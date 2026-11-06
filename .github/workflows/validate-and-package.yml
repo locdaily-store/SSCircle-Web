@@ -1,3 +1,4 @@
+# Cek revisi tim dan buat ZIP Cloudflare. Tidak ada deploy otomatis dari workflow ini.
 name: Periksa dan kemas SSCircle untuk Cloudflare
 
 on:
