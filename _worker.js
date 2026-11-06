@@ -672,7 +672,7 @@ async function submitVote(env, req) {
     return bad('Jumlah suara sudah mencapai batas voting. Hubungi admin.', 409);
   // One atomic JSON append prevents lost votes and duplicate keys under concurrent requests.
   const res = await env.DB.prepare(`UPDATE form_config
- SET settings=json_set(settings,'$.homeVotingVotes',json(json_insert(COALESCE(json_extract(settings,'$.homeVotingVotes'),'[]'),'$[#]',json(?)))),updated_at=?
+ SET settings=json_set(settings,'$.homeVotingVotes',json(json_insert(COALESCE(json_extract(settings,'$.homeVotingVotes'),'[]'),'$[#]',json(?))))
  WHERE id=1
  AND COALESCE(json_extract(settings,'$.homeVotingSessionId'),'voting-1')=?
  AND json_extract(settings,'$.homeVotingEnabled')=1
@@ -681,7 +681,7 @@ async function submitVote(env, req) {
  AND EXISTS (SELECT 1 FROM submissions WHERE id=? AND status='accepted')
  AND NOT EXISTS (SELECT 1 FROM json_each(COALESCE(json_extract(settings,'$.homeVotingVotes'),'[]'))
  WHERE json_extract(value,'$.voterKey')=? OR (json_extract(value,'$.voterKey') IS NULL AND lower(json_extract(value,'$.account'))=?))`)
-    .bind(JSON.stringify(vote), now, settings.homeVotingSessionId || 'voting-1', now, application.id, voterKey, safeAccount.toLowerCase()).run();
+    .bind(JSON.stringify(vote), settings.homeVotingSessionId || 'voting-1', now, application.id, voterKey, safeAccount.toLowerCase()).run();
   if (!Number(res.meta?.changes || 0))
     return bad('Voting tidak tersimpan. Akun sudah memilih atau sesi telah berubah. Muat ulang halaman.', 409);
   const payload = await publicVotingPayload(env);
@@ -1819,8 +1819,10 @@ async function route(req, env) {
   if (path.startsWith('/api/admin/')) {
     if (!(await admin(req, env)))
       return bad('Akses admin diperlukan. Login ulang.', 401);
-    if (path === '/api/admin/form' && method === 'GET')
-      return J(formFrom(await env.DB.prepare('SELECT * FROM form_config WHERE id=1').first()));
+    if (path === '/api/admin/form' && method === 'GET') {
+      const row = await env.DB.prepare('SELECT * FROM form_config WHERE id=1').first();
+      return J({ ...formFrom(row), revision: row.updated_at || '' });
+    }
     if (path === '/api/admin/voting' && method === 'GET') {
       const form = formFrom(await readSettingsRow(env));
       const settings = form.settings;
@@ -1847,8 +1849,13 @@ async function route(req, env) {
     }
     if (path === '/api/admin/form' && method === 'PUT') {
       const input = await body(req, 280000);
+      if (typeof input.revision !== 'string' || input.revision.length > 100)
+        return bad('Versi pengaturan tidak tersedia. Muat ulang Admin Control lalu coba lagi.', 428);
+      const current = await env.DB.prepare('SELECT settings, updated_at FROM form_config WHERE id=1').first();
+      if (!current || (current.updated_at || '') !== input.revision)
+        return bad('Pengaturan sudah diperbarui oleh admin lain. Muat ulang halaman sebelum menyimpan.', 409);
       const settings = settingsValid(input.settings), pages = pagesValid(input.pages);
-      const persistedVoting = parse((await env.DB.prepare('SELECT settings FROM form_config WHERE id=1').first())?.settings) || {};
+      const persistedVoting = parse(current.settings) || {};
       const usedVotingOptions = new Set((persistedVoting.homeVotingVotes || []).map(v => v.optionId).filter(Boolean));
       const requestedOptions = new Set(settings.homeVotingOptions.map(v => v.id));
       if ([...usedVotingOptions].some(id => !requestedOptions.has(id)))
@@ -1882,8 +1889,12 @@ async function route(req, env) {
         if (!m)
           throw Error('Gambar formulir tidak ditemukan. Upload ulang.');
       }
-      await env.DB.prepare("UPDATE form_config SET settings=json_set(json_set(?, '$.homeVotingVotes', json(COALESCE(json_extract(settings,'$.homeVotingVotes'),'[]'))), '$.homeVotingSessionId', COALESCE(json_extract(settings,'$.homeVotingSessionId'),'voting-1')), pages=?,questions=?,updated_at=? WHERE id=1").bind(JSON.stringify(settings), JSON.stringify(pages), JSON.stringify(flatQuestions(pages)), new Date().toISOString()).run();
-      return J({ ok: true });
+      // Cegah penyimpanan dua admin saling menimpa tanpa peringatan.
+      const revision = new Date().toISOString() + '-' + uid();
+      const saved = await env.DB.prepare("UPDATE form_config SET settings=json_set(json_set(?, '$.homeVotingVotes', json(COALESCE(json_extract(settings,'$.homeVotingVotes'),'[]'))), '$.homeVotingSessionId', COALESCE(json_extract(settings,'$.homeVotingSessionId'),'voting-1')), pages=?,questions=?,updated_at=? WHERE id=1 AND COALESCE(updated_at,'')=?").bind(JSON.stringify(settings), JSON.stringify(pages), JSON.stringify(flatQuestions(pages)), revision, input.revision).run();
+      if (!Number(saved.meta?.changes || 0))
+        return bad('Pengaturan berubah saat disimpan. Muat ulang Admin Control, lalu ulangi perubahanmu.', 409);
+      return J({ ok: true, revision });
     }
     if (path === '/api/admin/media' && method === 'POST') {
       const length = Number(req.headers.get('Content-Length') || 0);
