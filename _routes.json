@@ -3,7 +3,11 @@
   "include": [
     "/api/*",
     "/voting.html",
-    "/voting"
+    "/voting",
+    "/registration",
+    "/registration.html",
+    "/rules",
+    "/rules.html"
   ],
   "exclude": []
 }

@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#120b20">
+    <meta name="description" content="Baca peraturan komunitas dan Minecraft SSCircle sebelum melakukan pendaftaran.">
+    <title>Server Rules | SSCircle Server</title>
+    <link rel="icon" type="image/png" href="assets/sscircle-logo.png">
+    <link rel="stylesheet" href="style.css?v=10.29.0">
+    <link rel="stylesheet" href="community-pages.css?v=10.29.0">
+    <script src="color-theme.js?v=10.26.0" defer></script>
+    <script src="site-shell.js?v=10.29.0" defer></script>
+    <script src="rules.js?v=10.29.0" defer></script>
+  </head>
+  <body class="home-page rules-page theme-v3">
+    <!-- Header halaman peraturan -->
+    <header class="home-header" id="top">
+      <a href="./" class="home-brand" aria-label="SSCircle Server beranda">
+        <img id="home-logo" src="assets/sscircle-logo.png" width="41" height="41" alt="Logo SSCircle">
+        <span><strong>SSCircle</strong><small>SERVER</small></span>
+      </a>
+      <nav class="home-nav" aria-label="Navigasi utama">
+        <a class="home-nav-link" href="./#tentang">Tentang</a>
+        <a class="home-nav-link" href="./#galeri">Galeri</a>
+        <a class="home-nav-link" href="events.html">Event</a>
+        <a class="home-nav-link" href="status.html">Cek Status</a>
+        <a class="home-nav-join" href="registration.html">Pendaftaran <span aria-hidden="true">↗</span></a>
+      </nav>
+      <button type="button" class="home-menu-button" id="home-menu-button" aria-label="Buka menu navigasi" aria-expanded="false">☰</button>
+    </header>
+
+    <main class="rules-main" id="rules-main">
+      <!-- Judul dan penjelasan awal -->
+      <section class="rules-hero" aria-labelledby="rules-heading">
+        <span class="rules-eyebrow" id="rules-badge">SEBELUM MENDAFTAR</span>
+        <h1 class="rules-heading" id="rules-heading">Peraturan <em>SSCircle Server.</em></h1>
+        <p class="rules-lead" id="rules-description">Baca dan pahami peraturan komunitas serta server sebelum melanjutkan pendaftaran.</p>
+        <div class="rules-hero-meta"><span>◈ <span id="rules-meta-left">SSCircle Community</span></span><span>•</span><span id="rules-meta-right">Minecraft SMP</span></div>
+      </section>
+
+      <!-- Kategori aturan dikelola dari Admin Control -->
+      <div id="rules-sections" class="rules-sections" aria-live="polite">
+        <p class="rules-loading">Memuat peraturan server...</p>
+      </div>
+
+      <!-- Persetujuan wajib di bagian paling bawah -->
+      <section class="rules-consent" id="rules-consent" aria-labelledby="rules-consent-heading">
+        <div class="rules-consent-head">
+          <span class="rules-consent-symbol" aria-hidden="true">✓</span>
+          <div>
+            <h2 id="rules-consent-heading">Sudah selesai membaca?</h2>
+            <p id="rules-reminder">Pelanggaran aturan dapat dikenai peringatan atau ban sesuai tingkat pelanggaran.</p>
+          </div>
+        </div>
+        <label class="rules-agree-row" for="rules-agree">
+          <input type="checkbox" id="rules-agree" disabled>
+          <span id="rules-agree-text">Saya sudah membaca dan menyetujui semua peraturan SSCircle.</span>
+        </label>
+        <p class="rules-scroll-status" id="rules-scroll-status" role="status" aria-live="polite">Gulir ke bawah untuk membaca seluruh aturan.</p>
+        <button type="button" class="rules-continue" id="rules-continue" disabled>Setuju &amp; Lanjut Pendaftaran <span aria-hidden="true">↗</span></button>
+        <p class="rules-feedback" id="rules-feedback" role="alert"></p>
+      </section>
+    </main>
+    <footer class="home-footer ssc-unified-footer">
+      <div class="home-container home-footer-content ssc-footer-content">
+        <div class="home-footer-mark">
+          <img id="home-footer-logo" src="assets/sscircle-logo.png" width="27" height="27" alt="">
+          <span>SSCircle Server</span>
+        </div>
+        <span id="home-footer-text">One circle. Endless stories.</span>
+        <div class="home-footer-links">
+          <a href="registration.html">Registration</a>
+          <a href="status.html">Cek Status</a>
+          <a href="events.html">Event</a>
+          <a href="rules.html">Peraturan Server</a>
+          <a href="https://discord.gg/vQQSgY2GRS" target="_blank" rel="noopener noreferrer">Discord ↗</a>
+        </div>
+        <small>© 2026 SSCircle Server</small>
+      </div>
+    </footer>
+  </body>
+</html>

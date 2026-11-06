@@ -10,6 +10,16 @@ window.SSCircleThemeEditor = (() => {
   const targets = [
     ['.home-page', 'Seluruh Homepage'], ['.public-page', 'Seluruh Registration'],
     ['.status-standalone', 'Halaman Cek Status'], ['.voting-page', 'Halaman Voting'],
+    ['.rules-page', 'Seluruh Server Rules'], ['.rules-hero', 'Header Server Rules'],
+    ['.rules-heading', 'Judul Server Rules'], ['.rules-lead', 'Deskripsi pembuka Rules'],
+    ['.rules-section', 'Panel kategori Rules'], ['.rules-section h2', 'Judul kategori Rules'],
+    ['.rules-item', 'Kartu peraturan'], ['.rules-item-number', 'Nomor peraturan'],
+    ['.rules-item p', 'Penjelasan peraturan'], ['.rules-consent', 'Panel persetujuan'],
+    ['.rules-continue', 'Tombol lanjut Registration'],
+    ['.events-page', 'Seluruh Event Calendar'], ['.events-hero', 'Pembuka Event'],
+    ['.events-card', 'Kartu event'], ['.events-card h2', 'Judul event'],
+    ['.events-calendar', 'Kalender bulanan'], ['.events-status', 'Label status event'],
+    ['.events-countdown', 'Hitung mundur'],
     ['.home-header', 'Header Homepage'], ['.home-nav-link', 'Menu navigasi'],
     ['.home-brand', 'Nama/logo header'], ['.home-hero', 'Hero Video'],
     ['.home-hero-content h1', 'Judul Hero'], ['.home-hero-content h1 em', 'Highlight judul Hero'],
@@ -153,6 +163,12 @@ window.SSCircleThemeEditor = (() => {
     // Preview pages have a message receiver independent of API readiness.
     try {
       frame?.contentWindow?.postMessage({ type: 'ssc-theme-preview-settings', settings: JSON.parse(JSON.stringify(state.settings)) }, location.origin);
+      if ($('theme-preview-page').value === 'events.html') {
+        frame?.contentWindow?.postMessage({ type: 'ssc-events-preview-settings', settings: JSON.parse(JSON.stringify(state.settings)) }, location.origin);
+      }
+      if ($('theme-preview-page').value === 'rules.html') {
+        frame?.contentWindow?.postMessage({ type: 'ssc-rules-preview-settings', settings: JSON.parse(JSON.stringify(state.settings)) }, location.origin);
+      }
       if ($('theme-preview-page').value === 'registration.html') {
         frame?.contentWindow?.postMessage({ type: 'ssc-registration-preview-settings', settings: JSON.parse(JSON.stringify(state.settings)), pages: JSON.parse(JSON.stringify(state.pages || [])) }, location.origin);
       }

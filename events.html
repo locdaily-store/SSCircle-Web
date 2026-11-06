@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#120b20">
+  <meta name="description" content="Kalender event dan jadwal kegiatan SSCircle Server Minecraft SMP.">
+  <title>Event &amp; Schedule | SSCircle Server</title>
+  <link rel="icon" href="assets/sscircle-logo.png" type="image/png">
+  <link rel="stylesheet" href="style.css?v=10.29.0">
+    <link rel="stylesheet" href="community-pages.css?v=10.29.0">
+  <script src="color-theme.js?v=10.26.0" defer></script>
+  <script src="site-shell.js?v=10.29.0" defer></script>
+  <script src="events.js?v=10.29.0" defer></script>
+</head>
+<body class="home-page events-page theme-v3">
+    <header class="home-header" id="top">
+      <a href="./" class="home-brand" aria-label="SSCircle Server beranda">
+        <img id="home-logo" src="assets/sscircle-logo.png" width="41" height="41" alt="Logo SSCircle">
+        <span><strong>SSCircle</strong><small>SERVER</small></span>
+      </a>
+      <nav class="home-nav" aria-label="Navigasi utama">
+        <a class="home-nav-link" href="./#tentang">Tentang</a>
+        <a class="home-nav-link" href="./#galeri">Galeri</a>
+        <a class="home-nav-link" href="events.html">Event</a>
+        <a class="home-nav-link" href="status.html">Cek Status</a>
+        <a class="home-nav-join" href="registration.html">Pendaftaran <span aria-hidden="true">↗</span></a>
+      </nav>
+      <button type="button" class="home-menu-button" id="home-menu-button" aria-label="Buka menu navigasi" aria-expanded="false">☰</button>
+    </header>
+  <main class="events-main">
+    <section class="events-hero" aria-labelledby="events-title">
+      <span id="events-badge" class="events-eyebrow">SSCIRCLE / COMMUNITY EVENTS</span>
+      <h1 id="events-title">Event &amp; Schedule</h1>
+      <p id="events-description">Lihat kegiatan komunitas dan catat tanggal pentingmu di sini.</p>
+    </section>
+    <div class="events-layout">
+      <section class="events-calendar" aria-label="Kalender jadwal SSCircle">
+        <div class="events-calendar-head">
+          <h2 id="events-month-label">Kalender</h2>
+          <div class="events-month-actions">
+            <button type="button" id="events-prev" aria-label="Bulan sebelumnya">‹</button>
+            <button type="button" id="events-next" aria-label="Bulan berikutnya">›</button>
+          </div>
+        </div>
+        <div id="events-month-grid" class="events-month-grid"></div>
+        <p class="events-calendar-help">Tanggal bertanda memiliki jadwal kegiatan.</p>
+      </section>
+      <section class="events-results" aria-labelledby="events-list-heading">
+        <h2 id="events-list-heading">Jadwal event</h2>
+        <div id="events-list" class="events-list" aria-live="polite"><p class="events-empty">Memuat jadwal...</p></div>
+      </section>
+    </div>
+  </main>
+    <footer class="home-footer ssc-unified-footer">
+      <div class="home-container home-footer-content ssc-footer-content">
+        <div class="home-footer-mark">
+          <img id="home-footer-logo" src="assets/sscircle-logo.png" width="27" height="27" alt="">
+          <span>SSCircle Server</span>
+        </div>
+        <span id="home-footer-text">One circle. Endless stories.</span>
+        <div class="home-footer-links">
+          <a href="registration.html">Registration</a>
+          <a href="status.html">Cek Status</a>
+          <a href="events.html">Event</a>
+          <a href="rules.html">Peraturan Server</a>
+          <a href="https://discord.gg/vQQSgY2GRS" target="_blank" rel="noopener noreferrer">Discord ↗</a>
+        </div>
+        <small>© 2026 SSCircle Server</small>
+      </div>
+    </footer>
+</body>
+</html>
