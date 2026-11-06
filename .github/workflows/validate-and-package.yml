@@ -39,6 +39,9 @@ jobs:
       - name: Uji sesi Voting dan penyimpanan Admin Control
         run: node --test tests/worker.test.mjs
 
+      - name: Uji Server Rules dan Event Calendar
+        run: node --test tests/rules-regression.test.mjs
+
       - name: Pasang browser untuk tes responsif
         run: |
           python -m pip install 'playwright>=1.50,<2'
@@ -98,7 +101,7 @@ jobs:
           required = {'index.html','admin.html','registration.html','status.html','voting.html','_worker.js','_routes.json'}
           extra_root = {'_headers','_redirects','_version.txt','robots.txt','favicon.ico'}
           excluded_dirs = {'.github','docs','scripts','tests','.vscode'}
-          excluded_root = {'.gitignore','.gitattributes','README.md','CONTRIBUTING.md','SECURITY.md','PANDUAN-GITHUB.md'}
+          excluded_root = {'.gitignore','.gitattributes','README.md','CONTRIBUTING.md','SECURITY.md','PANDUAN-GITHUB.md','rules-defaults.json'}
           site = []
           for rel in tracked:
               path = Path(rel)
