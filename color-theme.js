@@ -80,6 +80,37 @@ window.SSCircleTheme = (() => {
     }
     return rules.join('\n');
   }
+  // Warna khusus diterapkan lewat CSSOM agar tetap cocok dengan CSP.
+  let customSheet = null;
+  let fallbackSheet = null;
+  let fallbackCount = 0;
+  function applyCustomRules(rules) {
+    if (typeof CSSStyleSheet === 'function' && 'adoptedStyleSheets' in document) {
+      if (!customSheet) {
+        customSheet = new CSSStyleSheet();
+        document.adoptedStyleSheets = [...document.adoptedStyleSheets, customSheet];
+      }
+      customSheet.replaceSync(rules);
+      return;
+    }
+    // Browser lama menggunakan stylesheet lokal yang sudah dimuat halaman.
+    if (!fallbackSheet)
+      fallbackSheet = [...document.styleSheets].find(sheet => sheet.href && new URL(sheet.href, location.href).origin === location.origin && /\/style\.css(?:[?#]|$)/.test(sheet.href));
+    if (!fallbackSheet)
+      return;
+    try {
+      while (fallbackCount-- > 0)
+        fallbackSheet.deleteRule(fallbackSheet.cssRules.length - 1);
+      fallbackCount = 0;
+      for (const rule of rules.split('\n').filter(Boolean)) {
+        fallbackSheet.insertRule(rule, fallbackSheet.cssRules.length);
+        fallbackCount++;
+      }
+    }
+    catch (error) {
+      console.warn('[SSCircle] Aturan warna tidak bisa diterapkan:', error);
+    }
+  }
   let previewSettings = null;
   function apply(settings = {}, opts = {}) {
     if (!settings || typeof settings !== 'object')
@@ -124,14 +155,8 @@ window.SSCircleTheme = (() => {
       root.style.setProperty('--ssc-hero-overlay-rgb', rgb);
     }
     const rules = safeRules(settings);
-    let style = document.getElementById('ssc-custom-colors');
-    if (!style) {
-      style = document.createElement('style');
-      style.id = 'ssc-custom-colors';
-      document.head.append(style);
-    }
-    // Security: generated rules contain only safe hex literals and validated CSS selectors.
-    style.textContent = rules;
+    // Selector dan warna HEX divalidasi sebelum dipasang.
+    applyCustomRules(rules);
     const themeMeta = document.querySelector('meta[name="theme-color"]');
     if (themeMeta && HEX.test(settings.backgroundColor || ''))
       themeMeta.content = settings.backgroundColor;

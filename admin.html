@@ -478,7 +478,7 @@
                   <span class="field-label">Cari pertanyaan</span>
                   <input id="analytics-search" type="search" placeholder="Cari judul pertanyaan...">
                 </label>
-                <div class="field-group">
+                <label class="field-group" for="analytics-status">
                   <span class="field-label">Tampilkan data</span>
                   <select id="analytics-status">
                     <option value="all">Semua pendaftar</option>
@@ -486,7 +486,7 @@
                     <option value="accepted">Diterima</option>
                     <option value="rejected">Ditolak</option>
                   </select>
-                </div>
+                </label>
                 <button type="button" class="button secondary" id="analytics-refresh">↻ Refresh</button>
               </div>
               <div id="analytics-summary" class="analytics-summary"></div>
@@ -505,7 +505,7 @@
               <div class="panel filters-panel">
                 <div class="search-wrap">
                   <span>⌕</span>
-                  <input type="search" id="search" placeholder="Cari username, jawaban, atau referensi...">
+                  <input type="search" id="search" aria-label="Cari pendaftar berdasarkan username, jawaban, atau referensi" placeholder="Cari username, jawaban, atau referensi...">
                 </div>
                 <select id="filter" aria-label="Filter status">
                   <option value="all">Semua status</option>
