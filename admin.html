@@ -5,7 +5,8 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#160a28">
-    <link rel="stylesheet" href="style.css?v=10.26.0">
+    <link rel="stylesheet" href="style.css?v=10.29.0">
+    <link rel="stylesheet" href="community-pages.css?v=10.29.0">
     <title>Admin Control · SSCircle Server</title>
     <link rel="icon" type="image/png" href="assets/sscircle-logo.png">
     <script src="color-theme.js?v=10.26.0" defer></script>
@@ -16,9 +17,11 @@
     <script src="homepage-admin.js?v=10.26.0" defer></script>
     <script src="homepage-builder.js?v=10.26.0" defer></script>
     <script src="vote-admin.js?v=10.26.0" defer></script>
+    <script src="rules-admin.js?v=10.28.0" defer></script>
+    <script src="events-admin.js?v=10.29.0" defer></script>
     <script src="registration-preview.js?v=10.26.0" defer></script>
-    <script src="color-theme-admin.js?v=10.26.0" defer></script>
-    <script src="admin.js?v=10.26.0" defer></script>
+    <script src="color-theme-admin.js?v=10.28.0" defer></script>
+    <script src="admin.js?v=10.28.0" defer></script>
     <script src="form-insert-rail.js?v=10.26.0" defer></script>
     <script src="spreadsheet.js?v=10.26.0" defer></script>
   </head>
@@ -62,6 +65,8 @@
             <button class="side-link active" data-tab="overview"><span class="side-icon">◈</span> Ringkasan</button>
             <button class="side-link" data-tab="homepage"><span class="side-icon">⌂</span> Atur Homepage</button>
             <button class="side-link" data-tab="voting-admin"><span class="side-icon">◉</span> Atur Voting</button>
+            <button class="side-link" data-tab="rules-admin"><span class="side-icon">▤</span> Atur Server Rules</button>
+            <button class="side-link" data-tab="events-admin"><span class="side-icon">▦</span> Atur Event &amp; Jadwal</button>
             <button class="side-link" data-tab="appearance"><span class="side-icon">✧</span> Atur Registration</button>
             <button class="side-link" data-tab="theme"><span class="side-icon">◐</span> Atur Warna</button>
             <button class="side-link" data-tab="form"><span class="side-icon">▤</span> Atur Formulir</button>
@@ -142,6 +147,58 @@
                 </div>
               </div>
               <div id="voting-admin-editor" class="ssc-vote-admin"></div>
+            </section>
+            <!-- Editor peraturan server -->
+            <section id="rules-admin" class="tab-page hide">
+              <div class="dashboard-heading heading-with-button">
+                <div>
+                  <div class="overline">SSCircle / SERVER RULES</div>
+                  <h1>Atur Server Rules<span class="dot-accent">.</span></h1>
+                  <p>Atur kategori, isi aturan, dan teks persetujuan. Lihat hasilnya langsung di samping.</p>
+                </div>
+                <button type="button" id="rules-admin-save" class="button primary">Simpan Server Rules ✓</button>
+              </div>
+              <div class="ssc-rules-admin-layout">
+                <div id="rules-admin-editor" class="ssc-rules-admin-editor"></div>
+                <aside class="panel ssc-rules-admin-preview">
+                  <div class="ssc-rules-preview-header">
+                    <div><strong>Pratinjau Server Rules</strong><small>Perubahan terlihat sebelum disimpan.</small></div>
+                    <div class="ssc-rules-preview-actions">
+                      <button id="rules-preview-desktop" class="button secondary" type="button">Desktop</button>
+                      <button id="rules-preview-mobile" class="button secondary" type="button">HP</button>
+                    </div>
+                  </div>
+                  <div id="rules-admin-preview-window" class="ssc-rules-preview-window">
+                    <iframe id="rules-admin-preview-frame" title="Pratinjau peraturan SSCircle" src="rules.html?ssc_theme_preview=1&amp;ssc_rules_preview=1" loading="lazy"></iframe>
+                  </div>
+                  <p id="rules-admin-preview-status" class="field-help" role="status">Memuat pratinjau...</p>
+                </aside>
+              </div>
+            </section>
+            <!-- Editor jadwal event dengan pratinjau langsung. -->
+            <section id="events-admin" class="tab-page hide">
+              <div class="dashboard-heading heading-with-button">
+                <div><div class="overline">SSCIRCLE / EVENT CALENDAR</div>
+                  <h1>Atur Event &amp; Jadwal<span class="dot-accent">.</span></h1>
+                  <p>Tambahkan foto, waktu mulai dan selesai, serta keterangan event. Status dan hitung mundur akan dihitung otomatis.</p></div>
+                <button type="button" id="events-admin-save" class="button primary">Simpan Event ✓</button>
+              </div>
+              <div class="ssc-rules-admin-layout">
+                <div id="events-admin-editor" class="ssc-rules-admin-editor"></div>
+                <aside class="panel ssc-rules-admin-preview">
+                  <div class="ssc-rules-preview-header">
+                    <div><strong>Pratinjau Event Calendar</strong><small>Desktop dan HP, tanpa menyimpan terlebih dahulu.</small></div>
+                    <div class="ssc-rules-preview-actions">
+                      <button id="events-preview-desktop" class="button secondary" type="button">Desktop</button>
+                      <button id="events-preview-mobile" class="button secondary" type="button">HP</button>
+                    </div>
+                  </div>
+                  <div id="events-admin-preview-window" class="ssc-rules-preview-window">
+                    <iframe id="events-admin-preview-frame" title="Pratinjau Event Calendar" src="events.html?ssc_theme_preview=1&amp;ssc_events_preview=1" loading="lazy"></iframe>
+                  </div>
+                  <p class="field-help" id="events-admin-preview-status" role="status">Memuat pratinjau event...</p>
+                </aside>
+              </div>
             </section>
             <!-- Pengaturan halaman pendaftaran -->
             <section id="appearance" class="tab-page hide">
@@ -327,6 +384,8 @@
                       <option value="registration.html">Registration</option>
                       <option value="voting.html">Voting</option>
                       <option value="status.html">Cek Status</option>
+                      <option value="rules.html">Server Rules</option>
+                      <option value="events.html">Event Calendar</option>
                     </select>
                     <button type="button" id="theme-preview-desktop" class="button secondary">Desktop</button>
                     <button type="button" id="theme-preview-mobile" class="button secondary">HP</button>

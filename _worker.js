@@ -148,6 +148,35 @@ async function playerSession(req, env) {
     return null;
   }
 }
+// Persetujuan Rules ditandatangani Worker. Cookie saja tidak bisa dipalsukan dari browser.
+const RULES_COOKIE = 'ssc_rules_agreed';
+const RULES_AGE = 24 * 60 * 60;
+const rulesCookie = (value, age) => `${RULES_COOKIE}=${value}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${age}`;
+const ruleFields = ['rulesEnabled', 'rulesBadge', 'rulesTitle', 'rulesDescription', 'rulesReminder', 'rulesAgreement', 'rulesButton', 'rulesConsentTitle', 'rulesFooterText',
+  'rulesBackText', 'rulesMetaLeft', 'rulesMetaRight', 'rulesScrollHint', 'rulesReadyHint', 'rulesSections'];
+function publicRules(settings) {
+  return Object.fromEntries(ruleFields.map(key => [key, settings[key]]));
+}
+async function rulesVersion(settings) {
+  return digest(JSON.stringify(publicRules(settings)));
+}
+async function rulesAgreed(req, env, settings) {
+  if (settings.rulesEnabled !== true)
+    return true;
+  if (!env.SESSION_SECRET)
+    return false;
+  const token = (req.headers.get('Cookie') || '').split(';').map(s => s.trim())
+    .find(c => c.startsWith(RULES_COOKIE + '='))?.slice(RULES_COOKIE.length + 1) || '';
+  const [payload, signature] = token.split('.');
+  if (!payload || !signature || !safeEq(signature, await hmac(env.SESSION_SECRET + '|server-rules', payload)))
+    return false;
+  try {
+    const data = JSON.parse(unb64(payload));
+    return Number.isFinite(data.exp) && data.exp > Math.floor(Date.now() / 1000)
+      && data.version === await rulesVersion(settings);
+  }
+  catch { return false; }
+}
 async function applicationByCode(env, raw) {
   const code = s(raw, 50).toUpperCase().replace(/[\s-]/g, '');
   if (/^[0-9A-F]{20}$/.test(code))
@@ -416,7 +445,141 @@ const HOME_DEFAULTS = {
     { id: "status", kind: "builtin" }
   ]
 };
+// Event disimpan bersama pengaturan website pada form_config (tanpa migrasi D1).
+const EVENTS_DEFAULTS = {
+  eventsEnabled: true,
+  eventsBadge: 'SSCIRCLE / COMMUNITY EVENTS',
+  eventsTitle: 'Event & Schedule',
+  eventsDescription: 'Lihat kegiatan komunitas dan catat tanggal pentingmu di sini.',
+  eventsEmptyText: 'Belum ada jadwal event yang diumumkan. Pantau terus halaman ini.',
+  eventsItems: []
+};
+function publicEvents(settings) {
+  return {
+    enabled: settings.eventsEnabled !== false,
+    badge: settings.eventsBadge,
+    title: settings.eventsTitle,
+    description: settings.eventsDescription,
+    emptyText: settings.eventsEmptyText,
+    events: settings.eventsEnabled !== false ? settings.eventsItems : []
+  };
+}
+// Teks dan kategori aturan awal. Seluruhnya bisa diedit melalui Admin Control.
+const RULES_DEFAULTS = {
+  "rulesEnabled": true,
+  "rulesBadge": "SEBELUM MENDAFTAR",
+  "rulesTitle": "Peraturan SSCircle Server",
+  "rulesDescription": "Selamat datang di SSCircle Community! Sebelum mendaftar, baca aturan komunitas dan server Minecraft sampai selesai.",
+  "rulesReminder": "Pelanggaran bisa berujung peringatan hingga banned dari server, tergantung jenis dan tingkat pelanggarannya. Terima kasih sudah ikut menjaga SSCircle tetap nyaman.",
+  "rulesAgreement": "Saya sudah membaca dan menyetujui seluruh peraturan SSCircle Server.",
+  "rulesButton": "Setuju & Lanjut Pendaftaran",
+  "rulesConsentTitle": "Sudah selesai membaca?",
+  "rulesFooterText": "One circle. Endless stories.",
+  "rulesBackText": "← Kembali ke Beranda",
+  "rulesMetaLeft": "SSCircle Community",
+  "rulesMetaRight": "Minecraft SMP",
+  "rulesScrollHint": "Baca semua bagian hingga paling bawah untuk membuka persetujuan.",
+  "rulesReadyHint": "Selesai dibaca. Centang kotak persetujuan untuk melanjutkan.",
+  "rulesSections": [
+    {
+      "id": "community",
+      "title": "SSCircle Community",
+      "description": "Aturan ini berlaku untuk obrolan dan kegiatan komunitas.",
+      "items": [
+        {
+          "id": "community-1",
+          "text": "Dilarang spam",
+          "detail": "Jangan membanjiri chat dengan pesan berulang atau promosi yang mengganggu."
+        },
+        {
+          "id": "community-2",
+          "text": "Jangan membawa isu SARA",
+          "detail": "Hindari pesan yang menghina atau memancing perdebatan tentang suku, agama, ras, dan golongan."
+        },
+        {
+          "id": "community-3",
+          "text": "Saling membantu",
+          "detail": "Kalau ada anggota yang kesulitan, bantu sebisanya. Tetap saling menghargai."
+        },
+        {
+          "id": "community-4",
+          "text": "Tidak ada konten NSFW",
+          "detail": "Dilarang mengirim konten dewasa (18+), pornografi, atau materi negatif yang tidak pantas."
+        },
+        {
+          "id": "community-5",
+          "text": "Jaga cara berbicara",
+          "detail": "Gunakan kata-kata yang sopan dan jangan sengaja memancing keributan."
+        },
+        {
+          "id": "community-6",
+          "text": "Dilarang menyebarkan link pinjol dan penipuan",
+          "detail": "Jangan kirim tautan pinjaman online, spam, phishing, atau link mencurigakan."
+        }
+      ]
+    },
+    {
+      "id": "minecraft",
+      "title": "Minecraft Server Rules",
+      "description": "Aturan ini berlaku selama bermain di server SSCircle.",
+      "items": [
+        {
+          "id": "minecraft-1",
+          "text": "Dilarang menggunakan X-Ray",
+          "detail": "Jangan menggunakan cheat, resource pack, atau mod yang memberi keuntungan tidak adil untuk mencari ore."
+        },
+        {
+          "id": "minecraft-2",
+          "text": "Jangan mencuri",
+          "detail": "Jangan mengambil barang milik pemain lain, baik yang disimpan di chest maupun block yang sudah ditempatkan."
+        },
+        {
+          "id": "minecraft-3",
+          "text": "Jangan spam",
+          "detail": "Hindari spam chat, perintah, atau tindakan yang mengganggu pemain lain."
+        },
+        {
+          "id": "minecraft-4",
+          "text": "Dilarang griefing",
+          "detail": "Jangan merusak bangunan, lahan, atau hasil kerja pemain lain tanpa izin."
+        },
+        {
+          "id": "minecraft-5",
+          "text": "Jangan mengganggu berlebihan",
+          "detail": "Bercanda boleh, tapi berhenti kalau pemain lain sudah merasa terganggu."
+        },
+        {
+          "id": "minecraft-6",
+          "text": "Jangan cari perhatian sampai mengganggu",
+          "detail": "Hindari tingkah yang sengaja memancing keributan atau membuat pemain lain risih."
+        },
+        {
+          "id": "minecraft-7",
+          "text": "Minta izin sebelum memakai barang orang lain",
+          "detail": "Hubungi pemilik lewat chat atau tinggalkan pesan di sign terlebih dahulu."
+        },
+        {
+          "id": "minecraft-8",
+          "text": "Whitelist dapat dibersihkan jika tidak aktif",
+          "detail": "Pemain yang belum pernah masuk atau tidak online sekitar 20 hari dapat dikeluarkan dari whitelist agar slot tersedia untuk pemain baru."
+        },
+        {
+          "id": "minecraft-9",
+          "text": "Bertanggung jawab atas tindakanmu",
+          "detail": "Kalau memulai masalah, bersiaplah menerima tindakan dari pengelola sesuai aturan."
+        },
+        {
+          "id": "minecraft-10",
+          "text": "Aktivitas server dapat diperiksa",
+          "detail": "Perusakan, pencurian, dan pelanggaran lain bisa ditelusuri. Jangan memberi keterangan palsu."
+        }
+      ]
+    }
+  ]
+};
 const DEFAULTS = {
+  ...EVENTS_DEFAULTS,
+  ...RULES_DEFAULTS,
   ...HOME_DEFAULTS,
   title: 'Pendaftaran SSCircle Server',
   subtitle: 'Your story starts here.',
@@ -755,6 +918,64 @@ function settingsValid(input) {
     throw Error('Judul formulir wajib diisi.');
   if (!out.brandName)
     throw Error('Nama website wajib diisi.');
+  // Jadwal disimpan sebagai UTC ISO; status dihitung dari waktu saat ini pada klien.
+  out.eventsEnabled = input.eventsEnabled !== false;
+  for (const [key, max] of Object.entries({eventsBadge:90,eventsTitle:140,eventsDescription:900,eventsEmptyText:400}))
+    out[key] = s(input[key] === undefined ? EVENTS_DEFAULTS[key] : input[key], max);
+  const rawEvents = input.eventsItems === undefined ? EVENTS_DEFAULTS.eventsItems : input.eventsItems;
+  if (!Array.isArray(rawEvents) || rawEvents.length > 40)
+    throw Error('Event maksimal 40 jadwal.');
+  const usedEventIds = new Set();
+  out.eventsItems = rawEvents.map((entry, index) => {
+    const id = s(entry?.id, 64), title = s(entry?.title, 140);
+    if (!/^[a-z0-9_-]{3,64}$/i.test(id) || usedEventIds.has(id) || !title)
+      throw Error('Judul atau ID event nomor ' + (index + 1) + ' tidak valid.');
+    usedEventIds.add(id);
+    const start = Date.parse(entry.startAt || ''), end = Date.parse(entry.endAt || '');
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end ||
+        end - start > 365 * 86400000 || start < Date.UTC(2020,0,1) || end > Date.UTC(2101,0,1))
+      throw Error('Tanggal mulai dan selesai event ' + title + ' harus benar dan berurutan.');
+    const image = s(entry.image, 700);
+    if (image) imageSource(image, 'Foto event');
+    return {id, title, description:s(entry.description,1400), image,
+      startAt:new Date(start).toISOString(), endAt:new Date(end).toISOString(),
+      location:s(entry.location,120)};
+  });
+  // Aturan ditulis sebagai teks biasa, tanpa HTML dari editor.
+  out.rulesEnabled = input.rulesEnabled !== false;
+  for (const [key, max] of Object.entries({
+    rulesBadge: 90, rulesTitle: 140, rulesDescription: 1100,
+    rulesReminder: 1300, rulesAgreement: 320, rulesButton: 100,
+    rulesConsentTitle: 120, rulesFooterText: 180, rulesBackText: 90,
+    rulesMetaLeft: 100, rulesMetaRight: 100, rulesScrollHint: 250, rulesReadyHint: 250
+  }))
+    out[key] = s(input[key] === undefined ? RULES_DEFAULTS[key] : input[key], max);
+  if (!out.rulesTitle || !out.rulesAgreement || !out.rulesButton)
+    throw Error('Judul, persetujuan, dan tombol Server Rules wajib diisi.');
+  const rawSections = input.rulesSections === undefined ? RULES_DEFAULTS.rulesSections : input.rulesSections;
+  if (!Array.isArray(rawSections) || rawSections.length < 1 || rawSections.length > 12)
+    throw Error('Server Rules harus mempunyai 1–12 kategori.');
+  const sectionIds = new Set();
+  let rulesCount = 0;
+  out.rulesSections = rawSections.map(section => {
+    const id = s(section?.id, 64), title = s(section?.title, 140);
+    if (!/^[a-z0-9_-]{1,64}$/i.test(id) || sectionIds.has(id) || !title)
+      throw Error('Kategori Server Rules tidak valid atau duplikat.');
+    sectionIds.add(id);
+    if (!Array.isArray(section.items) || section.items.length < 1 || section.items.length > 50)
+      throw Error('Setiap kategori perlu 1–50 peraturan.');
+    const itemIds = new Set();
+    const items = section.items.map(item => {
+      const ruleId = s(item?.id, 64), text = s(item?.text, 280);
+      if (!/^[a-z0-9_-]{1,64}$/i.test(ruleId) || itemIds.has(ruleId) || !text)
+        throw Error('Ada aturan kosong atau ID aturan yang berulang.');
+      itemIds.add(ruleId);
+      if (++rulesCount > 150)
+        throw Error('Maksimal 150 aturan di seluruh kategori.');
+      return { id: ruleId, text, detail: s(item?.detail, 650) };
+    });
+    return { id, title, description: s(section.description, 500), items };
+  });
   out.statusOwnCodeEnabled = input.statusOwnCodeEnabled !== false;
   out.open = input.open === true;
   out.introEnabled = input.introEnabled !== false;
@@ -1107,6 +1328,12 @@ function settingsValid(input) {
 // Teks dari Admin Control digunakan apa adanya; migrasi lama tidak boleh menghapus kata pengguna.
 function normalSettings(raw) {
   const input = raw && typeof raw === 'object' ? { ...raw } : {};
+  if (Array.isArray(input.rulesSections)) {
+    // Hapus hanya aturan bawaan lama, jangan ubah aturan yang telah ditulis sendiri.
+    input.rulesSections = input.rulesSections.map(section => ({ ...section,
+      items: Array.isArray(section.items) ? section.items.filter(item =>
+        !(item.id === 'community-7' && item.text === 'Bagikan konten di tempatnya')) : section.items }));
+  }
   if (input.homeProcessTitle === 'Bergabung dalam lingkaran.')
     input.homeProcessTitle = 'Join our Circle';
   if (!Array.isArray(input.homeProfileItems)) {
@@ -1520,6 +1747,9 @@ function activePublicMedia(row) {
   }
   if (typeof settings.homeDonateIcon === 'string' && settings.homeDonateIcon.startsWith('/api/media/'))
     active.add(settings.homeDonateIcon.split('/').pop());
+  for (const event of settings.eventsItems || [])
+    if (typeof event.image === 'string' && /^\/api\/media\/[0-9a-f-]{36}$/.test(event.image))
+      active.add(event.image.split('/').pop());
   for (const src of settings.homeVotingImages || [])
     if (typeof src === 'string' && src.startsWith('/api/media/'))
       active.add(src.split('/').pop());
@@ -1556,6 +1786,30 @@ function activePublicMedia(row) {
 }
 async function route(req, env) {
   const url = new URL(req.url), path = url.pathname, method = req.method;
+  // Semua jalur pendaftaran harus melalui Rules, termasuk URL langsung.
+  if (['/registration', '/registration.html'].includes(path) && ['GET', 'HEAD'].includes(method)) {
+    const preview = url.searchParams.has('ssc_registration_preview') || url.searchParams.has('ssc_theme_preview');
+    if (!preview) {
+      if (!env.DB || !env.SESSION_SECRET)
+        return new Response('Pendaftaran sedang tidak tersedia.', { status: 503 });
+      const settings = formFrom(await readSettingsRow(env)).settings;
+      if (settings.open && settings.rulesEnabled && !await rulesAgreed(req, env, settings))
+        return new Response(null, { status: 302, headers: { Location: '/rules', 'Cache-Control': 'no-store' } });
+    }
+    if (path === '/registration.html')
+      return new Response(null, { status: 302, headers: { Location: '/registration' + url.search, 'Cache-Control': 'no-store' } });
+    const response = await env.ASSETS.fetch(req);
+    const headers = new Headers(response.headers);
+    headers.set('Cache-Control', 'no-store');
+    headers.set('Vary', 'Cookie');
+    return new Response(response.body, { status: response.status, headers });
+  }
+  // Halaman rules selalu dapat dibaca, bahkan saat pendaftaran sedang ditutup.
+  if (['/rules', '/rules.html'].includes(path) && ['GET', 'HEAD'].includes(method)) {
+    if (path === '/rules.html')
+      return new Response(null, { status: 302, headers: { Location: '/rules' + url.search, 'Cache-Control': 'no-store' } });
+    return env.ASSETS.fetch(req);
+  }
   // Proteksi juga dokumen HTML, bukan hanya tombol UI: URL voting langsung tidak bisa dibuka oleh kode Pending/Rejected.
   if ((path === '/voting.html' || path === '/voting') && (method === 'GET' || method === 'HEAD')) {
     if (!env.DB || !env.SESSION_SECRET)
@@ -1624,6 +1878,31 @@ async function route(req, env) {
     'DELETE'
   ].includes(method))
     return bad('Metode tidak tersedia.', 405);
+  if (path === '/api/events' && method === 'GET') {
+    const settings = formFrom(await readSettingsRow(env)).settings;
+    return J(publicEvents(settings), 200, {'Cache-Control': 'public, max-age=45'});
+  }
+  if (path === '/api/rules' && method === 'GET') {
+    const settings = formFrom(await readSettingsRow(env)).settings;
+    return J({ ...publicRules(settings), registrationOpen: settings.open === true,
+      version: await rulesVersion(settings) });
+  }
+  if (path === '/api/rules/agree' && method === 'POST') {
+    if (!env.SESSION_SECRET)
+      return bad('Layanan persetujuan sedang tidak tersedia.', 503);
+    const input = await body(req, 1000);
+    if (input.agreed !== true || typeof input.version !== 'string')
+      return bad('Baca dan setujui peraturan terlebih dahulu.', 400);
+    const settings = formFrom(await readSettingsRow(env)).settings;
+    if (!settings.open)
+      return bad('Pendaftaran sedang ditutup.', 403);
+    if (settings.rulesEnabled === true && input.version !== await rulesVersion(settings))
+      return bad('Peraturan telah diperbarui. Muat ulang dan baca aturan terbaru.', 409);
+    const token = b64(JSON.stringify({ version: await rulesVersion(settings),
+      exp: Math.floor(Date.now() / 1000) + RULES_AGE, nonce: uid() }));
+    const signed = token + '.' + await hmac(env.SESSION_SECRET + '|server-rules', token);
+    return J({ ok: true, next: '/registration' }, 200, { 'Set-Cookie': rulesCookie(signed, RULES_AGE) });
+  }
   if (path === '/api/form' && method === 'GET') {
     const f = formFrom(await env.DB.prepare('SELECT * FROM form_config WHERE id=1').first());
     delete f.settings.homeVotingVotes;
@@ -1736,6 +2015,8 @@ async function route(req, env) {
     const f = formFrom(await env.DB.prepare('SELECT * FROM form_config WHERE id=1').first());
     if (!f.settings.open)
       return bad('Pendaftaran sedang ditutup.', 403);
+    if (f.settings.rulesEnabled && !await rulesAgreed(req, env, f.settings))
+      return bad('Setujui Server Rules sebelum mengirim pendaftaran.', 403);
     const flow = validateFlow(f.pages, payload.answers, files);
     const imageFields = [...flow.validFiles];
     const referencedImages = Object.values(flow.answers).filter(value => value && typeof value === 'object' && value.imageUrl).length;
@@ -1854,6 +2135,7 @@ async function route(req, env) {
           settings.homeVotingImage?.startsWith('/api/media/') ? settings.homeVotingImage.split('/').pop() : '',
           ...(settings.homeVotingImages || []).map(src => src.startsWith('/api/media/') ? src.split('/').pop() : '').filter(Boolean),
           ...settings.homeVotingOptions.flatMap(o => (o.images || []).filter(src => src.startsWith('/api/media/')).map(src => src.split('/').pop())),
+          ...settings.eventsItems.filter(event => event.image?.startsWith('/api/media/')).map(event => event.image.split('/').pop()),
           settings.homeProfileImage?.startsWith('/api/media/') ? settings.homeProfileImage.split('/').pop() : '',
           ...(settings.homeProfileItems || []).flatMap(item => [item.src, item.detailImage].filter(src => src?.startsWith('/api/media/')).map(src => src.split('/').pop())),
           ...settings.homeSocialLinks.map(link => link.icon?.startsWith('/api/media/') ? link.icon.split('/').pop() : ''),
@@ -2158,7 +2440,7 @@ export default {
     }
     catch (e) {
       console.error('[SSCircle]', e);
-      if (/tidak valid|Wajib|Gambar|gambar|Pertanyaan|pertanyaan|Blok|blok|Pilihan|pilihan|Opsi|opsi|halaman|Halaman|Homepage|kartu|Kartu|Bagian|bagian|warna|Warna|gradasi|Selector|Tautan|tautan|Data terlalu|Jumlah|Maksimal|harus|Format|percabangan|Percabangan|Unggah|Unggah|Jawaban|jawaban|diperlukan|besar|video|Video|Judul|Alasan|alasan|File|File gambar/.test(e.message || ''))
+      if (/tidak valid|Wajib|Gambar|gambar|Pertanyaan|pertanyaan|Blok|blok|Pilihan|pilihan|Opsi|opsi|halaman|Halaman|Homepage|kartu|Kartu|Bagian|bagian|warna|Warna|gradasi|Selector|Tautan|tautan|Data terlalu|Jumlah|Maksimal|harus|Format|percabangan|Percabangan|Unggah|Unggah|Jawaban|jawaban|diperlukan|besar|video|Video|Judul|Alasan|alasan|File|File gambar|aturan|Aturan|peraturan|Peraturan|kategori|Kategori/.test(e.message || ''))
         return bad(e.message, 400);
       return bad('Layanan sedang mengalami gangguan. Silakan coba lagi nanti.', 503);
     }

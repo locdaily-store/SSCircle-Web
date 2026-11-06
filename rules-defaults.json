@@ -1,0 +1,112 @@
+{
+  "rulesEnabled": true,
+  "rulesBadge": "SEBELUM MENDAFTAR",
+  "rulesTitle": "Peraturan SSCircle Server",
+  "rulesDescription": "Selamat datang di SSCircle Community! Sebelum mendaftar, baca aturan komunitas dan server Minecraft sampai selesai.",
+  "rulesReminder": "Pelanggaran bisa berujung peringatan hingga banned dari server, tergantung jenis dan tingkat pelanggarannya. Terima kasih sudah ikut menjaga SSCircle tetap nyaman.",
+  "rulesAgreement": "Saya sudah membaca dan menyetujui seluruh peraturan SSCircle Server.",
+  "rulesButton": "Setuju & Lanjut Pendaftaran",
+  "rulesSections": [
+    {
+      "id": "community",
+      "title": "SSCircle Community",
+      "description": "Aturan ini berlaku untuk obrolan dan kegiatan komunitas.",
+      "items": [
+        {
+          "id": "community-1",
+          "text": "Dilarang spam",
+          "detail": "Jangan membanjiri chat dengan pesan berulang atau promosi yang mengganggu."
+        },
+        {
+          "id": "community-2",
+          "text": "Jangan membawa isu SARA",
+          "detail": "Hindari pesan yang menghina atau memancing perdebatan tentang suku, agama, ras, dan golongan."
+        },
+        {
+          "id": "community-3",
+          "text": "Saling membantu",
+          "detail": "Kalau ada anggota yang kesulitan, bantu sebisanya. Tetap saling menghargai."
+        },
+        {
+          "id": "community-4",
+          "text": "Tidak ada konten NSFW",
+          "detail": "Dilarang mengirim konten dewasa (18+), pornografi, atau materi negatif yang tidak pantas."
+        },
+        {
+          "id": "community-5",
+          "text": "Jaga cara berbicara",
+          "detail": "Gunakan kata-kata yang sopan dan jangan sengaja memancing keributan."
+        },
+        {
+          "id": "community-6",
+          "text": "Dilarang menyebarkan link pinjol dan penipuan",
+          "detail": "Jangan kirim tautan pinjaman online, spam, phishing, atau link mencurigakan."
+        }
+      ]
+    },
+    {
+      "id": "minecraft",
+      "title": "Minecraft Server Rules",
+      "description": "Aturan ini berlaku selama bermain di server SSCircle.",
+      "items": [
+        {
+          "id": "minecraft-1",
+          "text": "Dilarang menggunakan X-Ray",
+          "detail": "Jangan menggunakan cheat, resource pack, atau mod yang memberi keuntungan tidak adil untuk mencari ore."
+        },
+        {
+          "id": "minecraft-2",
+          "text": "Jangan mencuri",
+          "detail": "Jangan mengambil barang milik pemain lain, baik yang disimpan di chest maupun block yang sudah ditempatkan."
+        },
+        {
+          "id": "minecraft-3",
+          "text": "Jangan spam",
+          "detail": "Hindari spam chat, perintah, atau tindakan yang mengganggu pemain lain."
+        },
+        {
+          "id": "minecraft-4",
+          "text": "Dilarang griefing",
+          "detail": "Jangan merusak bangunan, lahan, atau hasil kerja pemain lain tanpa izin."
+        },
+        {
+          "id": "minecraft-5",
+          "text": "Jangan mengganggu berlebihan",
+          "detail": "Bercanda boleh, tapi berhenti kalau pemain lain sudah merasa terganggu."
+        },
+        {
+          "id": "minecraft-6",
+          "text": "Jangan cari perhatian sampai mengganggu",
+          "detail": "Hindari tingkah yang sengaja memancing keributan atau membuat pemain lain risih."
+        },
+        {
+          "id": "minecraft-7",
+          "text": "Minta izin sebelum memakai barang orang lain",
+          "detail": "Hubungi pemilik lewat chat atau tinggalkan pesan di sign terlebih dahulu."
+        },
+        {
+          "id": "minecraft-8",
+          "text": "Whitelist dapat dibersihkan jika tidak aktif",
+          "detail": "Pemain yang belum pernah masuk atau tidak online sekitar 20 hari dapat dikeluarkan dari whitelist agar slot tersedia untuk pemain baru."
+        },
+        {
+          "id": "minecraft-9",
+          "text": "Bertanggung jawab atas tindakanmu",
+          "detail": "Kalau memulai masalah, bersiaplah menerima tindakan dari pengelola sesuai aturan."
+        },
+        {
+          "id": "minecraft-10",
+          "text": "Aktivitas server dapat diperiksa",
+          "detail": "Perusakan, pencurian, dan pelanggaran lain bisa ditelusuri. Jangan memberi keterangan palsu."
+        }
+      ]
+    }
+  ],
+  "rulesConsentTitle": "Sudah selesai membaca?",
+  "rulesFooterText": "One circle. Endless stories.",
+  "rulesBackText": "← Kembali ke Beranda",
+  "rulesMetaLeft": "SSCircle Community",
+  "rulesMetaRight": "Minecraft SMP",
+  "rulesScrollHint": "Baca semua bagian hingga paling bawah untuk membuka persetujuan.",
+  "rulesReadyHint": "Selesai dibaca. Centang kotak persetujuan untuk melanjutkan."
+}
