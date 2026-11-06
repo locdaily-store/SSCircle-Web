@@ -76,8 +76,19 @@ function dropdown(options, value, callback) {
 function tab(id) {
   for (const s of document.querySelectorAll('.tab-page'))
     s.classList.toggle('hide', s.id !== id);
-  for (const b of document.querySelectorAll('[data-tab]'))
-    b.classList.toggle('active', b.dataset.tab === id);
+  for (const b of document.querySelectorAll('[data-tab]')) {
+    const active = b.dataset.tab === id;
+    b.classList.toggle('active', active);
+    if (active) b.setAttribute('aria-current', 'page');
+    else b.removeAttribute('aria-current');
+  }
+  for (const group of document.querySelectorAll('.sidebar-group'))
+    group.classList.toggle('has-active', !!group.querySelector('.side-link.active'));
+  const selected = document.querySelector('.dashboard-sidebar .side-link.active span:not(.side-icon):not(.nav-count)');
+  const label = document.getElementById('admin-nav-current');
+  if (selected && label) label.textContent = selected.textContent.trim();
+  document.querySelector('.dashboard-sidebar')?.classList.remove('nav-open');
+  document.getElementById('admin-nav-toggle')?.setAttribute('aria-expanded', 'false');
   if (id === 'answers') {
     renderAnswers();
     void reloadSpreadsheet();
@@ -102,6 +113,16 @@ function tab(id) {
   }
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
+const mobileNavToggle = document.getElementById('admin-nav-toggle');
+mobileNavToggle?.addEventListener('click', () => {
+  const sidebar = document.querySelector('.dashboard-sidebar');
+  mobileNavToggle.setAttribute('aria-expanded', String(sidebar?.classList.toggle('nav-open') || false));
+});
+document.addEventListener('keydown', event => {
+  if (event.key !== 'Escape') return;
+  document.querySelector('.dashboard-sidebar')?.classList.remove('nav-open');
+  mobileNavToggle?.setAttribute('aria-expanded', 'false');
+});
 for (const btn of document.querySelectorAll('[data-tab]'))
   btn.onclick = async () => {
     if (dirty && !['form', 'appearance', 'theme', 'rules-admin', 'events-admin', 'seasons-admin'].includes(btn.dataset.tab) && !await SSCNotice.confirm('Ada perubahan yang belum disimpan. Tetap pindah?', { confirmText: 'Pindah halaman' }))

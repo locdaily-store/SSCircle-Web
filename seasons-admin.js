@@ -85,12 +85,16 @@ window.SSCircleSeasonsAdmin = (() => {
     const repaint=()=>{
       list.replaceChildren();
       season.entries.forEach((entry,i)=>{
-        const row=el('div','season-admin-rank');row.append(el('span','',String(i+1)+'.'));
-        row.append(inputField('Pemain',entry.name,v=>entry.name=v,{max:80}));
-        row.append(inputField('Peringkat / skor',entry.score,v=>entry.score=v,{max:80}));
-        row.append(action('Hapus',()=>{season.entries.splice(i,1);mark();repaint();}));list.append(row);
+        const row=el('div','season-admin-rank');
+        const top=el('div','season-admin-rank-top');
+        top.append(el('strong','season-admin-rank-number','Pemain '+String(i+1).padStart(2,'0')));
+        top.append(action('Hapus',()=>{season.entries.splice(i,1);mark();repaint();}));
+        const fields=el('div','season-admin-rank-fields');
+        fields.append(inputField('Nama pemain',entry.name,v=>entry.name=v,{max:80}));
+        fields.append(inputField('Peringkat / skor',entry.score,v=>entry.score=v,{max:80}));
+        row.append(top,fields);list.append(row);
       });
-      window.SSCircleSort?.attach(list,{item:'.season-admin-rank',onMove:(from,to)=>{
+      window.SSCircleSort?.attach(list,{item:'.season-admin-rank',handleTarget:'.season-admin-rank-top',onMove:(from,to)=>{
         season.entries.splice(to,0,season.entries.splice(from,1)[0]);mark();repaint();
       }});
     };
@@ -108,14 +112,19 @@ window.SSCircleSeasonsAdmin = (() => {
     const s=model.settings,root=$('seasons-admin-editor');if(!root)return;root.replaceChildren();
     s.homeLeaderboardSeasons ||= [];
     const main=el('section','panel rules-admin-panel');
-    main.append(el('h2','','Pengaturan halaman'));
+    main.classList.add('season-admin-page-settings');
+    main.append(el('h2','','Pengaturan halaman arsip'));
     main.append(toggle('Aktifkan halaman Season Archive untuk publik',s.seasonArchiveEnabled,v=>s.seasonArchiveEnabled=v));
     main.append(inputField('Judul halaman',s.seasonArchiveTitle,v=>s.seasonArchiveTitle=v,{max:160}));
     main.append(inputField('Deskripsi pembuka',s.seasonArchiveDescription,v=>s.seasonArchiveDescription=v,{multiline:true,max:900}));
     main.append(inputField('Pesan saat arsip kosong',s.seasonArchiveEmptyText,v=>s.seasonArchiveEmptyText=v,{max:350}));
     main.append(el('p','field-help','Data season sama dengan Leaderboard lama. Season baru tetap sebagai draft sampai dipublikasikan.'));
     root.append(main);
-    const bar=el('div','rules-admin-toolbar');bar.append(el('strong','',`Daftar season (${s.homeLeaderboardSeasons.length}/12)`));
+    const bar=el('div','rules-admin-toolbar season-admin-toolbar');
+    const overview=el('div','season-admin-toolbar-copy');
+    overview.append(el('strong','',`Daftar season (${s.homeLeaderboardSeasons.length}/12)`));
+    overview.append(el('small','',`${s.homeLeaderboardSeasons.filter(item=>item.archivePublished===true).length} dipublikasikan · Buka kartu untuk mengedit cerita dan prestasi`));
+    bar.append(overview);
     bar.append(action('+ Tambah season',()=>{
       if(s.homeLeaderboardSeasons.length>=12)return SSCNotice.alert('Maksimal 12 season.');
       const id='season-'+crypto.randomUUID().replace(/-/g,'').slice(0,12);
@@ -133,7 +142,8 @@ window.SSCircleSeasonsAdmin = (() => {
     if(!s.homeLeaderboardSeasons.length)root.append(el('p','field-help','Belum ada season. Tambahkan season pertama untuk mulai mengisi sejarah SSCircle.'));
   }
   function resize(){const shell=$('seasons-admin-preview-window'),frame=$('seasons-admin-preview-frame');if(!shell||!frame)return;
-    const width=phone?390:1150,height=phone?850:880,scale=Math.min(1,Math.max(190,shell.clientWidth-20)/width);
+    const width=phone?390:1150,height=phone?850:880;
+    const scale=Math.min(1,Math.max(.35,(shell.clientWidth-20)/width));
     frame.style.width=width+'px';frame.style.height=height+'px';frame.style.transform='scale('+scale+')';
     shell.style.height=Math.min(680,height*scale+18)+'px';
     $('seasons-preview-desktop').classList.toggle('primary',!phone);

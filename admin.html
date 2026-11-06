@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#160a28">
     <link rel="stylesheet" href="style.css?v=10.31.0">
-    <link rel="stylesheet" href="community-pages.css?v=10.32.0">
+    <link rel="stylesheet" href="community-pages.css?v=10.33.0">
     <title>Admin Control · SSCircle Server</title>
     <link rel="icon" type="image/png" href="assets/sscircle-logo.png">
     <script src="color-theme.js?v=10.26.0" defer></script>
@@ -19,10 +19,10 @@
     <script src="vote-admin.js?v=10.31.0" defer></script>
     <script src="rules-admin.js?v=10.31.0" defer></script>
     <script src="events-admin.js?v=10.31.0" defer></script>
-    <script src="seasons-admin.js?v=10.31.0" defer></script>
+    <script src="seasons-admin.js?v=10.33.0" defer></script>
     <script src="registration-preview.js?v=10.26.0" defer></script>
     <script src="color-theme-admin.js?v=10.31.0" defer></script>
-    <script src="admin.js?v=10.31.0" defer></script>
+    <script src="admin.js?v=10.33.0" defer></script>
     <script src="form-insert-rail.js?v=10.26.0" defer></script>
     <script src="spreadsheet.js?v=10.26.0" defer></script>
   </head>
@@ -61,27 +61,46 @@
         </section>
         <!-- Area kerja Admin Control -->
         <section id="dashboard" class="dashboard hide">
-          <aside class="dashboard-sidebar panel">
-            <div class="sidebar-heading">MANAGEMENT</div>
-            <button class="side-link active" data-tab="overview"><span class="side-icon">◈</span> Ringkasan</button>
-            <button class="side-link" data-tab="homepage"><span class="side-icon">⌂</span> Atur Homepage</button>
-            <button class="side-link" data-tab="voting-admin"><span class="side-icon">◉</span> Atur Voting</button>
-            <button class="side-link" data-tab="rules-admin"><span class="side-icon">▤</span> Atur Server Rules</button>
-            <button class="side-link" data-tab="events-admin"><span class="side-icon">▦</span> Atur Event &amp; Jadwal</button>
-            <button class="side-link" data-tab="seasons-admin"><span class="side-icon">★</span> Atur Season &amp; Sejarah</button>
-            <button class="side-link" data-tab="appearance"><span class="side-icon">✧</span> Atur Registration</button>
-            <button class="side-link" data-tab="theme"><span class="side-icon">◐</span> Atur Warna</button>
-            <button class="side-link" data-tab="form"><span class="side-icon">▤</span> Atur Formulir</button>
-            <button class="side-link" data-tab="analytics"><span class="side-icon">◉</span> Analitik jawaban</button>
-            <button class="side-link" data-tab="media"><span class="side-icon">▧</span> Penyimpanan Media</button>
-            <button class="side-link" data-tab="answers"><span class="side-icon">☷</span> Jawaban pendaftar <span id="nav-count" class="nav-count">0</span></button>
-            <button class="side-link" data-tab="spreadsheet"><span class="side-icon">▦</span> Spreadsheet</button>
+          <aside class="dashboard-sidebar panel" aria-label="Navigasi Admin Control">
+            <div class="sidebar-intro">
+              <div class="sidebar-heading">ADMIN CONTROL</div>
+              <p>Pilih bagian yang ingin dikelola.</p>
+            </div>
+            <button type="button" class="sidebar-mobile-toggle" id="admin-nav-toggle" aria-expanded="false" aria-controls="admin-nav-groups">
+              <span class="sidebar-mobile-glyph" aria-hidden="true">☷</span>
+              <span class="sidebar-mobile-label">Menu pengelolaan <strong id="admin-nav-current">Ringkasan</strong></span>
+              <span class="sidebar-mobile-chevron" aria-hidden="true">⌄</span>
+            </button>
+            <nav class="sidebar-nav" id="admin-nav-groups" aria-label="Menu pengelolaan SSCircle">
+              <section class="sidebar-group" aria-labelledby="sidebar-group-0">
+                <h2 id="sidebar-group-0">DASHBOARD</h2>
+                <button type="button" class="side-link active" aria-current="page" data-tab="overview"><span class="side-icon" aria-hidden="true">◈</span><span>Ringkasan</span></button>
+              </section>
+              <section class="sidebar-group" aria-labelledby="sidebar-group-1">
+                <h2 id="sidebar-group-1">KONTEN &amp; KOMUNITAS</h2>
+                <button type="button" class="side-link" data-tab="homepage"><span class="side-icon" aria-hidden="true">⌂</span><span>Homepage</span></button>
+                <button type="button" class="side-link" data-tab="events-admin"><span class="side-icon" aria-hidden="true">▦</span><span>Event &amp; Jadwal</span></button>
+                <button type="button" class="side-link" data-tab="seasons-admin"><span class="side-icon" aria-hidden="true">★</span><span>Season &amp; Sejarah</span></button>
+                <button type="button" class="side-link" data-tab="voting-admin"><span class="side-icon" aria-hidden="true">◉</span><span>Voting</span></button>
+                <button type="button" class="side-link" data-tab="rules-admin"><span class="side-icon" aria-hidden="true">▤</span><span>Server Rules</span></button>
+              </section>
+              <section class="sidebar-group" aria-labelledby="sidebar-group-2">
+                <h2 id="sidebar-group-2">PENDAFTARAN &amp; DATA</h2>
+                <button type="button" class="side-link" data-tab="appearance"><span class="side-icon" aria-hidden="true">✧</span><span>Registration</span></button>
+                <button type="button" class="side-link" data-tab="form"><span class="side-icon" aria-hidden="true">▤</span><span>Formulir</span></button>
+                <button type="button" class="side-link" data-tab="answers"><span class="side-icon" aria-hidden="true">☷</span><span>Jawaban pendaftar</span> <span id="nav-count" class="nav-count">0</span></button>
+                <button type="button" class="side-link" data-tab="analytics"><span class="side-icon" aria-hidden="true">◉</span><span>Analitik jawaban</span></button>
+                <button type="button" class="side-link" data-tab="spreadsheet"><span class="side-icon" aria-hidden="true">▦</span><span>Spreadsheet</span></button>
+              </section>
+              <section class="sidebar-group" aria-labelledby="sidebar-group-3">
+                <h2 id="sidebar-group-3">TAMPILAN &amp; MEDIA</h2>
+                <button type="button" class="side-link" data-tab="theme"><span class="side-icon" aria-hidden="true">◐</span><span>Warna Website</span></button>
+                <button type="button" class="side-link" data-tab="media"><span class="side-icon" aria-hidden="true">▧</span><span>Penyimpanan Media</span></button>
+              </section>
+            </nav>
             <div class="sidebar-bottom">
-              <div class="sidebar-mini">
-                <span class="live-dot"></span>
-                <span>SSCircle Server</span>
-              </div>
-              <button class="side-link logout-link" id="logout"><span class="side-icon">↪</span> Keluar</button>
+              <div class="sidebar-mini"><span class="live-dot"></span><span>SSCircle Server</span></div>
+              <button type="button" class="side-link logout-link" id="logout"><span class="side-icon" aria-hidden="true">↪</span><span>Keluar</span></button>
             </div>
           </aside>
           <div class="dashboard-main">
