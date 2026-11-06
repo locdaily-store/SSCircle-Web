@@ -28,7 +28,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for file in index.html admin.html registration.html status.html voting.html _worker.js _routes.json; do
+          for file in index.html admin.html registration.html status.html voting.html seasons.html seasons.js seasons-admin.js _worker.js _routes.json; do
             test -f "$file" || { echo "File wajib hilang: $file"; exit 1; }
           done
           while IFS= read -r -d '' file; do
@@ -44,6 +44,9 @@ jobs:
 
       - name: Uji Voting dengan beberapa pertanyaan
         run: node --test tests/voting-multi.test.mjs
+
+      - name: Uji Season Archive dan kompatibilitas Leaderboard
+        run: node --test tests/seasons.test.mjs
 
       - name: Pasang browser untuk tes responsif
         run: |
