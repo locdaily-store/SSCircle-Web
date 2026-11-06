@@ -259,3 +259,79 @@ body.rules-page .rules-consent { width: 100%; }
 .admin-page .ssc-vote-question-body{padding:clamp(.65rem,2vw,1rem);display:grid;gap:1rem}
 .admin-page .ssc-vote-result-group{padding:1rem 0;border-bottom:1px solid var(--ssc-border,#62457d)}
 .admin-page .ssc-vote-result-group h3{margin:0 0 .3rem}
+
+/* V10.31 — Season Archive & Hall of Fame. Mengikuti palet dan container SSCircle. */
+.season-page{--season-panel:var(--ssc-panel,#20142f);--season-line:var(--ssc-border,#62457d);--season-muted:var(--ssc-muted,#b8a5ca);--season-accent:var(--ssc-primary,#bc91f5)}
+.season-archive-main{width:min(100% - clamp(24px,5vw,92px),1320px);max-width:1320px;margin:0 auto;padding:clamp(5rem,9vw,9rem) 0 clamp(4rem,8vw,8rem);min-height:60vh}
+.season-archive-hero{max-width:780px;margin-bottom:clamp(2rem,5vw,4.5rem)}
+.season-archive-kicker{font-size:.76rem;letter-spacing:.16em;font-weight:700;color:var(--season-accent)}
+.season-archive-hero h1{font-size:clamp(2rem,5vw,4.2rem);line-height:1.12;letter-spacing:-.04em;margin:.8rem 0 1rem;overflow-wrap:anywhere}
+.season-archive-hero p{line-height:1.75;max-width:63ch;color:var(--season-muted)}
+.season-archive-timeline{display:grid;gap:clamp(1rem,3vw,1.7rem);padding-left:clamp(14px,2.8vw,30px);border-left:2px solid var(--season-line)}
+.season-archive-card{position:relative;background:var(--season-panel);border:1px solid var(--season-line);border-radius:clamp(14px,2vw,22px);overflow:hidden;min-width:0;box-shadow:0 12px 45px rgba(0,0,0,.12)}
+.season-archive-card:before{content:"";position:absolute;left:calc(-1 * clamp(15px,2.8vw,31px) - 5px);top:26px;width:10px;height:10px;border-radius:50%;background:var(--season-accent);box-shadow:0 0 0 4px var(--season-panel)}
+.season-archive-cover{max-height:clamp(150px,25vw,290px);overflow:hidden}
+.season-archive-cover img{width:100%;height:clamp(160px,25vw,290px);object-fit:cover;display:block}
+.season-archive-card-head{display:flex;align-items:start;justify-content:space-between;gap:1rem;padding:clamp(1rem,3vw,1.7rem);flex-wrap:wrap}
+.season-archive-heading-text{flex:1 1 280px;min-width:0}
+.season-archive-heading-text h2{font-size:clamp(1.35rem,3vw,2rem);line-height:1.22;overflow-wrap:anywhere;margin:.45rem 0}
+.season-archive-dates{color:var(--season-accent);font-size:.9rem;margin:.55rem 0}
+.season-archive-summary{color:var(--season-muted);line-height:1.65;margin:.5rem 0;white-space:pre-line;overflow-wrap:anywhere}
+.season-archive-state{display:inline-flex;border:1px solid var(--season-line);border-radius:999px;padding:.38rem .7rem;color:var(--season-accent);font-size:.77rem;font-weight:700;white-space:nowrap}
+.season-archive-details{border-top:1px solid var(--season-line)}
+.season-archive-details>summary{list-style:none;cursor:pointer;padding:1rem clamp(1rem,3vw,1.7rem);font-weight:700;color:var(--season-accent)}
+.season-archive-details>summary::-webkit-details-marker{display:none}
+.season-archive-details>summary:focus-visible{outline:2px solid var(--season-accent);outline-offset:-3px}
+.season-archive-details-body{display:grid;gap:clamp(1.5rem,3vw,2.5rem);padding:0 clamp(1rem,3vw,1.7rem) clamp(1.2rem,3vw,2rem)}
+.season-archive-group{min-width:0}
+.season-archive-group h3{font-size:clamp(1.05rem,2vw,1.35rem);margin:0 0 1rem}
+.season-archive-gallery,.season-archive-awards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));gap:.9rem}
+.season-archive-photo,.season-archive-feature,.season-archive-award{margin:0;background:color-mix(in srgb,var(--season-panel) 84%,white 5%);border:1px solid var(--season-line);border-radius:12px;overflow:hidden;min-width:0}
+.season-archive-photo img,.season-archive-feature img{display:block;width:100%;height:clamp(130px,15vw,205px);object-fit:cover}
+.season-archive-photo figcaption{font-size:.87rem;color:var(--season-muted);padding:.7rem;overflow-wrap:anywhere}
+.season-archive-feature{display:grid;align-content:start;gap:.4rem;padding-bottom:.8rem}
+.season-archive-feature>strong,.season-archive-feature>span,.season-archive-feature>p{margin:0 .8rem;overflow-wrap:anywhere}
+.season-archive-feature>strong{margin-top:.7rem}.season-archive-feature>span,.season-archive-feature>p{font-size:.88rem;color:var(--season-muted)}
+.season-archive-award{display:grid;gap:.5rem;padding:1rem}
+.season-archive-award>span{color:var(--season-accent);font-weight:700;font-size:.81rem}
+.season-archive-award>p{color:var(--season-muted);font-size:.89rem;margin:0;overflow-wrap:anywhere}
+.season-archive-ranking{display:grid;gap:.5rem;list-style:decimal;padding-left:1.6rem}
+.season-archive-ranking li{padding:.5rem .8rem;border:1px solid var(--season-line);border-radius:10px;display:list-item}
+.season-archive-ranking li span{float:right;color:var(--season-accent)}
+.season-archive-empty{text-align:center;padding:clamp(3rem,8vw,6rem) 1.5rem;border:1px dashed var(--season-line);border-radius:18px;color:var(--season-muted)}
+.home-season-highlights{min-width:0}
+.home-season-header{display:flex;align-items:end;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin:1.2rem 0 1.4rem}
+.home-season-header h2{font-size:clamp(1.5rem,3.5vw,2.5rem);margin:0}
+.home-season-header p{max-width:54ch;color:var(--ssc-muted,#b8a5ca);margin:.5rem 0 0}
+.home-season-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:1rem}
+.home-season-card{display:block;min-width:0;overflow:hidden;background:var(--ssc-panel,#20142f);border:1px solid var(--ssc-border,#62457d);border-radius:16px;text-decoration:none;color:inherit;transition:transform .2s ease,border-color .2s ease}
+.home-season-card:hover{transform:translateY(-3px);border-color:var(--ssc-primary,#bc91f5)}
+.home-season-card img{width:100%;height:clamp(125px,16vw,195px);object-fit:cover;display:block}
+.home-season-card-content{padding:1rem;display:grid;gap:.5rem}
+.home-season-card-content h3{margin:0;font-size:clamp(1rem,2vw,1.3rem);overflow-wrap:anywhere}
+.home-season-card-content small,.home-season-card-content p{margin:0;color:var(--ssc-muted,#b8a5ca);overflow-wrap:anywhere}
+.home-season-card-content p{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.home-season-card-content span{color:var(--ssc-primary,#bc91f5);font-weight:700;font-size:.87rem}
+.home-season-cards[data-layout=timeline]{display:grid;grid-template-columns:1fr;padding-left:16px;border-left:2px solid var(--ssc-border,#62457d)}
+.home-season-cards[data-layout=timeline] .home-season-card{display:flex;min-width:0}
+.home-season-cards[data-layout=timeline] .home-season-card img{max-width:26%;height:auto;min-height:130px}
+.admin-page .season-admin-list,.admin-page .season-admin-sublist{display:grid;gap:.55rem;min-width:0}
+.admin-page .season-admin-season{background:var(--ssc-panel,#20142f);border:1px solid var(--ssc-border,#62457d);border-radius:13px;min-width:0;overflow:hidden}
+.admin-page .season-admin-summary,.admin-page .season-admin-mini>summary{display:flex;align-items:center;gap:.6rem;min-height:45px;padding:.65rem .8rem;cursor:pointer;list-style:none}
+.admin-page .season-admin-summary::-webkit-details-marker,.admin-page .season-admin-mini>summary::-webkit-details-marker{display:none}
+.admin-page .season-admin-summary strong{min-width:0;flex:1;text-overflow:ellipsis;overflow:hidden;white-space:nowrap}
+.admin-page .season-admin-count{font-size:.78rem;color:var(--ssc-muted,#b8a5ca);white-space:nowrap}
+.admin-page .season-admin-body{display:grid;gap:.85rem;padding:clamp(.65rem,1.8vw,1.15rem);min-width:0}
+.admin-page .season-admin-dates{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.7rem}
+.admin-page .season-admin-subsection{min-width:0;border:1px solid var(--ssc-border,#62457d);border-radius:10px}
+.admin-page .season-admin-subsection>summary{padding:.8rem;cursor:pointer;font-weight:700}
+.admin-page .season-admin-subsection-content{display:grid;gap:.8rem;padding:.75rem;min-width:0}
+.admin-page .season-admin-mini{border:1px solid var(--ssc-border,#62457d);border-radius:8px;min-width:0}
+.admin-page .season-admin-mini>summary{font-size:.9rem;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.admin-page .season-admin-mini-body{padding:.75rem;display:grid;gap:.6rem}
+.admin-page .season-admin-rank{display:grid;grid-template-columns:auto minmax(0,1fr) minmax(0,1fr) auto;gap:.5rem;align-items:end}
+.admin-page .season-admin-media{display:grid;gap:.45rem;min-width:0}
+.admin-page .season-admin-thumbnail{display:block;max-width:220px;width:100%;max-height:140px;border-radius:9px;object-fit:cover}
+.admin-page .season-admin-sublist .ssc-sort-handle,.admin-page .season-admin-summary>.ssc-sort-handle{flex:none;touch-action:none}
+@media(max-width:640px){.season-archive-main{padding-top:6.5rem}.season-archive-card-head{flex-direction:column}.home-season-cards[data-layout=timeline] .home-season-card img{max-width:34%}.admin-page .season-admin-dates,.admin-page .season-admin-rank{grid-template-columns:1fr}.admin-page .season-admin-summary{flex-wrap:wrap}.home-season-header>a{width:100%;text-align:center}}
+@media(prefers-reduced-motion:reduce){.home-season-card{transition:none}}

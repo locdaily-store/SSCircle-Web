@@ -86,6 +86,8 @@ function tab(id) {
     window.SSCircleRulesAdmin?.schedule();
   if (id === 'events-admin')
     window.SSCircleEventsAdmin?.schedule();
+  if (id === 'seasons-admin')
+    window.SSCircleSeasonsAdmin?.schedule();
   if (id === 'theme')
     window.SSCircleThemeEditor?.schedule();
   if (id === 'analytics')
@@ -102,7 +104,7 @@ function tab(id) {
 }
 for (const btn of document.querySelectorAll('[data-tab]'))
   btn.onclick = async () => {
-    if (dirty && !['form', 'appearance', 'theme', 'rules-admin', 'events-admin'].includes(btn.dataset.tab) && !await SSCNotice.confirm('Ada perubahan yang belum disimpan. Tetap pindah?', { confirmText: 'Pindah halaman' }))
+    if (dirty && !['form', 'appearance', 'theme', 'rules-admin', 'events-admin', 'seasons-admin'].includes(btn.dataset.tab) && !await SSCNotice.confirm('Ada perubahan yang belum disimpan. Tetap pindah?', { confirmText: 'Pindah halaman' }))
       return;
     tab(btn.dataset.tab);
   };
@@ -138,6 +140,7 @@ async function refresh() {
   window.SSCircleVoteAdmin?.render(data, dirtyMark);
   window.SSCircleRulesAdmin?.render(data, dirtyMark);
   window.SSCircleEventsAdmin?.render(data, dirtyMark);
+  window.SSCircleSeasonsAdmin?.render(data, dirtyMark);
   if (data.settings.adminThemeEnabled === true)
     window.SSCircleTheme?.apply(data.settings);
   summary();
@@ -840,7 +843,8 @@ async function save() {
     '#save-theme',
     '#save-theme-bottom',
     '#rules-admin-save',
-    '#events-admin-save'
+    '#events-admin-save',
+    '#seasons-admin-save'
   ].map($).filter(Boolean);
   saveButtons.forEach(b => {
     b.disabled = true;
@@ -882,6 +886,7 @@ $('#save-theme').onclick = save;
 $('#save-theme-bottom').onclick = save;
 $('#rules-admin-save').onclick = save;
 $('#events-admin-save').onclick = save;
+$('#seasons-admin-save').onclick = save;
 function optionPreview(q) {
   const card = make('div', 'preview-question');
   card.append(make('strong', '', q.title + (q.required ? ' *' : '')));

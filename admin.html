@@ -5,8 +5,8 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#160a28">
-    <link rel="stylesheet" href="style.css?v=10.30.0">
-    <link rel="stylesheet" href="community-pages.css?v=10.30.0">
+    <link rel="stylesheet" href="style.css?v=10.31.0">
+    <link rel="stylesheet" href="community-pages.css?v=10.31.0">
     <title>Admin Control · SSCircle Server</title>
     <link rel="icon" type="image/png" href="assets/sscircle-logo.png">
     <script src="color-theme.js?v=10.26.0" defer></script>
@@ -14,14 +14,15 @@
     <script src="admin-notifications.js?v=10.26.0" defer></script>
     <script src="admin-sortable.js?v=10.30.0" defer></script>
     <script src="image-source-picker.js?v=10.26.0" defer></script>
-    <script src="homepage-admin.js?v=10.30.0" defer></script>
-    <script src="homepage-builder.js?v=10.30.0" defer></script>
-    <script src="vote-admin.js?v=10.30.0" defer></script>
-    <script src="rules-admin.js?v=10.30.0" defer></script>
-    <script src="events-admin.js?v=10.30.0" defer></script>
+    <script src="homepage-admin.js?v=10.31.0" defer></script>
+    <script src="homepage-builder.js?v=10.31.0" defer></script>
+    <script src="vote-admin.js?v=10.31.0" defer></script>
+    <script src="rules-admin.js?v=10.31.0" defer></script>
+    <script src="events-admin.js?v=10.31.0" defer></script>
+    <script src="seasons-admin.js?v=10.31.0" defer></script>
     <script src="registration-preview.js?v=10.26.0" defer></script>
-    <script src="color-theme-admin.js?v=10.28.0" defer></script>
-    <script src="admin.js?v=10.28.0" defer></script>
+    <script src="color-theme-admin.js?v=10.31.0" defer></script>
+    <script src="admin.js?v=10.31.0" defer></script>
     <script src="form-insert-rail.js?v=10.26.0" defer></script>
     <script src="spreadsheet.js?v=10.26.0" defer></script>
   </head>
@@ -67,6 +68,7 @@
             <button class="side-link" data-tab="voting-admin"><span class="side-icon">◉</span> Atur Voting</button>
             <button class="side-link" data-tab="rules-admin"><span class="side-icon">▤</span> Atur Server Rules</button>
             <button class="side-link" data-tab="events-admin"><span class="side-icon">▦</span> Atur Event &amp; Jadwal</button>
+            <button class="side-link" data-tab="seasons-admin"><span class="side-icon">★</span> Atur Season &amp; Sejarah</button>
             <button class="side-link" data-tab="appearance"><span class="side-icon">✧</span> Atur Registration</button>
             <button class="side-link" data-tab="theme"><span class="side-icon">◐</span> Atur Warna</button>
             <button class="side-link" data-tab="form"><span class="side-icon">▤</span> Atur Formulir</button>
@@ -197,6 +199,31 @@
                     <iframe id="events-admin-preview-frame" title="Pratinjau Event Calendar" src="events.html?ssc_theme_preview=1&amp;ssc_events_preview=1" loading="lazy"></iframe>
                   </div>
                   <p class="field-help" id="events-admin-preview-status" role="status">Memuat pratinjau event...</p>
+                </aside>
+              </div>
+            </section>
+            <!-- Season Archive & Hall of Fame dengan editor ringkas dan live preview. -->
+            <section id="seasons-admin" class="tab-page hide">
+              <div class="dashboard-heading heading-with-button">
+                <div><div class="overline">SSCIRCLE / SEASON ARCHIVE</div>
+                  <h1>Atur Season &amp; Sejarah<span class="dot-accent">.</span></h1>
+                  <p>Kelola perjalanan setiap season, foto kenangan, bangunan, penghargaan, dan pemain berprestasi dari satu tempat.</p></div>
+                <button type="button" id="seasons-admin-save" class="button primary">Simpan Season ✓</button>
+              </div>
+              <div class="ssc-rules-admin-layout">
+                <div id="seasons-admin-editor" class="ssc-rules-admin-editor"></div>
+                <aside class="panel ssc-rules-admin-preview">
+                  <div class="ssc-rules-preview-header">
+                    <div><strong>Pratinjau Season Archive</strong><small>Desktop dan HP, tanpa perlu menyimpan dulu.</small></div>
+                    <div class="ssc-rules-preview-actions">
+                      <button id="seasons-preview-desktop" class="button secondary" type="button">Desktop</button>
+                      <button id="seasons-preview-mobile" class="button secondary" type="button">HP</button>
+                    </div>
+                  </div>
+                  <div id="seasons-admin-preview-window" class="ssc-rules-preview-window">
+                    <iframe id="seasons-admin-preview-frame" title="Pratinjau Season Archive SSCircle" src="seasons.html?ssc_theme_preview=1&amp;ssc_season_preview=1" loading="lazy"></iframe>
+                  </div>
+                  <p id="seasons-admin-preview-status" class="field-help" role="status">Memuat pratinjau...</p>
                 </aside>
               </div>
             </section>
@@ -386,6 +413,7 @@
                       <option value="status.html">Cek Status</option>
                       <option value="rules.html">Server Rules</option>
                       <option value="events.html">Event Calendar</option>
+                      <option value="seasons.html">Season Archive</option>
                     </select>
                     <button type="button" id="theme-preview-desktop" class="button secondary">Desktop</button>
                     <button type="button" id="theme-preview-mobile" class="button secondary">HP</button>

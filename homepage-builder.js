@@ -12,6 +12,7 @@ window.SSCircleHomepageBuilder = (() => {
     { id: 'community', title: 'Stay Connected', help: 'Discord dan media sosial' },
     { id: 'profile', title: 'Profil & Sejarah', help: 'Foto kepala skin, judul, dan cerita komunitas' },
     { id: 'leaderboard', title: 'Leaderboard', help: 'Daftar peringkat komunitas per season' },
+    { id: 'season-highlights', title: 'Season Highlights', help: 'Cuplikan season terbit dari arsip SSCircle' },
     { id: 'status', title: 'Cek Status', help: 'Cara memeriksa hasil pendaftaran' }
   ];
   const TYPES = {

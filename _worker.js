@@ -408,6 +408,17 @@ const HOME_DEFAULTS = {
   homeVotingOptions: [{ id: 'opsi-1', label: 'Pilihan 1' }, { id: 'opsi-2', label: 'Pilihan 2' }],
   homeVotingQuestions: null,
   homeVotingVotes: [],
+  seasonArchiveEnabled: false,
+  seasonArchiveTitle: 'Season Archive & Hall of Fame',
+  seasonArchiveDescription: 'Jejak perjalanan dan kenangan komunitas SSCircle dari season ke season.',
+  seasonArchiveEmptyText: 'Belum ada cerita season yang dipublikasikan.',
+  homeSeasonHighlightsEnabled: false,
+  homeSeasonHighlightsCount: 2,
+  homeSeasonHighlightsStyle: 'cards',
+  homeSeasonHighlightsHideEmpty: true,
+  homeSeasonHighlightsTitle: 'Season Highlights',
+  homeSeasonHighlightsDescription: 'Cerita dan kenangan dari season SSCircle.',
+  homeSeasonHighlightsButton: 'Jelajahi Semua Season ↗',
   homeLeaderboardEnabled: false,
   homeLeaderboardTitle: 'Leaderboard Komunitas',
   homeLeaderboardText: 'Riwayat pemain terbaik dari setiap season SSCircle.',
@@ -452,6 +463,7 @@ const HOME_DEFAULTS = {
     { id: "community", kind: "builtin" },
     { id: "profile", kind: "builtin" },
     { id: "leaderboard", kind: "builtin" },
+    { id: "season-highlights", kind: "builtin" },
     { id: "status", kind: "builtin" }
   ]
 };
@@ -759,23 +771,50 @@ function validVotingVotes(input, questions) {
     return [{questionId,account,optionId,voterKey,createdAt:s(v?.createdAt,40)||new Date().toISOString()}];
   });
 }
+// Satu sumber data season untuk Leaderboard lama sekaligus Season Archive.
 function validLeaderboard(input) {
-  const seasons = Array.isArray(input) ? input : [];
-  if (seasons.length > 12)
-    throw Error('Maksimal 12 season leaderboard.');
+  if (!Array.isArray(input) || input.length > 12)
+    throw Error('Maksimal 12 season SSCircle.');
   const seen = new Set();
-  return seasons.map((season, index) => {
-    const rawId = s(season?.id, 64) || ('season-' + (index + 1));
-    const id = rawId.toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 64) || ('season-' + (index + 1));
-    if (seen.has(id))
-      throw Error('ID leaderboard season duplikat.');
+  const date = (value, label) => {
+    const raw = s(value, 10);
+    if (!raw) return '';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(raw) || Number.isNaN(Date.parse(raw+'T00:00:00Z')) || new Date(raw+'T00:00:00Z').toISOString().slice(0,10)!==raw)
+      throw Error('Tanggal '+label+' tidak valid.');
+    return raw;
+  };
+  const img = value => { const raw = s(value,700); return raw ? imageSource(raw,'Foto arsip season') : ''; };
+  return input.map((season,index) => {
+    const rawId=s(season?.id,64)||('season-'+(index+1));
+    const id=rawId.toLowerCase().replace(/[^a-z0-9_-]+/g,'-').replace(/^-+|-+$/g,'').slice(0,64)||('season-'+(index+1));
+    if (seen.has(id)) throw Error('ID season duplikat.');
     seen.add(id);
-    const title = s(season?.title, 120) || ('Leaderboard S' + (index + 1));
-    const entriesRaw = Array.isArray(season?.entries) ? season.entries : [];
-    const entries = entriesRaw.slice(0, 20).map(entry => ({ name: s(entry?.name, 80), score: s(entry?.score, 80) })).filter(entry => entry.name || entry.score);
-    return { id, title, entries };
-  }).filter(season => season.title);
+    const title=s(season?.title,120)||('Leaderboard S'+(index+1));
+    const entriesRaw=Array.isArray(season?.entries)?season.entries:[];
+    if(entriesRaw.length>20) throw Error('Maksimal 20 peringkat per season.');
+    const entries=entriesRaw.map(e=>({name:s(e?.name,80),score:s(e?.score,80)})).filter(e=>e.name||e.score);
+    const startDate=date(season?.archiveStartDate,'mulai season');
+    const endDate=date(season?.archiveEndDate,'akhir season');
+    if(startDate&&endDate&&endDate<startDate) throw Error('Tanggal akhir season harus setelah tanggal mulai.');
+    const memories=season?.archiveMemories===undefined?[]:season.archiveMemories;
+    const builds=season?.archiveBuilds===undefined?[]:season.archiveBuilds;
+    const awards=season?.archiveAwards===undefined?[]:season.archiveAwards;
+    if(!Array.isArray(memories)||memories.length>12) throw Error('Maksimal 12 foto kenangan per season.');
+    if(!Array.isArray(builds)||builds.length>8) throw Error('Maksimal 8 bangunan terbaik per season.');
+    if(!Array.isArray(awards)||awards.length>12) throw Error('Maksimal 12 penghargaan per season.');
+    return {id,title,entries,
+      archivePublished:season?.archivePublished===true,
+      archiveStatus:season?.archiveStatus==='active'?'active':'ended',
+      archiveStartDate:startDate,archiveEndDate:endDate,
+      archiveSummary:s(season?.archiveSummary,1200),
+      archiveCover:img(season?.archiveCover),
+      archiveMemories:memories.map(m=>({src:img(m?.src),caption:s(m?.caption,240)})).filter(m=>m.src),
+      archiveBuilds:builds.map(b=>({title:s(b?.title,120),builder:s(b?.builder,100),src:img(b?.src),description:s(b?.description,350)})).filter(b=>b.title),
+      archiveAwards:awards.map(a=>({title:s(a?.title,120),player:s(a?.player,100),description:s(a?.description,350)})).filter(a=>a.title)
+    };
+  });
 }
+
 function votingRuntime(settings) {
   const now=Date.now(), end=settings.homeVotingPermanent ? 0 : Date.parse(settings.homeVotingEndsAt||'');
   const hasEnd=Number.isFinite(end) && end>0,expired=hasEnd && end<=now;
@@ -923,6 +962,13 @@ function settingsValid(input) {
   out.eventsEnabled = input.eventsEnabled !== false;
   for (const [key, max] of Object.entries({eventsBadge:90,eventsTitle:140,eventsDescription:900,eventsEmptyText:400}))
     out[key] = s(input[key] === undefined ? EVENTS_DEFAULTS[key] : input[key], max);
+  out.seasonArchiveEnabled = input.seasonArchiveEnabled === true;
+  out.homeSeasonHighlightsEnabled = input.homeSeasonHighlightsEnabled === true;
+  out.homeSeasonHighlightsCount = [1,2,3].includes(Number(input.homeSeasonHighlightsCount)) ? Number(input.homeSeasonHighlightsCount) : 2;
+  out.homeSeasonHighlightsStyle = input.homeSeasonHighlightsStyle === 'timeline' ? 'timeline' : 'cards';
+  out.homeSeasonHighlightsHideEmpty = input.homeSeasonHighlightsHideEmpty !== false;
+  for(const [key,max] of Object.entries({seasonArchiveTitle:160,seasonArchiveDescription:900,seasonArchiveEmptyText:350,homeSeasonHighlightsTitle:120,homeSeasonHighlightsDescription:300,homeSeasonHighlightsButton:100}))
+    out[key]=s(input[key]===undefined?HOME_DEFAULTS[key]:input[key],max);
   out.homeUpcomingEnabled = input.homeUpcomingEnabled === true;
   out.homeUpcomingCount = [1,2,3].includes(Number(input.homeUpcomingCount)) ? Number(input.homeUpcomingCount) : 2;
   out.homeUpcomingLayout = input.homeUpcomingLayout === 'slider' ? 'slider' : 'grid';
@@ -1247,8 +1293,8 @@ function settingsValid(input) {
   const defaultLayout = HOME_DEFAULTS.homeLayout;
   const sourceLayout = input.homeLayout === undefined ? defaultLayout : input.homeLayout;
   const rawLayout = Array.isArray(sourceLayout) ? sourceLayout.filter(item => item?.id !== 'donate' && item?.id !== 'voting') : sourceLayout;
-  if (!Array.isArray(rawLayout) || rawLayout.length > 26)
-    throw Error('Maksimal 26 bagian pada Homepage.');
+  if (!Array.isArray(rawLayout) || rawLayout.length > 27)
+    throw Error('Maksimal 27 bagian pada Homepage.');
   const builtinIds = [
     'about',
     'gallery',
@@ -1257,6 +1303,7 @@ function settingsValid(input) {
     'community',
     'profile',
     'leaderboard',
+    'season-highlights',
     'status'
   ];
   const seenLayout = new Set();
@@ -1772,6 +1819,9 @@ function activePublicMedia(row) {
       if (typeof src==='string'&&src.startsWith('/api/media/'))active.add(src.split('/').pop());
   if (typeof settings.homeProfileImage === 'string' && settings.homeProfileImage.startsWith('/api/media/'))
     active.add(settings.homeProfileImage.split('/').pop());
+  for(const season of settings.homeLeaderboardSeasons || [])
+    for(const src of [season.archiveCover,...(season.archiveMemories||[]).map(i=>i.src),...(season.archiveBuilds||[]).map(i=>i.src)])
+      if(typeof src==='string'&&/^\/api\/media\/[0-9a-f-]{36}$/.test(src)) active.add(src.split('/').pop());
   for (const item of settings.homeProfileItems || []) {
     for (const src of [item.src, item.detailImage])
       if (typeof src === 'string' && src.startsWith('/api/media/'))
@@ -1821,6 +1871,17 @@ async function route(req, env) {
   if (['/rules', '/rules.html'].includes(path) && ['GET', 'HEAD'].includes(method)) {
     if (path === '/rules.html')
       return new Response(null, { status: 302, headers: { Location: '/rules' + url.search, 'Cache-Control': 'no-store' } });
+    return env.ASSETS.fetch(req);
+  }
+  // Arsip season publik bisa dinonaktifkan; preview admin tidak terpengaruh.
+  if (['/seasons','/seasons.html'].includes(path) && ['GET','HEAD'].includes(method)) {
+    const preview=url.searchParams.has('ssc_season_preview')||url.searchParams.has('ssc_theme_preview');
+    if(!preview) {
+      if(!env.DB) return bad('Halaman arsip belum tersedia.',503);
+      const settings=formFrom(await readSettingsRow(env)).settings;
+      if(settings.seasonArchiveEnabled!==true) return new Response('Season Archive belum dibuka.',{status:404,headers:{'Content-Type':'text/plain; charset=utf-8','Cache-Control':'no-store'}});
+    }
+    if(path==='/seasons.html') return new Response(null,{status:302,headers:{Location:'/seasons'+url.search,'Cache-Control':'no-store'}});
     return env.ASSETS.fetch(req);
   }
   // Proteksi juga dokumen HTML, bukan hanya tombol UI: URL voting langsung tidak bisa dibuka oleh kode Pending/Rejected.
@@ -1919,6 +1980,12 @@ async function route(req, env) {
   if (path === '/api/form' && method === 'GET') {
     const f = formFrom(await env.DB.prepare('SELECT * FROM form_config WHERE id=1').first());
     delete f.settings.homeVotingVotes;
+    // Data draft Season Archive hanya untuk admin; ranking lama tetap dapat dipakai di Homepage.
+    // Juga cegah metadata arsip bocor melalui API publik saat halaman dinonaktifkan.
+    f.settings.homeLeaderboardSeasons = (f.settings.homeLeaderboardSeasons || []).map(season =>
+      f.settings.seasonArchiveEnabled === true && season.archivePublished === true
+        ? season
+        : {id:season.id,title:season.title,entries:season.entries,archivePublished:false});
     return J(f);
   }
   if (path === '/api/registration-cooldown' && method === 'GET') {
@@ -2153,6 +2220,7 @@ async function route(req, env) {
           ...settings.homeVotingOptions.flatMap(o => (o.images || []).filter(src => src.startsWith('/api/media/')).map(src => src.split('/').pop())),
           ...settings.homeVotingQuestions.flatMap(q=>[...(q.images||[]),...q.options.flatMap(o=>o.images||[])].filter(src=>src.startsWith('/api/media/')).map(src=>src.split('/').pop())),
           ...settings.eventsItems.filter(event => event.image?.startsWith('/api/media/')).map(event => event.image.split('/').pop()),
+          ...settings.homeLeaderboardSeasons.flatMap(season=>[season.archiveCover,...(season.archiveMemories||[]).map(x=>x.src),...(season.archiveBuilds||[]).map(x=>x.src)]).filter(src=>src?.startsWith('/api/media/')).map(src=>src.split('/').pop()),
           settings.homeProfileImage?.startsWith('/api/media/') ? settings.homeProfileImage.split('/').pop() : '',
           ...(settings.homeProfileItems || []).flatMap(item => [item.src, item.detailImage].filter(src => src?.startsWith('/api/media/')).map(src => src.split('/').pop())),
           ...settings.homeSocialLinks.map(link => link.icon?.startsWith('/api/media/') ? link.icon.split('/').pop() : ''),

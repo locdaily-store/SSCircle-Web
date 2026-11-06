@@ -20,6 +20,16 @@ window.SSCircleThemeEditor = (() => {
     ['.events-card', 'Kartu event'], ['.events-card h2', 'Judul event'],
     ['.events-calendar', 'Kalender bulanan'], ['.events-status', 'Label status event'],
     ['.events-countdown', 'Hitung mundur'],
+    ['.season-page', 'Seluruh halaman Season Archive'],
+    ['.season-archive-hero', 'Pembuka arsip season'],
+    ['.season-archive-card', 'Kartu riwayat season'],
+    ['.season-archive-state', 'Status season'],
+    ['.season-archive-group', 'Bagian kenangan dan prestasi'],
+    ['.season-archive-photo', 'Foto kenangan'],
+    ['.season-archive-award', 'Kartu Hall of Fame'],
+    ['.season-archive-ranking', 'Peringkat pemain'],
+    ['.home-season-highlights', 'Bagian Season Highlights di Homepage'],
+    ['.home-season-card', 'Kartu Season Highlights'],
     ['.home-header', 'Header Homepage'], ['.home-nav-link', 'Menu navigasi'],
     ['.home-brand', 'Nama/logo header'], ['.home-hero', 'Hero Video'],
     ['.home-hero-content h1', 'Judul Hero'], ['.home-hero-content h1 em', 'Highlight judul Hero'],
@@ -163,6 +173,9 @@ window.SSCircleThemeEditor = (() => {
     // Preview pages have a message receiver independent of API readiness.
     try {
       frame?.contentWindow?.postMessage({ type: 'ssc-theme-preview-settings', settings: JSON.parse(JSON.stringify(state.settings)) }, location.origin);
+      if ($('theme-preview-page').value === 'seasons.html') {
+        frame?.contentWindow?.postMessage({type:'ssc-season-preview-settings',settings:JSON.parse(JSON.stringify(state.settings))},location.origin);
+      }
       if ($('theme-preview-page').value === 'events.html') {
         frame?.contentWindow?.postMessage({ type: 'ssc-events-preview-settings', settings: JSON.parse(JSON.stringify(state.settings)) }, location.origin);
       }
