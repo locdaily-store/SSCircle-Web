@@ -839,7 +839,8 @@ async function save() {
     b.classList.add('is-saving');
   });
   try {
-    await SSCircle.saveForm(data.settings, data.pages);
+    const result = await SSCircle.saveForm(data.settings, data.pages, data.revision);
+    data.revision = result.revision;
     dirty = false;
     ['#save-message', '#appearance-message', '#home-admin-message', '#theme-message'].forEach(selector => {
       const n = $(selector);
@@ -856,7 +857,7 @@ async function save() {
     summary();
   }
   catch (e) {
-    SSCNotice.toast('Gagal menyimpan: ' + e.message, 'error', 6500);
+    SSCNotice.toast(e.status === 409 ? 'Pengaturan berubah di sesi admin lain. Salin perubahanmu dulu, lalu muat ulang halaman agar tidak menimpa pekerjaan orang lain.' : 'Gagal menyimpan: ' + e.message, 'error', 7500);
   }
   finally {
     saveButtons.forEach(b => {
