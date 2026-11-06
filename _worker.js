@@ -1104,33 +1104,9 @@ function settingsValid(input) {
       out.homeLayout.push({ id, kind: 'builtin' });
   return out;
 }
-function legacyPublicText(txt) {
-  return String(txt ?? '').replace(/SSCircle S6/gi, 'SSCircle Server').replace(/SSCircle Season 6/gi, 'SSCircle Server');
-}
-// Old season badges and the old 8-character username prompt are display text,
-// not database identifiers. Keep historical records and keys unchanged.
-function cleanOutdatedLabel(txt) {
-  return legacyPublicText(txt)
-    .replace(/USERNAME\s+MINECRAFT\s*\(\s*HANYA\s+UNTUK\s+KODE\s+LAMA\s+8\s+KARAKTER\s*\)/gi, '')
-    .replace(/\bSeason\s*6\b/gi, '')
-    .replace(/\bS6\b/gi, '')
-    .replace(/[ \t]{2,}/g, ' ')
-    .trim();
-}
+// Teks dari Admin Control digunakan apa adanya; migrasi lama tidak boleh menghapus kata pengguna.
 function normalSettings(raw) {
   const input = raw && typeof raw === 'object' ? { ...raw } : {};
-  for (const key of Object.keys(input)) {
-    if (typeof input[key] !== 'string' || ['logoMediaId', 'heroMediaId', 'introLogoMediaId'].includes(key))
-      continue;
-    input[key] = /(?:Title|Text|Description|Subtitle|CTA|Label|Hint|Heading|Eyebrow|Notice|Button|Footer|brandName|^title$)/i.test(key)
-      ? cleanOutdatedLabel(input[key])
-      : legacyPublicText(input[key]);
-  }
-  if (Array.isArray(input.homeLeaderboardSeasons)) {
-    input.homeLeaderboardSeasons = input.homeLeaderboardSeasons.map(season => season && typeof season === 'object'
-      ? { ...season, title: cleanOutdatedLabel(season.title) }
-      : season);
-  }
   if (input.homeProcessTitle === 'Bergabung dalam lingkaran.')
     input.homeProcessTitle = 'Join our Circle';
   if (!Array.isArray(input.homeProfileItems)) {

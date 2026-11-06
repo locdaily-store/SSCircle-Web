@@ -69,3 +69,50 @@ test('Halaman Voting hanya dapat dibuka dengan status diterima', async () => {
   assert.equal(response.status,302);
   assert.equal(new URL(response.headers.get('Location'),'https://sscircle.pages.dev').pathname,'/voting');
 });
+
+
+test('Tulisan S6 tetap sama ketika pengaturan dibuka dan disimpan', async () => {
+  const { env, row } = setup();
+  row.settings = JSON.stringify({
+    brandName: 'SSCircle S6',
+    heroTitle: 'SSCircle Season 6',
+    homeVotingTitle: 'Voting S6',
+    homeLeaderboardSeasons: [{ id: 's6', title: 'Leaderboard S6', entries: [{ name: 'S6 Winner', score: '10' }] }]
+  });
+  const opened = await (await fetchWorker(env, '/api/admin/form')).json();
+  assert.equal(opened.settings.brandName, 'SSCircle S6');
+  assert.equal(opened.settings.heroTitle, 'SSCircle Season 6');
+  assert.equal(opened.settings.homeVotingTitle, 'Voting S6');
+  assert.equal(opened.settings.homeLeaderboardSeasons[0].title, 'Leaderboard S6');
+
+  opened.settings.footerText = 'Informasi server S6';
+  opened.settings.homeAboutTitle = 'Petualangan Season 6';
+  opened.pages[0].title = 'Pendaftaran S6';
+  opened.pages[0].description = 'Minecraft SSCircle S6';
+  const saved = await fetchWorker(env, '/api/admin/form', 'PUT', {
+    revision: opened.revision, settings: opened.settings, pages: opened.pages
+  });
+  assert.equal(saved.status, 200, await saved.clone().text());
+  assert.equal(JSON.parse(row.settings).footerText, 'Informasi server S6');
+  const admin = await (await fetchWorker(env, '/api/admin/form')).json();
+  const publicForm = await (await fetchWorker(env, '/api/form')).json();
+  for (const form of [admin, publicForm]) {
+    assert.equal(form.settings.brandName, 'SSCircle S6');
+    assert.equal(form.settings.heroTitle, 'SSCircle Season 6');
+    assert.equal(form.settings.homeVotingTitle, 'Voting S6');
+    assert.equal(form.settings.homeAboutTitle, 'Petualangan Season 6');
+    assert.equal(form.settings.footerText, 'Informasi server S6');
+    assert.equal(form.settings.homeLeaderboardSeasons[0].title, 'Leaderboard S6');
+    assert.equal(form.pages[0].title, 'Pendaftaran S6');
+    assert.equal(form.pages[0].description, 'Minecraft SSCircle S6');
+  }
+});
+
+test('Tampilan formulir tidak mengganti nama S6 atau Season 6', async () => {
+  const source = readFileSync(new URL('../app.js', import.meta.url), 'utf8');
+  const formatter = source.match(/function safePublicText\(value\) \{[\s\S]*?\n\}/)?.[0];
+  assert.ok(formatter, 'Fungsi teks formulir harus tersedia');
+  const { runInNewContext } = await import('node:vm');
+  const actual = runInNewContext(`${formatter}\nsafePublicText('SSCircle S6 - Season 6')`);
+  assert.equal(actual, 'SSCircle S6 - Season 6');
+});

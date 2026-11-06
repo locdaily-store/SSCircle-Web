@@ -18,7 +18,8 @@ const OTHER_RADIO = '__SSC_OTHER_CHOICE__';
 const isOther = v => typeof v === 'string' && v.startsWith(OTHER_PREFIX);
 const otherText = v => isOther(v) ? v.slice(OTHER_PREFIX.length) : '';
 function safePublicText(value) {
-  return String(value ?? '').replace(/SSCircle S6/gi, 'SSCircle Server').replace(/SSCircle Season 6/gi, 'SSCircle Server');
+  // Teks pengaturan ditampilkan sesuai isi yang disimpan admin.
+  return String(value ?? '');
 }
 const presentationDefaults = {
   brandName: 'SSCircle Server',
