@@ -1,4 +1,7 @@
 /* SSCircle: real registration-page live preview, isolated from submitting applications. */
+
+// Pratinjau halaman pendaftaran di Admin Control.
+
 'use strict';
 window.SSCircleRegistrationPreview = (() => {
   let form = null;
@@ -11,14 +14,16 @@ window.SSCircleRegistrationPreview = (() => {
   let listening = false;
   const el = (tag, cls = '', label) => {
     const n = document.createElement(tag);
-    if (cls) n.className = cls;
-    if (label !== undefined) n.textContent = label;
+    if (cls)
+      n.className = cls;
+    if (label !== undefined)
+      n.textContent = label;
     return n;
   };
   const clone = object => JSON.parse(JSON.stringify(object));
-
   function resize() {
-    if (!frame || !viewport) return;
+    if (!frame || !viewport)
+      return;
     const width = mode === 'mobile' ? 390 : 1280;
     const height = mode === 'mobile' ? 860 : 900;
     const available = Math.max(200, viewport.clientWidth - 24);
@@ -28,9 +33,9 @@ window.SSCircleRegistrationPreview = (() => {
     frame.style.transform = `scale(${scale})`;
     viewport.style.height = Math.min(mode === 'mobile' ? 640 : 620, height * scale + 10) + 'px';
   }
-
   function update() {
-    if (!form || !frame) return;
+    if (!form || !frame)
+      return;
     clearTimeout(timer);
     timer = setTimeout(() => {
       try {
@@ -39,14 +44,17 @@ window.SSCircleRegistrationPreview = (() => {
           settings: clone(form.settings),
           pages: clone(form.pages)
         }, location.origin);
-      } catch { badge.textContent = 'Tidak dapat memperbarui pratinjau'; }
+      }
+      catch {
+        badge.textContent = 'Tidak dapat memperbarui pratinjau';
+      }
     }, 110);
   }
-
   function render(data) {
     form = data;
     const root = document.getElementById('registration-live-preview');
-    if (!root) return;
+    if (!root)
+      return;
     // Refresh data on re-login without multiplying frames, events, or timers.
     if (panel) {
       update();
@@ -55,8 +63,7 @@ window.SSCircleRegistrationPreview = (() => {
     panel = el('section', 'home-builder-preview-panel ssc-registration-preview-panel');
     const top = el('div', 'home-builder-preview-top');
     const heading = el('div');
-    heading.append(el('strong', '', 'Pratinjau langsung Registration'),
-      el('small', '', 'Tampilan asli formulir. Perubahan langsung terlihat sebelum disimpan.'));
+    heading.append(el('strong', '', 'Pratinjau langsung Registration'), el('small', '', 'Tampilan asli formulir. Perubahan langsung terlihat sebelum disimpan.'));
     badge = el('span', 'home-preview-connection', 'Menghubungkan pratinjau...');
     top.append(heading, badge);
     const controls = el('div', 'home-builder-view-controls');
@@ -87,7 +94,8 @@ window.SSCircleRegistrationPreview = (() => {
     hide.onclick = () => {
       panel.classList.toggle('is-collapsed');
       hide.textContent = panel.classList.contains('is-collapsed') ? 'Tampilkan pratinjau' : 'Sembunyikan pratinjau';
-      if (!panel.classList.contains('is-collapsed')) requestAnimationFrame(resize);
+      if (!panel.classList.contains('is-collapsed'))
+        requestAnimationFrame(resize);
     };
     controls.append(hide);
     viewport = el('div', 'home-builder-preview-viewport');
@@ -103,15 +111,18 @@ window.SSCircleRegistrationPreview = (() => {
     if (!listening) {
       listening = true;
       window.addEventListener('message', event => {
-        if (event.origin !== location.origin || event.source !== frame?.contentWindow) return;
-        if (event.data?.type === 'ssc-registration-preview-ready') update();
+        if (event.origin !== location.origin || event.source !== frame?.contentWindow)
+          return;
+        if (event.data?.type === 'ssc-registration-preview-ready')
+          update();
         if (event.data?.type === 'ssc-registration-preview-applied') {
           badge.textContent = 'Pratinjau aktif';
           badge.classList.add('is-ready');
         }
       });
     }
-    if ('ResizeObserver' in window) new ResizeObserver(resize).observe(viewport);
+    if ('ResizeObserver' in window)
+      new ResizeObserver(resize).observe(viewport);
     requestAnimationFrame(resize);
     update();
   }

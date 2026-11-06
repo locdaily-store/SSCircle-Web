@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="id">
   <head>
+    <!-- Metadata, stylesheet, dan script halaman -->
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#120c1d">
@@ -15,8 +16,13 @@
     <script src="homepage.js?v=10.26.0" defer></script>
   </head>
   <body class="home-page theme-v3">
+
+    <!-- Header dan navigasi -->
     <header class="home-header" id="top">
-      <a href="./" class="home-brand" aria-label="SSCircle Server beranda"><img id="home-logo" src="assets/sscircle-logo.png" width="41" height="41" alt="Logo SSCircle"><span><strong>SSCircle</strong><small>SERVER</small></span></a>
+      <a href="./" class="home-brand" aria-label="SSCircle Server beranda">
+        <img id="home-logo" src="assets/sscircle-logo.png" width="41" height="41" alt="Logo SSCircle">
+        <span><strong>SSCircle</strong><small>SERVER</small></span>
+      </a>
       <nav class="home-nav" aria-label="Navigasi utama">
         <a class="home-nav-link" href="#tentang">Tentang</a>
         <a class="home-nav-link" href="#galeri">Galeri</a>
@@ -25,10 +31,15 @@
       </nav>
       <button type="button" class="home-menu-button" id="home-menu-button" aria-label="Buka menu navigasi" aria-expanded="false">☰</button>
     </header>
+
+    <!-- Konten utama halaman -->
     <main>
       <section class="home-hero" id="home-hero" aria-labelledby="home-title" style="--home-poster:url('assets/gallery/sscircle-01.webp')">
         <div class="home-hero-poster" id="home-hero-poster" aria-hidden="true"></div>
-        <video class="home-cinematic" id="home-cinematic" autoplay muted loop playsinline preload="metadata" poster="assets/gallery/sscircle-01.webp" aria-hidden="true"><source src="assets/sscircle-cinematic.mp4" type="video/mp4"></source></video>
+        <video class="home-cinematic" id="home-cinematic" autoplay muted loop playsinline preload="metadata" poster="assets/gallery/sscircle-01.webp" aria-hidden="true">
+          <source src="assets/sscircle-cinematic.mp4" type="video/mp4">
+          </source>
+        </video>
         <div class="home-video-dim" aria-hidden="true"></div>
         <div class="home-video-grain" aria-hidden="true"></div>
         <div class="home-hero-content">
@@ -48,7 +59,10 @@
           <button id="home-video-toggle" class="home-video-toggle" type="button" aria-label="Jeda video cinematic" title="Jeda / putar video"><span aria-hidden="true">Ⅱ</span></button>
         </div>
       </section>
+      <!-- Bagian Homepage yang susunannya dapat diatur -->
       <div id="home-content-sections" class="home-content-sections">
+
+        <!-- Tentang Server -->
         <section class="home-story home-container home-reveal" id="tentang">
           <div class="home-section-label">
             <span>01</span>
@@ -67,6 +81,8 @@
             </div>
           </div>
         </section>
+
+        <!-- Galeri server -->
         <section class="home-gallery-section home-container" id="galeri">
           <div class="home-section-label home-reveal">
             <span>02</span>
@@ -80,8 +96,10 @@
             </div>
             <span class="home-gallery-counter" id="home-gallery-counter">09 / MEMORIES</span>
           </div>
-          <div id="home-gallery-grid" class="home-gallery-grid" aria-label="Galeri screenshot server"><!-- Built from settings --></div>
+          <div id="home-gallery-grid" class="home-gallery-grid" aria-label="Galeri screenshot server"><!-- Foto galeri ditampilkan dari pengaturan Homepage --></div>
         </section>
+
+        <!-- Alur pendaftaran -->
         <section class="home-journey home-container home-reveal" id="proses">
           <div class="home-section-label">
             <span>03</span>
@@ -110,6 +128,8 @@
             </div>
           </div>
         </section>
+
+        <!-- Komunitas dan media sosial -->
         <section class="home-community home-container home-reveal" id="komunitas">
           <div class="home-section-label">
             <span>04</span>
@@ -117,9 +137,7 @@
             <span>STAY CONNECTED</span>
           </div>
           <div class="home-community-card">
-            <div class="home-community-icon">
-              <img src="assets/discord-logo.png" alt="Logo Discord" width="62" height="62">
-            </div>
+            <div class="home-community-icon"> <img src="assets/discord-logo.png" alt="Logo Discord" width="62" height="62"> </div>
             <div class="home-community-copy">
               <h2 id="home-discord-title">Temukan <em>komunitasmu.</em></h2>
               <p id="home-discord-description">Pengumuman, informasi pendaftaran, dan obrolan pemain tersedia di Discord SSCircle Community.</p>
@@ -135,12 +153,18 @@
           </div>
           <div class="home-community-donate" id="home-community-donate">
             <a id="home-donate-button" class="home-community-donate-link" href="https://sociabuzz.com/jasits" target="_blank" rel="noopener noreferrer" aria-label="Donasi untuk mendukung SSCircle Server">
-          <span class="home-community-donate-icon"><img id="home-donate-icon" src="assets/sscircle-community-icon.png" alt="Logo SSCircle Community" width="66" height="66"></span>
-          <span class="home-community-donate-copy"><span class="home-community-donate-eyebrow">DUKUNG KOMUNITAS</span><strong id="home-donate-title">Jika ingin mendukung server ini</strong><small id="home-donate-description">Donasi kalian akan sangat membantu dalam memperpanjang dan memperbaiki server ini. Terima kasih banyak atas dukungan kalian!</small></span>
-          <span id="home-donate-cta" class="home-community-donate-cta">Donasi Sekarang ↗</span>
-        </a>
+              <span class="home-community-donate-icon"><img id="home-donate-icon" src="assets/sscircle-community-icon.png" alt="Logo SSCircle Community" width="66" height="66"></span>
+              <span class="home-community-donate-copy">
+                <span class="home-community-donate-eyebrow">DUKUNG KOMUNITAS</span>
+                <strong id="home-donate-title">Jika ingin mendukung server ini</strong>
+                <small id="home-donate-description">Donasi kalian akan sangat membantu dalam memperpanjang dan memperbaiki server ini. Terima kasih banyak atas dukungan kalian!</small>
+              </span>
+              <span id="home-donate-cta" class="home-community-donate-cta">Donasi Sekarang ↗</span>
+            </a>
           </div>
         </section>
+
+        <!-- Profil dan sejarah -->
         <section class="home-profile home-container home-reveal" id="profile" hidden>
           <div class="home-section-label">
             <span>PROFILE</span>
@@ -154,6 +178,8 @@
           </div>
           <div class="home-profile-grid" id="home-profile-grid" aria-label="Foto Profil &amp; Sejarah SSCircle"></div>
         </section>
+
+        <!-- Leaderboard pemain -->
         <section class="home-leaderboard home-container home-reveal" id="leaderboard">
           <div class="home-section-label">
             <span>07</span>
@@ -175,6 +201,8 @@
           </div>
           <div id="home-leaderboard-dots" class="home-leaderboard-dots"></div>
         </section>
+
+        <!-- Akses cek status -->
         <section class="home-cta-strip home-container home-reveal" id="status-quick">
           <div>
             <span class="home-cta-mini" id="home-status-eyebrow">SUDAH MENDAFTAR?</span>
@@ -185,6 +213,8 @@
         </section>
       </div>
     </main>
+
+    <!-- Footer -->
     <footer class="home-footer ssc-unified-footer">
       <div class="home-container home-footer-content ssc-footer-content">
         <div class="home-footer-mark">
@@ -200,6 +230,7 @@
         <small>© 2026 SSCircle Server</small>
       </div>
     </footer>
+    <!-- Popup dan pratinjau gambar -->
     <dialog id="home-profile-dialog" class="home-profile-dialog" aria-labelledby="home-profile-detail-title" aria-modal="true">
       <button type="button" id="home-profile-detail-close" class="home-profile-dialog-close" aria-label="Tutup profil">×</button>
       <div class="home-profile-dialog-media"><img id="home-profile-detail-image" src="assets/sscircle-logo.png" alt="Foto profil lengkap"></div>
@@ -210,12 +241,11 @@
         <div id="home-profile-detail-description" class="home-profile-dialog-description"></div>
       </div>
     </dialog>
+    <!-- Popup dan pratinjau gambar -->
     <dialog id="home-gallery-dialog" class="home-lightbox" aria-label="Tampilan gambar galeri">
       <button class="home-lightbox-close" id="home-gallery-close" type="button" aria-label="Tutup galeri">×</button>
       <button type="button" class="home-lightbox-arrow" id="home-gallery-prev" aria-label="Gambar sebelumnya">‹</button>
-      <figure>
-        <img id="home-gallery-preview" alt="">
-      </figure>
+      <figure> <img id="home-gallery-preview" alt=""> </figure>
       <button type="button" class="home-lightbox-arrow" id="home-gallery-next" aria-label="Gambar berikutnya">›</button>
     </dialog>
   </body>

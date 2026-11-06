@@ -1,10 +1,15 @@
 /* SSCircle Server • public multi-page branching form */
+
+// Formulir pendaftaran: pertanyaan, navigasi, dan pengiriman data.
+
 'use strict';
 const $ = x => document.querySelector(x);
 const el = (tag, cls, txt) => {
   const n = document.createElement(tag);
-  if (cls) n.className = cls;
-  if (txt !== undefined) n.textContent = txt;
+  if (cls)
+    n.className = cls;
+  if (txt !== undefined)
+    n.textContent = txt;
   return n;
 };
 let model = null, pageIndex = 0, history = [], answers = {}, images = {}, demo = false;
@@ -12,7 +17,6 @@ const OTHER_PREFIX = '__SSC_OTHER__:';
 const OTHER_RADIO = '__SSC_OTHER_CHOICE__';
 const isOther = v => typeof v === 'string' && v.startsWith(OTHER_PREFIX);
 const otherText = v => isOther(v) ? v.slice(OTHER_PREFIX.length) : '';
-
 function safePublicText(value) {
   return String(value ?? '').replace(/SSCircle S6/gi, 'SSCircle Server').replace(/SSCircle Season 6/gi, 'SSCircle Server');
 }
@@ -82,7 +86,8 @@ function applyPresentation(settings) {
   const v = { ...presentationDefaults, ...settings };
   window.SSCircleSocial?.render(document.getElementById('registration-social-grid'), v, 'registration');
   const discord = document.getElementById('ssc-footer-discord');
-  if (discord && /^https:\/\/(?:discord\.gg|discord\.com)\//.test(v.homeDiscordUrl || '')) discord.href = v.homeDiscordUrl;
+  if (discord && /^https:\/\/(?:discord\.gg|discord\.com)\//.test(v.homeDiscordUrl || ''))
+    discord.href = v.homeDiscordUrl;
   const ids = {
     brandName: ['public-brand-name', 'public-footer-brand'],
     brandLabel: ['public-brand-label'],
@@ -123,18 +128,24 @@ function applyPresentation(settings) {
   for (const [key, targets] of Object.entries(ids)) {
     for (const id of targets) {
       const node = document.getElementById(id);
-      if (node) node.textContent = safePublicText(v[key] || '');
+      if (node)
+        node.textContent = safePublicText(v[key] || '');
     }
   }
   if (typeof v.homeFooterText === 'string' && v.homeFooterText.trim()) {
     const footerText = document.getElementById('public-footer-text');
-    if (footerText) footerText.textContent = v.homeFooterText;
+    if (footerText)
+      footerText.textContent = v.homeFooterText;
   }
   const media = (id, src = '') => {
-    if (src && (/^assets\/(?:gallery\/sscircle-0[1-9]\.webp|(?:sscircle-logo|sscircle-community-icon|tiktok-logo|discord-logo)\.png)$/.test(src) || /^https:\/\/[^\s<>"'\\]+$/i.test(src))) return src;
+    if (src && (/^assets\/(?:gallery\/sscircle-0[1-9]\.webp|(?:sscircle-logo|sscircle-community-icon|tiktok-logo|discord-logo)\.png)$/.test(src) || /^https:\/\/[^\s<>"'\\]+$/i.test(src)))
+      return src;
     return id && /^[0-9a-f-]{36}$/.test(id) ? '/api/media/' + id : 'assets/sscircle-logo.png';
   };
-  for (const image of document.querySelectorAll('[data-site-logo]')) { image.src = media(v.logoMediaId, v.logoImageUrl); image.referrerPolicy = 'no-referrer'; }
+  for (const image of document.querySelectorAll('[data-site-logo]')) {
+    image.src = media(v.logoMediaId, v.logoImageUrl);
+    image.referrerPolicy = 'no-referrer';
+  }
   $('.crest-logo').src = media(v.heroMediaId || v.logoMediaId, v.heroImageUrl || v.logoImageUrl);
   $('.crest-logo').referrerPolicy = 'no-referrer';
   $('#opening-logo').src = media(v.introLogoMediaId || v.logoMediaId, v.introLogoImageUrl || v.logoImageUrl);
@@ -166,12 +177,13 @@ function applyPresentation(settings) {
     dangerColor: '--ssc-danger'
   };
   for (const [key, cssVar] of Object.entries(colorVars)) {
-    if (/^#[0-9a-fA-F]{6}$/.test(v[key] || '')) document.documentElement.style.setProperty(cssVar, v[key]);
+    if (/^#[0-9a-fA-F]{6}$/.test(v[key] || ''))
+      document.documentElement.style.setProperty(cssVar, v[key]);
   }
-
   document.title = safePublicText(v.title || 'Pendaftaran SSCircle Server') + ' | ' + safePublicText(v.brandName);
   document.querySelector('meta[name="description"]')?.setAttribute('content', safePublicText(v.description || 'Pendaftaran SSCircle Server'));
-  if ($('#status-check-button')) $('#status-check-button').textContent = safePublicText(v.statusButtonText || 'Periksa status') + ' ↗';
+  if ($('#status-check-button'))
+    $('#status-check-button').textContent = safePublicText(v.statusButtonText || 'Periksa status') + ' ↗';
   $('#opening-kicker').textContent = safePublicText(v.brandLabel || 'REGISTRATION');
   setOpeningDuration(v.introDuration);
 }
@@ -179,21 +191,26 @@ let openingTimer = null;
 const opening = $('#site-opening');
 const motionOff = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 function closeOpening() {
-  if (openingTimer) clearTimeout(openingTimer);
+  if (openingTimer)
+    clearTimeout(openingTimer);
   opening.classList.add('is-leaving');
   opening.classList.remove('is-active');
   opening.setAttribute('aria-hidden', 'true');
 }
 function setOpeningDuration(value) {
-  if (!opening.classList.contains('is-active')) return;
+  if (!opening.classList.contains('is-active'))
+    return;
   let ms = Number(value);
-  if (!Number.isFinite(ms)) ms = 2300;
+  if (!Number.isFinite(ms))
+    ms = 2300;
   ms = Math.max(800, Math.min(6000, ms));
-  if (openingTimer) clearTimeout(openingTimer);
+  if (openingTimer)
+    clearTimeout(openingTimer);
   openingTimer = setTimeout(closeOpening, ms);
 }
 function startOpening() {
-  if (motionOff) return;
+  if (motionOff)
+    return;
   opening.classList.remove('is-leaving');
   opening.classList.add('is-active');
   opening.setAttribute('aria-hidden', 'false');
@@ -201,7 +218,6 @@ function startOpening() {
 }
 $('#opening-skip').onclick = closeOpening;
 startOpening();
-
 function note(text, error = false) {
   $('#notice').replaceChildren(el('div', 'message ' + (error ? 'message-error' : 'message-success'), text));
 }
@@ -218,17 +234,17 @@ const fallback = {
       title: 'Pendaftaran',
       description: 'Formulir sedang disiapkan.',
       blocks: [{
-        id: 'question-demo',
-        type: 'question',
-        question: {
-          id: 'username',
-          title: 'Username Minecraft kamu?',
-          type: 'short',
-          required: true,
-          placeholder: 'Steve',
-          options: []
-        }
-      }],
+          id: 'question-demo',
+          type: 'question',
+          question: {
+            id: 'username',
+            title: 'Username Minecraft kamu?',
+            type: 'short',
+            required: true,
+            placeholder: 'Steve',
+            options: []
+          }
+        }],
       routeQuestionId: '',
       routes: {}
     }
@@ -237,8 +253,10 @@ const fallback = {
 function mediaBlock(b) {
   if (b.type === 'text') {
     const section = el('section', 'content-section panel');
-    if (b.title) section.append(el('h3', '', safePublicText(b.title)));
-    if (b.description) section.append(el('p', '', safePublicText(b.description)));
+    if (b.title)
+      section.append(el('h3', '', safePublicText(b.title)));
+    if (b.description)
+      section.append(el('p', '', safePublicText(b.description)));
     return section;
   }
   if (b.type === 'image') {
@@ -250,12 +268,14 @@ function mediaBlock(b) {
     pic.alt = safePublicText(b.caption) || 'Gambar dari admin SSCircle';
     pic.loading = 'lazy';
     section.append(pic);
-    if (b.caption) section.append(el('figcaption', '', safePublicText(b.caption)));
+    if (b.caption)
+      section.append(el('figcaption', '', safePublicText(b.caption)));
     return section;
   }
   if (b.type === 'video') {
     const sec = el('section', 'media-card panel');
-    if (b.title) sec.append(el('h3', '', safePublicText(b.title)));
+    if (b.title)
+      sec.append(el('h3', '', safePublicText(b.title)));
     const iframe = el('iframe');
     iframe.loading = 'lazy';
     iframe.title = b.title || 'Video SSCircle';
@@ -271,19 +291,24 @@ function mediaBlock(b) {
 function questionBlock(q) {
   const card = el('div', 'question-card panel');
   const h = el('div', 'question-header'), t = el('h3', '', q.title);
-  if (q.required) t.append(el('span', 'required', ' *'));
+  if (q.required)
+    t.append(el('span', 'required', ' *'));
   h.append(el('span', 'question-number', '✦'), t);
   card.append(h);
   if (['short', 'long'].includes(q.type)) {
     const field = el(q.type === 'long' ? 'textarea' : 'input', 'answer-input');
-    if (q.type === 'short') field.type = 'text'; else field.rows = 4;
+    if (q.type === 'short')
+      field.type = 'text';
+    else
+      field.rows = 4;
     field.name = q.id;
     field.placeholder = q.placeholder || 'Ketik jawaban di sini...';
     field.maxLength = q.type === 'long' ? 2000 : 240;
     field.required = !!q.required;
     field.value = answers[q.id] || '';
     card.append(field);
-  } else if (q.type === 'select') {
+  }
+  else if (q.type === 'select') {
     const field = el('select', 'answer-input');
     field.name = q.id;
     field.required = !!q.required;
@@ -327,7 +352,8 @@ function questionBlock(q) {
       });
       card.append(input);
     }
-  } else if (q.type === 'single' || q.type === 'multi') {
+  }
+  else if (q.type === 'single' || q.type === 'multi') {
     const wrap = el('div', 'answer-options');
     for (const choice of q.options || []) {
       const lab = el('label', 'answer-option'), field = el('input');
@@ -335,7 +361,8 @@ function questionBlock(q) {
       field.name = q.id;
       field.value = choice;
       field.checked = q.type === 'multi' ? (answers[q.id] || []).includes(choice) : answers[q.id] === choice;
-      if (q.required && q.type === 'single') field.required = true;
+      if (q.required && q.type === 'single')
+        field.required = true;
       lab.append(field, el('span', 'custom-choice'), el('span', 'option-copy', choice));
       wrap.append(lab);
     }
@@ -345,7 +372,8 @@ function questionBlock(q) {
       field.name = q.id;
       field.value = OTHER_RADIO;
       field.checked = q.type === 'multi' ? (answers[q.id] || []).some(isOther) : isOther(answers[q.id]);
-      if (q.required && q.type === 'single') field.required = true;
+      if (q.required && q.type === 'single')
+        field.required = true;
       lab.append(field, el('span', 'custom-choice'), el('span', 'option-copy', 'Jawaban lainnya:'));
       wrap.append(lab);
       const input = el('input', 'answer-input other-answer-input');
@@ -377,9 +405,13 @@ function questionBlock(q) {
         updateNextLabel();
       });
       card.append(wrap, input);
-    } else card.append(wrap);
-    if (q.type === 'multi') card.append(el('p', 'question-hint', 'Pilih satu atau beberapa jawaban.'));
-  } else if (q.type === 'image_upload') {
+    }
+    else
+      card.append(wrap);
+    if (q.type === 'multi')
+      card.append(el('p', 'question-hint', 'Pilih satu atau beberapa jawaban.'));
+  }
+  else if (q.type === 'image_upload') {
     const field = el('input', 'answer-input');
     field.type = 'file';
     field.accept = 'image/png,image/jpeg,image/webp,image/gif';
@@ -396,63 +428,87 @@ function questionBlock(q) {
         }
         images[q.id] = f;
         field.required = false;
-        urlField.value = ''; preview.hidden = true; useLink.disabled = true;
+        urlField.value = '';
+        preview.hidden = true;
+        useLink.disabled = true;
         hint.textContent = 'Terpilih: ' + f.name;
-      } else delete images[q.id];
+      }
+      else
+        delete images[q.id];
     };
     card.append(field, hint);
     // Pilihan tambahan untuk pertanyaan upload gambar milik pendaftar.
     const externalPanel = el('details', 'ssc-respondent-url-image');
     const summary = el('summary', '', 'Atau gunakan link URL gambar (HTTPS)');
     const urlField = el('input', 'answer-input');
-    urlField.type = 'url'; urlField.maxLength = 700;
+    urlField.type = 'url';
+    urlField.maxLength = 700;
     urlField.placeholder = 'https://contoh.com/foto.jpg';
     urlField.value = images[q.id]?.url || '';
     const preview = el('img', 'ssc-image-url-preview');
-    preview.alt = 'Pratinjau jawaban gambar URL'; preview.referrerPolicy = 'no-referrer';
+    preview.alt = 'Pratinjau jawaban gambar URL';
+    preview.referrerPolicy = 'no-referrer';
     preview.hidden = true;
     const message = el('small', 'field-help', 'Foto tetap berada di hosting URL, bukan diunggah ke server SSCircle.');
     const useLink = el('button', 'button secondary', 'Gunakan URL ini');
-    useLink.type = 'button'; useLink.disabled = true;
+    useLink.type = 'button';
+    useLink.disabled = true;
     const validateURL = url => {
       try {
         const u = new URL(url);
         return u.protocol === 'https:' && !u.username && !u.password && !u.port && u.hostname.includes('.') &&
           !u.hostname.endsWith('.local') && !u.hostname.endsWith('.internal') && !/^(?:\d{1,3}\.){3}\d{1,3}$/.test(u.hostname) &&
           !/[<>"'\\]/.test(url);
-      } catch { return false; }
+      }
+      catch {
+        return false;
+      }
     };
     let tick = 0;
     urlField.addEventListener('input', () => {
       const sequence = ++tick, raw = urlField.value.trim();
-      preview.hidden = true; useLink.disabled = true;
-      if (!validateURL(raw)) { message.textContent = 'Gunakan URL HTTPS publik yang valid.'; return; }
-      const check = new Image(); check.referrerPolicy = 'no-referrer';
+      preview.hidden = true;
+      useLink.disabled = true;
+      if (!validateURL(raw)) {
+        message.textContent = 'Gunakan URL HTTPS publik yang valid.';
+        return;
+      }
+      const check = new Image();
+      check.referrerPolicy = 'no-referrer';
       check.onload = () => {
-        if (sequence !== tick) return;
-        preview.src = raw; preview.hidden = false; useLink.disabled = false;
+        if (sequence !== tick)
+          return;
+        preview.src = raw;
+        preview.hidden = false;
+        useLink.disabled = false;
         message.textContent = '✓ Gambar dapat ditampilkan. Klik Gunakan URL ini.';
       };
-      check.onerror = () => { if (sequence === tick) message.textContent = 'Gambar gagal dimuat. Gunakan alamat langsung ke gambar.'; };
+      check.onerror = () => { if (sequence === tick)
+        message.textContent = 'Gambar gagal dimuat. Gunakan alamat langsung ke gambar.'; };
       check.src = raw;
     });
     useLink.onclick = () => {
-      if (useLink.disabled || !validateURL(urlField.value.trim())) return;
+      if (useLink.disabled || !validateURL(urlField.value.trim()))
+        return;
       images[q.id] = { url: urlField.value.trim() };
-      field.value = ''; field.required = false;
+      field.value = '';
+      field.required = false;
       hint.textContent = 'Gambar menggunakan URL: ' + urlField.value.trim();
       message.textContent = '✓ URL gambar dipilih.';
     };
-    if (images[q.id]?.url) { externalPanel.open = true; urlField.dispatchEvent(new Event('input')); }
+    if (images[q.id]?.url) {
+      externalPanel.open = true;
+      urlField.dispatchEvent(new Event('input'));
+    }
     externalPanel.append(summary, urlField, preview, useLink, message);
     card.append(externalPanel);
   }
   return card;
 }
-
 function targetIndex(current) {
   const p = model.pages[current], v = answers[p.routeQuestionId], dest = p.routeQuestionId ? p.routes?.[v] : null;
-  if (dest === 'end') return -1;
+  if (dest === 'end')
+    return -1;
   if (dest && dest !== 'next') {
     const next = model.pages.findIndex(x => x.id === dest);
     return next > current ? next : -1;
@@ -472,22 +528,29 @@ function draw() {
   updateNextLabel();
 }
 function updateNextLabel() {
-  if (!model) return;
+  if (!model)
+    return;
   const settings = { ...presentationDefaults, ...model.settings };
   $('#send').querySelector('span').textContent = safePublicText(targetIndex(pageIndex) === -1 ? settings.buttonSend : settings.buttonNext);
 }
 function captureCurrent() {
   const form = $('#application-form'), page = model.pages[pageIndex];
   for (const block of page.blocks) {
-    if (block.type !== 'question') continue;
+    if (block.type !== 'question')
+      continue;
     const q = block.question;
-    if (q.type === 'image_upload') continue;
+    if (q.type === 'image_upload')
+      continue;
     const otherInput = form.querySelector(`[data-other-for="${CSS.escape(q.id)}"]`);
     const fromChoice = value => value === OTHER_RADIO ? OTHER_PREFIX + (otherInput?.value.trim() || '') : value;
-    if (q.type === 'multi') answers[q.id] = Array.from(form.querySelectorAll(`input[name="${CSS.escape(q.id)}"]:checked`)).map(x => fromChoice(x.value));
-    else if (q.type === 'single') answers[q.id] = fromChoice(form.querySelector(`input[name="${CSS.escape(q.id)}"]:checked`)?.value || '');
-    else if (q.type === 'select') answers[q.id] = fromChoice(form.elements.namedItem(q.id)?.value || '');
-    else answers[q.id] = form.elements.namedItem(q.id)?.value || '';
+    if (q.type === 'multi')
+      answers[q.id] = Array.from(form.querySelectorAll(`input[name="${CSS.escape(q.id)}"]:checked`)).map(x => fromChoice(x.value));
+    else if (q.type === 'single')
+      answers[q.id] = fromChoice(form.querySelector(`input[name="${CSS.escape(q.id)}"]:checked`)?.value || '');
+    else if (q.type === 'select')
+      answers[q.id] = fromChoice(form.elements.namedItem(q.id)?.value || '');
+    else
+      answers[q.id] = form.elements.namedItem(q.id)?.value || '';
   }
 }
 function validPage() {
@@ -500,7 +563,8 @@ function validPage() {
   }
   const page = model.pages[pageIndex];
   for (const b of page.blocks) {
-    if (b.type !== 'question') continue;
+    if (b.type !== 'question')
+      continue;
     const q = b.question;
     if (q.type === 'multi' && q.required && !answers[q.id]?.length) {
       note('Pilih setidaknya satu jawaban untuk: ' + q.title, true);
@@ -517,21 +581,28 @@ function activeAnswers() {
   const relevant = {}, files = {}, ids = new Set(), seen = new Set();
   let idx = 0;
   for (let step = 0; idx !== -1 && step < model.pages.length; step++) {
-    if (seen.has(idx)) break;
+    if (seen.has(idx))
+      break;
     seen.add(idx);
     for (const b of model.pages[idx].blocks) {
-      if (b.type !== 'question') continue;
+      if (b.type !== 'question')
+        continue;
       const q = b.question;
       ids.add(q.id);
       if (q.type === 'image_upload') {
-        if (images[q.id]?.url) relevant[q.id] = images[q.id].url;
-        else if (images[q.id]) files[q.id] = images[q.id];
-      } else relevant[q.id] = answers[q.id] ?? (q.type === 'multi' ? [] : '');
+        if (images[q.id]?.url)
+          relevant[q.id] = images[q.id].url;
+        else if (images[q.id])
+          files[q.id] = images[q.id];
+      }
+      else
+        relevant[q.id] = answers[q.id] ?? (q.type === 'multi' ? [] : '');
     }
     idx = targetIndex(idx);
   }
   return { relevant, files };
 }
+// Tampilan pertanyaan pendaftaran
 function render(form, isDemo) {
   model = form;
   demo = isDemo;
@@ -540,7 +611,8 @@ function render(form, isDemo) {
   answers = {};
   images = {};
   applyPresentation(form.settings);
-  if (form.settings.introEnabled === false) closeOpening();
+  if (form.settings.introEnabled === false)
+    closeOpening();
   if (!form.settings.open && !isDemo) {
     $('#availability').textContent = '● ' + safePublicText(form.settings.availabilityClosed || presentationDefaults.availabilityClosed);
     $('#availability').classList.add('closed');
@@ -558,7 +630,8 @@ function render(form, isDemo) {
   }
 }
 $('#back').onclick = () => {
-  if (!history.length) return;
+  if (!history.length)
+    return;
   captureCurrent();
   pageIndex = history.pop();
   $('#notice').replaceChildren();
@@ -571,11 +644,13 @@ $('#application-form').addEventListener('change', () => {
     updateNextLabel();
   }
 });
-$('#application-form').addEventListener('submit', async e => {
+$('#application-form').addEventListener('submit', async (e) => {
   e.preventDefault();
-  if (demo || !model) return;
+  if (demo || !model)
+    return;
   captureCurrent();
-  if (!validPage()) return;
+  if (!validPage())
+    return;
   const next = targetIndex(pageIndex);
   $('#notice').replaceChildren();
   if (next !== -1) {
@@ -598,7 +673,8 @@ $('#application-form').addEventListener('submit', async e => {
   }
   catch (err) {
     note('Gagal mengirim: ' + err.message, true);
-    if (err.remainingSeconds) startCooldown(err.remainingSeconds);
+    if (err.remainingSeconds)
+      startCooldown(err.remainingSeconds);
     button.disabled = false;
     updateNextLabel();
   }
@@ -611,25 +687,32 @@ const formatCountdown = seconds => {
 function tickCooldown() {
   const left = Math.max(0, Math.ceil((cooldownEndsAt - Date.now()) / 1000));
   if (left === 0) {
-    if (cooldownInterval) clearInterval(cooldownInterval);
+    if (cooldownInterval)
+      clearInterval(cooldownInterval);
     cooldownInterval = null;
     cooldownEndsAt = 0;
     $('#cooldown-panel').classList.add('hide');
     $('#success-cooldown').classList.add('hide');
-    if (model?.settings.open && !demo && $('#success').classList.contains('hide')) $('#application-form').classList.remove('hide');
+    if (model?.settings.open && !demo && $('#success').classList.contains('hide'))
+      $('#application-form').classList.remove('hide');
     return;
   }
   $('#cooldown-remaining').textContent = formatCountdown(left);
   $('#success-cooldown-time').textContent = formatCountdown(left);
   $('#cooldown-panel').classList.remove('hide');
-  if ($('#success').classList.contains('hide')) $('#application-form').classList.add('hide');
-  else $('#cooldown-panel').classList.add('hide');
+  if ($('#success').classList.contains('hide'))
+    $('#application-form').classList.add('hide');
+  else
+    $('#cooldown-panel').classList.add('hide');
   $('#success-cooldown').classList.toggle('hide', $('#success').classList.contains('hide'));
 }
+// Jeda pengiriman formulir
 function startCooldown(seconds) {
-  if (!Number.isFinite(Number(seconds)) || Number(seconds) <= 0) return;
+  if (!Number.isFinite(Number(seconds)) || Number(seconds) <= 0)
+    return;
   cooldownEndsAt = Date.now() + Math.ceil(Number(seconds)) * 1000;
-  if (cooldownInterval) clearInterval(cooldownInterval);
+  if (cooldownInterval)
+    clearInterval(cooldownInterval);
   tickCooldown();
   cooldownInterval = setInterval(tickCooldown, 1000);
 }
@@ -641,14 +724,18 @@ if (registrationEditorPreview) {
   render(fallback, true);
   closeOpening();
   window.addEventListener('message', event => {
-    if (event.origin !== location.origin || event.source !== window.parent || event.data?.type !== 'ssc-registration-preview-settings') return;
-    if (!event.data.settings || !Array.isArray(event.data.pages)) return;
+    if (event.origin !== location.origin || event.source !== window.parent || event.data?.type !== 'ssc-registration-preview-settings')
+      return;
+    if (!event.data.settings || !Array.isArray(event.data.pages))
+      return;
     render({ settings: event.data.settings, pages: event.data.pages }, true);
     closeOpening();
     window.parent.postMessage({ type: 'ssc-registration-preview-applied' }, location.origin);
   });
-  if (window.parent !== window) window.parent.postMessage({ type: 'ssc-registration-preview-ready' }, location.origin);
-} else {
+  if (window.parent !== window)
+    window.parent.postMessage({ type: 'ssc-registration-preview-ready' }, location.origin);
+}
+else {
   (async () => {
     try {
       render(await SSCircle.getForm(), false);
@@ -656,55 +743,59 @@ if (registrationEditorPreview) {
         try {
           const state = await SSCircle.getCooldown();
           startCooldown(state.remainingSeconds || 0);
-        } catch {/* Website can still be opened if the cooldown check is temporarily unavailable. */ }
+        }
+        catch { /* Website can still be opened if the cooldown check is temporarily unavailable. */ }
       }
-    } catch (err) {
+    }
+    catch (err) {
       render(fallback, true);
       note('Website belum siap: ' + err.message, true);
     }
   })();
 }
-
 // Status tracker: only displays the applicant's own status and admin rejection reason.
 const statusForm = document.querySelector('#status-check-form');
-if (statusForm) statusForm.addEventListener('submit', async event => {
-  event.preventDefault();
-  const root = document.querySelector('#status-result'), submit = document.querySelector('#status-check-button');
-  root.replaceChildren();
-  submit.disabled = true;
-  submit.textContent = 'Memeriksa...';
-  try {
-    const result = await SSCircle.checkStatus(document.querySelector('#status-code').value);
-    const labels = { pending: 'Sedang menunggu', accepted: 'Pendaftaran diterima', rejected: 'Pendaftaran ditolak' };
-    const card = el('div', 'status-result-card ' + result.status),
-      badge = el('span', 'status-result-badge', labels[result.status] || result.status);
-    // Lightweight CSS status animation, with a reduced-motion fallback.
-    const visual = el('div', 'status-visual status-visual-' + result.status);
-    visual.setAttribute('aria-hidden', 'true');
-    const aura = el('span', 'status-visual-aura'), glyph = el('span', 'status-visual-glyph');
-    glyph.textContent = result.status === 'accepted' ? '✓' : result.status === 'rejected' ? '×' : '◷';
-    visual.append(aura, glyph);
-    if (result.status === 'accepted') {
-      for (let i = 0; i < 6; i++) {
-        const spark = el('span', 'status-celebration-particle');
-        spark.style.setProperty('--p', String(i));
-        visual.append(spark);
+if (statusForm)
+  statusForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const root = document.querySelector('#status-result'), submit = document.querySelector('#status-check-button');
+    root.replaceChildren();
+    submit.disabled = true;
+    submit.textContent = 'Memeriksa...';
+    try {
+      const result = await SSCircle.checkStatus(document.querySelector('#status-code').value);
+      const labels = { pending: 'Sedang menunggu', accepted: 'Pendaftaran diterima', rejected: 'Pendaftaran ditolak' };
+      const card = el('div', 'status-result-card ' + result.status), badge = el('span', 'status-result-badge', labels[result.status] || result.status);
+      // Lightweight CSS status animation, with a reduced-motion fallback.
+      const visual = el('div', 'status-visual status-visual-' + result.status);
+      visual.setAttribute('aria-hidden', 'true');
+      const aura = el('span', 'status-visual-aura'), glyph = el('span', 'status-visual-glyph');
+      glyph.textContent = result.status === 'accepted' ? '✓' : result.status === 'rejected' ? '×' : '◷';
+      visual.append(aura, glyph);
+      if (result.status === 'accepted') {
+        for (let i = 0; i < 6; i++) {
+          const spark = el('span', 'status-celebration-particle');
+          spark.style.setProperty('--p', String(i));
+          visual.append(spark);
+        }
       }
+      card.append(visual);
+      const text = result.status === 'accepted' ? 'Selamat! Pendaftaranmu telah disetujui oleh admin SSCircle Server. Silahkan cek server Discord SSCircle Community untuk informasi lebih lanjut' : result.status === 'rejected' ? 'Admin telah memeriksa pendaftaranmu.' : 'Jawabanmu sudah masuk dan masih dalam proses seleksi.';
+      card.append(badge, el('p', '', text));
+      if (result.status === 'rejected')
+        card.append(el('strong', 'rejection-label', 'Alasan penolakan:'), el('p', 'rejection-text', result.reason || 'Tidak ada alasan tambahan.'));
+      if (result.submittedAt)
+        card.append(el('small', '', 'Dikirim: ' + new Date(result.submittedAt).toLocaleString('id-ID')));
+      root.append(card);
     }
-    card.append(visual);
-    const text = result.status === 'accepted' ? 'Selamat! Pendaftaranmu telah disetujui oleh admin SSCircle Server. Silahkan cek server Discord SSCircle Community untuk informasi lebih lanjut' : result.status === 'rejected' ? 'Admin telah memeriksa pendaftaranmu.' : 'Jawabanmu sudah masuk dan masih dalam proses seleksi.';
-    card.append(badge, el('p', '', text));
-    if (result.status === 'rejected') card.append(el('strong', 'rejection-label', 'Alasan penolakan:'), el('p', 'rejection-text', result.reason || 'Tidak ada alasan tambahan.'));
-    if (result.submittedAt) card.append(el('small', '', 'Dikirim: ' + new Date(result.submittedAt).toLocaleString('id-ID')));
-    root.append(card);
-  } catch (error) {
-    root.append(el('div', 'message message-error', error.message));
-  }
-  finally {
-    submit.disabled = false;
-    submit.textContent = safePublicText(model?.settings?.statusButtonText || 'Periksa status') + ' ↗';
-  }
-});
+    catch (error) {
+      root.append(el('div', 'message message-error', error.message));
+    }
+    finally {
+      submit.disabled = false;
+      submit.textContent = safePublicText(model?.settings?.statusButtonText || 'Periksa status') + ' ↗';
+    }
+  });
 document.querySelector('#copy-code').onclick = async () => {
   const value = document.querySelector('#reference-code').textContent;
   try {

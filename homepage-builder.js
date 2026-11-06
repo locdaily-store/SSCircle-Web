@@ -1,4 +1,7 @@
 /* SSCircle Server — Editor Homepage */
+
+// Susunan kartu Homepage dan pengurutan editor.
+
 'use strict';
 window.SSCircleHomepageBuilder = (() => {
   const BUILTINS = [
@@ -19,26 +22,13 @@ window.SSCircleHomepageBuilder = (() => {
   };
   const el = (tag, cls = '', text) => {
     const n = document.createElement(tag);
-    if (cls) n.className = cls;
-    if (text !== undefined) n.textContent = text;
+    if (cls)
+      n.className = cls;
+    if (text !== undefined)
+      n.textContent = text;
     return n;
   };
-  let state,
-    changed,
-    list,
-    notice,
-    frame,
-    frameShell,
-    view = 'desktop',
-    draftTimer = null,
-    activeId = '',
-    panel,
-    drag = null,
-    editors = {},
-    parking = document.createDocumentFragment(),
-    introCard,
-    designCard,
-    previewStatus;
+  let state, changed, list, notice, frame, frameShell, view = 'desktop', draftTimer = null, activeId = '', panel, drag = null, editors = {}, parking = document.createDocumentFragment(), introCard, designCard, previewStatus;
   const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)');
   const builtin = id => BUILTINS.find(b => b.id === id);
   function clone(arr) {
@@ -49,25 +39,33 @@ window.SSCircleHomepageBuilder = (() => {
     updatePreview();
   }
   function message(text) {
-    if (notice) notice.textContent = '';
-    if (text && /maksimal|batas|gagal/i.test(text)) window.SSCNotice?.toast(text, 'warning');
+    if (notice)
+      notice.textContent = '';
+    if (text && /maksimal|batas|gagal/i.test(text))
+      window.SSCNotice?.toast(text, 'warning');
   }
   function normalize() {
     let arr = Array.isArray(state.settings.homeLayout) ? state.settings.homeLayout.filter(x => x && x.id !== 'donate' && x.id !== 'voting').map(x => ({ ...x })) : [];
     const seen = new Set();
     arr = arr.filter(x => {
-      if (!x?.id || seen.has(x.id)) return false;
+      if (!x?.id || seen.has(x.id))
+        return false;
       seen.add(x.id);
       return x.kind === 'builtin' || x.kind === 'custom';
     });
-    for (const b of BUILTINS) if (!seen.has(b.id)) arr.push({ id: b.id, kind: 'builtin' });
-    for (const item of arr) if (item.kind === 'custom') {
-      if (!Array.isArray(item.images)) item.images = item.image ? [{ src: item.image, caption: item.caption || '' }] : [];
-      if (!Array.isArray(item.buttons)) item.buttons = ['button', 'feature'].includes(item.type) ? [{ label: item.buttonText || 'Selengkapnya', href: item.href || 'registration.html' }] : [];
-      item.width = item.width || 'full';
-      item.align = item.align || 'left';
-      item.appearance = item.appearance || 'card';
-    }
+    for (const b of BUILTINS)
+      if (!seen.has(b.id))
+        arr.push({ id: b.id, kind: 'builtin' });
+    for (const item of arr)
+      if (item.kind === 'custom') {
+        if (!Array.isArray(item.images))
+          item.images = item.image ? [{ src: item.image, caption: item.caption || '' }] : [];
+        if (!Array.isArray(item.buttons))
+          item.buttons = ['button', 'feature'].includes(item.type) ? [{ label: item.buttonText || 'Selengkapnya', href: item.href || 'registration.html' }] : [];
+        item.width = item.width || 'full';
+        item.align = item.align || 'left';
+        item.appearance = item.appearance || 'card';
+      }
     state.settings.homeLayout = arr;
   }
   function choose(id) {
@@ -79,11 +77,13 @@ window.SSCircleHomepageBuilder = (() => {
   function reorder(fromId, targetId, after) {
     const arr = state.settings.homeLayout;
     const a = arr.findIndex(x => x.id === fromId), b = arr.findIndex(x => x.id === targetId);
-    if (a < 0 || b < 0 || a === b) return;
+    if (a < 0 || b < 0 || a === b)
+      return;
     const oldRects = new Map([...list.querySelectorAll('.home-builder-card[data-id]')].map(n => [n.dataset.id, n.getBoundingClientRect()]));
     const [item] = arr.splice(a, 1);
     let dest = arr.findIndex(x => x.id === targetId);
-    if (after) dest++;
+    if (after)
+      dest++;
     arr.splice(dest, 0, item);
     activeId = fromId;
     mark();
@@ -92,7 +92,8 @@ window.SSCircleHomepageBuilder = (() => {
   }
   function moveDelta(id, delta) {
     const arr = state.settings.homeLayout, i = arr.findIndex(x => x.id === id), j = i + delta;
-    if (j < 0 || j >= arr.length) return;
+    if (j < 0 || j >= arr.length)
+      return;
     const [item] = arr.splice(i, 1);
     arr.splice(j, 0, item);
     activeId = id;
@@ -101,7 +102,8 @@ window.SSCircleHomepageBuilder = (() => {
   }
   function add(type) {
     const arr = state.settings.homeLayout;
-    if (arr.filter(x => x.kind === 'custom').length >= 18) return message('Kartu tambahan sudah mencapai batas.');
+    if (arr.filter(x => x.kind === 'custom').length >= 18)
+      return message('Kartu tambahan sudah mencapai batas.');
     const id = 'custom-' + SSCircle.uuid().replace(/-/g, '').slice(0, 16);
     const item = {
       id,
@@ -115,38 +117,48 @@ window.SSCircleHomepageBuilder = (() => {
       align: 'left',
       appearance: 'card'
     };
-    if (type === 'button' || type === 'feature') item.buttons = [{ label: 'Selengkapnya', href: 'registration.html' }];
+    if (type === 'button' || type === 'feature')
+      item.buttons = [{ label: 'Selengkapnya', href: 'registration.html' }];
     arr.push(item);
     mark();
     choose(id);
     message('Konten ditambahkan. Pilih kartu untuk mengedit isinya.');
   }
   async function remove(id) {
-    if (!await SSCNotice.confirm('Hapus kartu ini dari Homepage?', { danger: true, confirmText: 'Hapus kartu' })) return;
+    if (!await SSCNotice.confirm('Hapus kartu ini dari Homepage?', { danger: true, confirmText: 'Hapus kartu' }))
+      return;
     const arr = state.settings.homeLayout, i = arr.findIndex(x => x.id === id);
-    if (i < 0 || arr[i].kind !== 'custom') return;
+    if (i < 0 || arr[i].kind !== 'custom')
+      return;
     arr.splice(i, 1);
     activeId = '';
     mark();
     paint();
   }
   function livePreviewFor(item) {
-    if (item.kind === 'builtin') return builtin(item.id)?.help || 'Bagian Homepage';
+    if (item.kind === 'builtin')
+      return builtin(item.id)?.help || 'Bagian Homepage';
     const parts = [];
-    if (item.description) parts.push(item.description);
-    if ((item.images || []).length) parts.push((item.images || []).length + ' gambar');
-    if ((item.buttons || []).length) parts.push((item.buttons || []).length + ' tombol');
+    if (item.description)
+      parts.push(item.description);
+    if ((item.images || []).length)
+      parts.push((item.images || []).length + ' gambar');
+    if ((item.buttons || []).length)
+      parts.push((item.buttons || []).length + ' tombol');
     return parts.join(' · ') || 'Klik untuk mengatur isi';
   }
   function clearIndicators() {
-    for (const n of list.querySelectorAll('.is-drop-before,.is-drop-after,.is-dragging')) n.classList.remove('is-drop-before', 'is-drop-after', 'is-dragging');
+    for (const n of list.querySelectorAll('.is-drop-before,.is-drop-after,.is-dragging'))
+      n.classList.remove('is-drop-before', 'is-drop-after', 'is-dragging');
   }
   function dropMarkers() {
-    for (const n of list.querySelectorAll('.is-drop-before,.is-drop-after')) n.classList.remove('is-drop-before', 'is-drop-after');
+    for (const n of list.querySelectorAll('.is-drop-before,.is-drop-after'))
+      n.classList.remove('is-drop-before', 'is-drop-after');
   }
   function startGhost(d) {
     const source = list.querySelector(`[data-id="${CSS.escape(d.id)}"]`);
-    if (!source) return;
+    if (!source)
+      return;
     const bounds = source.getBoundingClientRect();
     d.left = bounds.left;
     d.top = bounds.top;
@@ -165,16 +177,19 @@ window.SSCircleHomepageBuilder = (() => {
     source.classList.add('is-dragging');
   }
   function pointerMove(e) {
-    if (!drag || e.pointerId !== drag.pointerId) return;
+    if (!drag || e.pointerId !== drag.pointerId)
+      return;
     const dist = Math.hypot(e.clientY - drag.y, e.clientX - drag.x);
-    if (dist < 6 && !drag.started) return;
+    if (dist < 6 && !drag.started)
+      return;
     if (!drag.started) {
       drag.started = true;
       startGhost(drag);
     }
     e.preventDefault();
     const d = drag;
-    if (d.ghost) d.ghost.style.transform = `translate3d(${e.clientX - d.x}px,${e.clientY - d.y}px,0) rotate(-.8deg)`;
+    if (d.ghost)
+      d.ghost.style.transform = `translate3d(${e.clientX - d.x}px,${e.clientY - d.y}px,0) rotate(-.8deg)`;
     dropMarkers();
     const target = document.elementFromPoint(e.clientX, e.clientY)?.closest('.home-builder-card[data-id]');
     d.target = null;
@@ -184,19 +199,26 @@ window.SSCircleHomepageBuilder = (() => {
       d.after = e.clientY > rect.top + rect.height / 2;
       target.classList.add(d.after ? 'is-drop-after' : 'is-drop-before');
     }
-    if (e.clientY < 85) window.scrollBy(0, -13); else if (e.clientY > window.innerHeight - 85) window.scrollBy(0, 13);
+    if (e.clientY < 85)
+      window.scrollBy(0, -13);
+    else if (e.clientY > window.innerHeight - 85)
+      window.scrollBy(0, 13);
   }
   function removeGhost(d) {
-    if (!d?.ghost) return;
+    if (!d?.ghost)
+      return;
     const node = d.ghost;
     if (!prefersReduced.matches && node.animate) {
       const a = node.animate([{ opacity: 1, transform: node.style.transform }, { opacity: 0, transform: node.style.transform + ' scale(.96)' }], { duration: 175, easing: 'ease-out' });
       a.onfinish = () => node.remove();
       setTimeout(() => node.remove(), 300);
-    } else node.remove();
+    }
+    else
+      node.remove();
   }
   function pointerEnd(e) {
-    if (!drag || e.pointerId !== drag.pointerId) return;
+    if (!drag || e.pointerId !== drag.pointerId)
+      return;
     const d = drag;
     document.removeEventListener('pointermove', pointerMove);
     document.removeEventListener('pointerup', pointerEnd);
@@ -204,7 +226,8 @@ window.SSCircleHomepageBuilder = (() => {
     drag = null;
     removeGhost(d);
     clearIndicators();
-    if (d.started && d.target) reorder(d.id, d.target, d.after);
+    if (d.started && d.target)
+      reorder(d.id, d.target, d.after);
   }
   function pointerCancel() {
     const d = drag;
@@ -221,7 +244,8 @@ window.SSCircleHomepageBuilder = (() => {
     handle.title = 'Seret kartu';
     handle.draggable = false;
     handle.addEventListener('pointerdown', e => {
-      if ((e.pointerType === 'mouse' && e.button !== 0) || drag) return;
+      if ((e.pointerType === 'mouse' && e.button !== 0) || drag)
+        return;
       drag = {
         id,
         pointerId: e.pointerId,
@@ -239,14 +263,17 @@ window.SSCircleHomepageBuilder = (() => {
     });
   }
   function animateReorder(previous) {
-    if (prefersReduced.matches) return;
+    if (prefersReduced.matches)
+      return;
     requestAnimationFrame(() => {
       for (const card of list.querySelectorAll('.home-builder-card[data-id]')) {
         const before = previous.get(card.dataset.id);
-        if (!before) continue;
+        if (!before)
+          continue;
         const now = card.getBoundingClientRect();
         const dx = before.left - now.left, dy = before.top - now.top;
-        if (Math.abs(dx) + Math.abs(dy) < 1) continue;
+        if (Math.abs(dx) + Math.abs(dy) < 1)
+          continue;
         card.animate([{ transform: `translate(${dx}px,${dy}px)` }, { transform: 'translate(0,0)' }], { duration: 290, easing: 'cubic-bezier(.2,.8,.2,1)' });
       }
     });
@@ -287,14 +314,16 @@ window.SSCircleHomepageBuilder = (() => {
   function subheading(parent, title, help) {
     const heading = el('div', 'home-builder-subheading');
     heading.append(el('strong', '', title));
-    if (help) heading.append(el('small', '', help));
+    if (help)
+      heading.append(el('small', '', help));
     parent.append(heading);
     return heading;
   }
   function fieldRow(parent, items) {
     const grid = el('div', 'home-builder-fields-grid');
     parent.append(grid);
-    for (const args of items) field(grid, ...args);
+    for (const args of items)
+      field(grid, ...args);
   }
   function editor(item) {
     const body = el('div', 'home-builder-card-editor');
@@ -302,12 +331,15 @@ window.SSCircleHomepageBuilder = (() => {
       item[key] = val;
       mark();
       const name = list.querySelector(`[data-id="${CSS.escape(item.id)}"] .home-builder-card-title`);
-      if (name && key === 'title') name.textContent = val || TYPES[item.type]?.[1] || 'Kartu baru';
+      if (name && key === 'title')
+        name.textContent = val || TYPES[item.type]?.[1] || 'Kartu baru';
       const sub = list.querySelector(`[data-id="${CSS.escape(item.id)}"] .home-builder-card-desc`);
-      if (sub) sub.textContent = livePreviewFor(item);
+      if (sub)
+        sub.textContent = livePreviewFor(item);
     };
     field(body, 'Judul kartu', item.title, v => change('title', v), { max: 160, placeholder: 'Masukkan judul bagian' });
-    if (item.type !== 'divider') field(body, 'Teks / deskripsi', item.description, v => change('description', v), { multi: true, max: 1400 });
+    if (item.type !== 'divider')
+      field(body, 'Teks / deskripsi', item.description, v => change('description', v), { multi: true, max: 1400 });
     if (item.type !== 'divider') {
       const imagesArea = el('div', 'home-builder-subsection');
       subheading(imagesArea, 'Gambar dalam kartu', 'Kamu bisa menambahkan beberapa gambar.');
@@ -355,7 +387,8 @@ window.SSCircleHomepageBuilder = (() => {
       uploadBtn.append(upload);
       upload.addEventListener('change', async () => {
         const file = upload.files?.[0];
-        if (!file) return;
+        if (!file)
+          return;
         if (item.images.length >= 8) {
           uploadFeedback.textContent = 'Maksimal 8 gambar per kartu.';
           return;
@@ -369,9 +402,11 @@ window.SSCircleHomepageBuilder = (() => {
           refreshImages();
           updateCardSummary(item);
           uploadFeedback.textContent = 'Gambar ditambahkan.';
-        } catch (e) {
+        }
+        catch (e) {
           uploadFeedback.textContent = 'Gagal menambahkan gambar: ' + e.message;
-        } finally {
+        }
+        finally {
           upload.disabled = false;
           upload.value = '';
         }
@@ -382,13 +417,15 @@ window.SSCircleHomepageBuilder = (() => {
       first.value = '';
       gallerySelect.append(first);
       for (const photo of state.settings.homeGallery || []) {
-        if (!photo.src) continue;
+        if (!photo.src)
+          continue;
         const option = el('option', '', photo.title || 'Foto SSCircle');
         option.value = photo.src;
         gallerySelect.append(option);
       }
       gallerySelect.addEventListener('change', () => {
-        if (!gallerySelect.value) return;
+        if (!gallerySelect.value)
+          return;
         if (item.images.length >= 8) {
           uploadFeedback.textContent = 'Maksimal 8 gambar per kartu.';
           gallerySelect.value = '';
@@ -407,7 +444,9 @@ window.SSCircleHomepageBuilder = (() => {
         title: 'Tambahkan gambar pada kartu', count: () => item.images.length, max: 8,
         onAdd: src => {
           item.images.push({ src, caption: '' });
-          mark(); refreshImages(); updateCardSummary(item);
+          mark();
+          refreshImages();
+          updateCardSummary(item);
         }
       });
       refreshImages();
@@ -452,7 +491,8 @@ window.SSCircleHomepageBuilder = (() => {
       const addButton = el('button', 'button secondary', '+ Tambah tombol');
       addButton.type = 'button';
       addButton.onclick = () => {
-        if (item.buttons.length >= 8) return message('Maksimal 8 tombol dalam satu kartu.');
+        if (item.buttons.length >= 8)
+          return message('Maksimal 8 tombol dalam satu kartu.');
         item.buttons.push({ label: 'Tombol baru', href: 'registration.html' });
         mark();
         refreshButtons();
@@ -478,10 +518,14 @@ window.SSCircleHomepageBuilder = (() => {
   }
   function updateCardSummary(item) {
     const node = list.querySelector(`[data-id="${CSS.escape(item.id)}"] .home-builder-card-desc`);
-    if (node) node.textContent = livePreviewFor(item);
+    if (node)
+      node.textContent = livePreviewFor(item);
   }
   function parkEditors() {
-    for (const sections of Object.values(editors)) for (const section of sections) if (section.parentNode !== parking) parking.append(section);
+    for (const sections of Object.values(editors))
+      for (const section of sections)
+        if (section.parentNode !== parking)
+          parking.append(section);
   }
   function pinnedCard(id, title, description) {
     const card = el('article', 'home-builder-card home-builder-pinned' + (activeId === id ? ' is-selected' : ''));
@@ -499,13 +543,15 @@ window.SSCircleHomepageBuilder = (() => {
     bar.append(glyph, copy, button);
     card.append(bar);
     card.addEventListener('click', e => {
-      if (e.target.closest('button,input,textarea,select,label')) return;
+      if (e.target.closest('button,input,textarea,select,label'))
+        return;
       if (activeId !== id) {
         activeId = id;
         paint();
       }
     });
-    if (activeId === id) mountSections(card, id);
+    if (activeId === id)
+      mountSections(card, id);
     return card;
   }
   function mountSections(card, id) {
@@ -519,7 +565,8 @@ window.SSCircleHomepageBuilder = (() => {
     }
   }
   function paint() {
-    if (!list) return;
+    if (!list)
+      return;
     parkEditors();
     list.replaceChildren();
     if (introCard) {
@@ -532,8 +579,7 @@ window.SSCircleHomepageBuilder = (() => {
     }
     const arr = state.settings.homeLayout;
     for (const [i, item] of arr.entries()) {
-      const fixed = item.kind === 'builtin',
-        card = el('article', 'home-builder-card' + (fixed ? ' home-builder-builtin' : '') + (activeId === item.id ? ' is-selected' : ''));
+      const fixed = item.kind === 'builtin', card = el('article', 'home-builder-card' + (fixed ? ' home-builder-builtin' : '') + (activeId === item.id ? ' is-selected' : ''));
       card.dataset.id = item.id;
       const handle = el('button', 'home-builder-handle', '⠿');
       attachDrag(handle, item.id);
@@ -564,7 +610,8 @@ window.SSCircleHomepageBuilder = (() => {
       bar.append(arrows);
       card.append(bar);
       card.addEventListener('click', e => {
-        if (e.target.closest('button,input,textarea,select,label')) return;
+        if (e.target.closest('button,input,textarea,select,label'))
+          return;
         if (activeId !== item.id) {
           activeId = item.id;
           paint();
@@ -573,7 +620,9 @@ window.SSCircleHomepageBuilder = (() => {
       if (activeId === item.id) {
         if (fixed) {
           mountSections(card, item.id);
-        } else card.append(editor(item));
+        }
+        else
+          card.append(editor(item));
       }
       list.append(card);
     }
@@ -585,7 +634,8 @@ window.SSCircleHomepageBuilder = (() => {
     }
   }
   function resizeFrame() {
-    if (!frame || !frameShell) return;
+    if (!frame || !frameShell)
+      return;
     const width = view === 'mobile' ? 390 : 1280;
     const available = Math.max(240, frameShell.clientWidth - 24);
     const scale = Math.min(1, available / width);
@@ -596,12 +646,14 @@ window.SSCircleHomepageBuilder = (() => {
     frameShell.style.height = Math.min(view === 'mobile' ? 640 : 620, height * scale + 10) + 'px';
   }
   function updatePreview() {
-    if (!frame || !state) return;
+    if (!frame || !state)
+      return;
     clearTimeout(draftTimer);
     draftTimer = setTimeout(() => {
       try {
         frame.contentWindow?.postMessage({ type: 'ssc-preview-settings', settings: clone(state.settings) }, location.origin);
-      } catch { }
+      }
+      catch { }
     }, 90);
   }
   function previewPanel() {
@@ -639,7 +691,8 @@ window.SSCircleHomepageBuilder = (() => {
     toggle.onclick = () => {
       panel.classList.toggle('is-collapsed');
       toggle.textContent = panel.classList.contains('is-collapsed') ? 'Tampilkan pratinjau' : 'Sembunyikan pratinjau';
-      if (!panel.classList.contains('is-collapsed')) requestAnimationFrame(resizeFrame);
+      if (!panel.classList.contains('is-collapsed'))
+        requestAnimationFrame(resizeFrame);
     };
     controls.append(toggle);
     frameShell = el('div', 'home-builder-preview-viewport');
@@ -663,11 +716,14 @@ window.SSCircleHomepageBuilder = (() => {
     changed = onChanged;
     normalize();
     const root = document.getElementById('home-admin-editor');
-    if (!root) return;
+    if (!root)
+      return;
     document.querySelector('.home-builder-section')?.remove();
     parking = document.createDocumentFragment();
     editors = linkedEditors;
-    for (const sections of Object.values(editors)) for (const section of sections) parking.append(section);
+    for (const sections of Object.values(editors))
+      for (const section of sections)
+        parking.append(section);
     activeId = '';
     const section = el('section', 'home-admin-section home-builder-section');
     section.id = 'home-builder-section';
@@ -694,20 +750,24 @@ window.SSCircleHomepageBuilder = (() => {
     section.append(heading, workspace);
     root.prepend(section);
     paint();
-    if ('ResizeObserver' in window) new ResizeObserver(resizeFrame).observe(frameShell);
+    if ('ResizeObserver' in window)
+      new ResizeObserver(resizeFrame).observe(frameShell);
     window.addEventListener('message', event => {
-      if (event.origin !== location.origin || event.source !== frame?.contentWindow) return;
+      if (event.origin !== location.origin || event.source !== frame?.contentWindow)
+        return;
       if (event.data?.type === 'ssc-preview-ready') {
         previewStatus.textContent = 'Pratinjau aktif';
         previewStatus.classList.add('is-ready');
         updatePreview();
-      } else if (event.data?.type === 'ssc-preview-applied') {
+      }
+      else if (event.data?.type === 'ssc-preview-applied') {
         previewStatus.textContent = 'Pratinjau aktif';
         previewStatus.classList.add('is-ready');
       }
     });
     window.setTimeout(() => {
-      if (previewStatus && !previewStatus.classList.contains('is-ready')) previewStatus.textContent = 'Pratinjau belum tampil. Gunakan Muat ulang.';
+      if (previewStatus && !previewStatus.classList.contains('is-ready'))
+        previewStatus.textContent = 'Pratinjau belum tampil. Gunakan Muat ulang.';
     }, 4800);
     updatePreview();
   }

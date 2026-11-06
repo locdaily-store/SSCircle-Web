@@ -1,4 +1,7 @@
 /* SSCircle Server — notifikasi dan konfirmasi admin */
+
+// Dialog konfirmasi dan pemberitahuan di Admin Control.
+
 'use strict';
 window.SSCNotice = (() => {
   let overlay = null, toastRegion = null, queue = Promise.resolve(), toastTimeout = null;
@@ -35,13 +38,15 @@ window.SSCNotice = (() => {
       no.hidden = isAlert;
       let finished = false;
       function settle(value) {
-        if (finished) return;
+        if (finished)
+          return;
         finished = true;
         form.removeEventListener('submit', submit);
         no.removeEventListener('click', cancel);
         overlay.removeEventListener('cancel', escape);
         overlay.removeEventListener('close', close);
-        if (overlay.open) overlay.close();
+        if (overlay.open)
+          overlay.close();
         resolve(value);
       }
       function submit(e) {
@@ -71,7 +76,8 @@ window.SSCNotice = (() => {
       no.addEventListener('click', cancel);
       overlay.addEventListener('cancel', escape);
       overlay.addEventListener('close', close);
-      if (!overlay.open) overlay.showModal();
+      if (!overlay.open)
+        overlay.showModal();
       (isPrompt ? inp : yes).focus();
     });
     // Queue dialogs rather than replacing an unfinished action.

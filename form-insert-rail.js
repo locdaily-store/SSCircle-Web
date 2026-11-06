@@ -1,11 +1,15 @@
 /* SSCircle Server — contextual insert rail for the form editor. */
+
+// Bilah penambah pertanyaan pada editor formulir.
+
 'use strict';
 (() => {
   const workspace = document.getElementById('builder-workspace');
   const rail = document.getElementById('floating-insert-rail');
   const context = document.getElementById('floating-rail-context');
   const form = document.getElementById('form');
-  if (!workspace || !rail || !context || !form) return;
+  if (!workspace || !rail || !context || !form)
+    return;
   let ticking = false;
   function syncContext() {
     ticking = false;
@@ -16,9 +20,11 @@
     const r = workspace.getBoundingClientRect();
     const editing = r.top < innerHeight - 65 && r.bottom > 105;
     workspace.classList.toggle('rail-in-view', editing);
-    if (!editing) return;
+    if (!editing)
+      return;
     const sections = [...workspace.querySelectorAll('.form-section')];
-    if (!sections.length) return;
+    if (!sections.length)
+      return;
     const anchor = Math.min(265, innerHeight * .40);
     let current = sections[0];
     for (const section of sections) {
@@ -27,7 +33,8 @@
         current = section;
         break;
       }
-      if (bounds.top <= anchor) current = section;
+      if (bounds.top <= anchor)
+        current = section;
     }
     const pageIndex = data.pages.findIndex(page => page.id === current.dataset.pageId);
     if (pageIndex >= 0) {
@@ -48,10 +55,12 @@
     }
   }
   rail.querySelectorAll('[data-insert]').forEach(btn => btn.addEventListener('click', () => {
-    if (!data.pages?.length) return;
+    if (!data.pages?.length)
+      return;
     syncContext();
     const page = data.pages[activePage];
-    if (!page) return;
+    if (!page)
+      return;
     addBlock(btn.dataset.insert, page);
     scheduleSync();
   }));

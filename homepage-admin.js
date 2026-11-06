@@ -1,12 +1,17 @@
 /* SSCircle Server V10.5 Homepage Control. Uses the existing authenticated form save API. */
+
+// Pengaturan konten Homepage dari Admin Control.
+
 'use strict';
 window.SSCircleHomeAdmin = (() => {
   let state = null, notifyDirty = () => { };
   const root = () => document.getElementById('home-admin-editor');
   const node = (tag, cls, value) => {
     const e = document.createElement(tag);
-    if (cls) e.className = cls;
-    if (value !== undefined) e.textContent = value;
+    if (cls)
+      e.className = cls;
+    if (value !== undefined)
+      e.textContent = value;
     return e;
   };
   const section = (name, help) => {
@@ -36,7 +41,10 @@ window.SSCircleHomeAdmin = (() => {
   function textField(container, key, label, { textarea = false, placeholder = '', hint = '' } = {}) {
     const wrap = node('label', 'field-group'), lab = node('span', 'field-label', label);
     const input = node(textarea ? 'textarea' : 'input');
-    if (!textarea) input.type = 'text'; else input.rows = 3;
+    if (!textarea)
+      input.type = 'text';
+    else
+      input.rows = 3;
     input.value = state.settings[key] ?? '';
     input.placeholder = placeholder;
     input.maxLength = textarea ? 1400 : 350;
@@ -45,13 +53,15 @@ window.SSCircleHomeAdmin = (() => {
       changed();
     };
     wrap.append(lab, input);
-    if (hint) wrap.append(node('small', 'field-help', hint));
+    if (hint)
+      wrap.append(node('small', 'field-help', hint));
     container.append(wrap);
     return input;
   }
   function formGrid(box, fields) {
     const grid = node('div', 'home-admin-grid');
-    for (const [key, label, type] of fields) textField(grid, key, label, { textarea: type === 'textarea' });
+    for (const [key, label, type] of fields)
+      textField(grid, key, label, { textarea: type === 'textarea' });
     box.append(grid);
   }
   function toggle(box, key, title, help) {
@@ -63,7 +73,8 @@ window.SSCircleHomeAdmin = (() => {
       changed();
       if (key === 'open') {
         const old = document.getElementById('form-open');
-        if (old) old.checked = input.checked;
+        if (old)
+          old.checked = input.checked;
       }
     };
     const deco = node('span', 'toggle-visual');
@@ -101,7 +112,8 @@ window.SSCircleHomeAdmin = (() => {
     ];
     const seen = new Set();
     for (const [value, label] of options) {
-      if (seen.has(value)) continue;
+      if (seen.has(value))
+        continue;
       seen.add(value);
       const opt = node('option', '', label);
       opt.value = value;
@@ -123,7 +135,8 @@ window.SSCircleHomeAdmin = (() => {
     const status = node('small', 'field-help', 'Gambar otomatis dioptimalkan agar ringan.');
     upload.onchange = async () => {
       const file = upload.files?.[0];
-      if (!file) return;
+      if (!file)
+        return;
       status.textContent = 'Mengunggah gambar...';
       upload.disabled = true;
       try {
@@ -132,9 +145,11 @@ window.SSCircleHomeAdmin = (() => {
         update();
         changed();
         status.textContent = '✓ Foto berhasil dipilih. Simpan Homepage untuk menerapkan.';
-      } catch (e) {
+      }
+      catch (e) {
         status.textContent = 'Gagal upload: ' + e.message;
-      } finally {
+      }
+      finally {
         upload.disabled = false;
         upload.value = '';
       }
@@ -158,11 +173,12 @@ window.SSCircleHomeAdmin = (() => {
       ['✧', 'Build & Explore'], ['✦', 'Vanilla SMP']
     ];
     const ensure = () => {
-      if (!Array.isArray(state.settings.homeAboutTags)) state.settings.homeAboutTags = [
-        { symbol: '✧', text: 'Survival Community' },
-        { symbol: '✧', text: 'Java & Bedrock' },
-        { symbol: '✧', text: 'Petualangan Bersama' }
-      ];
+      if (!Array.isArray(state.settings.homeAboutTags))
+        state.settings.homeAboutTags = [
+          { symbol: '✧', text: 'Survival Community' },
+          { symbol: '✧', text: 'Java & Bedrock' },
+          { symbol: '✧', text: 'Petualangan Bersama' }
+        ];
       return state.settings.homeAboutTags;
     };
     function redraw() {
@@ -173,25 +189,37 @@ window.SSCircleHomeAdmin = (() => {
         const drag = node('span', 'home-admin-tag-drag');
         drag.title = 'Seret untuk mengurutkan';
         const symbol = node('input');
-        symbol.type = 'text'; symbol.maxLength = 8; symbol.value = item.symbol ?? '✧';
-        symbol.placeholder = '✧'; symbol.setAttribute('aria-label', 'Simbol label ' + (index + 1));
+        symbol.type = 'text';
+        symbol.maxLength = 8;
+        symbol.value = item.symbol ?? '✧';
+        symbol.placeholder = '✧';
+        symbol.setAttribute('aria-label', 'Simbol label ' + (index + 1));
         symbol.oninput = () => { item.symbol = symbol.value; changed(); };
         const text = node('input');
-        text.type = 'text'; text.maxLength = 65; text.value = item.text || '';
-        text.placeholder = 'Teks label'; text.setAttribute('aria-label', 'Teks label ' + (index + 1));
+        text.type = 'text';
+        text.maxLength = 65;
+        text.value = item.text || '';
+        text.placeholder = 'Teks label';
+        text.setAttribute('aria-label', 'Teks label ' + (index + 1));
         text.oninput = () => { item.text = text.value; changed(); };
         const up = helpButton(card, '↑', () => {
-          if (!index) return;
+          if (!index)
+            return;
           [ensure()[index - 1], ensure()[index]] = [ensure()[index], ensure()[index - 1]];
-          changed(); redraw();
+          changed();
+          redraw();
         });
-        up.title = 'Naikkan urutan'; up.disabled = index === 0;
+        up.title = 'Naikkan urutan';
+        up.disabled = index === 0;
         const down = helpButton(card, '↓', () => {
-          if (index >= ensure().length - 1) return;
+          if (index >= ensure().length - 1)
+            return;
           [ensure()[index + 1], ensure()[index]] = [ensure()[index], ensure()[index + 1]];
-          changed(); redraw();
+          changed();
+          redraw();
         });
-        down.title = 'Turunkan urutan'; down.disabled = index === ensure().length - 1;
+        down.title = 'Turunkan urutan';
+        down.disabled = index === ensure().length - 1;
         const remove = helpButton(card, 'Hapus', () => { ensure().splice(index, 1); changed(); redraw(); });
         remove.title = 'Hapus label';
         card.prepend(drag, symbol, text);
@@ -202,28 +230,36 @@ window.SSCircleHomeAdmin = (() => {
         onMove: (from, to) => {
           const entries = ensure();
           entries.splice(to, 0, entries.splice(from, 1)[0]);
-          changed(); redraw();
+          changed();
+          redraw();
         }
       });
     }
     helpButton(controls, '+ Tambah label', () => {
-      if (ensure().length >= 16) return SSCNotice.alert('Maksimal 16 label Tentang Server.');
+      if (ensure().length >= 16)
+        return SSCNotice.alert('Maksimal 16 label Tentang Server.');
       ensure().push({ symbol: '✧', text: 'Label baru' });
-      changed(); redraw();
+      changed();
+      redraw();
     });
     const select = node('select');
     select.setAttribute('aria-label', 'Pilih contoh label Tentang Server');
     select.append(node('option', '', 'Pilih contoh label...'));
     for (const [symbol, label] of presets) {
       const opt = node('option', '', label);
-      opt.value = label; opt.dataset.symbol = symbol;
+      opt.value = label;
+      opt.dataset.symbol = symbol;
       select.append(opt);
     }
     select.onchange = () => {
-      if (!select.value) return;
-      if (ensure().length >= 16) return SSCNotice.alert('Maksimal 16 label Tentang Server.');
+      if (!select.value)
+        return;
+      if (ensure().length >= 16)
+        return SSCNotice.alert('Maksimal 16 label Tentang Server.');
       ensure().push({ symbol: select.selectedOptions[0].dataset.symbol, text: select.value });
-      select.value = ''; changed(); redraw();
+      select.value = '';
+      changed();
+      redraw();
     };
     controls.append(select);
     box.append(node('h3', 'home-admin-subheading', 'Label informasi singkat'));
@@ -260,30 +296,32 @@ window.SSCircleHomeAdmin = (() => {
         const actions = node('div', 'home-admin-gallery-actions');
         const buttons = [
           ['↑', () => {
-            if (index > 0) {
-              [gallery[index - 1], gallery[index]] = [gallery[index], gallery[index - 1]];
-              changed();
-              redraw();
-            }
-          }],
+              if (index > 0) {
+                [gallery[index - 1], gallery[index]] = [gallery[index], gallery[index - 1]];
+                changed();
+                redraw();
+              }
+            }],
           ['↓', () => {
-            if (index < gallery.length - 1) {
-              [gallery[index + 1], gallery[index]] = [gallery[index], gallery[index + 1]];
-              changed();
-              redraw();
-            }
-          }],
+              if (index < gallery.length - 1) {
+                [gallery[index + 1], gallery[index]] = [gallery[index], gallery[index + 1]];
+                changed();
+                redraw();
+              }
+            }],
           [
             'Hapus',
             async () => {
-              if (!await SSCNotice.confirm('Hapus foto ini dari galeri Homepage?', { danger: true, confirmText: 'Hapus foto' })) return;
+              if (!await SSCNotice.confirm('Hapus foto ini dari galeri Homepage?', { danger: true, confirmText: 'Hapus foto' }))
+                return;
               gallery.splice(index, 1);
               changed();
               redraw();
             }
           ]
         ];
-        for (const [label, run] of buttons) helpButton(actions, label, run);
+        for (const [label, run] of buttons)
+          helpButton(actions, label, run);
         row.append(img, fields, actions);
         const changePhoto = node('details', 'ssc-image-row-details');
         changePhoto.append(node('summary', '', 'Ubah gambar / URL'));
@@ -303,19 +341,15 @@ window.SSCircleHomeAdmin = (() => {
         }
       });
     }
-    helpButton(
-      toolbar,
-      '+ Tambahkan foto bawaan',
-      () => {
-        if (state.settings.homeGallery.length >= 24) {
-          SSCNotice.alert('Galeri maksimal 24 foto.');
-          return;
-        }
-        state.settings.homeGallery.push({ src: 'assets/gallery/sscircle-01.webp', title: 'Foto SSCircle', caption: '' });
-        changed();
-        redraw();
+    helpButton(toolbar, '+ Tambahkan foto bawaan', () => {
+      if (state.settings.homeGallery.length >= 24) {
+        SSCNotice.alert('Galeri maksimal 24 foto.');
+        return;
       }
-    );
+      state.settings.homeGallery.push({ src: 'assets/gallery/sscircle-01.webp', title: 'Foto SSCircle', caption: '' });
+      changed();
+      redraw();
+    });
     const uploadLabel = node('label', 'field-group');
     uploadLabel.append(node('span', 'field-label', 'Tambah foto dari perangkat'));
     const upload = node('input');
@@ -325,7 +359,8 @@ window.SSCircleHomeAdmin = (() => {
     const info = node('small', 'field-help', 'Setiap gambar otomatis dikompresi agar hemat ruang.');
     upload.onchange = async () => {
       const files = [...(upload.files || [])];
-      if (!files.length) return;
+      if (!files.length)
+        return;
       if (state.settings.homeGallery.length + files.length > 24) {
         info.textContent = 'Jumlah galeri maksimal 24 foto.';
         return;
@@ -337,14 +372,16 @@ window.SSCircleHomeAdmin = (() => {
           const result = await SSCircle.uploadImage(file);
           state.settings.homeGallery.push({ src: '/api/media/' + result.id, title: file.name.replace(/\.[^.]+$/, '').slice(0, 110), caption: '' });
           count++;
-        } catch (e) {
+        }
+        catch (e) {
           info.textContent = 'Gagal upload ' + file.name + ': ' + e.message;
           break;
         }
       }
       upload.value = '';
       upload.disabled = false;
-      if (count) info.textContent = '✓ ' + count + ' foto ditambahkan. Klik Simpan untuk menerapkan.';
+      if (count)
+        info.textContent = '✓ ' + count + ' foto ditambahkan. Klik Simpan untuk menerapkan.';
       changed();
       redraw();
     };
@@ -355,27 +392,26 @@ window.SSCircleHomeAdmin = (() => {
       title: 'Tambah foto Galeri', count: () => state.settings.homeGallery.length, max: 24,
       onAdd: src => {
         state.settings.homeGallery.push({ src, title: 'Foto SSCircle', caption: '' });
-        changed(); redraw();
+        changed();
+        redraw();
       }
     });
     redraw();
   }
-
   // Profil & Sejarah: each card owns its photo, headline and subtitle.
   function profileItemsEditor(box) {
     const settings = state.settings;
     if (!Array.isArray(settings.homeProfileItems)) {
       settings.homeProfileItems = [{
-        src: settings.homeProfileImage || 'assets/sscircle-logo.png',
-        title: 'SSCircle Server',
-        subtitle: 'Profil & Sejarah'
-      }];
+          src: settings.homeProfileImage || 'assets/sscircle-logo.png',
+          title: 'SSCircle Server',
+          subtitle: 'Profil & Sejarah'
+        }];
     }
     const list = node('div', 'home-admin-profile-list');
     const toolbar = node('div', 'home-admin-profile-toolbar');
     const helper = node('p', 'field-help', 'Foto tersusun otomatis mengikuti lebar layar. Tambahkan animasi dan popup detail melalui menu per kartu. Gambar popup boleh berbeda dari gambar kecil. Maksimal 24 foto.');
     box.append(helper, toolbar, list);
-
     const sizeField = node('label', 'field-group');
     sizeField.append(node('span', 'field-label', 'Ukuran kartu foto (otomatis menyesuaikan layar)'));
     const sizeInput = node('select');
@@ -395,7 +431,6 @@ window.SSCircleHomeAdmin = (() => {
     };
     sizeField.append(sizeInput);
     box.append(sizeField);
-
     const photoOptions = () => [
       ['assets/sscircle-logo.png', 'Logo SSCircle (bawaan)'],
       ['assets/sscircle-community-icon.png', 'Ikon komunitas (bawaan)'],
@@ -415,7 +450,8 @@ window.SSCircleHomeAdmin = (() => {
         imgWrap.append(node('span', 'field-label', 'Foto ' + (index + 1)));
         const select = node('select');
         for (const [value, title] of photoOptions()) {
-          if ([...select.options].some(option => option.value === value)) continue;
+          if ([...select.options].some(option => option.value === value))
+            continue;
           const option = node('option', '', title);
           option.value = value;
           select.append(option);
@@ -439,8 +475,10 @@ window.SSCircleHomeAdmin = (() => {
           const wrap = node('label', 'field-group');
           wrap.append(node('span', 'field-label', title));
           const input = node(field === 'subtitle' ? 'textarea' : 'input');
-          if (field !== 'subtitle') input.type = 'text';
-          else input.rows = 2;
+          if (field !== 'subtitle')
+            input.type = 'text';
+          else
+            input.rows = 2;
           input.maxLength = max;
           input.value = item[field] || '';
           input.oninput = () => {
@@ -458,7 +496,8 @@ window.SSCircleHomeAdmin = (() => {
         const uploadHelp = node('small', 'field-help');
         upload.onchange = async () => {
           const file = upload.files?.[0];
-          if (!file) return;
+          if (!file)
+            return;
           upload.disabled = true;
           uploadHelp.textContent = 'Mengunggah foto...';
           try {
@@ -466,9 +505,11 @@ window.SSCircleHomeAdmin = (() => {
             item.src = '/api/media/' + media.id;
             changed();
             redraw();
-          } catch (error) {
+          }
+          catch (error) {
             uploadHelp.textContent = 'Gagal: ' + error.message;
-          } finally {
+          }
+          finally {
             upload.disabled = false;
             upload.value = '';
           }
@@ -581,19 +622,22 @@ window.SSCircleHomeAdmin = (() => {
         fields.append(detailSettings);
         const actions = node('div', 'home-admin-profile-actions');
         helpButton(actions, '↑', () => {
-          if (index <= 0) return;
+          if (index <= 0)
+            return;
           [items[index - 1], items[index]] = [items[index], items[index - 1]];
           changed();
           redraw();
         }).disabled = index === 0;
         helpButton(actions, '↓', () => {
-          if (index >= items.length - 1) return;
+          if (index >= items.length - 1)
+            return;
           [items[index + 1], items[index]] = [items[index], items[index + 1]];
           changed();
           redraw();
         }).disabled = index === items.length - 1;
         helpButton(actions, 'Hapus', async () => {
-          if (!await SSCNotice.confirm('Hapus foto ini dari Profil & Sejarah?', { danger: true, confirmText: 'Hapus foto' })) return;
+          if (!await SSCNotice.confirm('Hapus foto ini dari Profil & Sejarah?', { danger: true, confirmText: 'Hapus foto' }))
+            return;
           items.splice(index, 1);
           changed();
           redraw();
@@ -610,7 +654,8 @@ window.SSCircleHomeAdmin = (() => {
           redraw();
         }
       });
-      if (!items.length) list.append(node('p', 'field-help', 'Belum ada foto Profil & Sejarah. Gunakan tombol tambah foto.'));
+      if (!items.length)
+        list.append(node('p', 'field-help', 'Belum ada foto Profil & Sejarah. Gunakan tombol tambah foto.'));
     }
     helpButton(toolbar, '+ Tambah foto', () => {
       if (settings.homeProfileItems.length >= 24) {
@@ -630,7 +675,8 @@ window.SSCircleHomeAdmin = (() => {
     const info = node('small', 'field-help', 'Gambar akan diunggah ke Penyimpanan Media.');
     upload.onchange = async () => {
       const files = [...(upload.files || [])];
-      if (!files.length) return;
+      if (!files.length)
+        return;
       if (settings.homeProfileItems.length + files.length > 24) {
         info.textContent = 'Maksimal 24 foto untuk Profil & Sejarah.';
         upload.value = '';
@@ -648,12 +694,14 @@ window.SSCircleHomeAdmin = (() => {
               subtitle: ''
             });
             success++;
-          } catch (error) {
+          }
+          catch (error) {
             info.textContent = 'Gagal upload ' + file.name + ': ' + error.message;
             break;
           }
         }
-      } finally {
+      }
+      finally {
         upload.disabled = false;
         upload.value = '';
         if (success) {
@@ -670,44 +718,42 @@ window.SSCircleHomeAdmin = (() => {
       title: 'Tambah foto Profil & Sejarah', count: () => settings.homeProfileItems.length, max: 24,
       onAdd: src => {
         settings.homeProfileItems.push({ src, title: '', subtitle: '' });
-        changed(); redraw();
+        changed();
+        redraw();
       }
     });
     redraw();
   }
-
   function socialEditor(box) {
     const links = state.settings.homeSocialLinks;
     const heading = node('div', 'home-admin-social-summary');
     const headingCopy = node('div', '');
     headingCopy.append(node('h3', '', 'Tautan media sosial'), node('p', '', 'Atur nama, tujuan, logo dan lokasi tampil setiap tautan. Klik kartu untuk mengedit.'));
     const count = node('span', 'home-admin-social-count');
-    const add = helpButton(
-      heading,
-      '+ Tambah tautan',
-      () => {
-        if (links.length >= 20) return SSCNotice.alert('Maksimal 20 tautan media sosial.');
-        const id = 'social-' + crypto.randomUUID().slice(0, 8);
-        links.push({
-          id,
-          title: 'Akun media sosial',
-          description: '',
-          url: 'https://',
-          icon: 'assets/tiktok-logo.png',
-          showHome: true,
-          showRegistration: true
-        });
-        changed();
-        redraw(id);
-      }
-    );
+    const add = helpButton(heading, '+ Tambah tautan', () => {
+      if (links.length >= 20)
+        return SSCNotice.alert('Maksimal 20 tautan media sosial.');
+      const id = 'social-' + crypto.randomUUID().slice(0, 8);
+      links.push({
+        id,
+        title: 'Akun media sosial',
+        description: '',
+        url: 'https://',
+        icon: 'assets/tiktok-logo.png',
+        showHome: true,
+        showRegistration: true
+      });
+      changed();
+      redraw(id);
+    });
     heading.prepend(headingCopy);
     heading.append(count);
     const list = node('div', 'home-admin-social-list');
     box.append(heading, list);
     function redraw(forceOpen) {
       const openIds = new Set([...list.querySelectorAll('details[open]')].map(d => d.dataset.linkId));
-      if (forceOpen) openIds.add(forceOpen);
+      if (forceOpen)
+        openIds.add(forceOpen);
       list.replaceChildren();
       count.textContent = links.length + '/20 tautan';
       for (const [index, item] of links.entries()) {
@@ -732,8 +778,11 @@ window.SSCircleHomeAdmin = (() => {
         card.append(summary);
         function updateLocations() {
           locations.replaceChildren();
-          for (const [key, text] of [['showHome', 'Homepage'], ['showRegistration', 'Registration']]) if (item[key] === true) locations.append(node('small', 'home-admin-social-tag', text));
-          if (!locations.children.length) locations.append(node('small', 'home-admin-social-tag muted', 'Disembunyikan'));
+          for (const [key, text] of [['showHome', 'Homepage'], ['showRegistration', 'Registration']])
+            if (item[key] === true)
+              locations.append(node('small', 'home-admin-social-tag', text));
+          if (!locations.children.length)
+            locations.append(node('small', 'home-admin-social-tag muted', 'Disembunyikan'));
         }
         updateLocations();
         const body = node('div', 'home-admin-social-card-body');
@@ -749,8 +798,10 @@ window.SSCircleHomeAdmin = (() => {
           inp.setAttribute('aria-label', label + ' ' + (index + 1));
           inp.addEventListener('input', () => {
             item[key] = inp.value;
-            if (key === 'title') title.textContent = inp.value || 'Tautan baru';
-            if (key === 'url') url.textContent = inp.value || 'Belum ada tautan';
+            if (key === 'title')
+              title.textContent = inp.value || 'Tautan baru';
+            if (key === 'url')
+              url.textContent = inp.value || 'Belum ada tautan';
             changed();
           });
           wrap.append(inp);
@@ -790,7 +841,8 @@ window.SSCircleHomeAdmin = (() => {
         upload.setAttribute('aria-label', 'Unggah logo ' + (index + 1));
         upload.onchange = async () => {
           const file = upload.files?.[0];
-          if (!file) return;
+          if (!file)
+            return;
           upload.disabled = true;
           uploadLabel.firstChild.textContent = 'Mengunggah...';
           try {
@@ -798,7 +850,8 @@ window.SSCircleHomeAdmin = (() => {
             item.icon = '/api/media/' + result.id;
             changed();
             redraw(card.dataset.linkId);
-          } catch (e) {
+          }
+          catch (e) {
             SSCNotice.alert('Gagal mengunggah logo: ' + e.message);
             upload.disabled = false;
             uploadLabel.firstChild.textContent = 'Unggah logo';
@@ -845,17 +898,13 @@ window.SSCircleHomeAdmin = (() => {
           }
         });
         down.disabled = index === links.length - 1;
-        const del = helpButton(
-          actions,
-          'Hapus tautan',
-          async () => {
-            if (await SSCNotice.confirm('Hapus tautan media sosial ini dari website?', { danger: true, confirmText: 'Hapus tautan' })) {
-              links.splice(index, 1);
-              changed();
-              redraw();
-            }
+        const del = helpButton(actions, 'Hapus tautan', async () => {
+          if (await SSCNotice.confirm('Hapus tautan media sosial ini dari website?', { danger: true, confirmText: 'Hapus tautan' })) {
+            links.splice(index, 1);
+            changed();
+            redraw();
           }
-        );
+        });
         del.classList.add('danger-button');
         body.append(actions);
         card.append(body);
@@ -871,11 +920,11 @@ window.SSCircleHomeAdmin = (() => {
           redraw(moved?.id);
         }
       });
-      if (!links.length) list.append(node('p', 'field-help', 'Belum ada tautan media sosial. Klik Tambah tautan untuk membuatnya.'));
+      if (!links.length)
+        list.append(node('p', 'field-help', 'Belum ada tautan media sosial. Klik Tambah tautan untuk membuatnya.'));
     }
     redraw();
   }
-
   function imagePickerField(container, key, label, { builtin = 'assets/sscircle-community-icon.png', hint = 'Unggah gambar baru jika ingin mengganti gambar bawaan.' } = {}) {
     const wrap = node('div', 'field-group full');
     wrap.append(node('span', 'field-label', label));
@@ -909,7 +958,8 @@ window.SSCircleHomeAdmin = (() => {
     const info = node('small', 'field-help', hint);
     upload.onchange = async () => {
       const file = upload.files?.[0];
-      if (!file) return;
+      if (!file)
+        return;
       upload.disabled = true;
       info.textContent = 'Mengunggah gambar...';
       try {
@@ -924,9 +974,11 @@ window.SSCircleHomeAdmin = (() => {
         select.value = state.settings[key];
         changed();
         info.textContent = '✓ Gambar berhasil dipilih. Simpan Homepage untuk menerapkan.';
-      } catch (e) {
+      }
+      catch (e) {
         info.textContent = 'Gagal upload: ' + e.message;
-      } finally {
+      }
+      finally {
         upload.disabled = false;
         upload.value = '';
       }
@@ -941,26 +993,25 @@ window.SSCircleHomeAdmin = (() => {
     container.append(wrap);
   }
   function leaderboardEditor(box) {
-    if (!Array.isArray(state.settings.homeLeaderboardSeasons)) state.settings.homeLeaderboardSeasons = [];
+    if (!Array.isArray(state.settings.homeLeaderboardSeasons))
+      state.settings.homeLeaderboardSeasons = [];
     const toolbar = node('div', 'home-admin-gallery-add'), list = node('div', 'home-admin-social-list');
     box.append(toolbar, list);
-    helpButton(
-      toolbar,
-      '+ Tambah season',
-      () => {
-        if (state.settings.homeLeaderboardSeasons.length >= 12) return SSCNotice.alert('Maksimal 12 season leaderboard.');
-        state.settings.homeLeaderboardSeasons.push({
-          id: 'season-' + (state.settings.homeLeaderboardSeasons.length + 1),
-          title: 'Leaderboard S' + (state.settings.homeLeaderboardSeasons.length + 1),
-          entries: [{ name: '', score: '' }, { name: '', score: '' }, { name: '', score: '' }]
-        });
-        changed();
-        redraw();
-      }
-    );
+    helpButton(toolbar, '+ Tambah season', () => {
+      if (state.settings.homeLeaderboardSeasons.length >= 12)
+        return SSCNotice.alert('Maksimal 12 season leaderboard.');
+      state.settings.homeLeaderboardSeasons.push({
+        id: 'season-' + (state.settings.homeLeaderboardSeasons.length + 1),
+        title: 'Leaderboard S' + (state.settings.homeLeaderboardSeasons.length + 1),
+        entries: [{ name: '', score: '' }, { name: '', score: '' }, { name: '', score: '' }]
+      });
+      changed();
+      redraw();
+    });
     function redraw(forceId) {
       const openIds = new Set([...list.querySelectorAll('details[open]')].map(d => d.dataset.seasonId));
-      if (forceId) openIds.add(forceId);
+      if (forceId)
+        openIds.add(forceId);
       list.replaceChildren();
       state.settings.homeLeaderboardSeasons.forEach((season, index) => {
         const card = node('details', 'home-admin-social-card');
@@ -1024,16 +1075,13 @@ window.SSCircleHomeAdmin = (() => {
               redraw(card.dataset.seasonId);
             }
           });
-          helpButton(
-            actions,
-            'Hapus',
-            async () => {
-              if (!await SSCNotice.confirm('Hapus entri leaderboard ini?', { danger: true, confirmText: 'Hapus entri' })) return;
-              entries.splice(rowIndex, 1);
-              changed();
-              redraw(card.dataset.seasonId);
-            }
-          );
+          helpButton(actions, 'Hapus', async () => {
+            if (!await SSCNotice.confirm('Hapus entri leaderboard ini?', { danger: true, confirmText: 'Hapus entri' }))
+              return;
+            entries.splice(rowIndex, 1);
+            changed();
+            redraw(card.dataset.seasonId);
+          });
           row.append(fields, actions);
           entryWrap.append(row);
         });
@@ -1046,45 +1094,35 @@ window.SSCircleHomeAdmin = (() => {
           }
         });
         const addEntry = helpButton(body, '+ Tambah entri', () => {
-          if (entries.length >= 20) return SSCNotice.alert('Maksimal 20 entri per season.');
+          if (entries.length >= 20)
+            return SSCNotice.alert('Maksimal 20 entri per season.');
           entries.push({ name: '', score: '' });
           changed();
           redraw(card.dataset.seasonId);
         });
         addEntry.classList.add('secondary');
         const actions = node('div', 'home-admin-gallery-add');
-        helpButton(
-          actions,
-          'Geser season ke atas',
-          () => {
-            if (index > 0) {
-              [state.settings.homeLeaderboardSeasons[index - 1], state.settings.homeLeaderboardSeasons[index]] = [state.settings.homeLeaderboardSeasons[index], state.settings.homeLeaderboardSeasons[index - 1]];
-              changed();
-              redraw(card.dataset.seasonId);
-            }
-          }
-        );
-        helpButton(
-          actions,
-          'Geser season ke bawah',
-          () => {
-            if (index < state.settings.homeLeaderboardSeasons.length - 1) {
-              [state.settings.homeLeaderboardSeasons[index + 1], state.settings.homeLeaderboardSeasons[index]] = [state.settings.homeLeaderboardSeasons[index], state.settings.homeLeaderboardSeasons[index + 1]];
-              changed();
-              redraw(card.dataset.seasonId);
-            }
-          }
-        );
-        helpButton(
-          actions,
-          'Hapus season',
-          async () => {
-            if (!await SSCNotice.confirm('Hapus season leaderboard ini?', { danger: true, confirmText: 'Hapus season' })) return;
-            state.settings.homeLeaderboardSeasons.splice(index, 1);
+        helpButton(actions, 'Geser season ke atas', () => {
+          if (index > 0) {
+            [state.settings.homeLeaderboardSeasons[index - 1], state.settings.homeLeaderboardSeasons[index]] = [state.settings.homeLeaderboardSeasons[index], state.settings.homeLeaderboardSeasons[index - 1]];
             changed();
-            redraw();
+            redraw(card.dataset.seasonId);
           }
-        );
+        });
+        helpButton(actions, 'Geser season ke bawah', () => {
+          if (index < state.settings.homeLeaderboardSeasons.length - 1) {
+            [state.settings.homeLeaderboardSeasons[index + 1], state.settings.homeLeaderboardSeasons[index]] = [state.settings.homeLeaderboardSeasons[index], state.settings.homeLeaderboardSeasons[index + 1]];
+            changed();
+            redraw(card.dataset.seasonId);
+          }
+        });
+        helpButton(actions, 'Hapus season', async () => {
+          if (!await SSCNotice.confirm('Hapus season leaderboard ini?', { danger: true, confirmText: 'Hapus season' }))
+            return;
+          state.settings.homeLeaderboardSeasons.splice(index, 1);
+          changed();
+          redraw();
+        });
         body.append(actions);
         card.append(body);
         list.append(card);
@@ -1104,11 +1142,7 @@ window.SSCircleHomeAdmin = (() => {
     redraw();
   }
   function range(box, key, label, min, max, unit) {
-    const labelWrap = node('label', 'field-group'),
-      heading = node('span', 'field-label', label),
-      slider = node('input'),
-      line = node('div', 'home-admin-range'),
-      out = node('output');
+    const labelWrap = node('label', 'field-group'), heading = node('span', 'field-label', label), slider = node('input'), line = node('div', 'home-admin-range'), out = node('output');
     slider.type = 'range';
     slider.min = min;
     slider.max = max;
@@ -1125,27 +1159,32 @@ window.SSCircleHomeAdmin = (() => {
     box.append(labelWrap);
   }
   function gotoAppearance(part) {
-    if (part === 'colors') { document.querySelector('.dashboard-sidebar [data-tab="theme"]')?.click(); return; }
+    if (part === 'colors') {
+      document.querySelector('.dashboard-sidebar [data-tab="theme"]')?.click();
+      return;
+    }
     document.querySelector('[data-tab="appearance"]')?.click();
     document.querySelector('[data-appearance="' + part + '"]')?.click();
   }
   function setStatus() {
     const el = document.getElementById('home-admin-registration-state');
-    if (el) el.textContent = state.settings.open ? '● Pendaftaran dibuka' : '◷ Pendaftaran ditutup';
+    if (el)
+      el.textContent = state.settings.open ? '● Pendaftaran dibuka' : '◷ Pendaftaran ditutup';
   }
   function render(data, dirtyMark) {
     state = data;
     notifyDirty = dirtyMark;
     const r = root();
-    if (!r) return;
+    if (!r)
+      return;
     r.replaceChildren();
-    if (!Array.isArray(data.settings.homeGallery)) data.settings.homeGallery = [...Array.from({ length: 9 }, (_, i) => ({
-      src: 'assets/gallery/sscircle-' + String(i + 1).padStart(2, '0') + '.webp',
-      title: 'SSCircle Gallery ' + (i + 1),
-      caption: ''
-    }))];
+    if (!Array.isArray(data.settings.homeGallery))
+      data.settings.homeGallery = [...Array.from({ length: 9 }, (_, i) => ({
+          src: 'assets/gallery/sscircle-' + String(i + 1).padStart(2, '0') + '.webp',
+          title: 'SSCircle Gallery ' + (i + 1),
+          caption: ''
+        }))];
     setStatus();
-
     const basics = section('01 · Homepage & Pendaftaran', 'Pengaturan utama yang paling sering digunakan.');
     toggle(basics, 'open', 'Pendaftaran dibuka', 'Matikan untuk menutup pendaftaran dan menampilkan pengumuman di halaman Registration.');
     textField(basics, 'homeClosedMessage', 'Pesan saat pendaftaran ditutup', { textarea: true });
@@ -1167,9 +1206,7 @@ window.SSCircleHomeAdmin = (() => {
     const fileInput = node('input');
     fileInput.type = 'file';
     fileInput.accept = 'video/mp4,video/webm,.mp4,.webm';
-    const videoProgress = node('div', 'home-upload-progress'),
-      bar = node('div', 'home-upload-progress-bar'),
-      uploadText = node('small', 'field-help', 'Video maksimal 16 MB. Pilih MP4 atau WebM; gambar dan suara tidak akan dimodifikasi saat upload. Pemutaran video pada halaman publik tetap tanpa suara.');
+    const videoProgress = node('div', 'home-upload-progress'), bar = node('div', 'home-upload-progress-bar'), uploadText = node('small', 'field-help', 'Video maksimal 16 MB. Pilih MP4 atau WebM; gambar dan suara tidak akan dimodifikasi saat upload. Pemutaran video pada halaman publik tetap tanpa suara.');
     videoProgress.append(bar);
     videoProgress.hidden = true;
     const preview = node('video', 'home-admin-video-preview');
@@ -1184,7 +1221,8 @@ window.SSCircleHomeAdmin = (() => {
     showVideo(state.settings.homeVideoUrl);
     fileInput.onchange = async () => {
       const file = fileInput.files?.[0];
-      if (!file) return;
+      if (!file)
+        return;
       fileInput.disabled = true;
       videoProgress.hidden = false;
       bar.style.width = '0%';
@@ -1231,7 +1269,6 @@ window.SSCircleHomeAdmin = (() => {
       oldShow(src);
       external.value = src;
     }
-
     async function fill() {
       picker.replaceChildren();
       const first = node('option', '', 'Video bawaan');
@@ -1240,12 +1277,14 @@ window.SSCircleHomeAdmin = (() => {
       try {
         const result = await SSCircle.getMediaLibrary();
         for (const item of result.files || []) {
-          if (!item.type?.startsWith('video/') || item.visibility === 'private' || item.visibility === 'uploading' || item.source === 'built-in') continue;
+          if (!item.type?.startsWith('video/') || item.visibility === 'private' || item.visibility === 'uploading' || item.source === 'built-in')
+            continue;
           const opt = node('option', '', item.name + ' · ' + (item.size / 1024 / 1024).toFixed(2) + ' MB');
           opt.value = '/api/media/' + item.id + (item.type === 'video/webm' ? '?format=webm' : '?format=mp4');
           picker.append(opt);
         }
-      } catch {
+      }
+      catch {
         uploadText.textContent = 'Daftar video belum dapat dimuat. Upload baru tetap tersedia.';
       }
       picker.value = state.settings.homeVideoUrl;
@@ -1292,26 +1331,27 @@ window.SSCircleHomeAdmin = (() => {
       ['homeDiscordUrl', 'Link undangan Discord', 'input'],
       ['homeFooterText', 'Teks footer Homepage', 'input']
     ]);
-    if (!Array.isArray(state.settings.homeSocialLinks)) state.settings.homeSocialLinks = [
-      {
-        id: 'tiktok-owner',
-        title: 'JasitS',
-        description: 'TikTok Owner SSCircle Server',
-        url: 'https://www.tiktok.com/@jasitsaja',
-        icon: 'assets/tiktok-logo.png',
-        showHome: true,
-        showRegistration: true
-      },
-      {
-        id: 'tiktok-community',
-        title: 'SSCircle Community',
-        description: 'TikTok resmi SSCircle Community',
-        url: 'https://www.tiktok.com/@sscircle.id',
-        icon: 'assets/tiktok-logo.png',
-        showHome: true,
-        showRegistration: true
-      }
-    ];
+    if (!Array.isArray(state.settings.homeSocialLinks))
+      state.settings.homeSocialLinks = [
+        {
+          id: 'tiktok-owner',
+          title: 'JasitS',
+          description: 'TikTok Owner SSCircle Server',
+          url: 'https://www.tiktok.com/@jasitsaja',
+          icon: 'assets/tiktok-logo.png',
+          showHome: true,
+          showRegistration: true
+        },
+        {
+          id: 'tiktok-community',
+          title: 'SSCircle Community',
+          description: 'TikTok resmi SSCircle Community',
+          url: 'https://www.tiktok.com/@sscircle.id',
+          icon: 'assets/tiktok-logo.png',
+          showHome: true,
+          showRegistration: true
+        }
+      ];
     socialEditor(community);
     const donationSubsection = node('div', 'home-admin-donation-subsection');
     donationSubsection.append(node('h3', '', 'Donasi Server'), node('p', 'field-help', 'Pengaturan dukungan server, tampil bersama Discord dan media sosial di Stay Connected.'));
@@ -1370,24 +1410,21 @@ window.SSCircleHomeAdmin = (() => {
     helpButton(buttons, 'Logo & animasi opening →', () => gotoAppearance('opening'));
     visual.append(buttons);
     // Setiap pengaturan ditempatkan di kartu Homepage sesuai posisi kontennya.
-    window.SSCircleHomepageBuilder?.render(
-      data,
-      changed,
-      {
-        intro: [basics, welcome, video],
-        about: [about],
-        gallery: [gallery],
-        process: [process],
-        community: [community],
-        profile: [profile],
-        leaderboard: [leaderboard],
-        status: [statusSection],
-        design: [visual]
-      }
-    );
+    window.SSCircleHomepageBuilder?.render(data, changed, {
+      intro: [basics, welcome, video],
+      about: [about],
+      gallery: [gallery],
+      process: [process],
+      community: [community],
+      profile: [profile],
+      leaderboard: [leaderboard],
+      status: [statusSection],
+      design: [visual]
+    });
   }
   function init() {
-    for (const id of ['home-admin-save', 'home-admin-save-top']) document.getElementById(id)?.addEventListener('click', () => document.getElementById('save')?.click());
+    for (const id of ['home-admin-save', 'home-admin-save-top'])
+      document.getElementById(id)?.addEventListener('click', () => document.getElementById('save')?.click());
     document.getElementById('home-admin-preview')?.addEventListener('click', () => window.open('./', '_blank', 'noopener'));
   }
   init();

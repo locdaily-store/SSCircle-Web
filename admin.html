@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="id">
   <head>
+    <!-- Metadata, stylesheet, dan script halaman -->
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#160a28">
@@ -24,19 +25,26 @@
   <body class="admin-page theme-v3">
     <div class="ambient ambient-a" aria-hidden="true"></div>
     <div class="page-shell admin-shell">
+
+      <!-- Header dan navigasi -->
       <header class="site-header">
-        <a class="brand" href="./"><img src="assets/sscircle-logo.png" width="43" height="43" alt="Logo SSCircle"><span class="brand-copy"><strong>SSCIRCLE</strong><small>ADMIN CONTROL</small></span></a>
+        <a class="brand" href="./">
+          <img src="assets/sscircle-logo.png" width="43" height="43" alt="Logo SSCircle">
+          <span class="brand-copy"><strong>SSCIRCLE</strong><small>ADMIN CONTROL</small></span>
+        </a>
         <a class="header-back" href="./">↗   Lihat Homepage</a>
       </header>
+
+      <!-- Konten utama halaman -->
       <main>
+        <!-- Halaman masuk admin -->
         <section id="login" class="login-wrap">
-          <div class="login-ornament">
-            <img src="assets/sscircle-logo.png" alt="" width="88" height="88">
-          </div>
+          <div class="login-ornament"> <img src="assets/sscircle-logo.png" alt="" width="88" height="88"> </div>
           <div class="panel login-panel">
             <div class="overline">ADMIN ACCESS / SSCIRCLE SERVER</div>
             <h1>Admin <span class="gradient-text">Control.</span></h1>
             <p>Masuk untuk mengelola formulir, memeriksa jawaban, dan melihat data pendaftar.</p>
+            <!-- Formulir pengisian data -->
             <form id="login-form">
               <label for="password" class="field-label">PASSWORD ADMIN</label>
               <input type="password" id="password" placeholder="Masukkan password admin" autocomplete="current-password" required>
@@ -47,6 +55,7 @@
             <small class="security-hint">Halaman ini khusus untuk pengelola SSCircle Server.</small>
           </div>
         </section>
+        <!-- Area kerja Admin Control -->
         <section id="dashboard" class="dashboard hide">
           <aside class="dashboard-sidebar panel">
             <div class="sidebar-heading">MANAGEMENT</div>
@@ -69,6 +78,7 @@
             </div>
           </aside>
           <div class="dashboard-main">
+            <!-- Ringkasan dashboard -->
             <section id="overview" class="tab-page">
               <div class="dashboard-heading">
                 <div>
@@ -101,6 +111,7 @@
                 </div>
               </div>
             </section>
+            <!-- Pengaturan Homepage -->
             <section id="homepage" class="tab-page hide">
               <div class="dashboard-heading heading-with-button">
                 <div>
@@ -121,6 +132,7 @@
                 <button type="button" id="home-admin-save" class="button primary">Simpan perubahan Homepage ✓</button>
               </div>
             </section>
+            <!-- Pengaturan Voting -->
             <section id="voting-admin" class="tab-page hide">
               <div class="dashboard-heading">
                 <div>
@@ -131,6 +143,7 @@
               </div>
               <div id="voting-admin-editor" class="ssc-vote-admin"></div>
             </section>
+            <!-- Pengaturan halaman pendaftaran -->
             <section id="appearance" class="tab-page hide">
               <div class="dashboard-heading heading-with-button">
                 <div>
@@ -148,7 +161,6 @@
                     <button type="button" class="appearance-nav-btn" data-appearance="hero">02 · Halaman pendaftaran</button>
                     <button type="button" class="appearance-nav-btn" data-appearance="copy">03 · Teks formulir</button>
                     <button type="button" class="appearance-nav-btn" data-appearance="opening">04 · Opening</button>
-
                   </div>
                   <div class="appearance-panel panel" data-appearance-panel="identity">
                     <div class="panel-heading">
@@ -168,7 +180,11 @@
                       </div>
                     </div>
                     <div id="appearance-identity-fields" class="appearance-fields"></div>
-                    <label class="toggle-row"><input type="checkbox" id="form-open"><span class="toggle-visual" aria-hidden="true"></span><span><strong>Buka pendaftaran</strong><small>Jika dimatikan, pengunjung tidak dapat mengirim jawaban.</small></span></label>
+                    <label class="toggle-row">
+                      <input type="checkbox" id="form-open">
+                      <span class="toggle-visual" aria-hidden="true"></span>
+                      <span><strong>Buka pendaftaran</strong><small>Jika dimatikan, pengunjung tidak dapat mengirim jawaban.</small></span>
+                    </label>
                   </div>
                   <div class="appearance-panel panel hide" data-appearance-panel="hero">
                     <div class="panel-heading">
@@ -207,7 +223,11 @@
                         <p>Intro halus saat pengunjung membuka link, lengkap dengan tombol lewati.</p>
                       </div>
                     </div>
-                    <label class="toggle-row"><input type="checkbox" id="intro-enabled"><span class="toggle-visual" aria-hidden="true"></span><span><strong>Aktifkan opening</strong><small>Otomatis dilewati bila perangkat memilih reduced motion.</small></span></label>
+                    <label class="toggle-row">
+                      <input type="checkbox" id="intro-enabled">
+                      <span class="toggle-visual" aria-hidden="true"></span>
+                      <span><strong>Aktifkan opening</strong><small>Otomatis dilewati bila perangkat memilih reduced motion.</small></span>
+                    </label>
                     <div class="appearance-logo-row">
                       <img id="intro-logo-preview" src="assets/sscircle-logo.png" alt="Pratinjau logo opening">
                       <div class="appearance-logo-actions">
@@ -231,10 +251,14 @@
                 <div id="registration-live-preview" class="ssc-registration-preview"></div>
               </div>
             </section>
+            <!-- Pengaturan warna dan gradasi -->
             <section id="theme" class="tab-page hide">
               <div class="dashboard-heading heading-with-button">
-                <div><div class="overline">GLOBAL DESIGN SYSTEM / SSCIRCLE</div><h1>Atur Warna<span class="dot-accent">.</span></h1>
-                  <p>Ubah semua warna utama dan gradasi, lalu atur warna tiap komponen jika perlu. Warna bisa dipratinjau sebelum disimpan.</p></div>
+                <div>
+                  <div class="overline">GLOBAL DESIGN SYSTEM / SSCIRCLE</div>
+                  <h1>Atur Warna<span class="dot-accent">.</span></h1>
+                  <p>Ubah semua warna utama dan gradasi, lalu atur warna tiap komponen jika perlu. Warna bisa dipratinjau sebelum disimpan.</p>
+                </div>
                 <button type="button" id="save-theme" class="button primary">Simpan semua warna ✓</button>
               </div>
               <div id="theme-message" role="status" aria-live="polite"></div>
@@ -261,16 +285,29 @@
                       </div>
                     </div>
                   </div>
-
                   <section class="panel ssc-theme-detail-panel">
                     <h2>Pengaturan lanjut</h2>
                     <p>Ubah masing-masing bagian tanpa mengubah seluruh warna. Pilih komponen yang tersedia, lalu tentukan warna dan jenis tampilannya.</p>
                     <div class="ssc-theme-settings-row">
                       <h3>Latar belakang halaman</h3>
                       <p>Warna bagian kosong di belakang kartu. Pilih warnanya pada kategori <strong>Latar &amp; gradasi</strong> di atas. Pengaturan di sini tidak memengaruhi warna kartu atau tombol.</p>
-                      <label class="field-group" for="theme-page-background-mode"><span class="field-label">Tampilan latar halaman</span><select id="theme-page-background-mode"><option value="gradient">Gradasi dua warna</option><option value="solid">Satu warna</option></select></label>
-                      <label class="field-group" id="theme-page-background-angle-row" for="theme-page-background-angle"><span class="field-label">Arah gradasi latar halaman</span><input type="range" id="theme-page-background-angle" min="0" max="360" step="5" value="160"><output id="theme-page-background-angle-value">160°</output></label>
-                      <label class="field-group"><span class="field-label">Arah gradasi tombol/kartu</span><input type="range" id="theme-gradient-angle" min="0" max="360" step="5" value="135"><output id="theme-gradient-angle-value">135°</output></label>
+                      <label class="field-group" for="theme-page-background-mode">
+                        <span class="field-label">Tampilan latar halaman</span>
+                        <select id="theme-page-background-mode">
+                          <option value="gradient">Gradasi dua warna</option>
+                          <option value="solid">Satu warna</option>
+                        </select>
+                      </label>
+                      <label class="field-group" id="theme-page-background-angle-row" for="theme-page-background-angle">
+                        <span class="field-label">Arah gradasi latar halaman</span>
+                        <input type="range" id="theme-page-background-angle" min="0" max="360" step="5" value="160">
+                        <output id="theme-page-background-angle-value">160°</output>
+                      </label>
+                      <label class="field-group">
+                        <span class="field-label">Arah gradasi tombol/kartu</span>
+                        <input type="range" id="theme-gradient-angle" min="0" max="360" step="5" value="135">
+                        <output id="theme-gradient-angle-value">135°</output>
+                      </label>
                       <label class="ssc-theme-check"><input id="theme-cards-gradient" type="checkbox"> Gunakan gradasi pada kartu dan panel</label>
                       <label class="ssc-theme-check"><input id="theme-admin-enable" type="checkbox"> Terapkan warna juga pada Admin Control</label>
                     </div>
@@ -282,20 +319,31 @@
                   </section>
                 </div>
                 <aside class="panel ssc-theme-preview-panel">
-                  <h2>Pratinjau warna langsung</h2><p>Uji perubahan untuk Homepage, Registration, Voting, dan Cek Status tanpa menyimpan lebih dulu.</p>
+                  <h2>Pratinjau warna langsung</h2>
+                  <p>Uji perubahan untuk Homepage, Registration, Voting, dan Cek Status tanpa menyimpan lebih dulu.</p>
                   <div class="ssc-theme-preview-controls">
-                    <select id="theme-preview-page" aria-label="Halaman pratinjau"><option value="index.html">Homepage</option><option value="registration.html">Registration</option><option value="voting.html">Voting</option><option value="status.html">Cek Status</option></select>
+                    <select id="theme-preview-page" aria-label="Halaman pratinjau">
+                      <option value="index.html">Homepage</option>
+                      <option value="registration.html">Registration</option>
+                      <option value="voting.html">Voting</option>
+                      <option value="status.html">Cek Status</option>
+                    </select>
                     <button type="button" id="theme-preview-desktop" class="button secondary">Desktop</button>
                     <button type="button" id="theme-preview-mobile" class="button secondary">HP</button>
                     <button type="button" id="theme-preview-reload" class="button secondary">↻</button>
                   </div>
-                  <div id="theme-preview-window" class="ssc-theme-preview-window"><iframe title="Pratinjau warna website SSCircle" id="theme-preview-frame" loading="lazy" scrolling="yes" src="./?ssc_theme_preview=1"></iframe></div>
+                  <div id="theme-preview-window" class="ssc-theme-preview-window">
+                    <iframe title="Pratinjau warna website SSCircle" id="theme-preview-frame" loading="lazy" scrolling="yes" src="./?ssc_theme_preview=1"></iframe>
+                  </div>
                   <p class="field-help">Gulir roda mouse atau usap langsung di dalam pratinjau untuk melihat bagian bawah halaman.</p>
                   <p id="theme-preview-status" class="field-help" role="status">Memuat pratinjau ...</p>
                 </aside>
               </div>
-              <div class="ssc-theme-savebar"><button type="button" id="save-theme-bottom" class="button primary">Simpan pengaturan warna ✓</button></div>
+              <div class="ssc-theme-savebar">
+                <button type="button" id="save-theme-bottom" class="button primary">Simpan pengaturan warna ✓</button>
+              </div>
             </section>
+            <!-- Editor formulir pendaftaran -->
             <section id="form" class="tab-page hide">
               <div class="dashboard-heading heading-with-button">
                 <div>
@@ -313,7 +361,11 @@
                     <p>Atur berapa lama pengunjung harus menunggu sebelum mengirim pendaftaran berikutnya.</p>
                   </div>
                 </div>
-                <label class="field-group cooldown-admin-field" for="registration-cooldown-minutes"><span class="field-label">Durasi jeda (menit)</span><input id="registration-cooldown-minutes" type="number" min="0" max="10080" step="1" inputmode="numeric" value="30"><span id="registration-cooldown-hint" class="field-help">0 = nonaktif. Durasi dihitung setelah pendaftaran berhasil dikirim.</span></label>
+                <label class="field-group cooldown-admin-field" for="registration-cooldown-minutes">
+                  <span class="field-label">Durasi jeda (menit)</span>
+                  <input id="registration-cooldown-minutes" type="number" min="0" max="10080" step="1" inputmode="numeric" value="30">
+                  <span id="registration-cooldown-hint" class="field-help">0 = nonaktif. Durasi dihitung setelah pendaftaran berhasil dikirim.</span>
+                </label>
                 <p class="cooldown-admin-note">Pengaturan ini membantu mencegah pengiriman berulang. Pemain yang memakai jaringan internet bersama dapat memiliki waktu tunggu yang sama.</p>
               </div>
               <div id="save-message" role="status" aria-live="polite"></div>
@@ -333,7 +385,11 @@
                 <div>
                   <div class="overline">EDITOR FORMULIR</div>
                   <h2>Bagian &amp; pertanyaan</h2>
-                  <p class="builder-helper">Setiap pertanyaan tampil langsung di bawah bagiannya, seperti Google Forms. Seret pegangan <strong>⋮⋮</strong> untuk memindahkan pertanyaan, termasuk ke bagian lain. Bagian lain bisa dilipat agar tidak perlu scroll panjang.</p>
+                  <p class="builder-helper">
+                    Setiap pertanyaan tampil langsung di bawah bagiannya, seperti Google Forms. Seret pegangan
+                    <strong>⋮⋮</strong>
+                    untuk memindahkan pertanyaan, termasuk ke bagian lain. Bagian lain bisa dilipat agar tidak perlu scroll panjang.
+                  </p>
                 </div>
                 <span id="builder-count" class="count-bubble">0 item</span>
               </div>
@@ -348,11 +404,17 @@
                 <aside class="floating-insert-rail panel" id="floating-insert-rail" role="toolbar" aria-label="Tambah konten formulir">
                   <div class="floating-rail-context" id="floating-rail-context" aria-live="off" title="Bagian tempat konten baru akan ditambahkan">B1</div>
                   <button type="button" class="floating-insert-btn" data-insert="question" aria-label="Tambah pertanyaan" title="Tambah pertanyaan"><span aria-hidden="true" class="rail-glyph">＋</span><span class="rail-caption">Pertanyaan</span></button>
-                  <button type="button" class="floating-insert-btn" data-insert="text" aria-label="Tambah judul atau deskripsi" title="Tambah judul atau deskripsi"><span aria-hidden="true" class="rail-glyph rail-text-glyph">Tᵀ</span><span class="rail-caption">Teks</span></button>
+                  <button type="button" class="floating-insert-btn" data-insert="text" aria-label="Tambah judul atau deskripsi" title="Tambah judul atau deskripsi">
+                    <span aria-hidden="true" class="rail-glyph rail-text-glyph">Tᵀ</span>
+                    <span class="rail-caption">Teks</span>
+                  </button>
                   <button type="button" class="floating-insert-btn" data-insert="image" aria-label="Tambah gambar" title="Tambah gambar"><span aria-hidden="true" class="rail-glyph">▧</span><span class="rail-caption">Gambar</span></button>
                   <button type="button" class="floating-insert-btn" data-insert="video" aria-label="Tambah video" title="Tambah video"><span aria-hidden="true" class="rail-glyph">▷</span><span class="rail-caption">Video</span></button>
                   <div class="floating-rail-divider" role="separator"></div>
-                  <button type="button" class="floating-insert-btn floating-insert-section" id="floating-add-section" aria-label="Tambah bagian atau halaman" title="Tambah bagian atau halaman"><span aria-hidden="true" class="rail-glyph">⊞</span><span class="rail-caption">Bagian</span></button>
+                  <button type="button" class="floating-insert-btn floating-insert-section" id="floating-add-section" aria-label="Tambah bagian atau halaman" title="Tambah bagian atau halaman">
+                    <span aria-hidden="true" class="rail-glyph">⊞</span>
+                    <span class="rail-caption">Bagian</span>
+                  </button>
                 </aside>
               </div>
               <div class="hide" id="routing-panel" aria-hidden="true"></div>
@@ -361,6 +423,7 @@
                 <button type="button" id="preview-draft" class="button secondary">Pratinjau halaman ini ↗</button>
               </div>
             </section>
+            <!-- Penyimpanan media -->
             <section id="media" class="tab-page hide">
               <div class="dashboard-heading">
                 <div>
@@ -378,7 +441,16 @@
                 <div class="media-upload-actions">
                   <label class="button secondary media-upload-label">＋ Upload gambar<input type="file" id="media-upload-image" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden></label>
                   <label class="button secondary media-upload-label">▷ Upload video<input type="file" id="media-upload-video" accept="video/mp4,video/webm,.mp4,.webm" hidden></label>
-                  <label class="field-group media-filter-label"><span class="field-label">Tampilkan</span><select id="media-filter"><option value="all">Semua media</option><option value="image">Gambar</option><option value="video">Video</option><option value="unused">Tidak digunakan</option><option value="private">Jawaban privat</option></select></label>
+                  <label class="field-group media-filter-label">
+                    <span class="field-label">Tampilkan</span>
+                    <select id="media-filter">
+                      <option value="all">Semua media</option>
+                      <option value="image">Gambar</option>
+                      <option value="video">Video</option>
+                      <option value="unused">Tidak digunakan</option>
+                      <option value="private">Jawaban privat</option>
+                    </select>
+                  </label>
                   <button type="button" class="button secondary danger-button" id="delete-unused-media">Bersihkan media tidak terpakai</button>
                 </div>
                 <progress id="media-video-progress" class="media-upload-progress" value="0" max="100" hidden></progress>
@@ -392,6 +464,7 @@
                 <button type="button" class="button secondary" id="media-next">Berikutnya →</button>
               </div>
             </section>
+            <!-- Analitik jawaban pendaftar -->
             <section id="analytics" class="tab-page hide">
               <div class="dashboard-heading">
                 <div>
@@ -401,16 +474,25 @@
                 </div>
               </div>
               <div class="panel analytics-toolbar">
-                <label class="field-group"><span class="field-label">Cari pertanyaan</span><input id="analytics-search" type="search" placeholder="Cari judul pertanyaan..."></label>
+                <label class="field-group">
+                  <span class="field-label">Cari pertanyaan</span>
+                  <input id="analytics-search" type="search" placeholder="Cari judul pertanyaan...">
+                </label>
                 <div class="field-group">
                   <span class="field-label">Tampilkan data</span>
-                  <select id="analytics-status"><option value="all">Semua pendaftar</option><option value="pending">Menunggu</option><option value="accepted">Diterima</option><option value="rejected">Ditolak</option></select>
+                  <select id="analytics-status">
+                    <option value="all">Semua pendaftar</option>
+                    <option value="pending">Menunggu</option>
+                    <option value="accepted">Diterima</option>
+                    <option value="rejected">Ditolak</option>
+                  </select>
                 </div>
                 <button type="button" class="button secondary" id="analytics-refresh">↻ Refresh</button>
               </div>
               <div id="analytics-summary" class="analytics-summary"></div>
               <div id="analytics-list" class="analytics-grid"></div>
             </section>
+            <!-- Data dan jawaban pendaftar -->
             <section id="answers" class="tab-page hide">
               <div class="dashboard-heading">
                 <div>
@@ -425,7 +507,12 @@
                   <span>⌕</span>
                   <input type="search" id="search" placeholder="Cari username, jawaban, atau referensi...">
                 </div>
-                <select id="filter" aria-label="Filter status"><option value="all">Semua status</option><option value="pending">Menunggu</option><option value="accepted">Diterima</option><option value="rejected">Ditolak</option></select>
+                <select id="filter" aria-label="Filter status">
+                  <option value="all">Semua status</option>
+                  <option value="pending">Menunggu</option>
+                  <option value="accepted">Diterima</option>
+                  <option value="rejected">Ditolak</option>
+                </select>
                 <button id="open-spreadsheet-answers" class="button primary">▦ Buka spreadsheet ↗</button>
               </div>
               <div class="selection-toolbar panel">
@@ -445,8 +532,10 @@
               <div class="spreadsheet-tip">Klik nama atau baris pendaftar untuk membuka seluruh jawaban. Tidak perlu menggeser tabel ke samping.</div>
               <div class="panel spreadsheet-wrap compact-sheet">
                 <table class="sheet-table">
-                  <thead id="sheet-head"></thead>
-                  <tbody id="sheet-body"></tbody>
+                  <thead id="sheet-head">
+                  </thead>
+                  <tbody id="sheet-body">
+                  </tbody>
                 </table>
                 <div id="sheet-empty" class="empty-state hide"></div>
               </div>
@@ -456,6 +545,7 @@
                 <button type="button" id="sheet-next" class="button secondary">Berikutnya →</button>
               </div>
             </section>
+            <!-- Tabel dan ekspor data -->
             <section id="spreadsheet" class="tab-page hide">
               <div class="dashboard-heading sheet-main-heading">
                 <div>
@@ -466,8 +556,19 @@
                 <button type="button" class="button secondary" id="sheet-back-answers">← Daftar pendaftar</button>
               </div>
               <div class="panel fullsheet-tools">
-                <label class="fullsheet-search"><span class="field-label">Cari nama, kode, atau jawaban</span><input id="fullsheet-search" type="search" placeholder="Cari di semua kolom..."></label>
-                <label class="fullsheet-status"><span class="field-label">Status</span><select id="fullsheet-status"><option value="all">Semua status</option><option value="pending">Menunggu</option><option value="accepted">Diterima</option><option value="rejected">Ditolak</option></select></label>
+                <label class="fullsheet-search">
+                  <span class="field-label">Cari nama, kode, atau jawaban</span>
+                  <input id="fullsheet-search" type="search" placeholder="Cari di semua kolom...">
+                </label>
+                <label class="fullsheet-status">
+                  <span class="field-label">Status</span>
+                  <select id="fullsheet-status">
+                    <option value="all">Semua status</option>
+                    <option value="pending">Menunggu</option>
+                    <option value="accepted">Diterima</option>
+                    <option value="rejected">Ditolak</option>
+                  </select>
+                </label>
                 <button id="fullsheet-refresh" type="button" class="button secondary">↻ Muat ulang</button>
                 <button id="fullsheet-download" type="button" class="button primary">↓ Unduh Excel (.xlsx)</button>
               </div>
@@ -477,8 +578,10 @@
               </div>
               <div class="panel fullsheet-scroll" id="fullsheet-scroll" tabindex="0" aria-label="Spreadsheet seluruh jawaban pendaftar">
                 <table class="fullsheet-table" aria-label="Jawaban pendaftar SSCircle Server">
-                  <thead id="fullsheet-head"></thead>
-                  <tbody id="fullsheet-body"></tbody>
+                  <thead id="fullsheet-head">
+                  </thead>
+                  <tbody id="fullsheet-body">
+                  </tbody>
                 </table>
                 <div id="fullsheet-empty" class="empty-state hide">Tidak ada jawaban yang cocok.</div>
               </div>
@@ -493,6 +596,7 @@
           </div>
         </section>
       </main>
+      <!-- Popup dan pratinjau gambar -->
       <dialog id="analytics-dialog" class="answer-dialog analytics-detail-dialog">
         <div class="dialog-header">
           <h2 id="analytics-detail-heading">Seluruh jawaban</h2>
@@ -503,6 +607,7 @@
           <button type="button" class="button secondary" id="analytics-more">Lihat lebih lanjut</button>
         </div>
       </dialog>
+      <!-- Popup dan pratinjau gambar -->
       <dialog id="answer-dialog" class="answer-dialog">
         <div class="dialog-header">
           <h2>Detail pendaftaran</h2>
@@ -513,14 +618,19 @@
           <button type="button" id="delete-current" class="button secondary danger-button">Hapus jawaban ini</button>
         </div>
       </dialog>
+      <!-- Popup dan pratinjau gambar -->
       <dialog id="reject-dialog" class="answer-dialog reject-dialog">
+        <!-- Formulir pengisian data -->
         <form method="dialog" id="reject-form">
           <div class="dialog-header">
             <h2>Alasan menolak pendaftaran</h2>
             <button type="button" id="cancel-reject" class="icon-button" aria-label="Batal">✕</button>
           </div>
           <p>Alasan ini akan terlihat oleh pendaftar saat mengecek status menggunakan kode pendaftarannya.</p>
-          <label class="field-group"><span class="field-label">ALASAN PENOLAKAN</span><textarea id="reject-reason" maxlength="1000" rows="5" placeholder="Contoh: Data pendaftaran belum lengkap atau tidak sesuai persyaratan." required></textarea></label>
+          <label class="field-group">
+            <span class="field-label">ALASAN PENOLAKAN</span>
+            <textarea id="reject-reason" maxlength="1000" rows="5" placeholder="Contoh: Data pendaftaran belum lengkap atau tidak sesuai persyaratan." required></textarea>
+          </label>
           <div id="reject-error" class="error-text" role="alert"></div>
           <div class="dialog-actions">
             <button type="button" id="reject-cancel" class="button secondary">Batal</button>
@@ -528,6 +638,7 @@
           </div>
         </form>
       </dialog>
+      <!-- Popup dan pratinjau gambar -->
       <dialog id="preview-dialog" class="answer-dialog preview-dialog">
         <div class="dialog-header">
           <h2>Pratinjau halaman aktif</h2>
@@ -535,11 +646,21 @@
         </div>
         <div id="preview-content"></div>
       </dialog>
+
+      <!-- Footer -->
       <footer class="site-footer ssc-unified-footer admin-footer">
         <div class="ssc-footer-content">
-          <div class="home-footer-mark"><img data-site-logo src="assets/sscircle-logo.png" alt="" width="27" height="27"><span >SSCircle Server</span></div>
+          <div class="home-footer-mark">
+            <img data-site-logo src="assets/sscircle-logo.png" alt="" width="27" height="27">
+            <span >SSCircle Server</span>
+          </div>
           <span >Portal administrasi SSCircle Server</span>
-          <nav class="home-footer-links" aria-label="Navigasi footer"><a href="./">Homepage</a><a href="registration.html">Registration</a><a href="status.html">Cek Status</a><a id="admin-footer-discord" href="https://discord.gg/vQQSgY2GRS" target="_blank" rel="noopener noreferrer">Discord ↗</a></nav>
+          <nav class="home-footer-links" aria-label="Navigasi footer">
+            <a href="./">Homepage</a>
+            <a href="registration.html">Registration</a>
+            <a href="status.html">Cek Status</a>
+            <a id="admin-footer-discord" href="https://discord.gg/vQQSgY2GRS" target="_blank" rel="noopener noreferrer">Discord ↗</a>
+          </nav>
           <small >© 2026 SSCircle Server</small>
         </div>
       </footer>

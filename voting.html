@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="id">
   <head>
+    <!-- Metadata, stylesheet, dan script halaman -->
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#120c1d">
@@ -12,8 +13,13 @@
     <script src="voting.js?v=10.26.0" defer></script>
   </head>
   <body class="home-page voting-page theme-v3">
+
+    <!-- Header dan navigasi -->
     <header class="home-header">
-      <a href="./" class="home-brand" aria-label="SSCircle Server beranda"><img src="assets/sscircle-logo.png" width="41" height="41" alt="Logo SSCircle"><span><strong>SSCircle</strong><small>SERVER</small></span></a>
+      <a href="./" class="home-brand" aria-label="SSCircle Server beranda">
+        <img src="assets/sscircle-logo.png" width="41" height="41" alt="Logo SSCircle">
+        <span><strong>SSCircle</strong><small>SERVER</small></span>
+      </a>
       <nav class="home-nav" aria-label="Navigasi utama">
         <a class="home-nav-link" href="./#galeri">Galeri</a>
         <a class="home-nav-link" href="./#leaderboard">Leaderboard</a>
@@ -21,6 +27,8 @@
         <a class="home-nav-join" href="./">Kembali ke Homepage</a>
       </nav>
     </header>
+
+    <!-- Konten utama halaman -->
     <main class="vote-main home-container">
       <a class="vote-back" href="./">← Kembali ke Homepage</a>
       <section class="vote-hero home-reveal">
@@ -43,8 +51,12 @@
         <div id="vote-login" class="vote-account-panel">
           <h3>Masuk sebagai pendaftar</h3>
           <p>Gunakan kode yang kamu terima setelah mendaftar. Nama akun saja tidak cukup untuk memberikan suara.</p>
+          <!-- Formulir pengisian data -->
           <form id="vote-login-form" class="vote-account-login">
-            <label class="field-group" for="vote-account"><span class="field-label">Kode pendaftaran</span><input id="vote-account" type="password" maxlength="40" autocomplete="off" placeholder="Masukkan kode milikmu" required></label>
+            <label class="field-group" for="vote-account">
+              <span class="field-label">Kode pendaftaran</span>
+              <input id="vote-account" type="password" maxlength="40" autocomplete="off" placeholder="Masukkan kode milikmu" required>
+            </label>
             <button id="vote-login-button" class="home-button home-button-secondary" type="submit">Masuk dengan Kode</button>
           </form>
           <a href="status.html#kode-milikku">Lihat kode milikku</a>
@@ -59,6 +71,7 @@
             <button id="vote-player-logout" type="button" class="home-button home-button-secondary">Keluar</button>
           </div>
         </div>
+        <!-- Formulir pengisian data -->
         <form id="vote-form" class="vote-form" hidden>
           <div id="vote-options" class="vote-options"></div>
           <button id="vote-submit" class="home-button home-button-primary" type="submit">Kirim Voting</button>
@@ -74,13 +87,23 @@
         <div id="vote-results" class="vote-results"></div>
       </section>
     </main>
-      <footer class="site-footer ssc-unified-footer">
-        <div class="ssc-footer-content">
-          <div class="home-footer-mark"><img id="vote-footer-logo" src="assets/sscircle-logo.png" alt="" width="27" height="27"><span >SSCircle Server</span></div>
-          <span id="vote-footer-text">One circle. Endless stories.</span>
-          <nav class="home-footer-links" aria-label="Navigasi footer"><a href="./">Homepage</a><a href="registration.html">Registration</a><a href="status.html">Cek Status</a><a id="ssc-footer-discord" href="https://discord.gg/vQQSgY2GRS" target="_blank" rel="noopener noreferrer">Discord ↗</a></nav>
-          <small >© 2026 SSCircle Server</small>
+
+    <!-- Footer -->
+    <footer class="site-footer ssc-unified-footer">
+      <div class="ssc-footer-content">
+        <div class="home-footer-mark">
+          <img id="vote-footer-logo" src="assets/sscircle-logo.png" alt="" width="27" height="27">
+          <span >SSCircle Server</span>
         </div>
-      </footer>
+        <span id="vote-footer-text">One circle. Endless stories.</span>
+        <nav class="home-footer-links" aria-label="Navigasi footer">
+          <a href="./">Homepage</a>
+          <a href="registration.html">Registration</a>
+          <a href="status.html">Cek Status</a>
+          <a id="ssc-footer-discord" href="https://discord.gg/vQQSgY2GRS" target="_blank" rel="noopener noreferrer">Discord ↗</a>
+        </nav>
+        <small >© 2026 SSCircle Server</small>
+      </div>
+    </footer>
   </body>
 </html>

@@ -1,4 +1,7 @@
 /* SSCircle Server V10.9 / homepage */
+
+// Tampilan Homepage: galeri, urutan section, profil, dan leaderboard.
+
 'use strict';
 (() => {
   const $ = id => document.getElementById(id);
@@ -143,24 +146,30 @@
   let gallery = [], currentImage = 0, manualPause = false, isVisible = true, pauseOffscreen = true, leaderboardIndex = 0, observer;
   const prefersReduced = matchMedia('(prefers-reduced-motion: reduce)');
   function safeImg(value) {
-    if (typeof value !== 'string') return 'assets/gallery/sscircle-01.webp';
-    if (/^assets\/(?:gallery\/sscircle-0[1-9]\.webp|(?:sscircle-logo|sscircle-community-icon|tiktok-logo|discord-logo)\.png)$/.test(value) || /^\/api\/media\/[0-9a-f-]{36}$/.test(value)) return value;
+    if (typeof value !== 'string')
+      return 'assets/gallery/sscircle-01.webp';
+    if (/^assets\/(?:gallery\/sscircle-0[1-9]\.webp|(?:sscircle-logo|sscircle-community-icon|tiktok-logo|discord-logo)\.png)$/.test(value) || /^\/api\/media\/[0-9a-f-]{36}$/.test(value))
+      return value;
     try {
       const u = new URL(value);
       if (u.protocol === 'https:' && !u.username && !u.password && !u.port && u.hostname.includes('.') &&
-          !/^(?:\d{1,3}\.){3}\d{1,3}$/.test(u.hostname) && !u.hostname.endsWith('.local')) return u.href;
-    } catch { /* Show the bundled fallback. */ }
+        !/^(?:\d{1,3}\.){3}\d{1,3}$/.test(u.hostname) && !u.hostname.endsWith('.local'))
+        return u.href;
+    }
+    catch { /* Show the bundled fallback. */ }
     return 'assets/gallery/sscircle-01.webp';
   }
   const paint = (id, text) => {
     const node = $(id);
-    if (node) node.textContent = String(text ?? '');
+    if (node)
+      node.textContent = String(text ?? '');
   };
   // Keep the label and arrow as separate pieces: textContent would otherwise
   // discard the arrow span and flatten the original three-button design.
   function heroButtonLabel(id, rawText, fallbackArrow) {
     const button = $(id);
-    if (!button) return;
+    if (!button)
+      return;
     const value = String(rawText ?? '').trim();
     const suffix = value.match(/\s*([↗→↓↑])$/);
     const arrow = document.createElement('span');
@@ -182,10 +191,12 @@
       highlightColor: '--ssc-highlight'
     };
     for (const [k, v] of Object.entries(map)) {
-      if (/^#[0-9a-f]{6}$/i.test(s[k] || '')) document.documentElement.style.setProperty(v, s[k]);
+      if (/^#[0-9a-f]{6}$/i.test(s[k] || ''))
+        document.documentElement.style.setProperty(v, s[k]);
     }
     const accent = s.accentColor?.match(/^#(..)(..)(..)$/);
-    if (accent) document.documentElement.style.setProperty('--home-primary-rgb', [1, 2, 3].map(i => parseInt(accent[i], 16)).join(','));
+    if (accent)
+      document.documentElement.style.setProperty('--home-primary-rgb', [1, 2, 3].map(i => parseInt(accent[i], 16)).join(','));
   }
   function setupReveals() {
     observer?.disconnect();
@@ -203,7 +214,8 @@
     nodes.forEach(node => observer.observe(node));
   }
   function playing() {
-    if (!video || video.hidden) return;
+    if (!video || video.hidden)
+      return;
     if (prefersReduced.matches || manualPause || (pauseOffscreen && !isVisible) || document.hidden) {
       video.pause();
       return;
@@ -212,14 +224,17 @@
   }
   function headline(title) {
     const node = $('home-title');
-    if (!node) return;
+    if (!node)
+      return;
     const words = String(title || 'SSCircle Server').trim().split(/\s+/);
     if (words.length > 1) {
       const last = words.pop();
       const em = document.createElement('em');
       em.textContent = last;
       node.replaceChildren(document.createTextNode(words.join(' ') + ' '), em);
-    } else node.textContent = words[0] || '';
+    }
+    else
+      node.textContent = words[0] || '';
   }
   function openImage(i) {
     currentImage = i;
@@ -228,7 +243,8 @@
   }
   function showImage() {
     const item = gallery[currentImage];
-    if (!item) return;
+    if (!item)
+      return;
     const img = $('home-gallery-preview');
     if (img) {
       img.src = safeImg(item.src);
@@ -240,7 +256,8 @@
   function renderGallery(s) {
     gallery = Array.isArray(s.homeGallery) && s.homeGallery.length ? s.homeGallery : builtInGallery;
     const grid = $('home-gallery-grid');
-    if (!grid) return;
+    if (!grid)
+      return;
     grid.replaceChildren();
     gallery.forEach((item, i) => {
       const fig = document.createElement('button');
@@ -273,12 +290,15 @@
       '#voting',
       '#leaderboard',
       '#status-quick'
-    ].includes(url)) return url;
+    ].includes(url))
+      return url;
     if (typeof url === 'string') {
       try {
         const parsed = new URL(url);
-        if (parsed.protocol === 'https:' && !parsed.username && !parsed.password) return parsed.href;
-      } catch { }
+        if (parsed.protocol === 'https:' && !parsed.username && !parsed.password)
+          return parsed.href;
+      }
+      catch { }
     }
     return 'registration.html';
   }
@@ -308,7 +328,8 @@
       const g = document.createElement('div');
       g.className = 'home-custom-images' + (images.length > 1 ? ' is-multiple' : '');
       for (const photo of images) {
-        if (!photo.src) continue;
+        if (!photo.src)
+          continue;
         const figure = document.createElement('figure');
         const img = document.createElement('img');
         img.src = safeImg(photo.src);
@@ -360,21 +381,27 @@
   }
   function arrangeHomepage(s) {
     const parent = $('home-content-sections');
-    if (!parent) return;
+    if (!parent)
+      return;
     const configured = Array.isArray(s.homeLayout) ? s.homeLayout : defaults.homeLayout;
     const used = new Set(), ordered = [];
     for (const block of configured) {
-      if (!block || typeof block.id !== 'string' || used.has(block.id) || block.id === 'voting' || block.id === 'donate') continue;
+      if (!block || typeof block.id !== 'string' || used.has(block.id) || block.id === 'voting' || block.id === 'donate')
+        continue;
       used.add(block.id);
       if (block.kind === 'builtin' && builtinParts[block.id]) {
         const el = $(builtinParts[block.id]);
-        if (el) ordered.push(el);
-      } else if (block.kind === 'custom' && ['text', 'button', 'image', 'feature', 'divider'].includes(block.type)) ordered.push(buildCustom(block));
+        if (el)
+          ordered.push(el);
+      }
+      else if (block.kind === 'custom' && ['text', 'button', 'image', 'feature', 'divider'].includes(block.type))
+        ordered.push(buildCustom(block));
     }
     for (const id of Object.keys(builtinParts)) {
       if (!used.has(id)) {
         const el = $(builtinParts[id]);
-        if (el) ordered.push(el);
+        if (el)
+          ordered.push(el);
       }
     }
     parent.replaceChildren(...ordered);
@@ -383,7 +410,8 @@
   // Kartu yang disembunyikan / nonaktif, termasuk profile kosong, tidak dihitung.
   function updateSectionNumbers() {
     const parent = $('home-content-sections');
-    if (!parent) return;
+    if (!parent)
+      return;
     let number = 0;
     for (const section of parent.children) {
       const visible = !section.hidden && getComputedStyle(section).display !== 'none';
@@ -399,10 +427,13 @@
         let first = label.querySelector(':scope > .home-order-number');
         if (!first) {
           first = label.querySelector(':scope > span:first-child');
-          if (first) first.classList.add('home-order-number');
+          if (first)
+            first.classList.add('home-order-number');
         }
-        if (first) first.textContent = ordinal;
-      } else if (section.id === 'status-quick') {
+        if (first)
+          first.textContent = ordinal;
+      }
+      else if (section.id === 'status-quick') {
         let marker = section.querySelector('.home-quick-order');
         if (!marker) {
           marker = document.createElement('span');
@@ -419,8 +450,11 @@
     const expired = hasEnd && end <= Date.now();
     const active = s.homeVotingEnabled === true && (!hasEnd || !expired || s.homeVotingPermanent === true);
     const counts = {};
-    for (const option of s.homeVotingOptions || []) counts[option.id] = 0;
-    for (const vote of s.homeVotingVotes || []) if (Object.hasOwn(counts, vote.optionId)) counts[vote.optionId]++;
+    for (const option of s.homeVotingOptions || [])
+      counts[option.id] = 0;
+    for (const vote of s.homeVotingVotes || [])
+      if (Object.hasOwn(counts, vote.optionId))
+        counts[vote.optionId]++;
     const total = Object.values(counts).reduce((a, b) => a + b, 0);
     const results = (s.homeVotingOptions || []).map(option => ({
       id: option.id,
@@ -453,7 +487,8 @@
     paint('home-leaderboard-description', s.homeLeaderboardText);
     const seasons = (Array.isArray(s.homeLeaderboardSeasons) ? s.homeLeaderboardSeasons : []).filter(season => season && season.title);
     const wrap = $('home-leaderboard-slides'), dots = $('home-leaderboard-dots');
-    if (!wrap || !dots) return;
+    if (!wrap || !dots)
+      return;
     wrap.replaceChildren();
     dots.replaceChildren();
     if (!seasons.length) {
@@ -480,7 +515,8 @@
         li.className = 'home-leaderboard-item';
         li.textContent = 'Belum ada data.';
         list.append(li);
-      } else {
+      }
+      else {
         entries.forEach((entry, rank) => {
           const li = document.createElement('li');
           li.className = 'home-leaderboard-item';
@@ -518,7 +554,8 @@
   }
   function openProfileDetail(card) {
     const dialog = $('home-profile-dialog');
-    if (!dialog || !card || card.detailEnabled !== true) return;
+    if (!dialog || !card || card.detailEnabled !== true)
+      return;
     const picture = $('home-profile-detail-image');
     picture.src = safeImg(card.detailImage || card.src);
     picture.alt = 'Foto detail ' + (card.title || 'Profil SSCircle');
@@ -529,18 +566,20 @@
     description.textContent = card.detailDescription || '';
     description.hidden = card.detailDescriptionEnabled === false || !description.textContent.trim();
     // Keep the modal visible when the longer description is intentionally disabled.
-    if (!dialog.open) dialog.showModal();
+    if (!dialog.open)
+      dialog.showModal();
   }
   function renderProfileCards(settings) {
     const grid = $('home-profile-grid');
-    if (!grid) return;
+    if (!grid)
+      return;
     const sizes = { compact: 'compact', normal: 'normal', wide: 'wide' };
     grid.dataset.size = sizes[settings.homeProfileCardSize] || 'normal';
     const legacy = [{
-      src: settings.homeProfileImage || 'assets/sscircle-logo.png',
-      title: 'SSCircle Server',
-      subtitle: 'Profil & Sejarah'
-    }];
+        src: settings.homeProfileImage || 'assets/sscircle-logo.png',
+        title: 'SSCircle Server',
+        subtitle: 'Profil & Sejarah'
+      }];
     // Backward compatible: previously this section stored only one photo.
     const cards = Array.isArray(settings.homeProfileItems) ? settings.homeProfileItems : legacy;
     grid.replaceChildren();
@@ -588,10 +627,10 @@
       grid.append(empty);
     }
   }
-
   function apply(settings) {
     const s = { ...defaults, ...settings };
-    if (s.homeProcessTitle === 'Bergabung dalam lingkaran.') s.homeProcessTitle = 'Join our Circle';
+    if (s.homeProcessTitle === 'Bergabung dalam lingkaran.')
+      s.homeProcessTitle = 'Join our Circle';
     theme(s);
     window.SSCircleTheme?.apply(s);
     paint('home-eyebrow', '✦  ' + s.homeEyebrow);
@@ -608,7 +647,8 @@
       const source = Array.isArray(s.homeAboutTags) ? s.homeAboutTags : defaults.homeAboutTags;
       for (const item of source.slice(0, 16)) {
         const label = String(item?.text || '').trim();
-        if (!label || s.homeAboutTagsEnabled === false) continue;
+        if (!label || s.homeAboutTagsEnabled === false)
+          continue;
         const tag = document.createElement('span');
         tag.textContent = [String(item?.symbol ?? '✧').trim(), label].filter(Boolean).join(' ');
         aboutTags.append(tag);
@@ -649,7 +689,8 @@
       donateButton.rel = 'noopener noreferrer';
     }
     const donateIcon = $('home-donate-icon');
-    if (donateIcon) donateIcon.src = safeImg(s.homeDonateIcon || defaults.homeDonateIcon);
+    if (donateIcon)
+      donateIcon.src = safeImg(s.homeDonateIcon || defaults.homeDonateIcon);
     const poster = safeImg(s.homePoster);
     hero.style.setProperty('--home-poster', `url("${poster}")`);
     video.poster = poster;
@@ -680,12 +721,13 @@
       [
         'leaderboard',
         s.homeShowLeaderboard && Array.isArray(s.homeLeaderboardSeasons)
-        && s.homeLeaderboardSeasons.some(season => Array.isArray(season.entries) && season.entries.some(entry => entry && (entry.name || entry.score)))
+          && s.homeLeaderboardSeasons.some(season => Array.isArray(season.entries) && season.entries.some(entry => entry && (entry.name || entry.score)))
       ]
     ]) {
       $(id).hidden = enabled === false;
     }
-    if (s.homeShowGallery === false) $('home-explore-button').href = '#tentang';
+    if (s.homeShowGallery === false)
+      $('home-explore-button').href = '#tentang';
     const closed = !s.open;
     $('home-closed-notice').hidden = !closed;
     $('home-closed-notice').textContent = s.homeClosedMessage || defaults.homeClosedMessage;
@@ -709,16 +751,21 @@
   };
   $('home-profile-detail-close').onclick = () => $('home-profile-dialog')?.close();
   $('home-profile-dialog')?.addEventListener('click', e => {
-    if (e.target === $('home-profile-dialog')) $('home-profile-dialog').close();
+    if (e.target === $('home-profile-dialog'))
+      $('home-profile-dialog').close();
   });
   $('home-gallery-close').onclick = () => $('home-gallery-dialog')?.close();
   $('home-gallery-dialog')?.addEventListener('click', e => {
-    if (e.target === $('home-gallery-dialog')) $('home-gallery-dialog').close();
+    if (e.target === $('home-gallery-dialog'))
+      $('home-gallery-dialog').close();
   });
   document.addEventListener('keydown', e => {
-    if (!$('home-gallery-dialog')?.open) return;
-    if (e.key === 'ArrowRight') $('home-gallery-next').click();
-    if (e.key === 'ArrowLeft') $('home-gallery-prev').click();
+    if (!$('home-gallery-dialog')?.open)
+      return;
+    if (e.key === 'ArrowRight')
+      $('home-gallery-next').click();
+    if (e.key === 'ArrowLeft')
+      $('home-gallery-prev').click();
   });
   $('home-menu-button').onclick = () => {
     const active = document.body.classList.toggle('home-menu-open');
@@ -745,18 +792,23 @@
     }, { threshold: .02 }).observe(hero);
   }
   document.addEventListener('visibilitychange', playing);
-  if (location.hash === '#cek-status') location.replace('status.html');
+  if (location.hash === '#cek-status')
+    location.replace('status.html');
   apply(defaults);
   const isEditorPreview = new URLSearchParams(location.search).has('ssc_preview');
   if (isEditorPreview) {
     document.body.classList.add('ssc-editor-preview');
     window.addEventListener('message', event => {
-      if (event.origin !== location.origin || event.source !== window.parent || event.data?.type !== 'ssc-preview-settings') return;
+      if (event.origin !== location.origin || event.source !== window.parent || event.data?.type !== 'ssc-preview-settings')
+        return;
       if (event.data.settings && typeof event.data.settings === 'object') {
         apply(event.data.settings);
         window.parent.postMessage({ type: 'ssc-preview-applied' }, location.origin);
       }
     });
-    if (window.parent !== window) window.parent.postMessage({ type: 'ssc-preview-ready' }, location.origin);
-  } else SSCircle.getForm().then(form => apply(form.settings || {})).catch(() => { });
+    if (window.parent !== window)
+      window.parent.postMessage({ type: 'ssc-preview-ready' }, location.origin);
+  }
+  else
+    SSCircle.getForm().then(form => apply(form.settings || {})).catch(() => { });
 })();

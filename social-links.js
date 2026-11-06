@@ -1,4 +1,7 @@
 /* SSCircle Server — public social links, configurable by admin. */
+
+// Tampilan tautan media sosial dan ikon komunitas.
+
 'use strict';
 window.SSCircleSocial = (() => {
   const defaults = [
@@ -22,24 +25,35 @@ window.SSCircleSocial = (() => {
     }
   ];
   function safeIcon(icon) {
-    if (typeof icon !== 'string') return 'assets/tiktok-logo.png';
-    if (/^assets\/(?:tiktok-logo|discord-logo|sscircle-logo|sscircle-community-icon)\.png$/.test(icon) || /^assets\/gallery\/sscircle-0[1-9]\.webp$/.test(icon) || /^\/api\/media\/[0-9a-f-]{36}$/.test(icon)) return icon;
-    try { const u = new URL(icon); if (u.protocol === 'https:' && !u.username && !u.password && u.hostname.includes('.')) return u.href; } catch { }
+    if (typeof icon !== 'string')
+      return 'assets/tiktok-logo.png';
+    if (/^assets\/(?:tiktok-logo|discord-logo|sscircle-logo|sscircle-community-icon)\.png$/.test(icon) || /^assets\/gallery\/sscircle-0[1-9]\.webp$/.test(icon) || /^\/api\/media\/[0-9a-f-]{36}$/.test(icon))
+      return icon;
+    try {
+      const u = new URL(icon);
+      if (u.protocol === 'https:' && !u.username && !u.password && u.hostname.includes('.'))
+        return u.href;
+    }
+    catch { }
     return 'assets/tiktok-logo.png';
   }
   function render(root, settings, placement) {
-    if (!root) return;
+    if (!root)
+      return;
     root.replaceChildren();
     const links = Array.isArray(settings?.homeSocialLinks) ? settings.homeSocialLinks : defaults;
     const items = links.filter(link => link && (placement === 'home' ? link.showHome === true : link.showRegistration === true));
     const parent = root.closest('.ssc-social-section');
-    if (parent) parent.hidden = items.length === 0;
+    if (parent)
+      parent.hidden = items.length === 0;
     for (const entry of items) {
       let target;
       try {
         target = new URL(entry.url);
-        if (target.protocol !== 'https:') continue;
-      } catch {
+        if (target.protocol !== 'https:')
+          continue;
+      }
+      catch {
         continue;
       }
       const link = document.createElement('a');
@@ -69,7 +83,8 @@ window.SSCircleSocial = (() => {
       link.append(img, info, arrow);
       root.append(link);
     }
-    if (parent) parent.hidden = !root.children.length;
+    if (parent)
+      parent.hidden = !root.children.length;
   }
   return { render };
 })();

@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="id">
   <head>
+    <!-- Metadata, stylesheet, dan script halaman -->
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#160a28">
@@ -25,25 +26,27 @@
         <div class="opening-kicker" id="opening-kicker">REGISTRATION</div>
         <div class="opening-title" id="opening-title">SSCircle Server</div>
         <div class="opening-subtitle" id="opening-subtitle">A new story begins.</div>
-        <div class="opening-loading">
-          <span></span>
-        </div>
+        <div class="opening-loading"> <span></span> </div>
       </div>
       <button type="button" class="opening-skip" id="opening-skip" aria-label="Lewati animasi pembukaan">Lewati intro ↗</button>
     </div>
     <div class="ambient ambient-a" aria-hidden="true"></div>
     <div class="ambient ambient-b" aria-hidden="true"></div>
     <div class="page-shell">
+
+      <!-- Header dan navigasi -->
       <header class="site-header">
         <a class="brand" href="./" aria-label="SSCircle Server, kembali ke beranda">
-        <span class="brand-icon"><img data-site-logo src="assets/sscircle-logo.png" alt="Logo SSCircle Server" width="42" height="42"></span>
-        <span class="brand-copy"><strong id="public-brand-name">SSCircle Server</strong><small id="public-brand-label">REGISTRATION</small></span>
-      </a>
+          <span class="brand-icon"><img data-site-logo src="assets/sscircle-logo.png" alt="Logo SSCircle Server" width="42" height="42"></span>
+          <span class="brand-copy"><strong id="public-brand-name">SSCircle Server</strong><small id="public-brand-label">REGISTRATION</small></span>
+        </a>
         <div class="header-right">
           <a class="status-top-link" href="status.html">Cek Status ↗</a>
           <span class="header-label"><span class="live-dot"></span> <span id="public-header-badge">PENDAFTARAN DIBUKA</span></span>
         </div>
       </header>
+
+      <!-- Konten utama halaman -->
       <main class="experience-layout">
         <aside class="experience-hero" id="public-hero" aria-label="Informasi SSCircle Server">
           <div class="hero-noise" aria-hidden="true"></div>
@@ -60,10 +63,7 @@
             <div class="hero-title-lockup">
               <span class="hero-edition" id="public-hero-eyebrow">THE NEXT CHAPTER</span>
               <h1 id="public-hero-title" class="hero-brand-title">SSCircle Server</h1>
-              <p>
-                <span id="public-hero-tagline">Petualangan baru. Cerita baru.</span>
-                <strong id="public-hero-subtitle">Komunitas yang sama.</strong>
-              </p>
+              <p> <span id="public-hero-tagline">Petualangan baru. Cerita baru.</span> <strong id="public-hero-subtitle">Komunitas yang sama.</strong> </p>
             </div>
           </div>
           <div class="hero-bottom">
@@ -86,9 +86,7 @@
           </div>
           <div class="form-intro panel">
             <div class="form-intro-top">
-              <div class="intro-icon">
-                <img data-site-logo src="assets/sscircle-logo.png" alt="" width="46" height="46">
-              </div>
+              <div class="intro-icon"> <img data-site-logo src="assets/sscircle-logo.png" alt="" width="46" height="46"> </div>
               <div id="availability" class="availability"><span class="live-dot"></span> MEMUAT...</div>
             </div>
             <div class="form-intro-copy">
@@ -102,10 +100,14 @@
             </div>
           </div>
           <a class="discord-community-card" href="https://discord.gg/vQQSgY2GRS" target="_blank" rel="noopener noreferrer" aria-label="Gabung SSCircle Community melalui Discord, membuka tab baru">
-          <span class="discord-community-icon"><img src="assets/discord-logo.png" width="46" height="46" alt="Logo Discord"></span>
-          <span class="discord-community-content"><span class="discord-community-eyebrow">KOMUNITAS RESMI</span><strong>SSCircle Community</strong><span class="discord-community-description">Gabung Discord untuk informasi server, pengumuman, dan ngobrol bersama pemain lain.</span></span>
-          <span class="discord-community-cta" aria-hidden="true">Gabung <span>↗</span></span>
-        </a>
+            <span class="discord-community-icon"><img src="assets/discord-logo.png" width="46" height="46" alt="Logo Discord"></span>
+            <span class="discord-community-content">
+              <span class="discord-community-eyebrow">KOMUNITAS RESMI</span>
+              <strong>SSCircle Community</strong>
+              <span class="discord-community-description">Gabung Discord untuk informasi server, pengumuman, dan ngobrol bersama pemain lain.</span>
+            </span>
+            <span class="discord-community-cta" aria-hidden="true">Gabung <span>↗</span></span>
+          </a>
           <div id="notice" role="status" aria-live="polite"></div>
           <div id="registration-closed-banner" class="registration-closed-banner hide" role="status">
             <span aria-hidden="true">◷</span>
@@ -116,9 +118,7 @@
             </div>
           </div>
           <section id="cooldown-panel" class="cooldown-panel panel hide" role="status" aria-live="polite">
-            <div class="cooldown-visual" aria-hidden="true">
-              <span class="cooldown-clock-face">◷</span>
-            </div>
+            <div class="cooldown-visual" aria-hidden="true"> <span class="cooldown-clock-face">◷</span> </div>
             <div class="cooldown-content">
               <span class="overline">PENDAFTARAN BERIKUTNYA</span>
               <h3>Waktu tunggu pendaftaran</h3>
@@ -127,6 +127,7 @@
               <span class="cooldown-footnote">Kamu tetap bisa mengecek status menggunakan kode pendaftaran.</span>
             </div>
           </section>
+          <!-- Formulir pengisian data -->
           <form id="application-form" class="hide" novalidate>
             <div class="wizard-progress" aria-label="Progres pendaftaran">
               <div class="wizard-progress-meta">
@@ -164,11 +165,18 @@
             <div class="overline" id="public-success-eyebrow">APPLICATION RECEIVED</div>
             <h2 id="public-success-title">Pendaftaran berhasil dikirim.</h2>
             <p id="public-success-description">Jawabanmu sudah tersimpan dan masuk ke dashboard admin.</p>
-            <div class="reference">Kode pendaftaran <strong id="reference-code">—</strong><button id="copy-code" type="button" class="copy-ref" aria-label="Salin kode pendaftaran">Salin kode</button></div>
+            <div class="reference">
+              Kode pendaftaran
+              <strong id="reference-code">—</strong>
+              <button id="copy-code" type="button" class="copy-ref" aria-label="Salin kode pendaftaran">Salin kode</button>
+            </div>
             <p class="reference-help">Kode juga bisa dilihat lagi lewat menu <a href="status.html#kode-milikku">Cek Status → Lihat Kode Saya</a> selama akun masih masuk pada perangkat ini.</p>
             <div id="success-cooldown" class="success-cooldown hide" role="status">Pendaftaran berikutnya dapat dilakukan dalam <strong id="success-cooldown-time">00:00</strong></div>
             <a href="status.html" class="status-link" id="success-check-link">Cek status pendaftaran ↗</a>
-            <a class="button secondary" href="./"><span id="public-back-home">Kembali ke beranda</span> <span>↗</span></a>
+            <a class="button secondary" href="./">
+              <span id="public-back-home">Kembali ke beranda</span>
+              <span>↗</span>
+            </a>
           </div>
         </section>
       </main>
@@ -177,11 +185,21 @@
         <p class="ssc-social-subtitle">Informasi dan aktivitas komunitas tersedia melalui akun resmi berikut.</p>
         <div id="registration-social-grid" class="ssc-social-grid"></div>
       </section>
+
+      <!-- Footer -->
       <footer class="site-footer ssc-unified-footer">
         <div class="ssc-footer-content">
-          <div class="home-footer-mark"><img data-site-logo src="assets/sscircle-logo.png" alt="" width="27" height="27"><span id="public-footer-brand">SSCircle Server</span></div>
+          <div class="home-footer-mark">
+            <img data-site-logo src="assets/sscircle-logo.png" alt="" width="27" height="27">
+            <span id="public-footer-brand">SSCircle Server</span>
+          </div>
           <span id="public-footer-text">One circle. Endless stories.</span>
-          <nav class="home-footer-links" aria-label="Navigasi footer"><a href="./">Homepage</a><a href="registration.html">Registration</a><a href="status.html">Cek Status</a><a id="ssc-footer-discord" href="https://discord.gg/vQQSgY2GRS" target="_blank" rel="noopener noreferrer">Discord ↗</a></nav>
+          <nav class="home-footer-links" aria-label="Navigasi footer">
+            <a href="./">Homepage</a>
+            <a href="registration.html">Registration</a>
+            <a href="status.html">Cek Status</a>
+            <a id="ssc-footer-discord" href="https://discord.gg/vQQSgY2GRS" target="_blank" rel="noopener noreferrer">Discord ↗</a>
+          </nav>
           <small id="public-footer-note">© 2026 SSCircle Server</small>
         </div>
       </footer>

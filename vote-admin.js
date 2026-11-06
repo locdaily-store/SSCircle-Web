@@ -1,12 +1,17 @@
 /* SSCircle Server – dedicated voting administration */
+
+// Pengaturan pilihan voting, foto, dan hasil suara.
+
 'use strict';
 window.SSCircleVoteAdmin = (() => {
   let data = null, dirtyMark = () => { }, resultsBusy = false;
   const root = () => document.getElementById('voting-admin-editor');
   const el = (tag, cls = '', text) => {
     const n = document.createElement(tag);
-    if (cls) n.className = cls;
-    if (text !== undefined) n.textContent = text;
+    if (cls)
+      n.className = cls;
+    if (text !== undefined)
+      n.textContent = text;
     return n;
   };
   const notify = (text, type = 'success') => window.SSCNotice?.toast(text, type);
@@ -29,7 +34,8 @@ window.SSCircleVoteAdmin = (() => {
     const n = el('section', 'ssc-voting-card panel');
     const head = el('div', 'ssc-vote-card-heading');
     head.append(el('h2', '', title));
-    if (description) head.append(el('p', '', description));
+    if (description)
+      head.append(el('p', '', description));
     n.append(head);
     return n;
   }
@@ -37,7 +43,10 @@ window.SSCircleVoteAdmin = (() => {
     const w = el('label', 'field-group');
     w.append(el('span', 'field-label', label));
     const input = el(opt.multiline ? 'textarea' : 'input');
-    if (opt.multiline) input.rows = 3; else input.type = opt.type || 'text';
+    if (opt.multiline)
+      input.rows = 3;
+    else
+      input.type = opt.type || 'text';
     input.maxLength = opt.max || 300;
     input.placeholder = opt.placeholder || '';
     input.value = data.settings[key] ?? '';
@@ -46,7 +55,8 @@ window.SSCircleVoteAdmin = (() => {
       dirty();
     });
     w.append(input);
-    if (opt.help) w.append(el('small', 'field-help', opt.help));
+    if (opt.help)
+      w.append(el('small', 'field-help', opt.help));
     parent.append(w);
     return input;
   }
@@ -63,7 +73,8 @@ window.SSCircleVoteAdmin = (() => {
     visual.setAttribute('aria-hidden', 'true');
     const copy = el('span');
     copy.append(el('strong', '', label));
-    if (help) copy.append(el('small', '', help));
+    if (help)
+      copy.append(el('small', '', help));
     wrap.append(input, visual, copy);
     parent.append(wrap);
     return input;
@@ -98,13 +109,13 @@ window.SSCircleVoteAdmin = (() => {
     let mediaList = [];
     // Remember expanded photo settings when a voting card rerenders.
     const openedPhotoEditors = new Set();
-
     async function loadMedia() {
       try {
         const result = await SSCircle.getMediaLibrary();
         mediaList = (result.files || []).filter(file => file.visibility === 'public' && String(file.type || '').startsWith('image/'))
           .map(file => ({ src: file.source === 'built-in' ? file.path : '/api/media/' + file.id, name: file.name }));
-      } catch {
+      }
+      catch {
         mediaList = [];
       }
     }
@@ -113,21 +124,24 @@ window.SSCircleVoteAdmin = (() => {
       dirty();
     }
     function move(array, from, to) {
-      if (from === to || to < 0 || to >= array.length) return;
+      if (from === to || to < 0 || to >= array.length)
+        return;
       array.splice(to, 0, array.splice(from, 1)[0]);
       dirty();
       redraw();
     }
     async function addPhotos(option, files) {
       const images = option.images;
-      if (images.length + files.length > 6) return notify('Maksimal 6 gambar per pilihan.', 'warning');
+      if (images.length + files.length > 6)
+        return notify('Maksimal 6 gambar per pilihan.', 'warning');
       let count = 0;
       for (const file of files) {
         try {
           const uploaded = await SSCircle.uploadImage(file);
           images.push('/api/media/' + uploaded.id);
           count++;
-        } catch (error) {
+        }
+        catch (error) {
           notify('Unggahan gambar gagal: ' + error.message, 'error');
           break;
         }
@@ -141,12 +155,12 @@ window.SSCircleVoteAdmin = (() => {
     }
     add.onclick = () => {
       const options = data.settings.homeVotingOptions;
-      if (options.length >= 20) return notify('Maksimal 20 pilihan.', 'warning');
+      if (options.length >= 20)
+        return notify('Maksimal 20 pilihan.', 'warning');
       options.push({ id: 'opsi-' + crypto.randomUUID().slice(0, 12), label: 'Pilihan baru', description: '', images: [] });
       dirty();
       redraw();
     };
-
     function redraw() {
       list.replaceChildren();
       const options = data.settings.homeVotingOptions;
@@ -172,7 +186,8 @@ window.SSCircleVoteAdmin = (() => {
         remove.disabled = options.length <= 1;
         remove.title = 'Hapus pilihan';
         remove.onclick = async () => {
-          if (!await SSCNotice.confirm('Hapus pilihan voting ini?', { danger: true, confirmText: 'Hapus pilihan' })) return;
+          if (!await SSCNotice.confirm('Hapus pilihan voting ini?', { danger: true, confirmText: 'Hapus pilihan' }))
+            return;
           options.splice(index, 1);
           dirty();
           redraw();
@@ -180,7 +195,6 @@ window.SSCircleVoteAdmin = (() => {
         actions.append(remove);
         top.append(actions);
         card.append(top);
-
         const fields = el('div', 'ssc-vote-choice-fields');
         const nameLabel = el('label', 'field-group');
         nameLabel.append(el('span', 'field-label', 'Teks pilihan'));
@@ -202,7 +216,6 @@ window.SSCircleVoteAdmin = (() => {
         descriptionLabel.append(textarea);
         fields.append(nameLabel, descriptionLabel);
         card.append(fields);
-
         const pictures = el('div', 'ssc-vote-choice-images');
         option.images.forEach((src, photoIndex) => {
           const box = el('div', 'ssc-vote-choice-photo');
@@ -225,11 +238,12 @@ window.SSCircleVoteAdmin = (() => {
         const editorId = String(option.id || 'option-' + index);
         photoSettings.open = openedPhotoEditors.has(editorId);
         photoSettings.addEventListener('toggle', () => {
-          if (photoSettings.open) openedPhotoEditors.add(editorId);
-          else openedPhotoEditors.delete(editorId);
+          if (photoSettings.open)
+            openedPhotoEditors.add(editorId);
+          else
+            openedPhotoEditors.delete(editorId);
         });
-        photoSettings.append(el('summary', 'ssc-vote-choice-media-summary',
-          `Gambar pilihan (${option.images.length}/6) · tambah atau atur foto`));
+        photoSettings.append(el('summary', 'ssc-vote-choice-media-summary', `Gambar pilihan (${option.images.length}/6) · tambah atau atur foto`));
         photoSettings.append(pictures);
         window.SSCircleSort?.attach(pictures, {
           item: '.ssc-vote-choice-photo',
@@ -239,7 +253,6 @@ window.SSCircleVoteAdmin = (() => {
             redraw();
           },
         });
-
         const tools = el('div', 'ssc-vote-choice-media-tools');
         const uploadLabel = el('label', 'field-group');
         uploadLabel.append(el('span', 'field-label', `Tambah gambar (${option.images.length}/6)`));
@@ -249,7 +262,8 @@ window.SSCircleVoteAdmin = (() => {
         upload.accept = 'image/png,image/jpeg,image/webp,image/gif';
         upload.onchange = async () => {
           const files = [...(upload.files || [])];
-          if (!files.length) return;
+          if (!files.length)
+            return;
           upload.disabled = true;
           await addPhotos(option, files);
           upload.disabled = false;
@@ -263,7 +277,8 @@ window.SSCircleVoteAdmin = (() => {
         placeholder.value = '';
         select.append(placeholder);
         for (const item of mediaList) {
-          if (!/^(assets\/gallery\/sscircle-0[1-9]\.webp|assets\/sscircle-community-icon\.png|assets\/sscircle-logo\.png|\/api\/media\/[0-9a-f-]{36})$/.test(item.src)) continue;
+          if (!/^(assets\/gallery\/sscircle-0[1-9]\.webp|assets\/sscircle-community-icon\.png|assets\/sscircle-logo\.png|\/api\/media\/[0-9a-f-]{36})$/.test(item.src))
+            continue;
           const opt = el('option', '', item.name || 'Gambar');
           opt.value = item.src;
           select.append(opt);
@@ -271,9 +286,12 @@ window.SSCircleVoteAdmin = (() => {
         const addExisting = el('button', 'button secondary', '+ Gunakan gambar');
         addExisting.type = 'button';
         addExisting.onclick = () => {
-          if (!select.value) return;
-          if (option.images.length >= 6) return notify('Maksimal 6 gambar per pilihan.', 'warning');
-          if (option.images.includes(select.value)) return notify('Gambar sudah dipilih.', 'warning');
+          if (!select.value)
+            return;
+          if (option.images.length >= 6)
+            return notify('Maksimal 6 gambar per pilihan.', 'warning');
+          if (option.images.includes(select.value))
+            return notify('Gambar sudah dipilih.', 'warning');
           option.images.push(select.value);
           dirty();
           redraw();
@@ -286,9 +304,11 @@ window.SSCircleVoteAdmin = (() => {
           compact: true, title: 'Gambar pilihan ' + (index + 1),
           count: () => option.images.length, max: 6,
           onAdd: src => {
-            if (option.images.includes(src)) throw Error('Gambar ini sudah digunakan pada pilihan ini.');
+            if (option.images.includes(src))
+              throw Error('Gambar ini sudah digunakan pada pilihan ini.');
             option.images.push(src);
-            dirty(); redraw();
+            dirty();
+            redraw();
           }
         });
         card.append(photoSettings);
@@ -329,9 +349,11 @@ window.SSCircleVoteAdmin = (() => {
       title: 'Foto pertanyaan voting', count: () => data.settings.homeVotingImages.length, max: 8,
       onAdd: src => {
         const images = data.settings.homeVotingImages;
-        if (images.includes(src)) throw Error('Foto yang sama sudah ada.');
+        if (images.includes(src))
+          throw Error('Foto yang sama sudah ada.');
         images.push(src);
-        dirty(); redraw();
+        dirty();
+        redraw();
       }
     });
     async function fillPicker() {
@@ -342,30 +364,38 @@ window.SSCircleVoteAdmin = (() => {
       try {
         const result = await SSCircle.getMediaLibrary();
         for (const item of result.files || []) {
-          if (!String(item.type || '').startsWith('image/') || item.visibility !== 'public') continue;
+          if (!String(item.type || '').startsWith('image/') || item.visibility !== 'public')
+            continue;
           const src = item.source === 'built-in' ? item.path : '/api/media/' + item.id;
-          if (!/^(assets\/gallery\/sscircle-0[1-9]\.webp|assets\/sscircle-community-icon\.png|\/api\/media\/[0-9a-f-]{36})$/.test(src)) continue;
+          if (!/^(assets\/gallery\/sscircle-0[1-9]\.webp|assets\/sscircle-community-icon\.png|\/api\/media\/[0-9a-f-]{36})$/.test(src))
+            continue;
           const o = el('option', '', item.name || 'Gambar');
           o.value = src;
           picker.append(o);
         }
-      } catch {
+      }
+      catch {
         info.textContent = 'Daftar gambar tersimpan belum bisa dimuat. Kamu tetap dapat mengunggah gambar baru.';
       }
     }
     use.onclick = () => {
       const src = picker.value;
-      if (!src) return;
-      if (data.settings.homeVotingImages.includes(src)) return notify('Gambar sudah dipilih.', 'warning');
-      if (data.settings.homeVotingImages.length >= 8) return notify('Maksimal 8 gambar.', 'warning');
+      if (!src)
+        return;
+      if (data.settings.homeVotingImages.includes(src))
+        return notify('Gambar sudah dipilih.', 'warning');
+      if (data.settings.homeVotingImages.length >= 8)
+        return notify('Maksimal 8 gambar.', 'warning');
       data.settings.homeVotingImages.push(src);
       dirty();
       redraw();
     };
     upload.onchange = async () => {
       const files = [...(upload.files || [])];
-      if (!files.length) return;
-      if (files.length + data.settings.homeVotingImages.length > 8) return notify('Jumlah gambar maksimal 8.', 'warning');
+      if (!files.length)
+        return;
+      if (files.length + data.settings.homeVotingImages.length > 8)
+        return notify('Jumlah gambar maksimal 8.', 'warning');
       upload.disabled = true;
       let count = 0;
       for (const file of files) {
@@ -373,7 +403,8 @@ window.SSCircleVoteAdmin = (() => {
           const result = await SSCircle.uploadImage(file);
           data.settings.homeVotingImages.push('/api/media/' + result.id);
           count++;
-        } catch (e) {
+        }
+        catch (e) {
           notify('Gagal upload ' + file.name + ': ' + e.message, 'error');
           break;
         }
@@ -429,7 +460,8 @@ window.SSCircleVoteAdmin = (() => {
     dirtyMark = onDirty;
     ensure();
     const host = root();
-    if (!host) return;
+    if (!host)
+      return;
     host.replaceChildren();
     const statusCard = card('01 · Status Voting', 'Aktifkan sesi dan tentukan siapa yang dapat berpartisipasi.');
     const controls = el('div', 'ssc-vote-controls');
@@ -488,14 +520,17 @@ window.SSCircleVoteAdmin = (() => {
     void refreshResults();
   }
   async function refreshResults() {
-    if (resultsBusy || !data) return;
+    if (resultsBusy || !data)
+      return;
     resultsBusy = true;
     const host = document.getElementById('ssc-vote-ranking');
-    if (host) host.replaceChildren(el('p', 'field-help', 'Memuat hasil...'));
+    if (host)
+      host.replaceChildren(el('p', 'field-help', 'Memuat hasil...'));
     try {
       const r = await fetch('/api/admin/voting', { credentials: 'same-origin' });
       const result = await r.json();
-      if (!r.ok) throw Error(result.error || 'Gagal memuat hasil.');
+      if (!r.ok)
+        throw Error(result.error || 'Gagal memuat hasil.');
       document.querySelector('.ssc-vote-total').textContent = result.totalVotes + ' suara masuk';
       const items = result.top10 || [];
       host.replaceChildren();
@@ -516,17 +551,21 @@ window.SSCircleVoteAdmin = (() => {
         row.append(copy);
         host.append(row);
       }
-    } catch (e) {
+    }
+    catch (e) {
       if (host) {
         host.replaceChildren(el('p', 'field-help', 'Hasil belum dapat dimuat: ' + e.message));
       }
-    } finally {
+    }
+    finally {
       resultsBusy = false;
     }
   }
   async function resetVotes() {
-    if (!data) return;
-    if (!await SSCNotice.confirm('Mulai sesi baru dan kosongkan seluruh suara sesi sebelumnya? Tindakan ini tidak dapat dibatalkan.', { danger: true, confirmText: 'Mulai sesi baru' })) return;
+    if (!data)
+      return;
+    if (!await SSCNotice.confirm('Mulai sesi baru dan kosongkan seluruh suara sesi sebelumnya? Tindakan ini tidak dapat dibatalkan.', { danger: true, confirmText: 'Mulai sesi baru' }))
+      return;
     try {
       const r = await fetch('/api/admin/voting/reset', {
         method: 'POST',
@@ -535,13 +574,15 @@ window.SSCircleVoteAdmin = (() => {
         body: JSON.stringify({ confirmation: 'RESET VOTING' })
       });
       const res = await r.json();
-      if (!r.ok) throw Error(res.error || 'Gagal memulai sesi baru.');
+      if (!r.ok)
+        throw Error(res.error || 'Gagal memulai sesi baru.');
       data.settings.homeVotingSessionId = res.sessionId;
       data.settings.homeVotingVotes = [];
       dirty();
       notify('Sesi baru berhasil dibuat. Simpan pengaturan jika ada perubahan lain.', 'success');
       await refreshResults();
-    } catch (e) {
+    }
+    catch (e) {
       notify(e.message, 'error');
     }
   }

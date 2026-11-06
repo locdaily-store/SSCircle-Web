@@ -1,25 +1,21 @@
 /* SSCircle Server • Admin form builder and browser spreadsheet */
+
+// Kontrol utama Admin: formulir, pendaftar, media, dan tampilan.
+
 'use strict';
 const $ = s => document.querySelector(s);
 const make = (tag, cls, text) => {
   const n = document.createElement(tag);
-  if (cls) n.className = cls;
-  if (text !== undefined) n.textContent = text;
+  if (cls)
+    n.className = cls;
+  if (text !== undefined)
+    n.textContent = text;
   return n;
 };
 const uid = () => SSCircle.uuid();
-let data = { settings: {}, pages: [], submissions: [] },
-  activePage = 0,
-  dirty = false,
-  sheetPage = 0,
-  selectedIds = new Set(),
-  currentDetailId = null,
-  dragState = { pageId: '', fromIndex: -1 },
-  collapsedPages = new Set(),
-  openRoutes = new Set();
+let data = { settings: {}, pages: [], submissions: [] }, activePage = 0, dirty = false, sheetPage = 0, selectedIds = new Set(), currentDetailId = null, dragState = { pageId: '', fromIndex: -1 }, collapsedPages = new Set(), openRoutes = new Set();
 const PAGE_SIZE = 20;
 // Review reason dialog is shown only when administrator rejects an application.
-
 const qtypes = [
   ['short', 'Jawaban singkat'],
   ['long', 'Paragraf'],
@@ -33,7 +29,8 @@ function dirtyMark() {
   window.SSCircleRegistrationPreview?.update();
   for (const id of ['#save-message', '#appearance-message', '#theme-message']) {
     const n = $(id);
-    if (n) n.replaceChildren(make('span', 'draft-label', '● Perubahan belum disimpan'));
+    if (n)
+      n.replaceChildren(make('span', 'draft-label', '● Perubahan belum disimpan'));
   }
 }
 function notify(selector, message, isError = false) {
@@ -41,8 +38,10 @@ function notify(selector, message, isError = false) {
 }
 function field(label, value, fn, { kind = 'input', hint = '', placeholder = '' } = {}) {
   const w = make('label', 'field-group'), l = make('span', 'field-label', label), c = make(kind);
-  if (kind === 'input') c.type = 'text';
-  if (kind === 'textarea') c.rows = 3;
+  if (kind === 'input')
+    c.type = 'text';
+  if (kind === 'textarea')
+    c.rows = 3;
   c.value = value ?? '';
   c.placeholder = placeholder;
   c.addEventListener('input', () => {
@@ -50,7 +49,8 @@ function field(label, value, fn, { kind = 'input', hint = '', placeholder = '' }
     dirtyMark();
   });
   w.append(l, c);
-  if (hint) w.append(make('small', 'field-help', hint));
+  if (hint)
+    w.append(make('small', 'field-help', hint));
   return w;
 }
 function button(label, callback, cls = 'button secondary') {
@@ -74,26 +74,34 @@ function dropdown(options, value, callback) {
   return select;
 }
 function tab(id) {
-  for (const s of document.querySelectorAll('.tab-page')) s.classList.toggle('hide', s.id !== id);
-  for (const b of document.querySelectorAll('[data-tab]')) b.classList.toggle('active', b.dataset.tab === id);
+  for (const s of document.querySelectorAll('.tab-page'))
+    s.classList.toggle('hide', s.id !== id);
+  for (const b of document.querySelectorAll('[data-tab]'))
+    b.classList.toggle('active', b.dataset.tab === id);
   if (id === 'answers') {
     renderAnswers();
     void reloadSpreadsheet();
   }
-  if (id === 'theme') window.SSCircleThemeEditor?.schedule();
-  if (id === 'analytics') renderAnalytics();
-  if (id === 'media') loadMediaLibrary();
-  if (id === 'voting-admin') window.SSCircleVoteAdmin?.refreshResults();
+  if (id === 'theme')
+    window.SSCircleThemeEditor?.schedule();
+  if (id === 'analytics')
+    renderAnalytics();
+  if (id === 'media')
+    loadMediaLibrary();
+  if (id === 'voting-admin')
+    window.SSCircleVoteAdmin?.refreshResults();
   if (id === 'spreadsheet' && window.SSCSpreadsheet) {
     SSCircleSheet.render(data, allColumns(), valueText, applicantName, showDetails);
     void reloadSpreadsheet();
   }
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
-for (const btn of document.querySelectorAll('[data-tab]')) btn.onclick = async () => {
-  if (dirty && !['form', 'appearance', 'theme'].includes(btn.dataset.tab) && !await SSCNotice.confirm('Ada perubahan yang belum disimpan. Tetap pindah?', { confirmText: 'Pindah halaman' })) return;
-  tab(btn.dataset.tab);
-};
+for (const btn of document.querySelectorAll('[data-tab]'))
+  btn.onclick = async () => {
+    if (dirty && !['form', 'appearance', 'theme'].includes(btn.dataset.tab) && !await SSCNotice.confirm('Ada perubahan yang belum disimpan. Tetap pindah?', { confirmText: 'Pindah halaman' }))
+      return;
+    tab(btn.dataset.tab);
+  };
 function summary() {
   const list = [
     ['TOTAL PENDAFTAR', data.submissions.length, '◈'],
@@ -124,13 +132,14 @@ async function refresh() {
   window.SSCircleRegistrationPreview?.render(data);
   window.SSCircleHomeAdmin?.render(data, dirtyMark);
   window.SSCircleVoteAdmin?.render(data, dirtyMark);
-  if (data.settings.adminThemeEnabled === true) window.SSCircleTheme?.apply(data.settings);
+  if (data.settings.adminThemeEnabled === true)
+    window.SSCircleTheme?.apply(data.settings);
   summary();
   renderBuilder();
   renderAnswers();
   renderAnalytics();
 }
-$('#login-form').onsubmit = async e => {
+$('#login-form').onsubmit = async (e) => {
   e.preventDefault();
   const submit = $('#login-form button');
   submit.disabled = true;
@@ -139,9 +148,11 @@ $('#login-form').onsubmit = async e => {
     await SSCircle.login($('#password').value);
     $('#password').value = '';
     await refresh();
-  } catch (error) {
+  }
+  catch (error) {
     $('#login-error').textContent = error.message;
-  } finally {
+  }
+  finally {
     submit.disabled = false;
   }
 };
@@ -150,23 +161,24 @@ $('#logout').onclick = async () => {
   location.reload();
 };
 const cooldownControl = $('#registration-cooldown-minutes');
-if (cooldownControl) cooldownControl.oninput = () => {
-  const value = Number(cooldownControl.value);
-  if (Number.isInteger(value) && value >= 0 && value <= 10080) {
-    data.settings.cooldownMinutes = value;
-    dirtyMark();
-  }
-};
+if (cooldownControl)
+  cooldownControl.oninput = () => {
+    const value = Number(cooldownControl.value);
+    if (Number.isInteger(value) && value >= 0 && value <= 10080) {
+      data.settings.cooldownMinutes = value;
+      dirtyMark();
+    }
+  };
 $('#jump-form').onclick = () => tab('form');
 $('#jump-answers').onclick = () => tab('answers');
 $('#refresh').onclick = async () => {
   try {
     await refresh();
-  } catch (e) {
+  }
+  catch (e) {
     SSCNotice.alert(e.message);
   }
 };
-
 function newQuestion() {
   return {
     id: uid(),
@@ -201,7 +213,8 @@ function cleanRoutes() {
     }
     for (const [key, dest] of Object.entries(p.routes || {})) {
       const ind = data.pages.findIndex(x => x.id === dest);
-      if (!q.options.includes(key) || (dest !== 'end' && dest !== 'next' && ind <= i)) delete p.routes[key];
+      if (!q.options.includes(key) || (dest !== 'end' && dest !== 'next' && ind <= i))
+        delete p.routes[key];
     }
   }
 }
@@ -211,6 +224,7 @@ function navToPage(index) {
   renderBuilder();
   document.getElementById('form-section-' + data.pages[index].id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
+// Editor pertanyaan dan halaman formulir
 function renderBuilder() {
   activePage = Math.max(0, Math.min(activePage, data.pages.length - 1));
   cleanRoutes();
@@ -238,17 +252,21 @@ function renderBuilder() {
   });
 }
 function clearDropHints() {
-  for (const el of document.querySelectorAll('.builder-card.drop-before,.builder-card.drop-after,.builder-card.dragging,.form-section.drop-in-section,.section-question-list.drop-in-section')) el.classList.remove('drop-before', 'drop-after', 'dragging', 'drop-in-section');
+  for (const el of document.querySelectorAll('.builder-card.drop-before,.builder-card.drop-after,.builder-card.dragging,.form-section.drop-in-section,.section-question-list.drop-in-section'))
+    el.classList.remove('drop-before', 'drop-after', 'dragging', 'drop-in-section');
 }
 function moveBlockTo(sourcePage, fromIndex, targetPage, toIndex, placeAfter = false) {
-  if (!sourcePage || !targetPage || fromIndex < 0 || fromIndex >= sourcePage.blocks.length) return;
+  if (!sourcePage || !targetPage || fromIndex < 0 || fromIndex >= sourcePage.blocks.length)
+    return;
   if (sourcePage !== targetPage && targetPage.blocks.length >= 30) {
     SSCNotice.alert('Bagian tujuan sudah berisi 30 item.');
     return;
   }
   let insertIndex = toIndex + (placeAfter ? 1 : 0);
-  if (sourcePage === targetPage && fromIndex < insertIndex) insertIndex--;
-  if (sourcePage === targetPage && insertIndex === fromIndex) return;
+  if (sourcePage === targetPage && fromIndex < insertIndex)
+    insertIndex--;
+  if (sourcePage === targetPage && insertIndex === fromIndex)
+    return;
   const [item] = sourcePage.blocks.splice(fromIndex, 1);
   insertIndex = Math.max(0, Math.min(insertIndex, targetPage.blocks.length));
   targetPage.blocks.splice(insertIndex, 0, item);
@@ -265,7 +283,8 @@ function moveBlockTo(sourcePage, fromIndex, targetPage, toIndex, placeAfter = fa
 }
 function finishDraggedOnCard(page, index, after) {
   const src = data.pages.find(p => p.id === dragState.pageId);
-  if (!src) return;
+  if (!src)
+    return;
   moveBlockTo(src, dragState.fromIndex, page, index, after);
   dragState = { pageId: '', fromIndex: -1 };
   clearDropHints();
@@ -275,54 +294,55 @@ function buildSection(page, index) {
   section.id = 'form-section-' + page.id;
   section.dataset.pageId = page.id;
   const collapsed = collapsedPages.has(page.id);
-  if (collapsed) section.classList.add('is-collapsed');
+  if (collapsed)
+    section.classList.add('is-collapsed');
   const bar = make('div', 'form-section-bar');
   const tag = make('span', 'form-section-tag', 'Bagian ' + (index + 1) + ' dari ' + data.pages.length);
   const barControls = make('div', 'form-section-controls');
   const toggle = button(collapsed ? '▾ Buka' : '▴ Lipat', () => {
-    if (collapsed) collapsedPages.delete(page.id); else collapsedPages.add(page.id);
+    if (collapsed)
+      collapsedPages.delete(page.id);
+    else
+      collapsedPages.add(page.id);
     renderBuilder();
   }, 'section-tool');
   toggle.setAttribute('aria-expanded', String(!collapsed));
-  const clone = button(
-    '⧉',
-    () => {
-      if (data.pages.length >= 24) return SSCNotice.alert('Maksimal 24 halaman.');
-      const c = structuredClone(page);
-      c.id = uid();
-      c.title += ' (salinan)';
-      c.routeQuestionId = '';
-      c.routes = {};
-      for (const b of c.blocks) {
-        b.id = uid();
-        if (b.type === 'question') b.question.id = uid();
-      }
-      data.pages.splice(index + 1, 0, c);
-      activePage = index + 1;
-      dirtyMark();
-      renderBuilder();
-      navToPage(activePage);
-    },
-    'section-tool'
-  );
+  const clone = button('⧉', () => {
+    if (data.pages.length >= 24)
+      return SSCNotice.alert('Maksimal 24 halaman.');
+    const c = structuredClone(page);
+    c.id = uid();
+    c.title += ' (salinan)';
+    c.routeQuestionId = '';
+    c.routes = {};
+    for (const b of c.blocks) {
+      b.id = uid();
+      if (b.type === 'question')
+        b.question.id = uid();
+    }
+    data.pages.splice(index + 1, 0, c);
+    activePage = index + 1;
+    dirtyMark();
+    renderBuilder();
+    navToPage(activePage);
+  }, 'section-tool');
   clone.title = 'Duplikat bagian';
-  const del = button(
-    '✕',
-    async () => {
-      if (data.pages.length === 1) return SSCNotice.SSCNotice.alert('Minimal ada satu halaman.');
-      if (!await SSCNotice.confirm('Hapus bagian beserta pertanyaan di dalamnya? Jawaban yang sudah masuk tetap disimpan.', { danger: true, confirmText: 'Hapus bagian' })) return;
-      data.pages.splice(index, 1);
-      collapsedPages.delete(page.id);
-      activePage = Math.max(0, Math.min(index, data.pages.length - 1));
-      dirtyMark();
-      renderBuilder();
-    },
-    'section-tool delete'
-  );
+  const del = button('✕', async () => {
+    if (data.pages.length === 1)
+      return SSCNotice.SSCNotice.alert('Minimal ada satu halaman.');
+    if (!await SSCNotice.confirm('Hapus bagian beserta pertanyaan di dalamnya? Jawaban yang sudah masuk tetap disimpan.', { danger: true, confirmText: 'Hapus bagian' }))
+      return;
+    data.pages.splice(index, 1);
+    collapsedPages.delete(page.id);
+    activePage = Math.max(0, Math.min(index, data.pages.length - 1));
+    dirtyMark();
+    renderBuilder();
+  }, 'section-tool delete');
   del.title = 'Hapus bagian';
   del.disabled = data.pages.length === 1;
   const movePrev = button('↑', () => {
-    if (index === 0) return;
+    if (index === 0)
+      return;
     [data.pages[index - 1], data.pages[index]] = [data.pages[index], data.pages[index - 1]];
     activePage = index - 1;
     dirtyMark();
@@ -331,7 +351,8 @@ function buildSection(page, index) {
   movePrev.title = 'Pindahkan bagian ke atas';
   movePrev.disabled = index === 0;
   const moveNext = button('↓', () => {
-    if (index === data.pages.length - 1) return;
+    if (index === data.pages.length - 1)
+      return;
     [data.pages[index], data.pages[index + 1]] = [data.pages[index + 1], data.pages[index]];
     activePage = index + 1;
     dirtyMark();
@@ -368,16 +389,21 @@ function buildSection(page, index) {
   });
   list.addEventListener('dragleave', () => list.classList.remove('drop-in-section'));
   list.addEventListener('drop', e => {
-    if (!dragState.pageId) return;
-    if (e.target.closest('.builder-card')) return;
+    if (!dragState.pageId)
+      return;
+    if (e.target.closest('.builder-card'))
+      return;
     e.preventDefault();
     const src = data.pages.find(p => p.id === dragState.pageId);
-    if (src) moveBlockTo(src, dragState.fromIndex, page, page.blocks.length);
+    if (src)
+      moveBlockTo(src, dragState.fromIndex, page, page.blocks.length);
   });
-  if (!page.blocks.length) list.append(make('p', 'empty-section-hint', 'Belum ada pertanyaan. Tambahkan pertanyaan melalui tombol di bawah ini.'));
+  if (!page.blocks.length)
+    list.append(make('p', 'empty-section-hint', 'Belum ada pertanyaan. Tambahkan pertanyaan melalui tombol di bawah ini.'));
   content.append(list);
   const toolbar = make('div', 'section-add-toolbar');
-  for (const [type, label] of [['question', '＋ Pertanyaan'], ['text', '＋ Judul / teks'], ['image', '＋ Gambar'], ['video', '＋ Video']]) toolbar.append(button(label, () => addBlock(type, page), 'section-add-button'));
+  for (const [type, label] of [['question', '＋ Pertanyaan'], ['text', '＋ Judul / teks'], ['image', '＋ Gambar'], ['video', '＋ Video']])
+    toolbar.append(button(label, () => addBlock(type, page), 'section-add-button'));
   content.append(toolbar);
   const routeDetails = make('details', 'section-route-details');
   routeDetails.open = openRoutes.has(page.id);
@@ -386,7 +412,10 @@ function buildSection(page, index) {
   const routeContents = make('div', 'section-route-editor');
   routeDetails.append(routeContents);
   routeDetails.addEventListener('toggle', () => {
-    if (routeDetails.open) openRoutes.add(page.id); else openRoutes.delete(page.id);
+    if (routeDetails.open)
+      openRoutes.add(page.id);
+    else
+      openRoutes.delete(page.id);
   });
   renderRouting(page, routeContents, index);
   content.append(routeDetails);
@@ -395,7 +424,8 @@ function buildSection(page, index) {
 }
 function tabsName(page, index, value) {
   const tab = document.querySelectorAll('#page-tabs .builder-tab')[index];
-  if (tab) tab.textContent = String(index + 1).padStart(2, '0') + ' · ' + (value || 'Bagian ' + (index + 1));
+  if (tab)
+    tab.textContent = String(index + 1).padStart(2, '0') + ' · ' + (value || 'Bagian ' + (index + 1));
 }
 function buildBlock(page, block, index) {
   const card = make('article', 'builder-card panel');
@@ -410,15 +440,12 @@ function buildBlock(page, block, index) {
   dragHandle.setAttribute('role', 'img');
   dragHandle.setAttribute('aria-label', 'Pegangan untuk menyeret kartu pertanyaan');
   dragHandle.setAttribute('tabindex', '0');
-  left.append(
-    dragHandle,
-    make('span', 'question-number', String(index + 1).padStart(2, '0')),
-    make('span', 'builder-number', ({ question: 'PERTANYAAN', text: 'JUDUL / TEKS', image: 'GAMBAR', video: 'VIDEO' })[block.type] || block.type)
-  );
+  left.append(dragHandle, make('span', 'question-number', String(index + 1).padStart(2, '0')), make('span', 'builder-number', ({ question: 'PERTANYAAN', text: 'JUDUL / TEKS', image: 'GAMBAR', video: 'VIDEO' })[block.type] || block.type));
   header.append(left);
   const buttons = make('div', 'block-actions');
   const del = button('✕', async () => {
-    if (!await SSCNotice.confirm('Hapus item ini?', { danger: true, confirmText: 'Hapus item' })) return;
+    if (!await SSCNotice.confirm('Hapus item ini?', { danger: true, confirmText: 'Hapus item' }))
+      return;
     page.blocks.splice(index, 1);
     dirtyMark();
     renderBuilder();
@@ -435,11 +462,13 @@ function buildBlock(page, block, index) {
     startTouchDrag(e, card, page, index);
   });
   dragHandle.addEventListener('keydown', e => {
-    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')
+      return;
     e.preventDefault();
     const step = e.key === 'ArrowUp' ? -1 : 1;
     const j = index + step;
-    if (j < 0 || j >= page.blocks.length) return;
+    if (j < 0 || j >= page.blocks.length)
+      return;
     moveBlockTo(page, index, page, j);
     document.querySelector(`[data-block-id="${block.id}"] .drag-handle`)?.focus();
   });
@@ -461,33 +490,41 @@ function buildBlock(page, block, index) {
     clearDropHints();
   });
   card.addEventListener('dragover', e => {
-    if (!dragState.pageId) return;
+    if (!dragState.pageId)
+      return;
     e.preventDefault();
     const rect = card.getBoundingClientRect();
     const before = e.clientY < rect.top + rect.height / 2;
     card.classList.toggle('drop-before', before);
     card.classList.toggle('drop-after', !before);
-    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    if (e.dataTransfer)
+      e.dataTransfer.dropEffect = 'move';
   });
   card.addEventListener('dragleave', e => {
-    if (!card.contains(e.relatedTarget)) card.classList.remove('drop-before', 'drop-after');
+    if (!card.contains(e.relatedTarget))
+      card.classList.remove('drop-before', 'drop-after');
   });
   card.addEventListener('drop', e => {
-    if (!dragState.pageId) return;
+    if (!dragState.pageId)
+      return;
     e.preventDefault();
     e.stopPropagation();
     const rect = card.getBoundingClientRect();
     const before = e.clientY < rect.top + rect.height / 2;
     finishDraggedOnCard(page, index, !before);
   });
-  if (block.type === 'question') renderQuestionEditor(card, block.question, page);
-  else if (block.type === 'text') card.append(field('Judul bagian informasi', block.title, v => block.title = v), field('Deskripsi atau informasi', block.description, v => block.description = v, { kind: 'textarea' }));
+  if (block.type === 'question')
+    renderQuestionEditor(card, block.question, page);
+  else if (block.type === 'text')
+    card.append(field('Judul bagian informasi', block.title, v => block.title = v), field('Deskripsi atau informasi', block.description, v => block.description = v, { kind: 'textarea' }));
   else if (block.type === 'image') {
     const img = make('img', 'builder-media-preview');
-    if (block.imageUrl || block.imageId) img.src = block.imageUrl || '/api/media/' + encodeURIComponent(block.imageId);
+    if (block.imageUrl || block.imageId)
+      img.src = block.imageUrl || '/api/media/' + encodeURIComponent(block.imageId);
     img.referrerPolicy = 'no-referrer';
     img.alt = 'Gambar halaman';
-    if (block.imageUrl || block.imageId) card.append(img);
+    if (block.imageUrl || block.imageId)
+      card.append(img);
     card.append(field('Caption gambar', block.caption, v => block.caption = v));
     const upload = make('input', 'image-upload-field');
     upload.type = 'file';
@@ -495,7 +532,8 @@ function buildBlock(page, block, index) {
     const progress = make('p', 'field-help', block.imageId ? 'Gambar sudah terunggah.' : 'Unggah JPG, PNG, atau WEBP. Gambar disesuaikan otomatis agar ringan.');
     upload.onchange = async () => {
       const file = upload.files?.[0];
-      if (!file) return;
+      if (!file)
+        return;
       if (file.size > 12 * 1024 * 1024) {
         progress.textContent = 'File terlalu besar (maks. 12 MB sebelum kompresi).';
         return;
@@ -507,7 +545,8 @@ function buildBlock(page, block, index) {
         block.imageId = result.id;
         dirtyMark();
         renderBuilder();
-      } catch (e) {
+      }
+      catch (e) {
         progress.textContent = 'Gagal upload: ' + e.message;
         upload.disabled = false;
       }
@@ -524,17 +563,14 @@ function buildBlock(page, block, index) {
       }
     });
     card.append(imageHost);
-
   }
-  else if (block.type === 'video') card.append(
-    field('Link video YouTube atau Vimeo', block.url, v => block.url = v, { placeholder: 'https://www.youtube.com/watch?v=...' }),
-    field('Judul video (opsional)', block.title, v => block.title = v),
-    make('p', 'field-help', 'Gunakan link HTTPS YouTube atau Vimeo. Video muncul langsung di halaman pengunjung.')
-  );
+  else if (block.type === 'video')
+    card.append(field('Link video YouTube atau Vimeo', block.url, v => block.url = v, { placeholder: 'https://www.youtube.com/watch?v=...' }), field('Judul video (opsional)', block.title, v => block.title = v), make('p', 'field-help', 'Gunakan link HTTPS YouTube atau Vimeo. Video muncul langsung di halaman pengunjung.'));
   return card;
 }
 function startTouchDrag(event, card, page, index) {
-  if (event.pointerType === 'mouse') return;
+  if (event.pointerType === 'mouse')
+    return;
   event.preventDefault();
   const handle = event.currentTarget;
   dragState = { pageId: page.id, fromIndex: index };
@@ -542,7 +578,8 @@ function startTouchDrag(event, card, page, index) {
   handle.setPointerCapture(event.pointerId);
   let target = null, after = false;
   const move = e => {
-    if (e.pointerId !== event.pointerId) return;
+    if (e.pointerId !== event.pointerId)
+      return;
     clearDropHints();
     card.classList.add('dragging');
     const found = document.elementFromPoint(e.clientX, e.clientY);
@@ -551,24 +588,32 @@ function startTouchDrag(event, card, page, index) {
       const rect = target.getBoundingClientRect();
       after = e.clientY >= rect.top + rect.height / 2;
       target.classList.add(after ? 'drop-after' : 'drop-before');
-    } else if (target?.classList.contains('section-question-list')) target.classList.add('drop-in-section');
+    }
+    else if (target?.classList.contains('section-question-list'))
+      target.classList.add('drop-in-section');
   };
   const end = e => {
-    if (e.pointerId !== event.pointerId) return;
+    if (e.pointerId !== event.pointerId)
+      return;
     handle.removeEventListener('pointermove', move);
     handle.removeEventListener('pointerup', end);
     handle.removeEventListener('pointercancel', cancel);
-    if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
+    if (handle.hasPointerCapture(event.pointerId))
+      handle.releasePointerCapture(event.pointerId);
     if (target) {
       const pg = data.pages.find(p => p.id === (target.dataset.pageId || target.closest('.form-section')?.dataset.pageId));
       const dst = target.closest('.builder-card');
-      if (pg && dst) moveBlockTo(page, index, pg, Number(dst.dataset.index), after); else if (pg) moveBlockTo(page, index, pg, pg.blocks.length);
+      if (pg && dst)
+        moveBlockTo(page, index, pg, Number(dst.dataset.index), after);
+      else if (pg)
+        moveBlockTo(page, index, pg, pg.blocks.length);
     }
     dragState = { pageId: '', fromIndex: -1 };
     clearDropHints();
   };
   const cancel = e => {
-    if (e.pointerId !== event.pointerId) return;
+    if (e.pointerId !== event.pointerId)
+      return;
     handle.removeEventListener('pointermove', move);
     handle.removeEventListener('pointerup', end);
     handle.removeEventListener('pointercancel', cancel);
@@ -584,23 +629,20 @@ function renderQuestionEditor(card, q, page) {
   const settings = make('div', 'question-settings');
   const selectWrap = make('label', 'field-group');
   selectWrap.append(make('span', 'field-label', 'Jenis jawaban'));
-  const type = dropdown(
-    qtypes,
-    q.type,
-    v => {
-      q.type = v;
-      if (['single', 'select', 'multi'].includes(v) && !q.options.length) q.options = ['Opsi 1', 'Opsi 2'];
-      if (!['single', 'select', 'multi'].includes(v)) {
-        q.options = [];
-        q.allowOther = false;
-      }
-      if (v === 'multi' && page.routeQuestionId === q.id) {
-        page.routeQuestionId = '';
-        page.routes = {};
-      }
-      renderBuilder();
+  const type = dropdown(qtypes, q.type, v => {
+    q.type = v;
+    if (['single', 'select', 'multi'].includes(v) && !q.options.length)
+      q.options = ['Opsi 1', 'Opsi 2'];
+    if (!['single', 'select', 'multi'].includes(v)) {
+      q.options = [];
+      q.allowOther = false;
     }
-  );
+    if (v === 'multi' && page.routeQuestionId === q.id) {
+      page.routeQuestionId = '';
+      page.routes = {};
+    }
+    renderBuilder();
+  });
   selectWrap.append(type);
   const required = make('label', 'required-toggle');
   const box = make('input');
@@ -618,8 +660,10 @@ function renderQuestionEditor(card, q, page) {
   required.append(box, make('span', '', 'Wajib dijawab'));
   settings.append(selectWrap, required);
   card.append(settings);
-  if (['short', 'long'].includes(q.type)) card.append(field('Placeholder', q.placeholder, v => q.placeholder = v));
-  if (q.type === 'image_upload') card.append(make('p', 'editor-note', 'Pengunjung dapat mengunggah 1 gambar (maksimal 3 MB). File tersimpan privat dan hanya admin dapat mengaksesnya.'));
+  if (['short', 'long'].includes(q.type))
+    card.append(field('Placeholder', q.placeholder, v => q.placeholder = v));
+  if (q.type === 'image_upload')
+    card.append(make('p', 'editor-note', 'Pengunjung dapat mengunggah 1 gambar (maksimal 3 MB). File tersimpan privat dan hanya admin dapat mengaksesnya.'));
   if (['single', 'multi', 'select'].includes(q.type)) {
     const intro = make('div', 'choice-editor-title');
     intro.append(make('strong', '', 'Pilihan jawaban'), make('small', '', 'Setiap opsi punya kontrol ' + (q.type === 'multi' ? 'checkbox' : q.type === 'single' ? 'radio' : 'dropdown') + ' asli.'));
@@ -627,7 +671,9 @@ function renderQuestionEditor(card, q, page) {
     const opts = make('div', 'choice-editor');
     q.options.forEach((value, i) => {
       const row = make('div', 'choice-editor-row');
-      if (q.type === 'select') row.append(make('span', 'select-number', String(i + 1) + '.')); else {
+      if (q.type === 'select')
+        row.append(make('span', 'select-number', String(i + 1) + '.'));
+      else {
         const ctrl = make('input', 'editor-choice-control');
         ctrl.type = q.type === 'multi' ? 'checkbox' : 'radio';
         ctrl.name = 'preview-' + q.id;
@@ -700,7 +746,6 @@ function renderQuestionEditor(card, q, page) {
       sample.append(indicator, copy, input);
       card.append(sample);
     }
-
   }
 }
 function renderRouting(page, container = $('#routing-panel'), pageIndex = data.pages.indexOf(page)) {
@@ -731,23 +776,30 @@ function renderRouting(page, container = $('#routing-panel'), pageIndex = data.p
     const row = make('div', 'route-row');
     row.append(make('span', 'route-option', '↳ ' + option));
     row.append(dropdown(targets, page.routes?.[option] || 'next', v => {
-      if (v === 'next') delete page.routes[option]; else page.routes[option] = v;
+      if (v === 'next')
+        delete page.routes[option];
+      else
+        page.routes[option] = v;
     }));
     container.append(row);
   }
-  if (pageIndex === data.pages.length - 1) container.append(make('p', 'field-help', 'Halaman ini paling akhir. Pilih Akhiri dan kirim, atau tambahkan halaman baru untuk percabangan.'));
+  if (pageIndex === data.pages.length - 1)
+    container.append(make('p', 'field-help', 'Halaman ini paling akhir. Pilih Akhiri dan kirim, atau tambahkan halaman baru untuk percabangan.'));
 }
 $('#add-page').onclick = () => {
-  if (data.pages.length >= 24) return SSCNotice.alert('Maksimal 24 halaman.');
+  if (data.pages.length >= 24)
+    return SSCNotice.alert('Maksimal 24 halaman.');
   data.pages.push(newPage());
   activePage = data.pages.length - 1;
   dirtyMark();
   navToPage(activePage);
 };
 function addBlock(type, page = selectedPage()) {
-  if (page.blocks.length >= 30) return SSCNotice.alert('Maksimal 30 item per bagian.');
+  if (page.blocks.length >= 30)
+    return SSCNotice.alert('Maksimal 30 item per bagian.');
   const b = { id: uid(), type };
-  if (type === 'question') b.question = newQuestion();
+  if (type === 'question')
+    b.question = newQuestion();
   if (type === 'text') {
     b.title = 'Judul bagian';
     b.description = 'Tuliskan informasi atau petunjuk...';
@@ -767,7 +819,8 @@ function addBlock(type, page = selectedPage()) {
   renderBuilder();
   document.querySelector(`[data-block-id="${b.id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
-for (const [id, type] of [['add-question', 'question'], ['add-text', 'text'], ['add-image', 'image'], ['add-video', 'video']]) $('#' + id).onclick = () => addBlock(type);
+for (const [id, type] of [['add-question', 'question'], ['add-text', 'text'], ['add-image', 'image'], ['add-video', 'video']])
+  $('#' + id).onclick = () => addBlock(type);
 async function save() {
   const btn = $('#save');
   btn.disabled = true;
@@ -790,7 +843,8 @@ async function save() {
     dirty = false;
     ['#save-message', '#appearance-message', '#home-admin-message', '#theme-message'].forEach(selector => {
       const n = $(selector);
-      if (n) n.replaceChildren();
+      if (n)
+        n.replaceChildren();
     });
     saveButtons.forEach(b => {
       b.classList.remove('is-saving');
@@ -800,7 +854,8 @@ async function save() {
     SSCNotice.toast('Perubahan berhasil disimpan.', 'success');
     renderBuilder();
     summary();
-  } catch (e) {
+  }
+  catch (e) {
     SSCNotice.toast('Gagal menyimpan: ' + e.message, 'error', 6500);
   }
   finally {
@@ -838,7 +893,8 @@ function optionPreview(q) {
       custom.placeholder = 'Tulis jawaban sendiri...';
       card.append(custom);
     }
-  } else if (q.type === 'select') {
+  }
+  else if (q.type === 'select') {
     const input = dropdown([['', 'Pilih jawaban...'], ...q.options.map(v => [v, v]), ...(q.allowOther ? [['__SSC_OTHER__', 'Jawaban lainnya...']] : [])], '', () => { });
     card.append(input);
     if (q.allowOther) {
@@ -847,13 +903,18 @@ function optionPreview(q) {
       other.placeholder = 'Tulis jawaban sendiri...';
       card.append(other);
     }
-  } else {
+  }
+  else {
     const input = make(q.type === 'long' ? 'textarea' : 'input');
     if (q.type === 'image_upload') {
       input.type = 'file';
       input.accept = 'image/*';
-    } else {
-      if (q.type === 'long') input.rows = 3; else input.type = 'text';
+    }
+    else {
+      if (q.type === 'long')
+        input.rows = 3;
+      else
+        input.type = 'text';
       input.placeholder = q.placeholder || '';
     }
     card.append(input);
@@ -864,9 +925,12 @@ $('#preview-draft').onclick = () => {
   const p = selectedPage(), root = $('#preview-content');
   root.replaceChildren(make('h2', '', p.title), make('p', '', p.description || ''));
   for (const b of p.blocks) {
-    if (b.type === 'question') root.append(optionPreview(b.question)); else if (b.type === 'text') {
+    if (b.type === 'question')
+      root.append(optionPreview(b.question));
+    else if (b.type === 'text') {
       root.append(make('h3', '', b.title), make('p', '', b.description));
-    } else if (b.type === 'image') {
+    }
+    else if (b.type === 'image') {
       if (b.imageId || b.imageUrl) {
         const img = make('img', 'preview-media');
         img.src = b.imageUrl || '/api/media/' + b.imageId;
@@ -874,15 +938,19 @@ $('#preview-draft').onclick = () => {
         root.append(img);
       }
       root.append(make('p', '', b.caption || ''));
-    } else if (b.type === 'video') root.append(make('p', '', b.title + ' · ' + b.url));
+    }
+    else if (b.type === 'video')
+      root.append(make('p', '', b.title + ' · ' + b.url));
   }
   $('#preview-dialog').showModal();
 };
 $('#close-preview').onclick = () => $('#preview-dialog').close();
 $('#close-detail').onclick = () => $('#answer-dialog').close();
 function valueText(v) {
-  if (Array.isArray(v)) return v.map(valueText).join(' | ');
-  if (typeof v === 'string' && v.startsWith('__SSC_OTHER__:')) return 'Jawaban lainnya: ' + v.slice('__SSC_OTHER__:'.length);
+  if (Array.isArray(v))
+    return v.map(valueText).join(' | ');
+  if (typeof v === 'string' && v.startsWith('__SSC_OTHER__:'))
+    return 'Jawaban lainnya: ' + v.slice('__SSC_OTHER__:'.length);
   return v && typeof v === 'object' ? (v.filename ? '📎 ' + v.filename : JSON.stringify(v)) : String(v ?? '');
 }
 function reasonDialog(previous = '') {
@@ -892,13 +960,15 @@ function reasonDialog(previous = '') {
     textarea.value = previous || '';
     $('#reject-error').textContent = '';
     const done = value => {
-      if (settled) return;
+      if (settled)
+        return;
       settled = true;
       dialog.removeEventListener('close', onClose);
       form.removeEventListener('submit', onSubmit);
       $('#reject-cancel').removeEventListener('click', cancel);
       $('#cancel-reject').removeEventListener('click', cancel);
-      if (dialog.open) dialog.close();
+      if (dialog.open)
+        dialog.close();
       resolve(value);
     };
     const onClose = () => done(null), cancel = () => done(null);
@@ -920,7 +990,8 @@ function reasonDialog(previous = '') {
   });
 }
 async function reviewStatus(record, newStatus) {
-  if (newStatus === record.status && newStatus !== 'rejected') return;
+  if (newStatus === record.status && newStatus !== 'rejected')
+    return;
   let reason = '';
   if (newStatus === 'rejected') {
     reason = await reasonDialog(record.reason);
@@ -943,26 +1014,37 @@ async function reviewStatus(record, newStatus) {
 }
 function allColumns() {
   const cols = new Map();
-  for (const p of data.pages) for (const b of p.blocks) if (b.type === 'question') {
-    const q = b.question;
-    cols.set(q.id, p.title + ' · ' + q.title);
-  }
-  for (const s of data.submissions) for (const q of s.questions || []) if (!cols.has(q.id)) cols.set(q.id, (q.pageTitle ? q.pageTitle + ' · ' : '') + q.title);
-  for (const s of data.submissions) for (const key of Object.keys(s.answers || {})) if (!cols.has(key)) cols.set(key, 'Pertanyaan lama: ' + key);
+  for (const p of data.pages)
+    for (const b of p.blocks)
+      if (b.type === 'question') {
+        const q = b.question;
+        cols.set(q.id, p.title + ' · ' + q.title);
+      }
+  for (const s of data.submissions)
+    for (const q of s.questions || [])
+      if (!cols.has(q.id))
+        cols.set(q.id, (q.pageTitle ? q.pageTitle + ' · ' : '') + q.title);
+  for (const s of data.submissions)
+    for (const key of Object.keys(s.answers || {}))
+      if (!cols.has(key))
+        cols.set(key, 'Pertanyaan lama: ' + key);
   return [...cols];
 }
 async function reloadSpreadsheet() {
   const count = $('#fullsheet-count');
-  if (count) count.textContent = 'Memperbarui jawaban terbaru...';
+  if (count)
+    count.textContent = 'Memperbarui jawaban terbaru...';
   try {
     data.submissions = await SSCircle.getSubmissions();
     summary();
     renderAnswers();
     renderAnalytics();
-    if ($('#spreadsheet') && !$('#spreadsheet').classList.contains('hide')) SSCircleSheet.render(data, allColumns(), valueText, applicantName, showDetails);
+    if ($('#spreadsheet') && !$('#spreadsheet').classList.contains('hide'))
+      SSCircleSheet.render(data, allColumns(), valueText, applicantName, showDetails);
   }
   catch (e) {
-    if (count) count.textContent = 'Gagal memperbarui jawaban terbaru. Tampilkan data yang sudah dimuat.';
+    if (count)
+      count.textContent = 'Gagal memperbarui jawaban terbaru. Tampilkan data yang sudah dimuat.';
   }
 }
 window.SSCRefreshSheet = reloadSpreadsheet;
@@ -993,7 +1075,8 @@ $('#sheet-next').onclick = () => {
 function matched() {
   const query = $('#search').value.trim().toLocaleLowerCase('id');
   return [...data.submissions].sort((a, b) => String(a.at).localeCompare(String(b.at)) || String(a.id).localeCompare(String(b.id))).filter(s => {
-    if ($('#filter').value !== 'all' && s.status !== $('#filter').value) return false;
+    if ($('#filter').value !== 'all' && s.status !== $('#filter').value)
+      return false;
     return !query || [
       s.id,
       s.trackingCode || '',
@@ -1011,7 +1094,8 @@ function applicantName(record) {
   if (!v) {
     const keys = Object.keys(record.answers || {});
     const fallback = keys.find(k => /ign|username|nickname|gamertag/i.test(k));
-    if (fallback) v = record.answers[fallback];
+    if (fallback)
+      v = record.answers[fallback];
   }
   return typeof v === 'string' && v.trim() ? v.trim() : 'Pendaftar #' + record.id.slice(0, 8).toUpperCase();
 }
@@ -1031,13 +1115,17 @@ function renderAnswers() {
   checkAll.indeterminate = !checkAll.checked && currentRows.some(x => selectedIds.has(x.id));
   checkAll.onchange = () => {
     for (const item of currentRows) {
-      if (checkAll.checked) selectedIds.add(item.id); else selectedIds.delete(item.id);
+      if (checkAll.checked)
+        selectedIds.add(item.id);
+      else
+        selectedIds.delete(item.id);
     }
     renderAnswers();
   };
   thSelect.append(checkAll);
   tr.append(thSelect);
-  for (const title of ['No', 'Pendaftar / kode', 'Tanggal', 'Status', 'Aksi']) tr.append(make('th', '', title));
+  for (const title of ['No', 'Pendaftar / kode', 'Tanggal', 'Status', 'Aksi'])
+    tr.append(make('th', '', title));
   head.replaceChildren(tr);
   const body = $('#sheet-body');
   body.replaceChildren();
@@ -1050,7 +1138,8 @@ function renderAnswers() {
     row.setAttribute('aria-label', 'Lihat detail jawaban ' + applicantName(record));
     row.onclick = () => showDetails(record);
     row.onkeydown = e => {
-      if (e.target !== row) return;
+      if (e.target !== row)
+        return;
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
         showDetails(record);
@@ -1062,15 +1151,15 @@ function renderAnswers() {
     check.setAttribute('aria-label', 'Pilih pendaftaran ' + record.id.slice(0, 8));
     check.onclick = e => e.stopPropagation();
     check.onchange = () => {
-      if (check.checked) selectedIds.add(record.id); else selectedIds.delete(record.id);
+      if (check.checked)
+        selectedIds.add(record.id);
+      else
+        selectedIds.delete(record.id);
       renderAnswers();
     };
     checkCell.append(check);
     const number = make('td', 'applicant-index', String(sheetPage * PAGE_SIZE + i + 1));
-    const identityCell = make('td', 'applicant-name-cell'),
-      identity = make('div', 'applicant-list-name'),
-      avatar = make('span', 'applicant-list-avatar', applicantName(record).slice(0, 1).toUpperCase()),
-      identityText = make('span', 'applicant-list-meta');
+    const identityCell = make('td', 'applicant-name-cell'), identity = make('div', 'applicant-list-name'), avatar = make('span', 'applicant-list-avatar', applicantName(record).slice(0, 1).toUpperCase()), identityText = make('span', 'applicant-list-meta');
     identityText.append(make('strong', '', applicantName(record)), make('small', '', record.trackingCode || '#' + record.id.slice(0, 8).toUpperCase()));
     identity.append(avatar, identityText);
     identityCell.append(identity);
@@ -1087,9 +1176,7 @@ function renderAnswers() {
     status.onkeydown = e => e.stopPropagation();
     status.onchange = () => reviewStatus(record, status.value);
     statusCell.append(status);
-    const actions = make('td', 'applicant-actions'),
-      open = button('Lihat ↗', e => showDetails(record), 'sheet-detail'),
-      remove = button('Hapus', () => deleteOne(record), 'sheet-detail sheet-danger');
+    const actions = make('td', 'applicant-actions'), open = button('Lihat ↗', e => showDetails(record), 'sheet-detail'), remove = button('Hapus', () => deleteOne(record), 'sheet-detail sheet-danger');
     open.onclick = e => {
       e.stopPropagation();
       showDetails(record);
@@ -1108,7 +1195,8 @@ function showDetails(sub) {
   currentDetailId = sub.id;
   const root = $('#answer-details');
   root.replaceChildren(make('p', 'field-help', 'Kode: ' + (sub.trackingCode || sub.id.slice(0, 8).toUpperCase()) + ' • ' + new Date(sub.at).toLocaleString('id-ID')));
-  if (sub.status === 'rejected') root.append(make('div', 'detail-answer', 'Alasan penolakan: ' + (sub.reason || '—')));
+  if (sub.status === 'rejected')
+    root.append(make('div', 'detail-answer', 'Alasan penolakan: ' + (sub.reason || '—')));
   const questions = (sub.questions?.length ? sub.questions : Object.keys(sub.answers || {}).map(id => ({ id, title: 'Pertanyaan ' + id })));
   for (const q of questions) {
     const row = make('div', 'detail-answer');
@@ -1120,19 +1208,25 @@ function showDetails(sub) {
       a.target = '_blank';
       a.rel = 'noopener noreferrer';
       row.append(a);
-    } else if (v && typeof v === 'object' && v.imageUrl && SSCircleImagePicker.external(v.imageUrl)) {
+    }
+    else if (v && typeof v === 'object' && v.imageUrl && SSCircleImagePicker.external(v.imageUrl)) {
       const a = make('a', '', 'Lihat gambar melalui URL ↗');
-      a.href = v.imageUrl; a.target = '_blank'; a.rel = 'noopener noreferrer';
+      a.href = v.imageUrl;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
       const pic = make('img', 'ssc-answer-url-preview');
-      pic.src = v.imageUrl; pic.loading = 'lazy'; pic.referrerPolicy = 'no-referrer';
+      pic.src = v.imageUrl;
+      pic.loading = 'lazy';
+      pic.referrerPolicy = 'no-referrer';
       pic.alt = 'Pratinjau gambar jawaban dari URL';
       row.append(a, pic);
-    } else row.append(make('p', '', valueText(v) || '—'));
+    }
+    else
+      row.append(make('p', '', valueText(v) || '—'));
     root.append(row);
   }
   $('#answer-dialog').showModal();
 }
-
 // Pengaturan tampilan publik: bagian terpisah agar admin tidak menggulir ratusan field.
 const appearanceGroups = {
   identity: [
@@ -1177,9 +1271,11 @@ const appearanceGroups = {
   ],
   opening: [['introTitle', 'Judul opening', 'input'], ['introSubtitle', 'Subjudul opening', 'input'], ['introDuration', 'Durasi opening (milidetik, 800–6000)', 'number']]
 };
+// Pengaturan tampilan pendaftaran
 function renderAppearance() {
   const cooldownInput = $('#registration-cooldown-minutes');
-  if (cooldownInput) cooldownInput.value = String(data.settings.cooldownMinutes ?? 30);
+  if (cooldownInput)
+    cooldownInput.value = String(data.settings.cooldownMinutes ?? 30);
   for (const [group, fields] of Object.entries(appearanceGroups)) {
     const root = $('#appearance-' + group + '-fields');
     root.replaceChildren();
@@ -1208,14 +1304,16 @@ function renderAppearance() {
     let hiddenCount = 0;
     for (const [key, label, kind] of fields) {
       const wrap = make('label', 'field-group'), name = make('span', 'field-label', label), input = make(kind === 'textarea' ? 'textarea' : 'input');
-      if (kind === 'input') input.type = 'text';
+      if (kind === 'input')
+        input.type = 'text';
       if (kind === 'number') {
         input.type = 'number';
         input.min = '800';
         input.max = '6000';
         input.step = '100';
       }
-      if (kind === 'textarea') input.rows = 3;
+      if (kind === 'textarea')
+        input.rows = 3;
       input.value = data.settings[key] ?? '';
       input.maxLength = kind === 'textarea' ? 1500 : 250;
       input.dataset.field = key;
@@ -1227,9 +1325,12 @@ function renderAppearance() {
       if (advanced.has(key)) {
         more.append(wrap);
         hiddenCount++;
-      } else root.append(wrap);
+      }
+      else
+        root.append(wrap);
     }
-    if (hiddenCount) root.append(more);
+    if (hiddenCount)
+      root.append(more);
   }
   $('#form-open').checked = !!data.settings.open;
   $('#form-open').onchange = () => {
@@ -1249,14 +1350,17 @@ function updateMediaPreviews() {
   $('#logo-preview').src = logo;
   $('#hero-image-preview').src = data.settings.heroImageUrl || (data.settings.heroMediaId ? '/api/media/' + encodeURIComponent(data.settings.heroMediaId) : logo);
   $('#intro-logo-preview').src = data.settings.introLogoImageUrl || (data.settings.introLogoMediaId ? '/api/media/' + encodeURIComponent(data.settings.introLogoMediaId) : logo);
-  for (const id of ['logo-preview', 'hero-image-preview', 'intro-logo-preview']) $('#' + id).referrerPolicy = 'no-referrer';
-
+  for (const id of ['logo-preview', 'hero-image-preview', 'intro-logo-preview'])
+    $('#' + id).referrerPolicy = 'no-referrer';
 }
-for (const b of document.querySelectorAll('[data-appearance]')) b.onclick = () => {
-  const part = b.dataset.appearance;
-  for (const x of document.querySelectorAll('[data-appearance]')) x.classList.toggle('active', x === b);
-  for (const panel of document.querySelectorAll('[data-appearance-panel]')) panel.classList.toggle('hide', panel.dataset.appearancePanel !== part);
-};
+for (const b of document.querySelectorAll('[data-appearance]'))
+  b.onclick = () => {
+    const part = b.dataset.appearance;
+    for (const x of document.querySelectorAll('[data-appearance]'))
+      x.classList.toggle('active', x === b);
+    for (const panel of document.querySelectorAll('[data-appearance-panel]'))
+      panel.classList.toggle('hide', panel.dataset.appearancePanel !== part);
+  };
 for (const [id, key, messageId] of [
   ['site-logo-input', 'logoMediaId', 'logo-upload-message'],
   ['hero-image-input', 'heroMediaId', 'hero-upload-message'],
@@ -1264,7 +1368,8 @@ for (const [id, key, messageId] of [
 ]) {
   $('#' + id).onchange = async () => {
     const file = $('#' + id).files?.[0];
-    if (!file) return;
+    if (!file)
+      return;
     const msg = $('#' + messageId);
     if (file.size > 12 * 1024 * 1024) {
       msg.textContent = 'File lebih besar dari 12 MB sebelum kompresi.';
@@ -1298,7 +1403,8 @@ for (const [fileId, mediaKey, urlKey, description] of [
   field.hidden = true;
   const wrapper = field.closest('.appearance-logo-actions');
   const label = wrapper?.querySelector('label[for="' + fileId + '"]');
-  if (label) label.hidden = true;
+  if (label)
+    label.hidden = true;
   const holder = make('div', 'ssc-appearance-image-source');
   wrapper?.insertBefore(holder, field);
   SSCircleImagePicker.mount(holder, {
@@ -1336,14 +1442,14 @@ $('#test-opening').onclick = () => {
   window.open(url.href, '_blank', 'noopener');
 };
 $('#open-public').onclick = () => window.open('./', '_blank', 'noopener');
-
 function updateSelectionInfo() {
   const size = selectedIds.size;
   $('#selected-count').textContent = size + ' dipilih';
   $('#delete-selected').disabled = size < 1;
 }
 async function deleteOne(record) {
-  if (!await SSCNotice.confirm('Hapus permanen seluruh jawaban milik #' + record.id.slice(0, 8).toUpperCase() + '? File gambar jawabannya juga akan dihapus.', { danger: true, confirmText: 'Hapus jawaban' })) return;
+  if (!await SSCNotice.confirm('Hapus permanen seluruh jawaban milik #' + record.id.slice(0, 8).toUpperCase() + '? File gambar jawabannya juga akan dihapus.', { danger: true, confirmText: 'Hapus jawaban' }))
+    return;
   try {
     const out = await SSCircle.deleteSubmissions({ scope: 'selected', ids: [record.id], confirmation: 'HAPUS' });
     selectedIds.delete(record.id);
@@ -1356,15 +1462,19 @@ async function deleteOne(record) {
 }
 $('#delete-current').onclick = () => {
   const sub = data.submissions.find(x => x.id === currentDetailId);
-  if (!sub) return;
+  if (!sub)
+    return;
   $('#answer-dialog').close();
   deleteOne(sub);
 };
 $('#delete-selected').onclick = async () => {
   const ids = [...selectedIds];
-  if (!ids.length) return;
-  if (ids.length > 100) return SSCNotice.alert('Maksimal 100 pendaftar sekali hapus.');
-  if (!await SSCNotice.confirm('Hapus permanen ' + ids.length + ' pendaftaran terpilih beserta gambar jawabannya? Tindakan ini tidak bisa dibatalkan.', { danger: true, confirmText: 'Hapus terpilih' })) return;
+  if (!ids.length)
+    return;
+  if (ids.length > 100)
+    return SSCNotice.alert('Maksimal 100 pendaftar sekali hapus.');
+  if (!await SSCNotice.confirm('Hapus permanen ' + ids.length + ' pendaftaran terpilih beserta gambar jawabannya? Tindakan ini tidak bisa dibatalkan.', { danger: true, confirmText: 'Hapus terpilih' }))
+    return;
   try {
     const out = await SSCircle.deleteSubmissions({ scope: 'selected', ids, confirmation: 'HAPUS' });
     await refresh();
@@ -1375,9 +1485,12 @@ $('#delete-selected').onclick = async () => {
   }
 };
 $('#delete-all').onclick = async () => {
-  if (!data.submissions.length) return SSCNotice.alert('Belum ada jawaban untuk dihapus.');
-  if (!await SSCNotice.confirm('Semua pendaftaran dan gambar jawabannya akan dihapus permanen. Pastikan kamu sudah menyimpan salinan spreadsheet Excel sebelum melanjutkan.', { danger: true, confirmText: 'Lanjutkan' })) return;
-  if (!await SSCNotice.promptConfirm('Sebagai konfirmasi terakhir, ketik HAPUS SEMUA.', 'HAPUS SEMUA')) return;
+  if (!data.submissions.length)
+    return SSCNotice.alert('Belum ada jawaban untuk dihapus.');
+  if (!await SSCNotice.confirm('Semua pendaftaran dan gambar jawabannya akan dihapus permanen. Pastikan kamu sudah menyimpan salinan spreadsheet Excel sebelum melanjutkan.', { danger: true, confirmText: 'Lanjutkan' }))
+    return;
+  if (!await SSCNotice.promptConfirm('Sebagai konfirmasi terakhir, ketik HAPUS SEMUA.', 'HAPUS SEMUA'))
+    return;
   const btn = $('#delete-all');
   btn.disabled = true;
   let total = 0, mediaErrors = 0;
@@ -1387,12 +1500,15 @@ $('#delete-all').onclick = async () => {
       const out = await SSCircle.deleteSubmissions({ scope: 'all', confirmation: 'HAPUS SEMUA' });
       total += out.deleted;
       mediaErrors += out.mediaErrors || 0;
-      if (!out.more) break;
-      if (i === 999) throw Error('Batas 100.000 jawaban per operasi tercapai. Lanjutkan penghapusan dari menu admin.');
+      if (!out.more)
+        break;
+      if (i === 999)
+        throw Error('Batas 100.000 jawaban per operasi tercapai. Lanjutkan penghapusan dari menu admin.');
     }
     await refresh();
     SSCNotice.alert('Penghapusan selesai: ' + total + ' pendaftaran.' + (mediaErrors ? ' ' + mediaErrors + ' gambar lama belum berhasil dihapus.' : ''));
-  } catch (e) {
+  }
+  catch (e) {
     SSCNotice.alert('Penghapusan belum sepenuhnya selesai: ' + e.message + ' Data yang sudah terhapus tidak dapat dipulihkan.');
     await refresh().catch(() => { });
   }
@@ -1401,12 +1517,10 @@ $('#delete-all').onclick = async () => {
     btn.textContent = 'Hapus semua jawaban';
   }
 };
-
 SSCircle.isAdmin().then(ok => {
-  if (ok) refresh().catch(e => $('#login-error').textContent = e.message);
+  if (ok)
+    refresh().catch(e => $('#login-error').textContent = e.message);
 });
-
-
 /* SSCircle V9 — Appearance palettes, public media hygiene and answer insights */
 const V9_COLORS = [
   ['accentColor', 'Primary / tombol', '#bc91f5'],
@@ -1507,24 +1621,27 @@ const V9_PRESETS = {
 };
 let mediaLibrary = [], mediaPage = 0, mediaLoading = false, analyticsModalItems = [], analyticsVisible = 0, activeColorCategory = 'brand';
 const COLOR_CATEGORIES = {
-  brand: { name: 'Aksen & sorotan', keys: ['accentColor','secondaryColor','highlightColor','selectedBackgroundColor','selectedTextColor','warningColor'] },
-  background: { name: 'Latar & gradasi', keys: ['backgroundColor','backgroundEndColor','gradientStartColor','gradientEndColor','headerBackgroundColor','footerBackgroundColor','cardGradientStartColor','cardGradientEndColor','heroOverlayColor'] },
-  text: { name: 'Teks & tautan', keys: ['textColor','mutedColor','headingColor','headerTextColor','footerTextColor','linkColor','linkHoverColor','heroTitleColor'] },
-  buttons: { name: 'Tombol & label', keys: ['buttonTextColor','primaryButtonColor','primaryButtonEndColor','secondaryButtonColor','secondaryButtonTextColor','badgeBackgroundColor','badgeTextColor'] },
-  forms: { name: 'Form & kartu', keys: ['panelColor','inputColor','borderColor','inputBorderColor','inputFocusColor','inputTextColor','placeholderColor','dividerColor','shadowColor'] },
-  status: { name: 'Status', keys: ['successColor','dangerColor'] }
+  brand: { name: 'Aksen & sorotan', keys: ['accentColor', 'secondaryColor', 'highlightColor', 'selectedBackgroundColor', 'selectedTextColor', 'warningColor'] },
+  background: { name: 'Latar & gradasi', keys: ['backgroundColor', 'backgroundEndColor', 'gradientStartColor', 'gradientEndColor', 'headerBackgroundColor', 'footerBackgroundColor', 'cardGradientStartColor', 'cardGradientEndColor', 'heroOverlayColor'] },
+  text: { name: 'Teks & tautan', keys: ['textColor', 'mutedColor', 'headingColor', 'headerTextColor', 'footerTextColor', 'linkColor', 'linkHoverColor', 'heroTitleColor'] },
+  buttons: { name: 'Tombol & label', keys: ['buttonTextColor', 'primaryButtonColor', 'primaryButtonEndColor', 'secondaryButtonColor', 'secondaryButtonTextColor', 'badgeBackgroundColor', 'badgeTextColor'] },
+  forms: { name: 'Form & kartu', keys: ['panelColor', 'inputColor', 'borderColor', 'inputBorderColor', 'inputFocusColor', 'inputTextColor', 'placeholderColor', 'dividerColor', 'shadowColor'] },
+  status: { name: 'Status', keys: ['successColor', 'dangerColor'] }
 };
 const mediaKB = bytes => bytes >= 1024 * 1024 ? (bytes / (1024 * 1024)).toFixed(2) + ' MB' : (bytes / 1024).toFixed(1) + ' KB';
+// Palet warna dan pratinjau
 function renderColors() {
   const root = $('#color-editor');
-  if (!root) return;
+  if (!root)
+    return;
   root.replaceChildren();
   const tabs = $('#color-category-tabs');
   tabs.replaceChildren();
-  for (const [id, group] of Object.entries(COLOR_CATEGORIES)) tabs.append(button(group.name, () => {
-    activeColorCategory = id;
-    renderColors();
-  }, 'button ' + (activeColorCategory === id ? 'primary' : 'secondary')));
+  for (const [id, group] of Object.entries(COLOR_CATEGORIES))
+    tabs.append(button(group.name, () => {
+      activeColorCategory = id;
+      renderColors();
+    }, 'button ' + (activeColorCategory === id ? 'primary' : 'secondary')));
   for (const [key, title, base] of V9_COLORS.filter(([id]) => COLOR_CATEGORIES[activeColorCategory].keys.includes(id))) {
     const wrap = make('label', 'color-field');
     const name = make('span', 'field-label', title), control = make('div', 'color-field-controls'), picker = make('input'), txt = make('input');
@@ -1535,7 +1652,8 @@ function renderColors() {
     txt.maxLength = 7;
     txt.setAttribute('aria-label', 'Kode warna ' + title);
     const change = v => {
-      if (!/^#[0-9a-fA-F]{6}$/.test(v)) return;
+      if (!/^#[0-9a-fA-F]{6}$/.test(v))
+        return;
       picker.value = v;
       txt.value = v;
       data.settings[key] = v;
@@ -1545,7 +1663,10 @@ function renderColors() {
     };
     picker.addEventListener('input', () => change(picker.value));
     txt.addEventListener('change', () => {
-      if (/^#[0-9a-fA-F]{6}$/.test(txt.value)) change(txt.value); else txt.value = picker.value;
+      if (/^#[0-9a-fA-F]{6}$/.test(txt.value))
+        change(txt.value);
+      else
+        txt.value = picker.value;
     });
     control.append(picker, txt);
     wrap.append(name, control);
@@ -1553,30 +1674,33 @@ function renderColors() {
   }
   const presets = $('#color-presets');
   presets.replaceChildren();
-  for (const [label, values] of Object.entries(V9_PRESETS)) presets.append(button(label, () => {
-    for (const [key, , base] of V9_COLORS) data.settings[key] = values[key] || base;
-    // Extend every theme preset to the new components instead of retaining old purple shades.
-    const s = data.settings;
-    Object.assign(s, {headerBackgroundColor:s.backgroundEndColor, headerTextColor:s.textColor,
-      footerBackgroundColor:s.backgroundColor, footerTextColor:s.mutedColor, headingColor:s.textColor,
-      linkColor:s.accentColor, linkHoverColor:s.highlightColor, badgeBackgroundColor:s.gradientStartColor,
-      badgeTextColor:s.textColor, placeholderColor:s.mutedColor, dividerColor:s.borderColor,
-      inputBorderColor:s.borderColor, inputFocusColor:s.accentColor, inputTextColor:s.textColor,
-      primaryButtonColor:s.accentColor, primaryButtonEndColor:s.secondaryColor,
-      secondaryButtonColor:s.panelColor, secondaryButtonTextColor:s.textColor,
-      cardGradientStartColor:s.panelColor, cardGradientEndColor:s.gradientEndColor,
-      selectedBackgroundColor:s.secondaryColor, selectedTextColor:s.textColor,
-      shadowColor:s.secondaryColor, warningColor:'#f0c785',heroTitleColor:s.textColor,
-      heroOverlayColor:s.backgroundColor});
-    renderColors();
-    dirtyMark();
-    window.SSCircleThemeEditor?.schedule();
-  }, 'button secondary'));
+  for (const [label, values] of Object.entries(V9_PRESETS))
+    presets.append(button(label, () => {
+      for (const [key, , base] of V9_COLORS)
+        data.settings[key] = values[key] || base;
+      // Extend every theme preset to the new components instead of retaining old purple shades.
+      const s = data.settings;
+      Object.assign(s, { headerBackgroundColor: s.backgroundEndColor, headerTextColor: s.textColor,
+        footerBackgroundColor: s.backgroundColor, footerTextColor: s.mutedColor, headingColor: s.textColor,
+        linkColor: s.accentColor, linkHoverColor: s.highlightColor, badgeBackgroundColor: s.gradientStartColor,
+        badgeTextColor: s.textColor, placeholderColor: s.mutedColor, dividerColor: s.borderColor,
+        inputBorderColor: s.borderColor, inputFocusColor: s.accentColor, inputTextColor: s.textColor,
+        primaryButtonColor: s.accentColor, primaryButtonEndColor: s.secondaryColor,
+        secondaryButtonColor: s.panelColor, secondaryButtonTextColor: s.textColor,
+        cardGradientStartColor: s.panelColor, cardGradientEndColor: s.gradientEndColor,
+        selectedBackgroundColor: s.secondaryColor, selectedTextColor: s.textColor,
+        shadowColor: s.secondaryColor, warningColor: '#f0c785', heroTitleColor: s.textColor,
+        heroOverlayColor: s.backgroundColor });
+      renderColors();
+      dirtyMark();
+      window.SSCircleThemeEditor?.schedule();
+    }, 'button secondary'));
   updateColorPreview();
 }
 function updateColorPreview() {
   const box = $('#color-preview');
-  if (!box) return;
+  if (!box)
+    return;
   const s = data.settings;
   box.style.background = s.pageBackgroundMode === 'solid'
     ? (s.backgroundColor || '#0c0815')
@@ -1597,7 +1721,8 @@ let mediaFilter = 'all';
 const mediaType = f => f.type?.startsWith('video/') ? 'video' : 'image';
 const mediaUrl = f => f.source === 'built-in' ? f.id.replace(/^built-in:/, '') : (f.visibility === 'private' ? '/api/admin/media/' : '/api/media/') + encodeURIComponent(f.id);
 async function loadMediaLibrary() {
-  if (mediaLoading) return;
+  if (mediaLoading)
+    return;
   mediaLoading = true;
   const root = $('#media-list');
   root.replaceChildren(make('p', 'field-help', 'Memuat daftar media...'));
@@ -1628,22 +1753,14 @@ async function loadMediaLibrary() {
       const pct = Math.max(0, Math.min(100, (used / max) * 100)), remaining = Math.max(0, max - used);
       const formatSize = bytes => bytes >= 1000000 ? (bytes / 1000000).toFixed(2) + ' MB' : (bytes / 1000).toFixed(1) + ' KB';
       const title = make('h3', '', measured ? 'Pemakaian penyimpanan' : 'Perkiraan penyimpanan media');
-      const meta = make('div', 'storage-quota-meta'),
-        usage = make('strong', '', formatSize(used) + ' dari ' + formatSize(max)),
-        percent = make('span', '', pct.toFixed(1) + '% terpakai');
+      const meta = make('div', 'storage-quota-meta'), usage = make('strong', '', formatSize(used) + ' dari ' + formatSize(max)), percent = make('span', '', pct.toFixed(1) + '% terpakai');
       meta.append(usage, percent);
       const bar = make('div', 'storage-quota-bar'), fill = make('div', 'storage-quota-bar-fill');
       fill.style.width = pct > 0 ? Math.max(.5, pct) + '%' : '0%';
       bar.append(fill);
-      const footer = make('div', 'storage-quota-meta'),
-        free = make('span', '', 'Sisa ruang acuan: ' + formatSize(remaining)),
-        media = make('span', '', 'File unggahan: ' + formatSize(Number(info.uploadedBytes) || 0));
+      const footer = make('div', 'storage-quota-meta'), free = make('span', '', 'Sisa ruang acuan: ' + formatSize(remaining)), media = make('span', '', 'File unggahan: ' + formatSize(Number(info.uploadedBytes) || 0));
       footer.append(free, media);
-      const hint = make(
-        'p',
-        '',
-        measured ? 'Batas acuan sesuai paket Free. Pemakaian dapat berbeda jika paket atau kapasitas akun berubah.' : 'Estimasi file unggahan; data lain juga menggunakan ruang. Untuk angka kapasitas keseluruhan, lihat pengaturan penyimpanan akun.'
-      );
+      const hint = make('p', '', measured ? 'Batas acuan sesuai paket Free. Pemakaian dapat berbeda jika paket atau kapasitas akun berubah.' : 'Estimasi file unggahan; data lain juga menggunakan ruang. Untuk angka kapasitas keseluruhan, lihat pengaturan penyimpanan akun.');
       quota.append(title, meta, bar, footer, hint);
       if (pct >= 80) {
         bar.classList.add('storage-warning');
@@ -1653,9 +1770,11 @@ async function loadMediaLibrary() {
     }
     $('#media-message').textContent = info.limited ? 'Sebagian media belum ditampilkan. Muat ulang setelah membersihkan file yang tidak digunakan.' : 'Media bawaan tersedia untuk ditinjau. File yang masih digunakan dilindungi dari penghapusan.';
     renderMediaPage();
-  } catch (e) {
+  }
+  catch (e) {
     root.replaceChildren(make('div', 'message message-error', 'Gagal membaca media: ' + e.message));
-  } finally {
+  }
+  finally {
     mediaLoading = false;
   }
 }
@@ -1686,8 +1805,7 @@ function renderMediaPage() {
       preview.alt = file.name || 'Gambar';
       preview.loading = 'lazy';
     }
-    const name = make('strong', 'media-name', file.name || file.id),
-      meta = make('small', '', mediaKB(file.size) + ' · ' + (mediaType(file) === 'video' ? 'Video' : 'Gambar'));
+    const name = make('strong', 'media-name', file.name || file.id), meta = make('small', '', mediaKB(file.size) + ' · ' + (mediaType(file) === 'video' ? 'Video' : 'Gambar'));
     const source = file.source === 'built-in' ? 'Bawaan' : file.visibility === 'private' ? 'Jawaban pendaftar' : file.visibility === 'uploading' ? 'Unggahan belum selesai' : file.used ? 'Sedang digunakan' : 'Tidak digunakan';
     const flag = make('span', 'media-flag ' + ((file.used || file.source === 'built-in' || file.visibility === 'private') ? 'is-used' : ''), source);
     card.append(preview, name, meta, flag);
@@ -1707,18 +1825,23 @@ function renderMediaPage() {
       remove.disabled = file.used;
       card.append(remove);
     }
-    if (file.visibility === 'private') card.append(make('small', 'field-help', 'File jawaban privat. Hapus melalui daftar pendaftar jika sudah tidak diperlukan.'));
-    if (file.source === 'built-in') card.append(make('small', 'field-help', 'Aset bawaan website. Tidak dapat dihapus dari dashboard.'));
+    if (file.visibility === 'private')
+      card.append(make('small', 'field-help', 'File jawaban privat. Hapus melalui daftar pendaftar jika sudah tidak diperlukan.'));
+    if (file.source === 'built-in')
+      card.append(make('small', 'field-help', 'Aset bawaan website. Tidak dapat dihapus dari dashboard.'));
     root.append(card);
   }
-  if (!filtered.length) root.append(make('p', 'empty-state', 'Belum ada media untuk kategori ini.'));
+  if (!filtered.length)
+    root.append(make('p', 'empty-state', 'Belum ada media untuk kategori ini.'));
   $('#media-pagination').textContent = 'Halaman ' + (mediaPage + 1) + ' dari ' + count + ' · ' + filtered.length + ' file';
   $('#media-prev').disabled = mediaPage === 0;
   $('#media-next').disabled = mediaPage >= count - 1;
 }
 async function removeMedia(ids) {
-  if (!ids.length) return;
-  if (!await SSCNotice.confirm('Hapus permanen ' + ids.length + ' media tidak terpakai? Pastikan perubahan Homepage atau formulir sudah disimpan.', { danger: true, confirmText: 'Hapus media' })) return;
+  if (!ids.length)
+    return;
+  if (!await SSCNotice.confirm('Hapus permanen ' + ids.length + ' media tidak terpakai? Pastikan perubahan Homepage atau formulir sudah disimpan.', { danger: true, confirmText: 'Hapus media' }))
+    return;
   let deleted = 0, errors = [];
   try {
     for (let i = 0; i < ids.length; i += 50) {
@@ -1728,15 +1851,15 @@ async function removeMedia(ids) {
     }
     await loadMediaLibrary();
     SSCNotice.alert('Berhasil menghapus ' + deleted + ' file.' + (errors.length ? ' Gagal: ' + errors.length + ' file.' : ''));
-  } catch (e) {
+  }
+  catch (e) {
     SSCNotice.alert('Gagal menghapus media: ' + e.message);
     await loadMediaLibrary();
   }
 }
 function setupExternalImageLibrary() {
   const listPanel = make('div', 'panel ssc-external-image-library');
-  listPanel.append(make('h3', '', 'Foto URL eksternal'), make('p', 'field-help',
-    'Bookmark tautan HTTPS untuk dipakai ulang di editor mana pun. Hanya URL disimpan, tanpa menyalin file ke Cloudflare.'));
+  listPanel.append(make('h3', '', 'Foto URL eksternal'), make('p', 'field-help', 'Bookmark tautan HTTPS untuk dipakai ulang di editor mana pun. Hanya URL disimpan, tanpa menyalin file ke Cloudflare.'));
   const list = make('div', 'ssc-external-image-list');
   const addPanel = make('div');
   listPanel.append(addPanel, list);
@@ -1746,14 +1869,19 @@ function setupExternalImageLibrary() {
     data.settings.homeExternalImages.forEach((entry, index) => {
       const row = make('div', 'ssc-external-image-item');
       const thumbnail = make('img', 'ssc-external-image-thumb');
-      thumbnail.src = entry.src; thumbnail.referrerPolicy = 'no-referrer'; thumbnail.loading = 'lazy';
+      thumbnail.src = entry.src;
+      thumbnail.referrerPolicy = 'no-referrer';
+      thumbnail.loading = 'lazy';
       const name = make('input');
-      name.type = 'text'; name.maxLength = 110; name.value = entry.title || '';
+      name.type = 'text';
+      name.maxLength = 110;
+      name.value = entry.title || '';
       name.placeholder = 'Nama foto URL';
       name.addEventListener('input', () => { entry.title = name.value; dirtyMark(); });
       const remove = button('Hapus', () => {
         data.settings.homeExternalImages.splice(index, 1);
-        dirtyMark(); refreshList();
+        dirtyMark();
+        refreshList();
       }, 'button secondary danger-button');
       row.append(thumbnail, name, remove);
       list.append(row);
@@ -1764,14 +1892,17 @@ function setupExternalImageLibrary() {
     count: () => (data.settings.homeExternalImages || []).length, max: 80,
     onAdd: src => {
       const arr = data.settings.homeExternalImages ||= [];
-      if (arr.some(entry => entry.src === src)) throw Error('URL ini sudah disimpan.');
+      if (arr.some(entry => entry.src === src))
+        throw Error('URL ini sudah disimpan.');
       arr.push({ src, title: 'Gambar URL ' + (arr.length + 1) });
-      dirtyMark(); refreshList();
+      dirtyMark();
+      refreshList();
     }
   });
   const tab = $('#media');
   const stats = $('#media-storage-quota');
-  if (tab && stats) stats.before(listPanel);
+  if (tab && stats)
+    stats.before(listPanel);
   refreshList();
 }
 setupExternalImageLibrary();
@@ -1786,7 +1917,8 @@ $('#media-next').onclick = () => {
 };
 $('#delete-unused-media').onclick = () => {
   const ids = mediaLibrary.filter(m => m.source === 'upload' && !m.used && m.visibility !== 'private').map(m => m.id);
-  if (!ids.length) return SSCNotice.alert('Tidak ada media tidak terpakai.');
+  if (!ids.length)
+    return SSCNotice.alert('Tidak ada media tidak terpakai.');
   removeMedia(ids);
 };
 $('#media-filter').onchange = e => {
@@ -1794,9 +1926,10 @@ $('#media-filter').onchange = e => {
   mediaPage = 0;
   renderMediaPage();
 };
-$('#media-upload-image').onchange = async e => {
+$('#media-upload-image').onchange = async (e) => {
   const files = [...e.target.files || []], status = $('#media-upload-status');
-  if (!files.length) return;
+  if (!files.length)
+    return;
   e.target.disabled = true;
   let success = 0;
   for (const file of files) {
@@ -1804,7 +1937,8 @@ $('#media-upload-image').onchange = async e => {
       await SSCircle.uploadImage(file);
       success++;
       status.textContent = 'Berhasil mengunggah ' + success + ' dari ' + files.length + ' gambar.';
-    } catch (err) {
+    }
+    catch (err) {
       status.textContent = 'Gagal mengunggah ' + file.name + ': ' + err.message;
       break;
     }
@@ -1813,9 +1947,10 @@ $('#media-upload-image').onchange = async e => {
   e.target.value = '';
   await loadMediaLibrary();
 };
-$('#media-upload-video').onchange = async e => {
+$('#media-upload-video').onchange = async (e) => {
   const file = e.target.files?.[0], status = $('#media-upload-status'), progress = $('#media-video-progress');
-  if (!file) return;
+  if (!file)
+    return;
   e.target.disabled = true;
   progress.hidden = false;
   progress.value = 0;
@@ -1836,30 +1971,34 @@ $('#media-upload-video').onchange = async e => {
     progress.hidden = true;
   }
 };
-
 // Aggregate based on exact question IDs and historic snapshots, not labels alone.
 function aggregateAnswers() {
   const result = new Map();
   const filter = $('#analytics-status')?.value || 'all';
   const matches = data.submissions.filter(x => filter === 'all' || x.status === filter);
   const active = new Map();
-  for (const p of data.pages) for (const block of p.blocks || []) if (block.type === 'question') active.set(block.question.id, { ...block.question, pageTitle: p.title });
+  for (const p of data.pages)
+    for (const block of p.blocks || [])
+      if (block.type === 'question')
+        active.set(block.question.id, { ...block.question, pageTitle: p.title });
   for (const sub of matches) {
     const old = new Map((sub.questions || []).map(q => [q.id, q]));
     for (const [id, value] of Object.entries(sub.answers || {})) {
       const q = old.get(id) || active.get(id) || { id, title: 'Pertanyaan lama ' + id, type: typeof value === 'string' ? 'short' : 'multi' };
-      if (!result.has(id)) result.set(id, {
-        id,
-        title: q.title || id,
-        pageTitle: q.pageTitle || '',
-        type: q.type || 'short',
-        respondents: 0,
-        counts: new Map(),
-        written: [],
-        images: 0
-      });
+      if (!result.has(id))
+        result.set(id, {
+          id,
+          title: q.title || id,
+          pageTitle: q.pageTitle || '',
+          type: q.type || 'short',
+          respondents: 0,
+          counts: new Map(),
+          written: [],
+          images: 0
+        });
       const entry = result.get(id);
-      if (value === null || value === undefined || value === '' || (Array.isArray(value) && !value.length)) continue;
+      if (value === null || value === undefined || value === '' || (Array.isArray(value) && !value.length))
+        continue;
       if (entry.type === 'image_upload') {
         if (value?.mediaId) {
           entry.images++;
@@ -1870,15 +2009,19 @@ function aggregateAnswers() {
       const values = Array.isArray(value) ? value : [value];
       entry.respondents++;
       for (const val of values) {
-        if (val === null || val === undefined || val === '') continue;
+        if (val === null || val === undefined || val === '')
+          continue;
         const text = String(val);
         if (['single', 'multi', 'select'].includes(entry.type)) {
           if (text.startsWith('__SSC_OTHER__:')) {
             entry.counts.set('Jawaban lainnya', (entry.counts.get('Jawaban lainnya') || 0) + 1);
             entry.written.push({ value: text.slice('__SSC_OTHER__:'.length), who: applicantName(sub) });
           }
-          else entry.counts.set(text, (entry.counts.get(text) || 0) + 1);
-        } else entry.written.push({ value: valueText(val), who: applicantName(sub) });
+          else
+            entry.counts.set(text, (entry.counts.get(text) || 0) + 1);
+        }
+        else
+          entry.written.push({ value: valueText(val), who: applicantName(sub) });
       }
     }
   }
@@ -1896,9 +2039,11 @@ const PIE_COLORS = [
   '#aec6f5',
   '#cba2b9'
 ];
+// Ringkasan dan statistik pendaftar
 function renderAnalytics() {
   const root = $('#analytics-list');
-  if (!root) return;
+  if (!root)
+    return;
   root.replaceChildren();
   const all = aggregateAnswers(), query = $('#analytics-search').value.trim().toLocaleLowerCase('id');
   const items = all.filter(x => !query || (x.title + ' ' + x.pageTitle).toLocaleLowerCase('id').includes(query));
@@ -1931,16 +2076,19 @@ function renderAnalytics() {
       const area = make('div', 'analytics-chart-row');
       area.append(donut, legend);
       card.append(area);
-      if (q.type === 'multi') card.append(make('p', 'field-help', 'Persentase dihitung dari total pilihan yang dicentang; satu pemain dapat memilih beberapa opsi.'));
+      if (q.type === 'multi')
+        card.append(make('p', 'field-help', 'Persentase dihitung dari total pilihan yang dicentang; satu pemain dapat memilih beberapa opsi.'));
     }
     if (q.written.length) {
       const head = make('p', 'analytics-written-heading', 'Jawaban diketik (' + q.written.length + ')');
       card.append(head);
       const samples = make('div', 'analytics-written');
-      for (const item of q.written.slice(0, 3)) samples.append(make('div', 'analytics-written-item', item.value));
+      for (const item of q.written.slice(0, 3))
+        samples.append(make('div', 'analytics-written-item', item.value));
       card.append(samples);
     }
-    if (q.images) card.append(make('p', 'field-help', q.images + ' gambar dikirim oleh pendaftar.'));
+    if (q.images)
+      card.append(make('p', 'field-help', q.images + ' gambar dikirim oleh pendaftar.'));
     card.append(button('Lihat lebih lanjut →', () => openAnalyticsDetail(q), 'button secondary'));
     root.append(card);
   }
@@ -1956,7 +2104,8 @@ function openAnalyticsDetail(q) {
   if (q.written.length) {
     analyticsModalItems.push('── Semua jawaban teks (' + q.written.length + ') ──', ...q.written.map(x => x.value + ' · ' + x.who));
   }
-  if (q.images) analyticsModalItems.push(q.images + ' lampiran gambar — buka detail pendaftar untuk melihatnya.');
+  if (q.images)
+    analyticsModalItems.push(q.images + ' lampiran gambar — buka detail pendaftar untuk melihatnya.');
   analyticsVisible = 0;
   root.replaceChildren();
   dialog.showModal();
@@ -1964,7 +2113,8 @@ function openAnalyticsDetail(q) {
 }
 function showMoreAnalytics() {
   const root = $('#analytics-detail-content');
-  for (const value of analyticsModalItems.slice(analyticsVisible, analyticsVisible + 25)) root.append(make('div', 'analytics-detail-row', value));
+  for (const value of analyticsModalItems.slice(analyticsVisible, analyticsVisible + 25))
+    root.append(make('div', 'analytics-detail-row', value));
   analyticsVisible = Math.min(analyticsVisible + 25, analyticsModalItems.length);
   const more = $('#analytics-more');
   more.hidden = analyticsVisible >= analyticsModalItems.length;
@@ -1978,7 +2128,8 @@ $('#analytics-refresh').onclick = async () => {
   try {
     await refresh();
     tab('analytics');
-  } catch (e) {
+  }
+  catch (e) {
     SSCNotice.alert(e.message);
   }
 };

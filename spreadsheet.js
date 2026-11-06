@@ -1,12 +1,17 @@
 /* SSCircle Server: protected, in-browser spreadsheet + Excel workbook export.
    Operates on authenticated response data; never fetches public submissions. */
+
+// Tabel data pendaftar dan ekspor spreadsheet.
+
 'use strict';
 const SSCircleSheet = (() => {
   const $ = id => document.getElementById(id);
   const create = (tag, text, cls = '') => {
     const el = document.createElement(tag);
-    if (text !== undefined) el.textContent = String(text);
-    if (cls) el.className = cls;
+    if (text !== undefined)
+      el.textContent = String(text);
+    if (cls)
+      el.className = cls;
     return el;
   };
   const PAGE_ROWS = 100;
@@ -27,13 +32,16 @@ const SSCircleSheet = (() => {
     return Number.isNaN(date.getTime()) ? String(raw || '') : date.toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   };
   function answerText(raw) {
-    if (raw === undefined || raw === null || raw === '') return '';
-    if (Array.isArray(raw)) return raw.map(answerText).filter(Boolean).join('; ');
+    if (raw === undefined || raw === null || raw === '')
+      return '';
+    if (Array.isArray(raw))
+      return raw.map(answerText).filter(Boolean).join('; ');
     if (typeof raw === 'string') {
       return raw.startsWith('__SSC_OTHER__:') ? 'Jawaban lainnya: ' + raw.slice(14) : raw;
     }
     if (typeof raw === 'object') {
-      if (raw.filename) return 'Gambar: ' + raw.filename;
+      if (raw.filename)
+        return 'Gambar: ' + raw.filename;
       return state.valueText(raw);
     }
     return String(raw);
@@ -50,19 +58,27 @@ const SSCircleSheet = (() => {
     ];
   }
   function field(row, id, index) {
-    if (id === 'number') return index + 1;
-    if (id === 'username') return state.applicantName(row);
-    if (id === 'date') return fmtDate(row.at);
-    if (id === 'status') return statusNames[row.status] || row.status;
-    if (id === 'code') return row.trackingCode || row.id.slice(0, 8).toUpperCase();
-    if (id === 'reason') return row.reason || '';
+    if (id === 'number')
+      return index + 1;
+    if (id === 'username')
+      return state.applicantName(row);
+    if (id === 'date')
+      return fmtDate(row.at);
+    if (id === 'status')
+      return statusNames[row.status] || row.status;
+    if (id === 'code')
+      return row.trackingCode || row.id.slice(0, 8).toUpperCase();
+    if (id === 'reason')
+      return row.reason || '';
     return answerText(row.answers?.[id]);
   }
   function filtered() {
     const q = state.query, st = state.status;
     return [...state.data.submissions].sort((a, b) => String(a.at).localeCompare(String(b.at)) || String(a.id).localeCompare(String(b.id))).filter(sub => {
-      if (st !== 'all' && sub.status !== st) return false;
-      if (!q) return true;
+      if (st !== 'all' && sub.status !== st)
+        return false;
+      if (!q)
+        return true;
       const values = [
         state.applicantName(sub),
         sub.trackingCode || '',
@@ -93,11 +109,13 @@ const SSCircleSheet = (() => {
       r.tabIndex = 0;
       r.setAttribute('aria-label', 'Buka detail ' + state.applicantName(item));
       r.addEventListener('click', e => {
-        if (e.target.closest('a')) return;
+        if (e.target.closest('a'))
+          return;
         state.showDetails(item);
       });
       r.addEventListener('keydown', e => {
-        if (e.target !== r) return;
+        if (e.target !== r)
+          return;
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           state.showDetails(item);
@@ -107,11 +125,13 @@ const SSCircleSheet = (() => {
         const value = field(item, column.id, start + i);
         const td = create('td', value || '—');
         td.title = String(value || '');
-        if (column.id === 'number') td.textContent = String(start + i + 1);
+        if (column.id === 'number')
+          td.textContent = String(start + i + 1);
         if (column.id === 'status') {
           td.replaceChildren(create('span', value, 'fullsheet-status-badge ' + item.status));
         }
-        if (column.id === 'code') td.style.fontFamily = 'ui-monospace,monospace';
+        if (column.id === 'code')
+          td.style.fontFamily = 'ui-monospace,monospace';
         if (![
           'number',
           'username',
@@ -150,7 +170,8 @@ const SSCircleSheet = (() => {
   }
   function columnLetter(n) {
     let s = '';
-    for (let v = n + 1; v > 0; v = Math.floor((v - 1) / 26))s = String.fromCharCode(65 + (v - 1) % 26) + s;
+    for (let v = n + 1; v > 0; v = Math.floor((v - 1) / 26))
+      s = String.fromCharCode(65 + (v - 1) % 26) + s;
     return s;
   }
   function xml(s) {
@@ -171,7 +192,8 @@ const SSCircleSheet = (() => {
       + sheetRows.map((r, index) => `<row r="${index + 1}"${index === 0 ? ' ht="25" customHeight="1"' : ''}>`
         + r.map((v, i) => {
           const ref = columnLetter(i) + (index + 1);
-          if (index > 0 && i === 0) return `<c r="${ref}"><v>${index}</v></c>`;
+          if (index > 0 && i === 0)
+            return `<c r="${ref}"><v>${index}</v></c>`;
           const value = String(v ?? '').slice(0, 32767);
           return `<c r="${ref}" t="inlineStr"${index === 0 ? ' s="1"' : ''}><is><t xml:space="preserve">${xml(value)}</t></is></c>`;
         }).join('')
@@ -202,12 +224,14 @@ const SSCircleSheet = (() => {
   const encoder = new TextEncoder();
   const crcTable = Array.from({ length: 256 }, (_, i) => {
     let c = i;
-    for (let j = 0; j < 8; j++)c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+    for (let j = 0; j < 8; j++)
+      c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
     return c >>> 0;
   });
   function crc32(arr) {
     let crc = 0xffffffff;
-    for (const b of arr) crc = crcTable[(crc ^ b) & 255] ^ (crc >>> 8);
+    for (const b of arr)
+      crc = crcTable[(crc ^ b) & 255] ^ (crc >>> 8);
     return (crc ^ 0xffffffff) >>> 0;
   }
   function zipFiles(files) {
@@ -251,7 +275,8 @@ const SSCircleSheet = (() => {
     return new Blob([...parts, ...central, end], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   }
   function downloadExcel() {
-    if (!state.data) return;
+    if (!state.data)
+      return;
     const btn = $('fullsheet-download');
     btn.disabled = true;
     btn.textContent = 'Menyiapkan Excel...';
@@ -266,7 +291,8 @@ const SSCircleSheet = (() => {
     }
     catch (err) {
       SSCNotice.alert('Gagal membuat spreadsheet: ' + err.message);
-    } finally {
+    }
+    finally {
       btn.disabled = false;
       btn.textContent = '↓ Unduh Excel (.xlsx)';
     }
@@ -274,12 +300,14 @@ const SSCircleSheet = (() => {
   $('fullsheet-search').addEventListener('input', e => {
     state.query = e.target.value.trim().toLocaleLowerCase('id-ID');
     state.page = 0;
-    if (state.data) renderRows();
+    if (state.data)
+      renderRows();
   });
   $('fullsheet-status').addEventListener('change', e => {
     state.status = e.target.value;
     state.page = 0;
-    if (state.data) renderRows();
+    if (state.data)
+      renderRows();
   });
   $('fullsheet-prev').addEventListener('click', () => {
     state.page = Math.max(0, state.page - 1);
@@ -291,7 +319,8 @@ const SSCircleSheet = (() => {
   });
   $('fullsheet-download').addEventListener('click', downloadExcel);
   $('fullsheet-refresh').addEventListener('click', () => {
-    if (window.SSCRefreshSheet) void SSCRefreshSheet();
+    if (window.SSCRefreshSheet)
+      void SSCRefreshSheet();
   });
   return { render, createWorkbook, columns };
 })();

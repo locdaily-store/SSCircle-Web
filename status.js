@@ -1,4 +1,7 @@
 /* Standalone secure status lookup. Only the code is submitted. */
+
+// Cek status pendaftaran dan akses kode milik pendaftar.
+
 'use strict';
 (() => {
   const $ = id => document.getElementById(id);
@@ -20,7 +23,8 @@
   };
   const text = (tag, cls, value) => {
     const n = document.createElement(tag);
-    if (cls) n.className = cls;
+    if (cls)
+      n.className = cls;
     n.textContent = String(value ?? '');
     return n;
   };
@@ -36,7 +40,9 @@
       borderColor: '--ssc-border',
       highlightColor: '--ssc-highlight'
     };
-    for (const [k, v] of Object.entries(map)) if (/^#[0-9a-f]{6}$/i.test(settings[k] || '')) document.documentElement.style.setProperty(v, settings[k]);
+    for (const [k, v] of Object.entries(map))
+      if (/^#[0-9a-f]{6}$/i.test(settings[k] || ''))
+        document.documentElement.style.setProperty(v, settings[k]);
   }
   let settings = { ...defaults };
   SSCircle.getForm().then(form => {
@@ -60,14 +66,18 @@
     $('status-own-copy').textContent = settings.statusOwnCodeCopyText;
     $('status-check-own').textContent = settings.statusOwnCodeCheckText + ' ↗';
     $('status-own-logout').textContent = settings.statusOwnCodeLogoutText;
-    if (settings.statusOwnCodeEnabled === false) $('status-code').value = '';
+    if (settings.statusOwnCodeEnabled === false)
+      $('status-code').value = '';
     const logo = settings.logoImageUrl || (settings.logoMediaId ? '/api/media/' + settings.logoMediaId : 'assets/sscircle-logo.png');
     $('status-logo').src = logo;
     $('status-footer-logo').src = logo;
-    if ($('status-footer-text')) $('status-footer-text').textContent = settings.homeFooterText || 'One circle. Endless stories.';
+    if ($('status-footer-text'))
+      $('status-footer-text').textContent = settings.homeFooterText || 'One circle. Endless stories.';
     const footerDiscord = $('ssc-footer-discord');
-    if (footerDiscord && /^https:\/\/(discord\.gg|discord\.com)\//.test(settings.homeDiscordUrl || '')) footerDiscord.href = settings.homeDiscordUrl;
-    if (/^https:\/\/(discord\.gg|discord\.com)\//.test(settings.homeDiscordUrl)) $('status-discord-link').href = settings.homeDiscordUrl;
+    if (footerDiscord && /^https:\/\/(discord\.gg|discord\.com)\//.test(settings.homeDiscordUrl || ''))
+      footerDiscord.href = settings.homeDiscordUrl;
+    if (/^https:\/\/(discord\.gg|discord\.com)\//.test(settings.homeDiscordUrl))
+      $('status-discord-link').href = settings.homeDiscordUrl;
   }).catch(() => { });
   const playerRequest = async (path, payload) => {
     const response = await fetch(path, {
@@ -77,7 +87,8 @@
       ...(payload ? { body: JSON.stringify(payload) } : {})
     });
     const result = await response.json();
-    if (!response.ok) throw Error(result.error || 'Tidak dapat masuk.');
+    if (!response.ok)
+      throw Error(result.error || 'Tidak dapat masuk.');
     return result;
   };
   const votingAccess = new URLSearchParams(location.search).get('akses-voting');
@@ -103,7 +114,8 @@
       $('status-voting-notice').textContent = account.status === 'rejected'
         ? 'Status Ditolak. Akses voting tidak tersedia untuk kode ini.'
         : 'Status Menunggu. Kamu bisa masuk voting setelah admin menerima pendaftaranmu.';
-    } else if (accepted) {
+    }
+    else if (accepted) {
       $('status-voting-notice').hidden = true;
     }
     if (!active) {
@@ -112,18 +124,20 @@
     }
     if (active) {
       $('status-own-code').textContent = account.code;
-      if (settings.statusOwnCodeEnabled !== false) $('status-code').value = account.code;
+      if (settings.statusOwnCodeEnabled !== false)
+        $('status-code').value = account.code;
       $('status-my-code-help').textContent = 'Sesi akun aktif. Kode bisa dilihat dan disalin berkali-kali pada perangkat ini tanpa login ulang.';
     }
   }
   async function refreshOwnCode() {
     try {
       showOwnCode(await playerRequest('/api/player/me'));
-    } catch {
+    }
+    catch {
       showOwnCode(null);
     }
   }
-  $('status-my-code-login').addEventListener('submit', async event => {
+  $('status-my-code-login').addEventListener('submit', async (event) => {
     event.preventDefault();
     const help = $('status-my-code-help');
     help.textContent = 'Memeriksa kode...';
@@ -148,7 +162,8 @@
   $('status-own-logout').addEventListener('click', async () => {
     try {
       await playerRequest('/api/player/logout', {});
-    } catch { }
+    }
+    catch { }
     showOwnCode(null);
     $('status-my-code-help').textContent = 'Kamu sudah keluar. Masuk kembali untuk melihat kode milikmu.';
   });
@@ -170,8 +185,7 @@
       const card = text('div', 'status-result-card ' + result.status);
       const visual = text('div', 'status-visual status-visual-' + result.status);
       visual.setAttribute('aria-hidden', 'true');
-      const aura = text('span', 'status-visual-aura'),
-        glyph = text('span', 'status-visual-glyph', result.status === 'accepted' ? '✓' : result.status === 'rejected' ? '×' : '◷');
+      const aura = text('span', 'status-visual-aura'), glyph = text('span', 'status-visual-glyph', result.status === 'accepted' ? '✓' : result.status === 'rejected' ? '×' : '◷');
       visual.append(aura, glyph);
       if (result.status === 'accepted') {
         for (let i = 0; i < 6; i++) {
@@ -192,23 +206,28 @@
       if (result.status === 'rejected') {
         card.append(text('strong', 'rejection-label', 'Alasan penolakan:'), text('p', 'rejection-text', result.reason || 'Tidak ada alasan tambahan.'));
       }
-      if (result.submittedAt) card.append(text('small', '', 'Dikirim: ' + new Date(result.submittedAt).toLocaleString('id-ID')));
+      if (result.submittedAt)
+        card.append(text('small', '', 'Dikirim: ' + new Date(result.submittedAt).toLocaleString('id-ID')));
       if (result.status === 'accepted') {
         const link = text('a', 'button primary status-voting-result-link', 'Masuk ke Voting ↗');
         link.href = '/voting';
         let redirecting = false;
         const openVoting = async () => {
-          if (redirecting) return;
+          if (redirecting)
+            return;
           redirecting = true;
           link.textContent = 'Memeriksa akses Voting...';
           try {
             const account = await loginPromise;
-            if (account.status !== 'accepted') throw Error('Hanya kode berstatus Diterima yang bisa membuka voting.');
+            if (account.status !== 'accepted')
+              throw Error('Hanya kode berstatus Diterima yang bisa membuka voting.');
             // Pastikan browser telah menerima sesi sebelum meminta dokumen yang dilindungi.
             const session = await playerRequest('/api/player/me');
-            if (!session.authenticated || session.status !== 'accepted') throw Error('Sesi Voting belum aktif. Silakan masuk kembali.');
+            if (!session.authenticated || session.status !== 'accepted')
+              throw Error('Sesi Voting belum aktif. Silakan masuk kembali.');
             window.location.assign(link.href);
-          } catch (error) {
+          }
+          catch (error) {
             link.textContent = 'Masuk ke Voting ↗';
             $('status-voting-notice').textContent = 'Status Diterima, tetapi sesi Voting belum berhasil: ' + error.message;
             $('status-voting-notice').hidden = false;
@@ -224,12 +243,15 @@
         // Sesuai alur pendaftaran: kode Diterima langsung masuk ke Voting.
         // Jika autentikasi gagal, tetap tampilkan hasil status dan tombol untuk mencoba lagi.
         void openVoting();
-      } else {
+      }
+      else {
         root.append(card);
       }
-    } catch (error) {
+    }
+    catch (error) {
       root.append(text('div', 'message message-error', error.message));
-    } finally {
+    }
+    finally {
       btn.disabled = false;
       btn.textContent = (settings.statusButtonText || 'Periksa status') + ' ↗';
     }
@@ -240,7 +262,8 @@
   });
   $('status-check-own').addEventListener('click', () => {
     const code = $('status-own-code').textContent.trim();
-    if (!code) return;
+    if (!code)
+      return;
     void checkStatus(code);
     $('status-result').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   });
