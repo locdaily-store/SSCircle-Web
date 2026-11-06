@@ -14,7 +14,7 @@ permissions:
 jobs:
   validate-and-package:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - name: Ambil kode SSCircle
         uses: actions/checkout@v4
@@ -35,6 +35,17 @@ jobs:
             node --check "$file"
           done < <(find . -type f -name '*.js' ! -path './.git/*' ! -path './.github/*' ! -path './node_modules/*' -print0)
           python -c 'import json; json.load(open("_routes.json", encoding="utf-8"))'
+
+      - name: Uji sesi Voting dan penyimpanan Admin Control
+        run: node --test tests/worker.test.mjs
+
+      - name: Pasang browser untuk tes responsif
+        run: |
+          python -m pip install 'playwright>=1.50,<2'
+          python -m playwright install --with-deps chromium
+
+      - name: Uji warna CSP dan tampilan HP
+        run: python tests/browser_smoke.py
 
       - name: Periksa file sensitif (pemeriksaan dasar)
         shell: bash
