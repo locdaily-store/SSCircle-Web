@@ -1,0 +1,52 @@
+# SSCircle: root repository = direktori website Cloudflare
+# Jangan abaikan _worker.js, _routes.json, HTML, CSS, JS, atau assets/.
+
+# Kredensial / konfigurasi lokal
+.env
+.env.*
+.dev.vars
+.dev.vars.*
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+credentials.json
+service-account*.json
+secrets.json
+
+# Database, ekspor data pengguna, backup
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.sql
+*.dump
+*.bak
+*.backup
+backups/
+private/
+
+# Arsip / hasil build dan cache
+*.zip
+*.7z
+*.rar
+*.tar
+*.tar.gz
+*.tgz
+node_modules/
+dist/
+build/
+coverage/
+.wrangler/
+.cloudflare/
+__pycache__/
+*.pyc
+*.log
+
+# Editor / sistem operasi
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
