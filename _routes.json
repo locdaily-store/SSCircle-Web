@@ -7,7 +7,9 @@
     "/registration",
     "/registration.html",
     "/rules",
-    "/rules.html"
+    "/rules.html",
+    "/seasons",
+    "/seasons.html"
   ],
   "exclude": []
 }

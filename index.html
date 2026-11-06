@@ -9,11 +9,12 @@
     <title>SSCircle Server | Official Website</title>
     <link rel="icon" href="assets/sscircle-logo.png" type="image/png">
     <link rel="preload" href="assets/gallery/sscircle-01.webp" as="image">
-    <link rel="stylesheet" href="style.css?v=10.29.0">
+    <link rel="stylesheet" href="style.css?v=10.31.0">
     <script src="color-theme.js?v=10.26.0" defer></script>
     <script src="cloudflare-api.js?v=10.26.0" defer></script>
     <script src="social-links.js?v=10.26.0" defer></script>
-    <script src="homepage.js?v=10.26.0" defer></script>
+    <script src="homepage.js?v=10.31.0" defer></script>
+    <link rel="stylesheet" href="community-pages.css?v=10.31.0">
   </head>
   <body class="home-page theme-v3">
 
@@ -27,6 +28,7 @@
         <a class="home-nav-link" href="#tentang">Tentang</a>
         <a class="home-nav-link" href="#galeri">Galeri</a>
         <a class="home-nav-link" href="events.html">Event</a>
+          <a class="home-nav-link" data-season-link href="seasons.html" hidden>Seasons</a>
         <a class="home-nav-link" href="status.html">Cek Status</a>
         <a class="home-nav-join" href="registration.html">Pendaftaran <span aria-hidden="true">↗</span></a>
       </nav>
@@ -189,6 +191,16 @@
           <div class="home-profile-grid" id="home-profile-grid" aria-label="Foto Profil &amp; Sejarah SSCircle"></div>
         </section>
 
+        <!-- Season Highlights: data sama dengan Leaderboard dan arsip season -->
+        <section class="home-season-highlights home-container home-reveal" id="home-season-highlights" hidden>
+          <div class="home-section-label"><span>HISTORY</span><i></i><span>SEASON ARCHIVE</span></div>
+          <div class="home-season-header">
+            <div><h2 id="home-season-title">Season Highlights</h2><p id="home-season-description"></p></div>
+            <a class="home-button home-button-secondary" id="home-season-link" href="seasons.html">Jelajahi Semua Season ↗</a>
+          </div>
+          <div class="home-season-cards" id="home-season-cards"></div>
+        </section>
+
         <!-- Leaderboard pemain -->
         <section class="home-leaderboard home-container home-reveal" id="leaderboard">
           <div class="home-section-label">
@@ -237,6 +249,7 @@
           <a href="status.html">Cek Status</a>
           <a href="rules.html">Peraturan Server</a>
           <a href="events.html">Event</a>
+          <a href="seasons.html" data-season-link hidden>Seasons</a>
           <a href="https://discord.gg/vQQSgY2GRS" target="_blank" rel="noopener noreferrer">Discord ↗</a>
         </div>
         <small>© 2026 SSCircle Server</small>

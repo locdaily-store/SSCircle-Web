@@ -1402,6 +1402,24 @@ window.SSCircleHomeAdmin = (() => {
     toggle(leaderboard, 'homeShowLeaderboard', 'Tampilkan leaderboard di Homepage', 'Jika dimatikan, semua data tetap tersimpan tetapi tidak tampil di homepage.');
     formGrid(leaderboard, [['homeLeaderboardTitle', 'Judul leaderboard', 'input'], ['homeLeaderboardText', 'Deskripsi leaderboard', 'textarea']]);
     leaderboardEditor(leaderboard);
+    const highlights = section('10A · Season Highlights', 'Tampilkan cuplikan season yang sudah dipublikasikan di halaman arsip. Kartu dapat dipindahkan dari Homepage Builder.');
+    toggle(highlights, 'homeSeasonHighlightsEnabled', 'Tampilkan Season Highlights di Homepage', 'Arsip harus aktif dan ada season yang dipublikasikan agar kartu tampil.');
+    formGrid(highlights, [
+      ['homeSeasonHighlightsTitle', 'Judul bagian', 'input'],
+      ['homeSeasonHighlightsDescription', 'Deskripsi singkat', 'textarea'],
+      ['homeSeasonHighlightsButton', 'Teks tombol lihat arsip', 'input']
+    ]);
+    const hiOptions=node('div','home-admin-gallery-add');
+    const countLabel=node('label','field-group');countLabel.append(node('span','field-label','Jumlah kartu yang ditampilkan'));
+    const countSelect=node('select');for(const n of [1,2,3]){const option=node('option','',String(n));option.value=String(n);countSelect.append(option);}
+    countSelect.value=String(state.settings.homeSeasonHighlightsCount||2);countSelect.onchange=()=>{state.settings.homeSeasonHighlightsCount=Number(countSelect.value);changed();};
+    countLabel.append(countSelect);hiOptions.append(countLabel);
+    const layoutLabel=node('label','field-group');layoutLabel.append(node('span','field-label','Model kartu'));
+    const layoutSelect=node('select');for(const [value,label] of [['cards','Kartu ringkas'],['timeline','Mini timeline']]){const opt=node('option','',label);opt.value=value;layoutSelect.append(opt);}
+    layoutSelect.value=state.settings.homeSeasonHighlightsStyle||'cards';layoutSelect.onchange=()=>{state.settings.homeSeasonHighlightsStyle=layoutSelect.value;changed();};
+    layoutLabel.append(layoutSelect);hiOptions.append(layoutLabel);highlights.append(hiOptions);
+    toggle(highlights, 'homeSeasonHighlightsHideEmpty', 'Sembunyikan bagian jika belum ada season', 'Homepage tetap rapi ketika arsip belum diisi.');
+    highlights.append(node('p','field-help','Kelola foto, penghargaan dan cerita di menu “Atur Season & Sejarah”. Leaderboard tetap menggunakan data yang sama.'));
     const statusSection = section('11 · Cek Status & Kode Saya', 'Atur kartu Homepage dan seluruh pengaturan halaman Cek Status dari satu tempat.');
     formGrid(statusSection, [
       ['homeStatusEyebrow', 'Label kecil', 'input'],

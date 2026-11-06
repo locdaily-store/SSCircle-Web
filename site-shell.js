@@ -28,6 +28,7 @@ window.SSCircleShell = (() => {
     }
     const footerText = document.getElementById('home-footer-text');
     if (footerText) footerText.textContent = settings.homeFooterText || settings.footerText || 'One circle. Endless stories.';
+    document.querySelectorAll('[data-season-link]').forEach(link => {link.hidden=settings.seasonArchiveEnabled!==true;});
     const discord = settings.homeDiscordUrl;
     if (typeof discord === 'string' && /^https:\/\/(?:discord\.gg|discord\.com)\//i.test(discord))
       document.querySelectorAll('.home-footer-links a[href^="https://discord"]').forEach(link => { link.href = discord; });

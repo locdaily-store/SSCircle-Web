@@ -66,6 +66,14 @@
     homeVotingResultsMode: 'after_end',
     homeVotingOptions: [{ id: 'opsi-1', label: 'Pilihan 1' }, { id: 'opsi-2', label: 'Pilihan 2' }],
     homeVotingVotes: [],
+    seasonArchiveEnabled: false,
+    homeSeasonHighlightsEnabled: false,
+    homeSeasonHighlightsCount: 2,
+    homeSeasonHighlightsStyle: 'cards',
+    homeSeasonHighlightsHideEmpty: true,
+    homeSeasonHighlightsTitle: 'Season Highlights',
+    homeSeasonHighlightsDescription: 'Cerita dan kenangan dari season SSCircle.',
+    homeSeasonHighlightsButton: 'Jelajahi Semua Season ↗',
     homeLeaderboardEnabled: false,
     homeLeaderboardTitle: 'Leaderboard Komunitas',
     homeLeaderboardText: 'Riwayat pemain terbaik dari setiap season SSCircle.',
@@ -126,6 +134,7 @@
       { id: 'community', kind: 'builtin' },
       { id: 'profile', kind: 'builtin' },
       { id: 'leaderboard', kind: 'builtin' },
+      { id: 'season-highlights', kind: 'builtin' },
       { id: 'status', kind: 'builtin' }
     ],
     accentColor: '#bc91f5',
@@ -150,6 +159,7 @@
     community: 'komunitas',
     profile: 'profile',
     leaderboard: 'leaderboard',
+    'season-highlights': 'home-season-highlights',
     status: 'status-quick'
   };
   const video = $('home-cinematic'), hero = $('home-hero');
@@ -656,6 +666,29 @@
     list.dataset.layout=s.homeUpcomingLayout==='slider'?'slider':'grid';
     section.hidden = s.homeUpcomingEnabled !== true || (!list.children.length && s.homeUpcomingHideEmpty !== false);
   }
+  function renderSeasonHighlights(settings) {
+    const section=$('home-season-highlights'),root=$('home-season-cards');
+    if(!section||!root) return;
+    root.replaceChildren();
+    paint('home-season-title',settings.homeSeasonHighlightsTitle||'Season Highlights');
+    paint('home-season-description',settings.homeSeasonHighlightsDescription||'');
+    paint('home-season-link',settings.homeSeasonHighlightsButton||'Jelajahi Semua Season ↗');
+    const seasons=(Array.isArray(settings.homeLeaderboardSeasons)?settings.homeLeaderboardSeasons:[])
+      .filter(item=>item?.archivePublished===true).slice(0,[1,2,3].includes(Number(settings.homeSeasonHighlightsCount))?Number(settings.homeSeasonHighlightsCount):2);
+    root.dataset.layout=settings.homeSeasonHighlightsStyle==='timeline'?'timeline':'cards';
+    for(const season of seasons){
+      const card=document.createElement('a');card.href='seasons.html';card.className='home-season-card';
+      if(season.archiveCover){const image=document.createElement('img');image.src=safeImg(season.archiveCover);image.loading='lazy';image.alt='Foto '+season.title;card.append(image);}
+      const body=document.createElement('div');body.className='home-season-card-content';
+      const title=document.createElement('h3');title.textContent=season.title||'Season SSCircle';body.append(title);
+      if(season.archiveStartDate){const meta=document.createElement('small');meta.textContent='Mulai '+new Date(season.archiveStartDate+'T12:00:00Z').toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric',timeZone:'UTC'});body.append(meta);}
+      if(season.archiveSummary){const desc=document.createElement('p');desc.textContent=season.archiveSummary;body.append(desc);}
+      const arrow=document.createElement('span');arrow.textContent='Lihat sejarah ↗';body.append(arrow);card.append(body);root.append(card);
+    }
+    const enabled=settings.seasonArchiveEnabled===true&&settings.homeSeasonHighlightsEnabled===true;
+    section.hidden=!enabled||(!root.children.length&&settings.homeSeasonHighlightsHideEmpty!==false);
+    $('home-season-link').hidden=!enabled;
+  }
   function apply(settings) {
     const s = { ...defaults, ...settings };
     if (s.homeProcessTitle === 'Bergabung dalam lingkaran.')
@@ -763,6 +796,8 @@
     $('home-registration-button').classList.toggle('registration-closed', closed);
     arrangeHomepage(s);
     renderUpcomingEvents(s);
+    renderSeasonHighlights(s);
+    document.querySelectorAll('[data-season-link]').forEach(link=>{link.hidden=s.seasonArchiveEnabled!==true;});
     updateSectionNumbers();
     renderGallery(s);
     renderVotingSummary(s);
