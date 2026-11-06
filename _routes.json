@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "include": [
+    "/api/*",
+    "/voting.html",
+    "/voting"
+  ],
+  "exclude": []
+}

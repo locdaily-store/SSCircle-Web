@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="theme-color" content="#120c1d">
+    <meta name="description" content="Cek status pendaftaran SSCircle Server menggunakan kode pendaftaran.">
+    <title>Cek Status | SSCircle Server</title>
+    <link rel="icon" type="image/png" href="assets/sscircle-logo.png">
+    <link rel="stylesheet" href="style.css?v=10.26.0">
+    <script src="color-theme.js?v=10.26.0" defer></script>
+    <script src="cloudflare-api.js?v=10.26.0" defer></script>
+    <script src="status.js?v=10.26.0" defer></script>
+  </head>
+  <body class="status-standalone theme-v3">
+    <div class="ambient ambient-a" aria-hidden="true"></div>
+    <div class="page-shell">
+      <header class="site-header status-site-header">
+        <a class="brand" href="./"><span class="brand-icon"><img id="status-logo" src="assets/sscircle-logo.png" alt="SSCircle Server" width="42" height="42"></span><span class="brand-copy"><strong>SSCircle Server</strong><small>APPLICATION TRACKER</small></span></a>
+        <nav class="status-nav">
+          <a href="./">Beranda</a>
+          <a href="registration.html">Pendaftaran ↗</a>
+        </nav>
+      </header>
+      <main class="status-main">
+        <div class="status-ambient-orb" aria-hidden="true">✧</div>
+        <span class="overline" id="status-eyebrow">APPLICATION TRACKER</span>
+        <h1 id="status-heading">Cek Status <em>Pendaftaran.</em></h1>
+        <p class="status-lead" id="status-description">Masukkan kode pendaftaranmu untuk melihat apakah pendaftaran sedang menunggu, diterima, atau ditolak beserta alasannya.</p>
+        <section class="status-standalone-card panel">
+          <div class="status-code-meta">
+            <span class="status-code-icon" aria-hidden="true">⌕</span>
+            <div>
+              <strong>Kode pendaftaran</strong>
+              <small>Gunakan kode yang kamu dapat setelah mengirim formulir.</small>
+            </div>
+          </div>
+          <form id="status-check-form" novalidate>
+            <label class="field-label" for="status-code">KODE PENDAFTARAN</label>
+            <div class="status-code-row">
+              <input id="status-code" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="40" placeholder="Masukkan kode pendaftaran..." required>
+              <button id="status-check-button" type="submit" class="button primary">Periksa status ↗</button>
+            </div>
+            <small id="status-old-hint" class="field-help">Gunakan kode pendaftaran yang didapat setelah mengirim formulir.</small>
+          </form>
+          <div id="status-voting-notice" class="status-voting-notice" role="status" aria-live="polite" hidden></div>
+          <div id="status-result" role="status" aria-live="polite"></div>
+          <details class="status-my-code" id="kode-milikku">
+            <summary class="status-my-code-summary">
+              <span id="status-my-code-title">Lihat kode pendaftaran saya</span>
+              <span aria-hidden="true" class="status-my-code-chevron">⌄</span>
+            </summary>
+            <div class="status-my-code-inside">
+              <p id="status-my-code-description" class="status-my-code-description">Jika sesi akun masih aktif, kode pendaftaranmu bisa dilihat dan disalin tanpa masuk ulang.</p>
+              <div id="status-my-code-logged" hidden>
+                <strong id="status-own-code" class="status-own-code"></strong>
+                <div class="status-my-code-actions">
+                  <button type="button" class="button primary" id="status-own-copy">Salin kode</button>
+                  <button type="button" class="button secondary" id="status-check-own">Cek status saya ↗</button>
+                  <a href="/voting" class="button primary" id="status-voting-entry" hidden>Masuk Voting ↗</a>
+                  <button type="button" class="button secondary" id="status-own-logout">Keluar akun</button>
+                </div>
+              </div>
+              <form id="status-my-code-login">
+                <label class="field-group"><span class="field-label">Masuk dengan kode milikmu</span><input id="status-own-login-code" type="password" maxlength="40" autocomplete="off" placeholder="Kode pendaftaran" required></label>
+                <button type="submit" class="button primary">Masuk &amp; lihat kode</button>
+              </form>
+              <small id="status-my-code-help" class="field-help" role="status" aria-live="polite">Jika sudah keluar, masuk satu kali dengan kode asli atau hubungi admin untuk verifikasi.</small>
+            </div>
+          </details>
+        </section>
+        <div class="status-support">
+          <span>Butuh bantuan lebih lanjut?</span>
+          <a id="status-discord-link" href="https://discord.gg/vQQSgY2GRS" target="_blank" rel="noopener noreferrer"><img src="assets/discord-logo.png" alt="" width="25" height="25"> SSCircle Community ↗</a>
+        </div>
+      </main>
+      <footer class="site-footer ssc-unified-footer status-footer">
+        <div class="ssc-footer-content">
+          <div class="home-footer-mark"><img id="status-footer-logo" src="assets/sscircle-logo.png" alt="" width="27" height="27"><span >SSCircle Server</span></div>
+          <span id="status-footer-text">One circle. Endless stories.</span>
+          <nav class="home-footer-links" aria-label="Navigasi footer"><a href="./">Homepage</a><a href="registration.html">Registration</a><a href="status.html">Cek Status</a><a id="ssc-footer-discord" href="https://discord.gg/vQQSgY2GRS" target="_blank" rel="noopener noreferrer">Discord ↗</a></nav>
+          <small >© 2026 SSCircle Server</small>
+        </div>
+      </footer>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,548 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#160a28">
+    <link rel="stylesheet" href="style.css?v=10.26.0">
+    <title>Admin Control · SSCircle Server</title>
+    <link rel="icon" type="image/png" href="assets/sscircle-logo.png">
+    <script src="color-theme.js?v=10.26.0" defer></script>
+    <script src="cloudflare-api.js?v=10.26.0" defer></script>
+    <script src="admin-notifications.js?v=10.26.0" defer></script>
+    <script src="admin-sortable.js?v=10.26.0" defer></script>
+    <script src="image-source-picker.js?v=10.26.0" defer></script>
+    <script src="homepage-admin.js?v=10.26.0" defer></script>
+    <script src="homepage-builder.js?v=10.26.0" defer></script>
+    <script src="vote-admin.js?v=10.26.0" defer></script>
+    <script src="registration-preview.js?v=10.26.0" defer></script>
+    <script src="color-theme-admin.js?v=10.26.0" defer></script>
+    <script src="admin.js?v=10.26.0" defer></script>
+    <script src="form-insert-rail.js?v=10.26.0" defer></script>
+    <script src="spreadsheet.js?v=10.26.0" defer></script>
+  </head>
+  <body class="admin-page theme-v3">
+    <div class="ambient ambient-a" aria-hidden="true"></div>
+    <div class="page-shell admin-shell">
+      <header class="site-header">
+        <a class="brand" href="./"><img src="assets/sscircle-logo.png" width="43" height="43" alt="Logo SSCircle"><span class="brand-copy"><strong>SSCIRCLE</strong><small>ADMIN CONTROL</small></span></a>
+        <a class="header-back" href="./">↗   Lihat Homepage</a>
+      </header>
+      <main>
+        <section id="login" class="login-wrap">
+          <div class="login-ornament">
+            <img src="assets/sscircle-logo.png" alt="" width="88" height="88">
+          </div>
+          <div class="panel login-panel">
+            <div class="overline">ADMIN ACCESS / SSCIRCLE SERVER</div>
+            <h1>Admin <span class="gradient-text">Control.</span></h1>
+            <p>Masuk untuk mengelola formulir, memeriksa jawaban, dan melihat data pendaftar.</p>
+            <form id="login-form">
+              <label for="password" class="field-label">PASSWORD ADMIN</label>
+              <input type="password" id="password" placeholder="Masukkan password admin" autocomplete="current-password" required>
+              <div id="login-error" role="alert" class="error-text"></div>
+              <div id="admin-setup" class="hide" role="status"></div>
+              <button type="submit" class="button primary full-width">Masuk dashboard <span>↗</span></button>
+            </form>
+            <small class="security-hint">Halaman ini khusus untuk pengelola SSCircle Server.</small>
+          </div>
+        </section>
+        <section id="dashboard" class="dashboard hide">
+          <aside class="dashboard-sidebar panel">
+            <div class="sidebar-heading">MANAGEMENT</div>
+            <button class="side-link active" data-tab="overview"><span class="side-icon">◈</span> Ringkasan</button>
+            <button class="side-link" data-tab="homepage"><span class="side-icon">⌂</span> Atur Homepage</button>
+            <button class="side-link" data-tab="voting-admin"><span class="side-icon">◉</span> Atur Voting</button>
+            <button class="side-link" data-tab="appearance"><span class="side-icon">✧</span> Atur Registration</button>
+            <button class="side-link" data-tab="theme"><span class="side-icon">◐</span> Atur Warna</button>
+            <button class="side-link" data-tab="form"><span class="side-icon">▤</span> Atur Formulir</button>
+            <button class="side-link" data-tab="analytics"><span class="side-icon">◉</span> Analitik jawaban</button>
+            <button class="side-link" data-tab="media"><span class="side-icon">▧</span> Penyimpanan Media</button>
+            <button class="side-link" data-tab="answers"><span class="side-icon">☷</span> Jawaban pendaftar <span id="nav-count" class="nav-count">0</span></button>
+            <button class="side-link" data-tab="spreadsheet"><span class="side-icon">▦</span> Spreadsheet</button>
+            <div class="sidebar-bottom">
+              <div class="sidebar-mini">
+                <span class="live-dot"></span>
+                <span>SSCircle Server</span>
+              </div>
+              <button class="side-link logout-link" id="logout"><span class="side-icon">↪</span> Keluar</button>
+            </div>
+          </aside>
+          <div class="dashboard-main">
+            <section id="overview" class="tab-page">
+              <div class="dashboard-heading">
+                <div>
+                  <div class="overline">WELCOME TO YOUR CONTROL CENTER</div>
+                  <h1>Overview<span class="dot-accent">.</span></h1>
+                  <p>Ringkasan pendaftaran, aktivitas, dan pengelolaan SSCircle Server.</p>
+                </div>
+                <span class="season-tag">SSCircle / ADMIN</span>
+              </div>
+              <div id="stat-cards" class="stat-grid"></div>
+              <div class="panel overview-panel">
+                <div class="overview-copy">
+                  <div class="overline">APPLICATION STATUS</div>
+                  <h2>Kontrol pendaftaran</h2>
+                  <p>Kelola pertanyaan dan pantau pendaftar tanpa mengubah kode website.</p>
+                  <div id="form-status" class="availability"></div>
+                </div>
+                <div class="overview-actions">
+                  <button class="button secondary" id="jump-form">Edit formulir <span>↗</span></button>
+                  <button class="button primary" id="jump-answers">Lihat jawaban <span>↗</span></button>
+                </div>
+              </div>
+              <div class="panel export-panel">
+                <div>
+                  <h3>Spreadsheet pendaftaran</h3>
+                  <p>Lihat semua pendaftar dan jawaban mereka dalam tabel lengkap, termasuk pertanyaan dari formulir sebelumnya.</p>
+                </div>
+                <div class="export-actions">
+                  <button class="button primary" id="open-spreadsheet">▦ Buka spreadsheet ↗</button>
+                </div>
+              </div>
+            </section>
+            <section id="homepage" class="tab-page hide">
+              <div class="dashboard-heading heading-with-button">
+                <div>
+                  <div class="overline">SSCircle Server / OFFICIAL WEBSITE</div>
+                  <h1>Atur Homepage<span class="dot-accent">.</span></h1>
+                  <p>Atur video cinematic, gambar sampul, semua teks, galeri, tombol, dan konten halaman utama dari satu tempat.</p>
+                </div>
+                <button type="button" id="home-admin-save-top" class="button primary">Simpan Homepage ✓</button>
+              </div>
+              <div id="home-admin-message" role="status" aria-live="polite"></div>
+              <div class="home-admin-preview">
+                <span class="home-admin-status" id="home-admin-registration-state">Status pendaftaran</span>
+                <button type="button" id="home-admin-preview" class="button secondary">↗ Pratinjau Homepage</button>
+              </div>
+              <div id="home-admin-editor" class="home-admin-controls"></div>
+              <div class="home-admin-save-bar">
+                <span class="home-save-caption" aria-hidden="true"></span>
+                <button type="button" id="home-admin-save" class="button primary">Simpan perubahan Homepage ✓</button>
+              </div>
+            </section>
+            <section id="voting-admin" class="tab-page hide">
+              <div class="dashboard-heading">
+                <div>
+                  <div class="overline">SSCircle / COMMUNITY</div>
+                  <h1>Atur Voting<span class="dot-accent">.</span></h1>
+                  <p>Atur pertanyaan, pilihan jawaban, gambar, jadwal, dan pantau hasil voting dalam satu tempat.</p>
+                </div>
+              </div>
+              <div id="voting-admin-editor" class="ssc-vote-admin"></div>
+            </section>
+            <section id="appearance" class="tab-page hide">
+              <div class="dashboard-heading heading-with-button">
+                <div>
+                  <div class="overline">PUBLIC WEBSITE / DESIGN SYSTEM</div>
+                  <h1>Atur Registration<span class="dot-accent">.</span></h1>
+                  <p>Atur identitas, halaman pendaftaran, teks, warna, dan animasi opening dengan pratinjau langsung.</p>
+                </div>
+                <button type="button" class="button primary" id="save-appearance">Simpan Registration ✓</button>
+              </div>
+              <div id="appearance-message" role="status" aria-live="polite"></div>
+              <div class="ssc-registration-editor-grid">
+                <div class="ssc-registration-editor-controls">
+                  <div class="appearance-nav" role="tablist" aria-label="Bagian pengaturan Registration">
+                    <button type="button" class="appearance-nav-btn active" data-appearance="identity">01 · Identitas &amp; logo</button>
+                    <button type="button" class="appearance-nav-btn" data-appearance="hero">02 · Halaman pendaftaran</button>
+                    <button type="button" class="appearance-nav-btn" data-appearance="copy">03 · Teks formulir</button>
+                    <button type="button" class="appearance-nav-btn" data-appearance="opening">04 · Opening</button>
+
+                  </div>
+                  <div class="appearance-panel panel" data-appearance-panel="identity">
+                    <div class="panel-heading">
+                      <span class="panel-heading-icon">◈</span>
+                      <div>
+                        <h2>Identitas SSCircle</h2>
+                        <p>Ganti logo website dengan gambar pilihanmu. Pratinjau diperbarui otomatis sebelum disimpan.</p>
+                      </div>
+                    </div>
+                    <div class="appearance-logo-row">
+                      <img id="logo-preview" src="assets/sscircle-logo.png" alt="Pratinjau logo">
+                      <div class="appearance-logo-actions">
+                        <label class="field-label" for="site-logo-input">Ganti logo (JPG/PNG/WEBP/GIF, dikompresi otomatis)</label>
+                        <input type="file" id="site-logo-input" accept="image/png,image/jpeg,image/webp,image/gif">
+                        <button type="button" class="button secondary" id="reset-logo">Gunakan logo bawaan</button>
+                        <p id="logo-upload-message" class="field-help"></p>
+                      </div>
+                    </div>
+                    <div id="appearance-identity-fields" class="appearance-fields"></div>
+                    <label class="toggle-row"><input type="checkbox" id="form-open"><span class="toggle-visual" aria-hidden="true"></span><span><strong>Buka pendaftaran</strong><small>Jika dimatikan, pengunjung tidak dapat mengirim jawaban.</small></span></label>
+                  </div>
+                  <div class="appearance-panel panel hide" data-appearance-panel="hero">
+                    <div class="panel-heading">
+                      <span class="panel-heading-icon">✧</span>
+                      <div>
+                        <h2>Area sambutan &amp; halaman Registration</h2>
+                        <p>Sesuaikan panel identitas di halaman awal, pesan pembuka, informasi server, dan tahapan pendaftaran.</p>
+                      </div>
+                    </div>
+                    <div class="appearance-logo-row">
+                      <img id="hero-image-preview" src="assets/sscircle-logo.png" alt="Pratinjau gambar utama">
+                      <div class="appearance-logo-actions">
+                        <label class="field-label" for="hero-image-input">Gambar utama halaman (dikompresi otomatis)</label>
+                        <input type="file" id="hero-image-input" accept="image/png,image/jpeg,image/webp,image/gif">
+                        <button type="button" class="button secondary" id="reset-hero-image">Gunakan logo utama</button>
+                        <p id="hero-upload-message" class="field-help"></p>
+                      </div>
+                    </div>
+                    <div id="appearance-hero-fields" class="appearance-fields"></div>
+                  </div>
+                  <div class="appearance-panel panel hide" data-appearance-panel="copy">
+                    <div class="panel-heading">
+                      <span class="panel-heading-icon">▤</span>
+                      <div>
+                        <h2>Teks &amp; formulir</h2>
+                        <p>Judul, subjudul, petunjuk, tombol kirim, pesan sukses, serta footer website.</p>
+                      </div>
+                    </div>
+                    <div id="appearance-copy-fields" class="appearance-fields"></div>
+                  </div>
+                  <div class="appearance-panel panel hide" data-appearance-panel="opening">
+                    <div class="panel-heading">
+                      <span class="panel-heading-icon">◌</span>
+                      <div>
+                        <h2>Opening animasi &amp; warna</h2>
+                        <p>Intro halus saat pengunjung membuka link, lengkap dengan tombol lewati.</p>
+                      </div>
+                    </div>
+                    <label class="toggle-row"><input type="checkbox" id="intro-enabled"><span class="toggle-visual" aria-hidden="true"></span><span><strong>Aktifkan opening</strong><small>Otomatis dilewati bila perangkat memilih reduced motion.</small></span></label>
+                    <div class="appearance-logo-row">
+                      <img id="intro-logo-preview" src="assets/sscircle-logo.png" alt="Pratinjau logo opening">
+                      <div class="appearance-logo-actions">
+                        <label class="field-label" for="intro-logo-input">Logo khusus untuk animasi opening</label>
+                        <input type="file" id="intro-logo-input" accept="image/png,image/jpeg,image/webp,image/gif">
+                        <button type="button" class="button secondary" id="reset-intro-logo">Ikuti logo website</button>
+                        <p id="intro-logo-upload-message" class="field-help"></p>
+                      </div>
+                    </div>
+                    <div id="appearance-opening-fields" class="appearance-fields"></div>
+                    <div class="appearance-actions">
+                      <button type="button" class="button secondary" id="test-opening">▶ Lihat animasi opening</button>
+                      <button type="button" class="button secondary" id="open-public">↗ Pratinjau halaman publik</button>
+                    </div>
+                  </div>
+                  <div class="appearance-save-footer">
+                    <span class="field-help">Perubahan akan terlihat di halaman publik setelah disimpan.</span>
+                    <button type="button" class="button primary" id="save-appearance-bottom">Simpan pengaturan Registration ✓</button>
+                  </div>
+                </div>
+                <div id="registration-live-preview" class="ssc-registration-preview"></div>
+              </div>
+            </section>
+            <section id="theme" class="tab-page hide">
+              <div class="dashboard-heading heading-with-button">
+                <div><div class="overline">GLOBAL DESIGN SYSTEM / SSCIRCLE</div><h1>Atur Warna<span class="dot-accent">.</span></h1>
+                  <p>Ubah semua warna utama dan gradasi, lalu atur warna tiap komponen jika perlu. Warna bisa dipratinjau sebelum disimpan.</p></div>
+                <button type="button" id="save-theme" class="button primary">Simpan semua warna ✓</button>
+              </div>
+              <div id="theme-message" role="status" aria-live="polite"></div>
+              <div class="ssc-theme-layout">
+                <div class="ssc-theme-left">
+                  <div class="appearance-panel panel ssc-theme-panel">
+                    <div class="panel-heading">
+                      <span class="panel-heading-icon">◈</span>
+                      <div>
+                        <h2>Warna &amp; gradasi seluruh website</h2>
+                        <p>Atur warna utama, secondary, latar, teks, kartu, border dan gradasi. Palet global untuk Homepage, Registration, Voting, Cek Status, serta komponen Admin Control jika diaktifkan. Penyesuaian objek tertentu ada di bawah.</p>
+                      </div>
+                    </div>
+                    <div class="color-presets" id="color-presets"></div>
+                    <div class="color-category-tabs" id="color-category-tabs" role="group" aria-label="Kategori pengaturan warna"></div>
+                    <div class="appearance-color-grid" id="color-editor"></div>
+                    <p class="field-help">Tips: pastikan teks tetap kontras dengan background. Perubahan warna diterapkan setelah kamu menekan Simpan semua warna.</p>
+                    <div class="color-preview" id="color-preview">
+                      <div class="color-preview-panel">
+                        <small>PRATINJAU WARNA</small>
+                        <h3>SSCircle Server</h3>
+                        <p>Contoh teks dan kartu tampilan publik.</p>
+                        <span class="color-preview-button">Lanjutkan →</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <section class="panel ssc-theme-detail-panel">
+                    <h2>Pengaturan lanjut</h2>
+                    <p>Ubah masing-masing bagian tanpa mengubah seluruh warna. Pilih komponen yang tersedia, lalu tentukan warna dan jenis tampilannya.</p>
+                    <div class="ssc-theme-settings-row">
+                      <h3>Latar belakang halaman</h3>
+                      <p>Warna bagian kosong di belakang kartu. Pilih warnanya pada kategori <strong>Latar &amp; gradasi</strong> di atas. Pengaturan di sini tidak memengaruhi warna kartu atau tombol.</p>
+                      <label class="field-group" for="theme-page-background-mode"><span class="field-label">Tampilan latar halaman</span><select id="theme-page-background-mode"><option value="gradient">Gradasi dua warna</option><option value="solid">Satu warna</option></select></label>
+                      <label class="field-group" id="theme-page-background-angle-row" for="theme-page-background-angle"><span class="field-label">Arah gradasi latar halaman</span><input type="range" id="theme-page-background-angle" min="0" max="360" step="5" value="160"><output id="theme-page-background-angle-value">160°</output></label>
+                      <label class="field-group"><span class="field-label">Arah gradasi tombol/kartu</span><input type="range" id="theme-gradient-angle" min="0" max="360" step="5" value="135"><output id="theme-gradient-angle-value">135°</output></label>
+                      <label class="ssc-theme-check"><input id="theme-cards-gradient" type="checkbox"> Gunakan gradasi pada kartu dan panel</label>
+                      <label class="ssc-theme-check"><input id="theme-admin-enable" type="checkbox"> Terapkan warna juga pada Admin Control</label>
+                    </div>
+                    <h3>Warna khusus per komponen</h3>
+                    <p class="field-help">Untuk hal spesifik seperti judul, form, kartu, ikon, atau tombol. Aturan di bawah berprioritas lebih tinggi dibanding palet umum.</p>
+                    <div id="theme-overrides" class="ssc-theme-overrides"></div>
+                    <button type="button" class="button secondary" id="theme-add-override">+ Tambah pengaturan warna objek</button>
+                    <p class="field-help">Pilih properti warna, gradasi, border, atau bayangan. Maksimal 80 pengaturan. Gunakan kombinasi warna dengan kontras yang cukup.</p>
+                  </section>
+                </div>
+                <aside class="panel ssc-theme-preview-panel">
+                  <h2>Pratinjau warna langsung</h2><p>Uji perubahan untuk Homepage, Registration, Voting, dan Cek Status tanpa menyimpan lebih dulu.</p>
+                  <div class="ssc-theme-preview-controls">
+                    <select id="theme-preview-page" aria-label="Halaman pratinjau"><option value="index.html">Homepage</option><option value="registration.html">Registration</option><option value="voting.html">Voting</option><option value="status.html">Cek Status</option></select>
+                    <button type="button" id="theme-preview-desktop" class="button secondary">Desktop</button>
+                    <button type="button" id="theme-preview-mobile" class="button secondary">HP</button>
+                    <button type="button" id="theme-preview-reload" class="button secondary">↻</button>
+                  </div>
+                  <div id="theme-preview-window" class="ssc-theme-preview-window"><iframe title="Pratinjau warna website SSCircle" id="theme-preview-frame" loading="lazy" scrolling="yes" src="./?ssc_theme_preview=1"></iframe></div>
+                  <p class="field-help">Gulir roda mouse atau usap langsung di dalam pratinjau untuk melihat bagian bawah halaman.</p>
+                  <p id="theme-preview-status" class="field-help" role="status">Memuat pratinjau ...</p>
+                </aside>
+              </div>
+              <div class="ssc-theme-savebar"><button type="button" id="save-theme-bottom" class="button primary">Simpan pengaturan warna ✓</button></div>
+            </section>
+            <section id="form" class="tab-page hide">
+              <div class="dashboard-heading heading-with-button">
+                <div>
+                  <div class="overline">FORM BUILDER / SSCIRCLE SERVER</div>
+                  <h1>Atur formulir<span class="dot-accent">.</span></h1>
+                  <p>Kelola halaman, pertanyaan, media, dan alur jawaban. Pengaturan logo dan teks pendaftaran ada pada Atur Registration.</p>
+                </div>
+                <button class="button primary" id="save">Simpan perubahan <span>✓</span></button>
+              </div>
+              <div class="panel cooldown-admin-settings">
+                <div class="cooldown-admin-heading">
+                  <div class="cooldown-admin-icon" aria-hidden="true">◷</div>
+                  <div>
+                    <h2>Jeda pendaftaran</h2>
+                    <p>Atur berapa lama pengunjung harus menunggu sebelum mengirim pendaftaran berikutnya.</p>
+                  </div>
+                </div>
+                <label class="field-group cooldown-admin-field" for="registration-cooldown-minutes"><span class="field-label">Durasi jeda (menit)</span><input id="registration-cooldown-minutes" type="number" min="0" max="10080" step="1" inputmode="numeric" value="30"><span id="registration-cooldown-hint" class="field-help">0 = nonaktif. Durasi dihitung setelah pendaftaran berhasil dikirim.</span></label>
+                <p class="cooldown-admin-note">Pengaturan ini membantu mencegah pengiriman berulang. Pemain yang memakai jaringan internet bersama dapat memiliki waktu tunggu yang sama.</p>
+              </div>
+              <div id="save-message" role="status" aria-live="polite"></div>
+              <div class="builder-tabs-area panel">
+                <div class="builder-tabs-heading">
+                  <div>
+                    <div class="overline">PENGELOLA HALAMAN</div>
+                    <h2>Susun alur pendaftaran</h2>
+                    <p>Pindah ke bagian dengan cepat, lalu susun pertanyaan langsung di bawah judul bagiannya.</p>
+                  </div>
+                  <button type="button" id="add-page" class="button secondary">+ Halaman baru</button>
+                </div>
+                <div id="page-tabs" class="builder-tabs" role="tablist" aria-label="Halaman formulir"></div>
+              </div>
+              <div id="page-editor" class="hide" aria-hidden="true"></div>
+              <div class="builder-head">
+                <div>
+                  <div class="overline">EDITOR FORMULIR</div>
+                  <h2>Bagian &amp; pertanyaan</h2>
+                  <p class="builder-helper">Setiap pertanyaan tampil langsung di bawah bagiannya, seperti Google Forms. Seret pegangan <strong>⋮⋮</strong> untuk memindahkan pertanyaan, termasuk ke bagian lain. Bagian lain bisa dilipat agar tidak perlu scroll panjang.</p>
+                </div>
+                <span id="builder-count" class="count-bubble">0 item</span>
+              </div>
+              <div class="block-toolbar hide" aria-hidden="true">
+                <button type="button" id="add-question" class="button secondary">+ Pertanyaan</button>
+                <button type="button" id="add-text" class="button secondary">+ Judul / teks</button>
+                <button type="button" id="add-image" class="button secondary">+ Gambar</button>
+                <button type="button" id="add-video" class="button secondary">+ Video</button>
+              </div>
+              <div class="builder-workspace" id="builder-workspace">
+                <div id="builder" class="builder-blocks builder-stream"></div>
+                <aside class="floating-insert-rail panel" id="floating-insert-rail" role="toolbar" aria-label="Tambah konten formulir">
+                  <div class="floating-rail-context" id="floating-rail-context" aria-live="off" title="Bagian tempat konten baru akan ditambahkan">B1</div>
+                  <button type="button" class="floating-insert-btn" data-insert="question" aria-label="Tambah pertanyaan" title="Tambah pertanyaan"><span aria-hidden="true" class="rail-glyph">＋</span><span class="rail-caption">Pertanyaan</span></button>
+                  <button type="button" class="floating-insert-btn" data-insert="text" aria-label="Tambah judul atau deskripsi" title="Tambah judul atau deskripsi"><span aria-hidden="true" class="rail-glyph rail-text-glyph">Tᵀ</span><span class="rail-caption">Teks</span></button>
+                  <button type="button" class="floating-insert-btn" data-insert="image" aria-label="Tambah gambar" title="Tambah gambar"><span aria-hidden="true" class="rail-glyph">▧</span><span class="rail-caption">Gambar</span></button>
+                  <button type="button" class="floating-insert-btn" data-insert="video" aria-label="Tambah video" title="Tambah video"><span aria-hidden="true" class="rail-glyph">▷</span><span class="rail-caption">Video</span></button>
+                  <div class="floating-rail-divider" role="separator"></div>
+                  <button type="button" class="floating-insert-btn floating-insert-section" id="floating-add-section" aria-label="Tambah bagian atau halaman" title="Tambah bagian atau halaman"><span aria-hidden="true" class="rail-glyph">⊞</span><span class="rail-caption">Bagian</span></button>
+                </aside>
+              </div>
+              <div class="hide" id="routing-panel" aria-hidden="true"></div>
+              <div class="bottom-save">
+                <button id="save-bottom" class="button primary">Simpan semua perubahan <span>✓</span></button>
+                <button type="button" id="preview-draft" class="button secondary">Pratinjau halaman ini ↗</button>
+              </div>
+            </section>
+            <section id="media" class="tab-page hide">
+              <div class="dashboard-heading">
+                <div>
+                  <div class="overline">GALERI MEDIA</div>
+                  <h1>Penyimpanan Media<span class="dot-accent">.</span></h1>
+                  <p>Kelola semua gambar dan video di satu tempat, termasuk file bawaan, galeri, dan jawaban pendaftar.</p>
+                </div>
+                <button type="button" id="reload-media" class="button secondary">↻ Muat ulang</button>
+              </div>
+              <div id="media-storage-quota" class="panel storage-quota-panel" aria-live="polite">
+                <h3>Memuat penggunaan penyimpanan...</h3>
+              </div>
+              <div class="media-stats" id="media-stats"></div>
+              <div class="panel media-upload-panel">
+                <div class="media-upload-actions">
+                  <label class="button secondary media-upload-label">＋ Upload gambar<input type="file" id="media-upload-image" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden></label>
+                  <label class="button secondary media-upload-label">▷ Upload video<input type="file" id="media-upload-video" accept="video/mp4,video/webm,.mp4,.webm" hidden></label>
+                  <label class="field-group media-filter-label"><span class="field-label">Tampilkan</span><select id="media-filter"><option value="all">Semua media</option><option value="image">Gambar</option><option value="video">Video</option><option value="unused">Tidak digunakan</option><option value="private">Jawaban privat</option></select></label>
+                  <button type="button" class="button secondary danger-button" id="delete-unused-media">Bersihkan media tidak terpakai</button>
+                </div>
+                <progress id="media-video-progress" class="media-upload-progress" value="0" max="100" hidden></progress>
+                <p id="media-upload-status" class="field-help" role="status" aria-live="polite">Video maksimal 16 MB. Media yang sedang digunakan tidak dapat dihapus.</p>
+              </div>
+              <div id="media-list" class="media-grid"></div>
+              <div id="media-message" role="status"></div>
+              <div class="media-pages">
+                <button type="button" class="button secondary" id="media-prev">← Sebelumnya</button>
+                <span id="media-pagination">Halaman 1</span>
+                <button type="button" class="button secondary" id="media-next">Berikutnya →</button>
+              </div>
+            </section>
+            <section id="analytics" class="tab-page hide">
+              <div class="dashboard-heading">
+                <div>
+                  <div class="overline">FORM INSIGHTS / SSCIRCLE</div>
+                  <h1>Analitik jawaban<span class="dot-accent">.</span></h1>
+                  <p>Lihat distribusi pilihan dan seluruh jawaban tertulis secara langsung, termasuk data pertanyaan versi sebelumnya.</p>
+                </div>
+              </div>
+              <div class="panel analytics-toolbar">
+                <label class="field-group"><span class="field-label">Cari pertanyaan</span><input id="analytics-search" type="search" placeholder="Cari judul pertanyaan..."></label>
+                <div class="field-group">
+                  <span class="field-label">Tampilkan data</span>
+                  <select id="analytics-status"><option value="all">Semua pendaftar</option><option value="pending">Menunggu</option><option value="accepted">Diterima</option><option value="rejected">Ditolak</option></select>
+                </div>
+                <button type="button" class="button secondary" id="analytics-refresh">↻ Refresh</button>
+              </div>
+              <div id="analytics-summary" class="analytics-summary"></div>
+              <div id="analytics-list" class="analytics-grid"></div>
+            </section>
+            <section id="answers" class="tab-page hide">
+              <div class="dashboard-heading">
+                <div>
+                  <div class="overline">APPLICATION REVIEW / SEASON 06</div>
+                  <h1>Jawaban masuk<span class="dot-accent">.</span></h1>
+                  <p>Semua pertanyaan dan jawaban pendaftar tersimpan di sini.</p>
+                </div>
+                <button id="refresh" class="button secondary">↻ Refresh</button>
+              </div>
+              <div class="panel filters-panel">
+                <div class="search-wrap">
+                  <span>⌕</span>
+                  <input type="search" id="search" placeholder="Cari username, jawaban, atau referensi...">
+                </div>
+                <select id="filter" aria-label="Filter status"><option value="all">Semua status</option><option value="pending">Menunggu</option><option value="accepted">Diterima</option><option value="rejected">Ditolak</option></select>
+                <button id="open-spreadsheet-answers" class="button primary">▦ Buka spreadsheet ↗</button>
+              </div>
+              <div class="selection-toolbar panel">
+                <div class="selection-info">
+                  <strong id="selected-count">0 dipilih</strong>
+                  <span>Pilih melalui kotak centang pada baris tabel.</span>
+                </div>
+                <div class="selection-actions">
+                  <button type="button" class="button secondary danger-button" id="delete-selected" disabled>Hapus terpilih</button>
+                  <button type="button" class="button secondary danger-button" id="delete-all">Hapus semua jawaban</button>
+                </div>
+              </div>
+              <div class="applicant-order-toolbar">
+                <div id="result-count" class="result-count"></div>
+                <button id="sheet-go-latest" type="button" class="button secondary">Pendaftar terbaru ↓</button>
+              </div>
+              <div class="spreadsheet-tip">Klik nama atau baris pendaftar untuk membuka seluruh jawaban. Tidak perlu menggeser tabel ke samping.</div>
+              <div class="panel spreadsheet-wrap compact-sheet">
+                <table class="sheet-table">
+                  <thead id="sheet-head"></thead>
+                  <tbody id="sheet-body"></tbody>
+                </table>
+                <div id="sheet-empty" class="empty-state hide"></div>
+              </div>
+              <div class="sheet-footer">
+                <button type="button" id="sheet-prev" class="button secondary">← Sebelumnya</button>
+                <span id="sheet-paging"></span>
+                <button type="button" id="sheet-next" class="button secondary">Berikutnya →</button>
+              </div>
+            </section>
+            <section id="spreadsheet" class="tab-page hide">
+              <div class="dashboard-heading sheet-main-heading">
+                <div>
+                  <div class="overline">DAFTAR PENDAFTAR / LEMBAR JAWABAN</div>
+                  <h1>Spreadsheet<span class="dot-accent">.</span></h1>
+                  <p>Semua jawaban dalam satu lembar. Setiap baris adalah pendaftar dan setiap kolom mewakili pertanyaan.</p>
+                </div>
+                <button type="button" class="button secondary" id="sheet-back-answers">← Daftar pendaftar</button>
+              </div>
+              <div class="panel fullsheet-tools">
+                <label class="fullsheet-search"><span class="field-label">Cari nama, kode, atau jawaban</span><input id="fullsheet-search" type="search" placeholder="Cari di semua kolom..."></label>
+                <label class="fullsheet-status"><span class="field-label">Status</span><select id="fullsheet-status"><option value="all">Semua status</option><option value="pending">Menunggu</option><option value="accepted">Diterima</option><option value="rejected">Ditolak</option></select></label>
+                <button id="fullsheet-refresh" type="button" class="button secondary">↻ Muat ulang</button>
+                <button id="fullsheet-download" type="button" class="button primary">↓ Unduh Excel (.xlsx)</button>
+              </div>
+              <div class="fullsheet-summary">
+                <span id="fullsheet-count" aria-live="polite"></span>
+                <span>Geser tabel ke samping untuk melihat seluruh pertanyaan. Klik baris untuk membuka detail.</span>
+              </div>
+              <div class="panel fullsheet-scroll" id="fullsheet-scroll" tabindex="0" aria-label="Spreadsheet seluruh jawaban pendaftar">
+                <table class="fullsheet-table" aria-label="Jawaban pendaftar SSCircle Server">
+                  <thead id="fullsheet-head"></thead>
+                  <tbody id="fullsheet-body"></tbody>
+                </table>
+                <div id="fullsheet-empty" class="empty-state hide">Tidak ada jawaban yang cocok.</div>
+              </div>
+              <div class="fullsheet-footer">
+                <span id="fullsheet-page-info"></span>
+                <div class="fullsheet-pagination">
+                  <button type="button" id="fullsheet-prev" class="button secondary">← Sebelumnya</button>
+                  <button type="button" id="fullsheet-next" class="button secondary">Berikutnya →</button>
+                </div>
+              </div>
+            </section>
+          </div>
+        </section>
+      </main>
+      <dialog id="analytics-dialog" class="answer-dialog analytics-detail-dialog">
+        <div class="dialog-header">
+          <h2 id="analytics-detail-heading">Seluruh jawaban</h2>
+          <button type="button" id="analytics-close" class="icon-button" aria-label="Tutup">✕</button>
+        </div>
+        <div id="analytics-detail-content"></div>
+        <div class="dialog-actions">
+          <button type="button" class="button secondary" id="analytics-more">Lihat lebih lanjut</button>
+        </div>
+      </dialog>
+      <dialog id="answer-dialog" class="answer-dialog">
+        <div class="dialog-header">
+          <h2>Detail pendaftaran</h2>
+          <button type="button" id="close-detail" class="icon-button" aria-label="Tutup">✕</button>
+        </div>
+        <div id="answer-details"></div>
+        <div class="dialog-actions">
+          <button type="button" id="delete-current" class="button secondary danger-button">Hapus jawaban ini</button>
+        </div>
+      </dialog>
+      <dialog id="reject-dialog" class="answer-dialog reject-dialog">
+        <form method="dialog" id="reject-form">
+          <div class="dialog-header">
+            <h2>Alasan menolak pendaftaran</h2>
+            <button type="button" id="cancel-reject" class="icon-button" aria-label="Batal">✕</button>
+          </div>
+          <p>Alasan ini akan terlihat oleh pendaftar saat mengecek status menggunakan kode pendaftarannya.</p>
+          <label class="field-group"><span class="field-label">ALASAN PENOLAKAN</span><textarea id="reject-reason" maxlength="1000" rows="5" placeholder="Contoh: Data pendaftaran belum lengkap atau tidak sesuai persyaratan." required></textarea></label>
+          <div id="reject-error" class="error-text" role="alert"></div>
+          <div class="dialog-actions">
+            <button type="button" id="reject-cancel" class="button secondary">Batal</button>
+            <button type="submit" class="button primary">Simpan penolakan</button>
+          </div>
+        </form>
+      </dialog>
+      <dialog id="preview-dialog" class="answer-dialog preview-dialog">
+        <div class="dialog-header">
+          <h2>Pratinjau halaman aktif</h2>
+          <button type="button" id="close-preview" class="icon-button" aria-label="Tutup">✕</button>
+        </div>
+        <div id="preview-content"></div>
+      </dialog>
+      <footer class="site-footer ssc-unified-footer admin-footer">
+        <div class="ssc-footer-content">
+          <div class="home-footer-mark"><img data-site-logo src="assets/sscircle-logo.png" alt="" width="27" height="27"><span >SSCircle Server</span></div>
+          <span >Portal administrasi SSCircle Server</span>
+          <nav class="home-footer-links" aria-label="Navigasi footer"><a href="./">Homepage</a><a href="registration.html">Registration</a><a href="status.html">Cek Status</a><a id="admin-footer-discord" href="https://discord.gg/vQQSgY2GRS" target="_blank" rel="noopener noreferrer">Discord ↗</a></nav>
+          <small >© 2026 SSCircle Server</small>
+        </div>
+      </footer>
+    </div>
+  </body>
+</html>
