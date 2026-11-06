@@ -7,6 +7,7 @@ window.SSCircleHomepageBuilder = (() => {
   const BUILTINS = [
     { id: 'about', title: 'Tentang Server', help: 'Pengenalan server dan komunitas' },
     { id: 'gallery', title: 'SSCircle Gallery', help: 'Kumpulan foto dari server' },
+    { id: 'upcoming', title: 'Upcoming Events', help: 'Kartu jadwal terdekat dari Atur Event & Jadwal' },
     { id: 'process', title: 'Join our Circle', help: 'Informasi dan tombol pendaftaran' },
     { id: 'community', title: 'Stay Connected', help: 'Discord dan media sosial' },
     { id: 'profile', title: 'Profil & Sejarah', help: 'Foto kepala skin, judul, dan cerita komunitas' },

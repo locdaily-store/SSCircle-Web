@@ -44,8 +44,8 @@
       $('vote-current-player-code').textContent = account.code.replace(/.(?=.{4})/g, '•');
     }
     const active = votingData?.active === true;
-    $('vote-form').hidden = !active || !accepted;
-    $('vote-submit').disabled = !active || !accepted;
+    $('vote-questions').hidden = !accepted;
+    for(const b of document.querySelectorAll('.vote-question-submit'))b.disabled=!active||!accepted||b.dataset.voted==='1';
   }
   async function refreshAccount() {
     try {
@@ -60,83 +60,75 @@
     }
     renderAccount();
   }
-  function renderResults(payload) {
-    const container = $('vote-results');
-    container.replaceChildren();
-    $('vote-results-section').hidden = !payload.showResults;
-    if (!payload.showResults)
-      return;
-    for (const item of payload.results || []) {
-      const row = make('article', 'vote-result-card');
-      const heading = make('div', 'vote-result-head');
-      heading.append(make('strong', '', item.label), make('span', '', `${item.count} suara · ${item.percent}%`));
-      const track = make('div', 'vote-result-bar');
-      const fill = make('div', 'vote-result-fill');
-      fill.style.width = `${item.percent}%`;
-      track.append(fill);
-      row.append(heading, track);
-      container.append(row);
-    }
-    if (!container.childElementCount)
-      container.append(make('p', 'vote-message', 'Belum ada hasil voting.'));
-  }
   function imageGallery(sources, className) {
-    const gallery = make('div', className);
-    for (const [index, source] of sources.entries()) {
-      const figure = make('figure', 'vote-image-frame');
-      const image = make('img');
-      image.src = source;
-      image.alt = `Foto pilihan voting ${index + 1}`;
-      image.loading = 'lazy';
-      figure.append(image);
-      gallery.append(figure);
+    const gallery=make('div',className);
+    for(const [index,source] of sources.entries()){
+      const figure=make('figure','vote-image-frame'),image=make('img');
+      image.src=source;image.alt='Foto voting '+(index+1);image.loading='lazy';figure.append(image);gallery.append(figure);
     }
     return gallery;
   }
-  function renderVoting(data) {
-    votingData = data;
-    $('vote-title').textContent = data.title || 'Voting Komunitas';
-    $('vote-question').textContent = data.question || 'Pilih jawabanmu';
-    $('vote-description').textContent = data.text || '';
-    $('vote-status').textContent = !data.enabled
-      ? 'Voting sedang tidak tersedia.'
-      : data.active
-        ? (data.endsAt ? 'Voting berakhir: ' + new Date(data.endsAt).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }) : 'Voting sedang berlangsung.')
-        : 'Sesi voting sudah berakhir.';
-    const images = $('vote-images');
-    images.replaceChildren();
-    for (const [index, source] of (data.images || []).entries()) {
-      const figure = make('figure', 'vote-image-frame');
-      const image = make('img');
-      image.src = source;
-      image.alt = `Foto pertanyaan voting ${index + 1}`;
-      image.loading = index < 2 ? 'eager' : 'lazy';
-      figure.append(image);
-      images.append(figure);
-    }
-    images.hidden = images.childElementCount === 0;
-    const choices = $('vote-options');
-    choices.replaceChildren();
-    for (const [index, option] of (data.options || []).entries()) {
-      const card = make('label', 'vote-option vote-option-rich');
-      const titleRow = make('div', 'vote-option-top');
-      const radio = make('input');
-      radio.type = 'radio';
-      radio.name = 'vote-option';
-      radio.value = option.id;
-      radio.required = true;
-      if (index === 0)
-        radio.checked = true;
-      titleRow.append(radio, make('strong', '', option.label));
-      card.append(titleRow);
-      if (option.description)
-        card.append(make('p', 'vote-option-description', option.description));
-      if (Array.isArray(option.images) && option.images.length) {
-        card.append(imageGallery(option.images, 'vote-choice-gallery'));
+  function renderVoting(payload) {
+    votingData=payload;
+    $('vote-title').textContent=payload.title||'Voting Komunitas';
+    $('vote-question').textContent=(payload.questions?.length||0)>1?'Pilih sesuai pertanyaan':'Pertanyaan Voting';
+    $('vote-description').textContent=payload.text||'';
+    $('vote-status').textContent=!payload.enabled?'Voting sedang tidak tersedia.':payload.active?
+      (payload.endsAt?'Voting berakhir: '+new Date(payload.endsAt).toLocaleString('id-ID',{dateStyle:'medium',timeStyle:'short'}):'Voting sedang berlangsung.'):
+      'Sesi voting sudah berakhir.';
+    $('vote-images').hidden=true;$('vote-images').replaceChildren();
+    $('vote-results-section').hidden=true;
+    const host=$('vote-questions');host.replaceChildren();
+    const voted=new Set(payload.votedQuestionIds||[]);
+    for(const [index,question] of (payload.questions||[]).entries()){
+      const card=make('section','vote-poll-card');card.id='poll-'+question.id;
+      card.append(make('span','vote-poll-index','PERTANYAAN '+String(index+1).padStart(2,'0')),
+        make('h2','',question.title));
+      if(question.description)card.append(make('p','vote-option-description',question.description));
+      if(question.images?.length)card.append(imageGallery(question.images,'vote-image-gallery'));
+      const form=make('form','vote-form vote-question-form');
+      const choices=make('div','vote-options');
+      for(const [i,option] of (question.options||[]).entries()){
+        const row=make('label','vote-option vote-option-rich'),top=make('div','vote-option-top');
+        const radio=make('input');radio.type='radio';radio.name='choice-'+question.id;
+        radio.value=option.id;radio.required=true;radio.disabled=voted.has(question.id)||!payload.active;
+        if(i===0&&!voted.has(question.id))radio.checked=true;
+        top.append(radio,make('strong','',option.label));row.append(top);
+        if(option.description)row.append(make('p','vote-option-description',option.description));
+        if(option.images?.length)row.append(imageGallery(option.images,'vote-choice-gallery'));
+        choices.append(row);
       }
-      choices.append(card);
+      form.append(choices);
+      const submit=make('button','home-button home-button-primary vote-question-submit',voted.has(question.id)?'✓ Sudah memilih':'Kirim jawaban');
+      submit.type='submit';submit.dataset.voted=voted.has(question.id)?'1':'0';
+      submit.disabled=voted.has(question.id)||!payload.active||account?.status!=='accepted';
+      form.append(submit);
+      form.addEventListener('submit',async event=>{
+        event.preventDefault();
+        if(!account||account.status!=='accepted')return note('Masuk sebagai pendaftar Diterima terlebih dahulu.','error');
+        const selected=form.querySelector('input[type="radio"]:checked');
+        if(!selected)return note('Pilih satu jawaban terlebih dahulu.','error');
+        submit.disabled=true;note('Menyimpan jawaban...');
+        try {
+          const result=await request('/api/voting/vote',{method:'POST',body:JSON.stringify({questionId:question.id,optionId:selected.value})});
+          note(result.message||'Jawaban tersimpan.','success');
+          renderVoting(await request('/api/voting'));
+        }catch(err){note(err.message,'error');submit.disabled=false;}
+      });
+      card.append(form);
+      if(question.showResults){
+        const results=make('div','vote-results');results.append(make('h3','',`Hasil: ${question.title}`));
+        for(const item of question.results||[]){
+          const row=make('article','vote-result-card'),heading=make('div','vote-result-head');
+          heading.append(make('strong','',item.label),make('span','',item.count+' suara · '+item.percent+'%'));
+          const track=make('div','vote-result-bar'),fill=make('div','vote-result-fill');
+          fill.style.width=item.percent+'%';track.append(fill);row.append(heading,track);results.append(row);
+        }
+        card.append(results);
+      }
+      host.append(card);
     }
-    renderResults(data);
+    if(!host.children.length)host.append(make('p','vote-message','Belum ada pertanyaan voting.'));
     renderAccount();
   }
   $('vote-login-form').addEventListener('submit', async (event) => {
@@ -156,6 +148,7 @@
         return;
       }
       note('Berhasil masuk. Sekarang kamu dapat memberikan suara.', 'success');
+      renderVoting(await request('/api/voting'));
     }
     catch (error) {
       note(error.message, 'error');
@@ -169,31 +162,6 @@
     account = null;
     renderAccount();
     note('Kamu sudah keluar.');
-  });
-  $('vote-form').addEventListener('submit', async (event) => {
-    event.preventDefault();
-    if (!account || account.status !== 'accepted')
-      return note('Hanya pendaftar berstatus Diterima yang boleh voting.', 'error');
-    const selected = document.querySelector('input[name="vote-option"]:checked');
-    if (!selected)
-      return note('Pilih jawaban terlebih dahulu.', 'error');
-    const button = $('vote-submit');
-    button.disabled = true;
-    note('Mengirim suara...');
-    try {
-      const result = await request('/api/voting/vote', {
-        method: 'POST',
-        body: JSON.stringify({ optionId: selected.value }),
-      });
-      note(result.message || 'Suara berhasil dikirim.', 'success');
-      const next = await request('/api/voting');
-      renderVoting(next);
-      $('vote-submit').disabled = true;
-    }
-    catch (error) {
-      note(error.message, 'error');
-      button.disabled = false;
-    }
   });
   document.querySelectorAll('.home-reveal').forEach(item => item.classList.add('is-shown'));
   window.SSCircleTheme?.load();

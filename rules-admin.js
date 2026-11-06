@@ -5,6 +5,8 @@ window.SSCircleRulesAdmin = (() => {
   let changed = () => {};
   let viewportMobile = false;
   let previewTimer = 0;
+  let openedCategory = '';
+  let openedRule = '';
   const $ = id => document.getElementById(id);
   const el = (tag, cls, text) => {
     const node = document.createElement(tag);
@@ -103,11 +105,12 @@ window.SSCircleRulesAdmin = (() => {
       mark(); renderEditor();
       root.querySelector('details:last-of-type')?.setAttribute('open','');
     }));
-    sections.append(toolbar, el('p', 'field-help', 'Klik nama kategori untuk mengedit isinya. Gunakan panah untuk mengatur urutan.'));
+    sections.append(toolbar, el('p', 'field-help', 'Seret ikon ⠿ untuk mengurutkan kategori atau aturan. Klik judul untuk mengedit.'));
     s.rulesSections ||= [];
     s.rulesSections.forEach((section, sectionIndex) => {
       const details = el('details', 'rules-admin-category');
-      if (sectionIndex === 0) details.open = true;
+      details.open = openedCategory === section.id || (!openedCategory && sectionIndex === 0);
+      details.addEventListener('toggle', () => { if (details.open) openedCategory = section.id; });
       const summary = el('summary');
       summary.append(el('strong','', section.title || 'Kategori ' + (sectionIndex + 1)),
         el('span', 'rules-admin-count', (section.items || []).length + ' aturan'));
@@ -130,8 +133,10 @@ window.SSCircleRulesAdmin = (() => {
       section.items ||= [];
       const list = el('div','rules-admin-items');
       section.items.forEach((rule, index) => {
-        const item = el('div','rules-admin-rule');
-        const top = el('div','rules-admin-rule-top');
+        const item = el('details','rules-admin-rule');
+        item.open = openedRule === rule.id;
+        item.addEventListener('toggle', () => { if (item.open) openedRule = rule.id; });
+        const top = el('summary','rules-admin-rule-top');
         top.append(el('span','rules-item-index',String(index+1).padStart(2,'0')),
           el('strong','', rule.text || 'Peraturan baru'));
         const controls = el('div','rules-admin-actions');
@@ -141,11 +146,16 @@ window.SSCircleRulesAdmin = (() => {
             if(section.items.length === 1) return SSCNotice.alert('Kategori perlu setidaknya satu aturan.');
             section.items.splice(index,1); mark();renderEditor();
           }));
-        item.append(top, field('Isi aturan',rule.text,v=>{
+        const inner = el('div', 'rules-admin-rule-fields');
+        inner.append(field('Isi aturan',rule.text,v=>{
           rule.text=v;top.querySelector('strong').textContent=v||'Peraturan baru';
         },false,280),field('Penjelasan tambahan (opsional)',rule.detail,v=>{rule.detail=v;},true,650),controls);
+        item.append(top,inner);
         list.append(item);
       });
+      window.SSCircleSort?.attach(list, { item: '.rules-admin-rule', handleTarget: 'summary', onMove: (from, to) => {
+        const moved = section.items.splice(from, 1)[0]; section.items.splice(to, 0, moved); mark(); renderEditor();
+      }});
       contents.append(list,button('+ Tambah peraturan',()=>{
         if(section.items.length >= 50) return SSCNotice.alert('Maksimal 50 peraturan per kategori.');
         section.items.push({id:newId('rule'),text:'Peraturan baru',detail:''});mark();renderEditor();
@@ -153,6 +163,9 @@ window.SSCircleRulesAdmin = (() => {
       details.append(contents);
       sections.append(details);
     });
+    window.SSCircleSort?.attach(sections, { item: '.rules-admin-category', handleTarget: 'summary', onMove: (from, to) => {
+      const moved = s.rulesSections.splice(from, 1)[0]; s.rulesSections.splice(to, 0, moved); mark(); renderEditor();
+    }});
     root.append(sections);
   }
   let installed = false;

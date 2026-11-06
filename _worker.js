@@ -406,6 +406,7 @@ const HOME_DEFAULTS = {
   homeVotingSessionId: 'voting-1',
   homeVotingImages: [],
   homeVotingOptions: [{ id: 'opsi-1', label: 'Pilihan 1' }, { id: 'opsi-2', label: 'Pilihan 2' }],
+  homeVotingQuestions: null,
   homeVotingVotes: [],
   homeLeaderboardEnabled: false,
   homeLeaderboardTitle: 'Leaderboard Komunitas',
@@ -435,9 +436,18 @@ const HOME_DEFAULTS = {
   homeShowDonate: true,
   homeShowVoting: false,
   homeShowLeaderboard: false,
+  homeUpcomingEnabled: false,
+  homeUpcomingCount: 2,
+  homeUpcomingLayout: 'grid',
+  homeUpcomingOngoingFirst: true,
+  homeUpcomingHideEmpty: true,
+  homeUpcomingTitle: 'Upcoming Events',
+  homeUpcomingDescription: 'Catat tanggalnya dan ikuti kegiatan SSCircle berikutnya.',
+  homeUpcomingButton: 'Lihat Seluruh Jadwal ↗',
   homeLayout: [
     { id: "about", kind: "builtin" },
     { id: "gallery", kind: "builtin" },
+    { id: "upcoming", kind: "builtin" },
     { id: "process", kind: "builtin" },
     { id: "community", kind: "builtin" },
     { id: "profile", kind: "builtin" },
@@ -713,17 +723,40 @@ function validVotingOptions(input) {
     return { id: cleanId, label, description, images };
   });
 }
-function validVotingVotes(input, options) {
+// Format baru: setiap pertanyaan memiliki pilihan dan hasil sendiri. Data lama menjadi pertanyaan pertama.
+function votingQuestions(settings) {
+  const old = [{id:'question-1',title:settings.homeVotingQuestion || 'Pertanyaan voting',
+    description:'',images:settings.homeVotingImages || [],options:settings.homeVotingOptions || []}];
+  return Array.isArray(settings.homeVotingQuestions) && settings.homeVotingQuestions.length ? settings.homeVotingQuestions : old;
+}
+function validVotingQuestions(input, legacy) {
+  const source = Array.isArray(input) ? input : votingQuestions(legacy);
+  if (!source.length || source.length > 15) throw Error('Jumlah pertanyaan voting harus 1–15.');
+  const ids = new Set();
+  return source.map((q, index) => {
+    const id = s(q?.id,64) || ('question-' + (index + 1));
+    if (!/^[a-zA-Z0-9_-]{1,64}$/.test(id) || ids.has(id)) throw Error('ID pertanyaan voting duplikat atau tidak valid.');
+    ids.add(id);
+    const title = s(q?.title,200);
+    if (!title) throw Error('Judul pertanyaan voting wajib diisi.');
+    const images = Array.isArray(q?.images) ? q.images : [];
+    if (images.length > 8) throw Error('Maksimal 8 foto untuk satu pertanyaan.');
+    return {id,title,description:s(q?.description,500),images:[...new Set(images.map(v=>imageSource(v,'Foto voting')))],
+      options:validVotingOptions(q?.options)};
+  });
+}
+function validVotingVotes(input, questions) {
   const votes = Array.isArray(input) ? input : [];
-  const seen = new Set();
-  return votes.slice(0, 5000).flatMap(v => {
-    const account = s(v?.account, 40).replace(/\s+/g, ' ').trim();
-    const optionId = s(v?.optionId, 64);
-    const voterKey = s(v?.voterKey, 128) || ('name:' + account.toLowerCase());
-    if (!voterKey || !optionId || seen.has(voterKey))
-      return [];
-    seen.add(voterKey);
-    return [{ account, optionId, voterKey, createdAt: s(v?.createdAt, 40) || new Date().toISOString() }];
+  const valid = new Map(questions.map(q=>[q.id,new Set(q.options.map(o=>o.id))]));
+  const seen = new Set(), first = questions[0]?.id;
+  return votes.slice(0,5000).flatMap(v=>{
+    const account=s(v?.account,40).replace(/\s+/g,' ').trim();
+    const voterKey=s(v?.voterKey,128) || ('name:'+account.toLowerCase());
+    const questionId=s(v?.questionId,64) || 'question-1';
+    const optionId=s(v?.optionId,64),unique=questionId+'|'+voterKey;
+    if (!voterKey || !valid.get(questionId)?.has(optionId) || seen.has(unique)) return [];
+    seen.add(unique);
+    return [{questionId,account,optionId,voterKey,createdAt:s(v?.createdAt,40)||new Date().toISOString()}];
   });
 }
 function validLeaderboard(input) {
@@ -744,117 +777,85 @@ function validLeaderboard(input) {
   }).filter(season => season.title);
 }
 function votingRuntime(settings) {
-  const now = Date.now();
-  const endsAt = settings.homeVotingPermanent ? 0 : Date.parse(settings.homeVotingEndsAt || '');
-  const hasEnd = Number.isFinite(endsAt) && endsAt > 0;
-  const expired = hasEnd && endsAt <= now;
-  const active = settings.homeVotingEnabled === true && (!hasEnd || !expired || settings.homeVotingPermanent === true);
-  const options = Array.isArray(settings.homeVotingOptions) ? settings.homeVotingOptions : [];
-  const votes = Array.isArray(settings.homeVotingVotes) ? settings.homeVotingVotes : [];
-  const counts = {};
-  for (const option of options)
-    counts[option.id] = 0;
-  for (const vote of votes)
-    if (Object.hasOwn(counts, vote.optionId))
-      counts[vote.optionId]++;
-  const total = Object.values(counts).reduce((a, b) => a + b, 0);
-  const results = options.map(option => ({
-    id: option.id,
-    label: option.label,
-    count: counts[option.id] || 0,
-    percent: total ? Math.round(((counts[option.id] || 0) / total) * 1000) / 10 : 0
-  }));
-  const resultsMode = ['always', 'after_end', 'hidden'].includes(settings.homeVotingResultsMode) ? settings.homeVotingResultsMode : 'after_end';
-  const showResults = resultsMode === 'always' || (resultsMode === 'after_end' && (!active || expired));
-  return {
-    active,
-    expired,
-    hasEnd,
-    endsAt: hasEnd ? new Date(endsAt).toISOString() : '',
-    options,
-    votes,
-    results,
-    total,
-    showResults,
-    resultsMode
-  };
+  const now=Date.now(), end=settings.homeVotingPermanent ? 0 : Date.parse(settings.homeVotingEndsAt||'');
+  const hasEnd=Number.isFinite(end) && end>0,expired=hasEnd && end<=now;
+  const active=settings.homeVotingEnabled===true && (!expired || settings.homeVotingPermanent===true);
+  const questions=votingQuestions(settings),votes=Array.isArray(settings.homeVotingVotes)?settings.homeVotingVotes:[];
+  const resultsMode=['always','after_end','hidden'].includes(settings.homeVotingResultsMode)?settings.homeVotingResultsMode:'after_end';
+  const showResults=resultsMode==='always'||(resultsMode==='after_end'&&(!active||expired));
+  const details=questions.map(q=>{
+    const counts=Object.fromEntries(q.options.map(o=>[o.id,0]));
+    const qvotes=votes.filter(v=>(v.questionId||'question-1')===q.id);
+    for (const vote of qvotes) if(Object.hasOwn(counts,vote.optionId))counts[vote.optionId]++;
+    const total=Object.values(counts).reduce((n,v)=>n+v,0);
+    const results=q.options.map(o=>({id:o.id,label:o.label,count:counts[o.id]||0,
+      percent:total?Math.round((counts[o.id]||0)/total*1000)/10:0}));
+    return {...q,results,totalVotes:total};
+  });
+  return {active,expired,hasEnd,endsAt:hasEnd?new Date(end).toISOString():'',
+    questions:details,options:details[0]?.options||[],votes,results:details[0]?.results||[],
+    total:details.reduce((n,q)=>n+q.totalVotes,0),showResults,resultsMode};
 }
 async function readSettingsRow(env) {
   return await env.DB.prepare('SELECT * FROM form_config WHERE id=1').first();
 }
-async function publicVotingPayload(env) {
-  const form = formFrom(await readSettingsRow(env));
-  const settings = form.settings;
-  const runtime = votingRuntime(settings);
+async function publicVotingPayload(env, application=null) {
+  const {settings}=formFrom(await readSettingsRow(env)),runtime=votingRuntime(settings);
+  const key=application?'app:'+application.id:null;
+  const votedQuestionIds=key?runtime.votes.filter(v=>v.voterKey===key).map(v=>v.questionId||'question-1'):[];
   return {
-    enabled: settings.homeVotingEnabled === true,
-    title: settings.homeVotingTitle,
-    question: settings.homeVotingQuestion,
-    text: settings.homeVotingText,
-    button: settings.homeVotingButton,
-    images: settings.homeVotingShowImage !== false ? (settings.homeVotingImages || []) : [],
-    requireCode: true,
-    permanent: settings.homeVotingPermanent === true,
-    endsAt: runtime.endsAt,
-    active: runtime.active,
-    expired: runtime.expired,
-    deadlineLabel: settings.homeVotingDeadlineLabel,
-    options: runtime.options,
-    results: runtime.showResults ? runtime.results : [],
-    showResults: runtime.showResults,
-    totalVotes: runtime.showResults ? runtime.total : 0
+    enabled:settings.homeVotingEnabled===true,title:settings.homeVotingTitle,
+    question:runtime.questions[0]?.title||'',text:settings.homeVotingText,
+    button:settings.homeVotingButton,images:settings.homeVotingShowImage!==false?(runtime.questions[0]?.images||[]):[],
+    requireCode:true,permanent:settings.homeVotingPermanent===true,endsAt:runtime.endsAt,
+    active:runtime.active,expired:runtime.expired,deadlineLabel:settings.homeVotingDeadlineLabel,
+    options:runtime.options,results:runtime.showResults?runtime.results:[],
+    showResults:runtime.showResults,totalVotes:runtime.showResults?runtime.total:0,
+    votedQuestionIds,
+    questions:runtime.questions.map(q=>({id:q.id,title:q.title,description:q.description,
+      images:settings.homeVotingShowImage!==false?q.images:[],options:q.options,
+      results:runtime.showResults?q.results:[],totalVotes:runtime.showResults?q.totalVotes:0,
+      showResults:runtime.showResults}))
   };
 }
-// Pemeriksaan dan penyimpanan suara
+// Penyimpanan atomik: satu pendaftar boleh memilih satu kali pada SETIAP pertanyaan.
 async function submitVote(env, req) {
-  if (!(await rateLimit(env, req, 'vote', 8, 900)))
-    return bad('Terlalu banyak percobaan voting. Coba lagi nanti.', 429);
-  const input = await body(req, 2400);
-  const optionId = s(input.optionId, 64);
-  const row = await readSettingsRow(env);
-  if (!row)
-    return bad('Voting belum tersedia.', 404);
-  const settings = normalSettings(parse(row.settings) || {}), runtime = votingRuntime(settings);
-  if (settings.homeVotingEnabled !== true)
-    return bad('Voting sedang ditutup.', 403);
-  if (!runtime.active)
-    return bad(runtime.expired ? 'Voting sudah berakhir.' : 'Voting sedang tidak tersedia.', 403);
-  if (!runtime.options.some(option => option.id === optionId))
-    return bad('Pilihan voting tidak valid.', 400);
-  const application = await playerSession(req, env);
-  if (!application)
-    return bad('Masuk menggunakan kode pendaftaran terlebih dahulu.', 401);
-  if (application.status !== VOTING_ACCEPTED_STATUS)
-    return bad('Hanya pendaftar berstatus Diterima yang dapat mengikuti voting.', 403);
-  const voterKey = 'app:' + application.id;
-  const safeAccount = 'Pendaftar ' + application.id.slice(0, 8).toUpperCase();
-  const now = new Date().toISOString(), vote = { voterKey, account: safeAccount, optionId, createdAt: now };
-  if (runtime.votes.some(v => v.voterKey === voterKey || (!v.voterKey && String(v.account || '').toLowerCase() === safeAccount.toLowerCase())))
-    return bad('Akun ini sudah menggunakan hak votingnya.', 409);
-  if (runtime.votes.length >= 5000)
-    return bad('Jumlah suara sudah mencapai batas voting. Hubungi admin.', 409);
-  // One atomic JSON append prevents lost votes and duplicate keys under concurrent requests.
-  const res = await env.DB.prepare(`UPDATE form_config
- SET settings=json_set(settings,'$.homeVotingVotes',json(json_insert(COALESCE(json_extract(settings,'$.homeVotingVotes'),'[]'),'$[#]',json(?))))
- WHERE id=1
- AND COALESCE(json_extract(settings,'$.homeVotingSessionId'),'voting-1')=?
- AND json_extract(settings,'$.homeVotingEnabled')=1
- AND (json_extract(settings,'$.homeVotingPermanent')=1 OR json_extract(settings,'$.homeVotingEndsAt') IS NULL OR json_extract(settings,'$.homeVotingEndsAt')='' OR json_extract(settings,'$.homeVotingEndsAt')>?)
- AND json_array_length(COALESCE(json_extract(settings,'$.homeVotingVotes'),'[]'))<5000
- AND EXISTS (SELECT 1 FROM submissions WHERE id=? AND status='accepted')
- AND NOT EXISTS (SELECT 1 FROM json_each(COALESCE(json_extract(settings,'$.homeVotingVotes'),'[]'))
- WHERE json_extract(value,'$.voterKey')=? OR (json_extract(value,'$.voterKey') IS NULL AND lower(json_extract(value,'$.account'))=?))`)
-    .bind(JSON.stringify(vote), settings.homeVotingSessionId || 'voting-1', now, application.id, voterKey, safeAccount.toLowerCase()).run();
-  if (!Number(res.meta?.changes || 0))
-    return bad('Voting tidak tersimpan. Akun sudah memilih atau sesi telah berubah. Muat ulang halaman.', 409);
-  const payload = await publicVotingPayload(env);
-  return J({
-    ok: true,
-    message: 'Voting berhasil dikirim.',
-    results: payload.results,
-    showResults: payload.showResults,
-    totalVotes: payload.totalVotes
-  });
+  if (!(await rateLimit(env,req,'vote',35,900))) return bad('Terlalu banyak percobaan voting.',429);
+  const input=await body(req,2400),optionId=s(input.optionId,64),questionId=s(input.questionId,64);
+  const row=await readSettingsRow(env);
+  if (!row) return bad('Voting belum tersedia.',404);
+  const settings=normalSettings(parse(row.settings)||{}),runtime=votingRuntime(settings);
+  if (!runtime.active) return bad('Voting sedang tidak tersedia atau telah berakhir.',403);
+  const question=runtime.questions.find(q=>q.id===questionId);
+  if (!question || !question.options.some(o=>o.id===optionId)) return bad('Pertanyaan atau pilihan voting tidak valid.',400);
+  const application=await playerSession(req,env);
+  if (!application) return bad('Masuk menggunakan kode pendaftaran terlebih dahulu.',401);
+  if (application.status!==VOTING_ACCEPTED_STATUS) return bad('Voting hanya untuk pendaftar yang Diterima.',403);
+  const voterKey='app:'+application.id,safeAccount='Pendaftar '+application.id.slice(0,8).toUpperCase();
+  const already=runtime.votes.some(v=>(v.questionId||'question-1')===questionId && v.voterKey===voterKey);
+  if (already) return bad('Kamu sudah memberikan suara untuk pertanyaan ini.',409);
+  if (runtime.votes.length>=5000) return bad('Batas suara voting tercapai. Hubungi admin.',409);
+  const now=new Date().toISOString(),vote={questionId,voterKey,account:safeAccount,optionId,createdAt:now};
+  const firstId='question-1';
+  const res=await env.DB.prepare(`UPDATE form_config
+    SET settings=json_set(settings,'$.homeVotingVotes',json(json_insert(COALESCE(json_extract(settings,'$.homeVotingVotes'),'[]'),'$[#]',json(?))))
+    WHERE id=1
+    AND COALESCE(json_extract(settings,'$.homeVotingSessionId'),'voting-1')=?
+    AND json_extract(settings,'$.homeVotingEnabled')=1
+    AND (json_extract(settings,'$.homeVotingPermanent')=1 OR json_extract(settings,'$.homeVotingEndsAt') IS NULL OR json_extract(settings,'$.homeVotingEndsAt')='' OR json_extract(settings,'$.homeVotingEndsAt')>?)
+    AND json_array_length(COALESCE(json_extract(settings,'$.homeVotingVotes'),'[]'))<5000
+    AND EXISTS (SELECT 1 FROM submissions WHERE id=? AND status='accepted')
+    AND (EXISTS (SELECT 1 FROM json_each(settings,'$.homeVotingQuestions') WHERE json_extract(value,'$.id')=?)
+      OR (?=? AND (json_type(settings,'$.homeVotingQuestions') IS NULL OR json_type(settings,'$.homeVotingQuestions')='null')))
+    AND NOT EXISTS (SELECT 1 FROM json_each(COALESCE(json_extract(settings,'$.homeVotingVotes'),'[]'))
+      WHERE json_extract(value,'$.voterKey')=?
+      AND (json_extract(value,'$.questionId')=? OR (json_extract(value,'$.questionId') IS NULL AND ?=?)))`)
+    .bind(JSON.stringify(vote),settings.homeVotingSessionId||'voting-1',now,application.id,
+      questionId,questionId,firstId,voterKey,questionId,questionId,firstId).run();
+  if (!Number(res.meta?.changes||0)) return bad('Suara belum tersimpan. Muat ulang halaman dan coba lagi.',409);
+  const payload=await publicVotingPayload(env,application);
+  return J({ok:true,message:'Suara untuk pertanyaan ini berhasil dikirim.',questions:payload.questions,
+    results:payload.results,showResults:payload.showResults,totalVotes:payload.totalVotes});
 }
 // Validasi pengaturan dari Admin Control
 function settingsValid(input) {
@@ -922,6 +923,13 @@ function settingsValid(input) {
   out.eventsEnabled = input.eventsEnabled !== false;
   for (const [key, max] of Object.entries({eventsBadge:90,eventsTitle:140,eventsDescription:900,eventsEmptyText:400}))
     out[key] = s(input[key] === undefined ? EVENTS_DEFAULTS[key] : input[key], max);
+  out.homeUpcomingEnabled = input.homeUpcomingEnabled === true;
+  out.homeUpcomingCount = [1,2,3].includes(Number(input.homeUpcomingCount)) ? Number(input.homeUpcomingCount) : 2;
+  out.homeUpcomingLayout = input.homeUpcomingLayout === 'slider' ? 'slider' : 'grid';
+  out.homeUpcomingOngoingFirst = input.homeUpcomingOngoingFirst !== false;
+  out.homeUpcomingHideEmpty = input.homeUpcomingHideEmpty !== false;
+  for (const [key,max] of Object.entries({homeUpcomingTitle:120,homeUpcomingDescription:300,homeUpcomingButton:90}))
+    out[key] = s(input[key] === undefined ? HOME_DEFAULTS[key] : input[key],max);
   const rawEvents = input.eventsItems === undefined ? EVENTS_DEFAULTS.eventsItems : input.eventsItems;
   if (!Array.isArray(rawEvents) || rawEvents.length > 40)
     throw Error('Event maksimal 40 jadwal.');
@@ -1229,10 +1237,11 @@ function settingsValid(input) {
   out.homeVotingEndsAt = votingEndsAt;
   out.homeVotingResultsMode = ['always', 'after_end', 'hidden'].includes(input.homeVotingResultsMode) ? input.homeVotingResultsMode : HOME_DEFAULTS.homeVotingResultsMode;
   out.homeVotingOptions = validVotingOptions(input.homeVotingOptions === undefined ? HOME_DEFAULTS.homeVotingOptions : input.homeVotingOptions);
+  out.homeVotingQuestions = validVotingQuestions(input.homeVotingQuestions, {...HOME_DEFAULTS,...input,homeVotingOptions:out.homeVotingOptions});
   if (out.homeVotingEnabled && !out.homeVotingQuestion)
     throw Error('Isi pertanyaan voting sebelum mengaktifkannya.');
   out.homeVotingRequireCode = true;
-  out.homeVotingVotes = validVotingVotes(input.homeVotingVotes === undefined ? HOME_DEFAULTS.homeVotingVotes : input.homeVotingVotes, out.homeVotingOptions);
+  out.homeVotingVotes = validVotingVotes(input.homeVotingVotes === undefined ? HOME_DEFAULTS.homeVotingVotes : input.homeVotingVotes, out.homeVotingQuestions);
   out.homeLeaderboardSeasons = validLeaderboard(input.homeLeaderboardSeasons === undefined ? HOME_DEFAULTS.homeLeaderboardSeasons : input.homeLeaderboardSeasons);
   // Homepage Builder: bagian asli dan kartu tambahan, diproses sepenuhnya di server.
   const defaultLayout = HOME_DEFAULTS.homeLayout;
@@ -1243,6 +1252,7 @@ function settingsValid(input) {
   const builtinIds = [
     'about',
     'gallery',
+    'upcoming',
     'process',
     'community',
     'profile',
@@ -1757,6 +1767,9 @@ function activePublicMedia(row) {
     for (const src of option.images || [])
       if (typeof src === 'string' && src.startsWith('/api/media/'))
         active.add(src.split('/').pop());
+  for (const question of settings.homeVotingQuestions || [])
+    for (const src of [...(question.images||[]),...(question.options||[]).flatMap(o=>o.images||[])])
+      if (typeof src==='string'&&src.startsWith('/api/media/'))active.add(src.split('/').pop());
   if (typeof settings.homeProfileImage === 'string' && settings.homeProfileImage.startsWith('/api/media/'))
     active.add(settings.homeProfileImage.split('/').pop());
   for (const item of settings.homeProfileItems || []) {
@@ -1920,7 +1933,7 @@ async function route(req, env) {
       return bad('Masuk dengan kode pendaftaran yang sudah Diterima untuk membuka voting.', 401);
     if (application.status !== VOTING_ACCEPTED_STATUS)
       return bad('Voting hanya untuk pendaftar berstatus Diterima.', 403);
-    return J(await publicVotingPayload(env));
+    return J(await publicVotingPayload(env,application));
   }
   if (path === '/api/voting/vote' && method === 'POST')
     return await submitVote(env, req);
@@ -2091,6 +2104,7 @@ async function route(req, env) {
         totalVotes: runtime.total,
         top10: ranking.slice(0, 10),
         results: ranking,
+        questions: runtime.questions.map(q=>({id:q.id,title:q.title,totalVotes:q.totalVotes,results:[...q.results].sort((a,b)=>b.count-a.count||a.label.localeCompare(b.label,'id'))})),
         question: settings.homeVotingQuestion || '',
         active: runtime.active,
         endsAt: runtime.endsAt
@@ -2101,8 +2115,9 @@ async function route(req, env) {
       if (requestBody.confirmation !== 'RESET VOTING')
         return bad('Konfirmasi reset voting tidak sesuai.', 400);
       const session = 'poll-' + uid().replace(/-/g, '').slice(0, 20);
-      const result = await env.DB.prepare("UPDATE form_config SET settings=json_set(settings,'$.homeVotingVotes',json('[]'),'$.homeVotingSessionId',?),updated_at=? WHERE id=1").bind(session, new Date().toISOString()).run();
-      return J({ ok: true, sessionId: session, totalVotes: 0, changed: Number(result.meta?.changes || 0) });
+      const revision=new Date().toISOString()+'-'+uid();
+      const result = await env.DB.prepare("UPDATE form_config SET settings=json_set(settings,'$.homeVotingVotes',json('[]'),'$.homeVotingSessionId',?),updated_at=? WHERE id=1").bind(session, revision).run();
+      return J({ ok: true, revision, sessionId: session, totalVotes: 0, changed: Number(result.meta?.changes || 0) });
     }
     if (path === '/api/admin/form' && method === 'PUT') {
       const input = await body(req, 280000);
@@ -2113,9 +2128,10 @@ async function route(req, env) {
         return bad('Pengaturan sudah diperbarui oleh admin lain. Muat ulang halaman sebelum menyimpan.', 409);
       const settings = settingsValid(input.settings), pages = pagesValid(input.pages);
       const persistedVoting = parse(current.settings) || {};
-      const usedVotingOptions = new Set((persistedVoting.homeVotingVotes || []).map(v => v.optionId).filter(Boolean));
-      const requestedOptions = new Set(settings.homeVotingOptions.map(v => v.id));
-      if ([...usedVotingOptions].some(id => !requestedOptions.has(id)))
+      const oldQuestions=votingQuestions(persistedVoting),newQuestions=settings.homeVotingQuestions;
+      const previouslyUsed=(persistedVoting.homeVotingVotes||[]).map(v=>({questionId:v.questionId||'question-1',optionId:v.optionId}));
+      const requestedOptions=new Set(newQuestions.flatMap(q=>q.options.map(o=>q.id+'|'+o.id)));
+      if (previouslyUsed.some(v=>!requestedOptions.has(v.questionId+'|'+v.optionId)))
         return bad('Pilihan yang sudah memiliki suara tidak dapat dihapus. Mulai sesi voting baru terlebih dahulu.', 409);
       const activeVideoId = videoIdFromURL(settings.homeVideoUrl);
       if (activeVideoId) {
@@ -2135,6 +2151,7 @@ async function route(req, env) {
           settings.homeVotingImage?.startsWith('/api/media/') ? settings.homeVotingImage.split('/').pop() : '',
           ...(settings.homeVotingImages || []).map(src => src.startsWith('/api/media/') ? src.split('/').pop() : '').filter(Boolean),
           ...settings.homeVotingOptions.flatMap(o => (o.images || []).filter(src => src.startsWith('/api/media/')).map(src => src.split('/').pop())),
+          ...settings.homeVotingQuestions.flatMap(q=>[...(q.images||[]),...q.options.flatMap(o=>o.images||[])].filter(src=>src.startsWith('/api/media/')).map(src=>src.split('/').pop())),
           ...settings.eventsItems.filter(event => event.image?.startsWith('/api/media/')).map(event => event.image.split('/').pop()),
           settings.homeProfileImage?.startsWith('/api/media/') ? settings.homeProfileImage.split('/').pop() : '',
           ...(settings.homeProfileItems || []).flatMap(item => [item.src, item.detailImage].filter(src => src?.startsWith('/api/media/')).map(src => src.split('/').pop())),

@@ -110,9 +110,18 @@
     homeShowDonate: true,
     homeShowVoting: false,
     homeShowLeaderboard: false,
+    homeUpcomingEnabled: false,
+    homeUpcomingCount: 2,
+    homeUpcomingLayout: 'grid',
+    homeUpcomingOngoingFirst: true,
+    homeUpcomingHideEmpty: true,
+    homeUpcomingTitle: 'Upcoming Events',
+    homeUpcomingDescription: 'Catat tanggalnya dan ikuti kegiatan SSCircle berikutnya.',
+    homeUpcomingButton: 'Lihat Seluruh Jadwal ↗',
     homeLayout: [
       { id: 'about', kind: 'builtin' },
       { id: 'gallery', kind: 'builtin' },
+      { id: 'upcoming', kind: 'builtin' },
       { id: 'process', kind: 'builtin' },
       { id: 'community', kind: 'builtin' },
       { id: 'profile', kind: 'builtin' },
@@ -136,6 +145,7 @@
   const builtinParts = {
     about: 'tentang',
     gallery: 'galeri',
+    upcoming: 'home-upcoming',
     process: 'proses',
     community: 'komunitas',
     profile: 'profile',
@@ -445,34 +455,19 @@
     }
   }
   function votingRuntime(s) {
-    const end = s.homeVotingPermanent ? 0 : Date.parse(s.homeVotingEndsAt || '');
-    const hasEnd = Number.isFinite(end) && end > 0;
-    const expired = hasEnd && end <= Date.now();
-    const active = s.homeVotingEnabled === true && (!hasEnd || !expired || s.homeVotingPermanent === true);
-    const counts = {};
-    for (const option of s.homeVotingOptions || [])
-      counts[option.id] = 0;
-    for (const vote of s.homeVotingVotes || [])
-      if (Object.hasOwn(counts, vote.optionId))
-        counts[vote.optionId]++;
-    const total = Object.values(counts).reduce((a, b) => a + b, 0);
-    const results = (s.homeVotingOptions || []).map(option => ({
-      id: option.id,
-      label: option.label,
-      count: counts[option.id] || 0,
-      percent: total ? Math.round(((counts[option.id] || 0) / total) * 1000) / 10 : 0
-    }));
-    const mode = ['always', 'after_end', 'hidden'].includes(s.homeVotingResultsMode) ? s.homeVotingResultsMode : 'after_end';
-    const showResults = mode === 'always' || (mode === 'after_end' && (!active || expired));
-    return {
-      active,
-      expired,
-      hasEnd,
-      endsAt: hasEnd ? new Date(end).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }) : '',
-      results,
-      total,
-      showResults
-    };
+    const end=s.homeVotingPermanent?0:Date.parse(s.homeVotingEndsAt||'');
+    const expired=Number.isFinite(end)&&end>0&&end<=Date.now();
+    const active=s.homeVotingEnabled===true&&!expired;
+    const first=Array.isArray(s.homeVotingQuestions)&&s.homeVotingQuestions.length?s.homeVotingQuestions[0]:
+      {id:'question-1',options:s.homeVotingOptions||[]};
+    const counts=Object.fromEntries(first.options.map(o=>[o.id,0]));
+    for(const vote of s.homeVotingVotes||[])
+      if((vote.questionId||'question-1')===first.id&&Object.hasOwn(counts,vote.optionId))counts[vote.optionId]++;
+    const total=Object.values(counts).reduce((a,b)=>a+b,0);
+    const results=first.options.map(o=>({id:o.id,label:o.label,count:counts[o.id]||0,
+      percent:total?Math.round((counts[o.id]||0)/total*1000)/10:0}));
+    const mode=['always','after_end','hidden'].includes(s.homeVotingResultsMode)?s.homeVotingResultsMode:'after_end';
+    return {active,results,total,showResults:mode==='always'||(mode==='after_end'&&!active)};
   }
   function renderVotingSummary(s) {
     const button = $('home-hero-voting-button');
@@ -627,6 +622,40 @@
       grid.append(empty);
     }
   }
+  function renderUpcomingEvents(s) {
+    const section = $('home-upcoming'), list = $('home-upcoming-cards');
+    if (!section || !list) return;
+    list.replaceChildren();
+    paint('home-upcoming-title',s.homeUpcomingTitle);
+    paint('home-upcoming-description',s.homeUpcomingDescription);
+    paint('home-upcoming-link',s.homeUpcomingButton);
+    const now = Date.now();
+    const items = Array.isArray(s.eventsItems) && s.eventsEnabled !== false ? s.eventsItems.filter(e =>
+      e && Number.isFinite(Date.parse(e.startAt)) && Number.isFinite(Date.parse(e.endAt)) && Date.parse(e.endAt) > now) : [];
+    items.sort((a,b)=> {
+      const aStart=Date.parse(a.startAt),bStart=Date.parse(b.startAt);
+      if(s.homeUpcomingOngoingFirst !== false){const aLive=aStart<=now,bLive=bStart<=now;
+        if(aLive!==bLive)return aLive?-1:1;}
+      return aStart-bStart;
+    });
+    const count=[1,2,3].includes(Number(s.homeUpcomingCount))?Number(s.homeUpcomingCount):2;
+    for(const event of items.slice(0,count)){
+      const card=document.createElement('article');card.className='home-upcoming-card';
+      if(event.image){const image=document.createElement('img');image.src=safeImg(event.image);image.alt='Poster '+event.title;image.loading='lazy';card.append(image);}
+      const body=document.createElement('div');body.className='home-upcoming-card-body';
+      const badge=document.createElement('span');badge.className='home-upcoming-status';badge.textContent=Date.parse(event.startAt)<=now?'Berlangsung':'Akan Datang';
+      const title=document.createElement('h3');title.textContent=event.title;
+      const date=document.createElement('p');date.textContent=new Intl.DateTimeFormat('id-ID',{dateStyle:'medium',timeStyle:'short',timeZone:'Asia/Makassar'}).format(new Date(event.startAt))+' WITA';
+      body.append(badge,title,date);if(event.location){const location=document.createElement('small');location.textContent=event.location;body.append(location);}
+      const link=document.createElement('a');link.className='home-upcoming-detail';link.href='events.html';link.textContent='Lihat jadwal lengkap ↗';body.append(link);
+      card.append(body);list.append(card);
+    }
+    if (!items.length && s.homeUpcomingHideEmpty === false) {
+      const empty=document.createElement('p');empty.className='events-empty';empty.textContent='Belum ada event mendatang.';list.append(empty);
+    }
+    list.dataset.layout=s.homeUpcomingLayout==='slider'?'slider':'grid';
+    section.hidden = s.homeUpcomingEnabled !== true || (!list.children.length && s.homeUpcomingHideEmpty !== false);
+  }
   function apply(settings) {
     const s = { ...defaults, ...settings };
     if (s.homeProcessTitle === 'Bergabung dalam lingkaran.')
@@ -733,6 +762,7 @@
     $('home-closed-notice').textContent = s.homeClosedMessage || defaults.homeClosedMessage;
     $('home-registration-button').classList.toggle('registration-closed', closed);
     arrangeHomepage(s);
+    renderUpcomingEvents(s);
     updateSectionNumbers();
     renderGallery(s);
     renderVotingSummary(s);
