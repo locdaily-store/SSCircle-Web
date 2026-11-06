@@ -13,14 +13,17 @@ def page_source(file, prelude=''):
         path=m.group(1).split('?')[0]
         return '<style>'+ (ROOT/path).read_text()+'</style>'
     html=re.sub(r'<link rel="stylesheet" href="([^"]+)">',css,html)
+    # Inline scripts are not deferred by browsers. Execute them after the body
+    # to preserve the original <script defer> behavior during sandbox tests.
+    deferred=[]
     def js(m):
         path=m.group(1).split('?')[0]
         original=(ROOT/path).read_text()
-        # Avoid breaking script tags from embedded source content.
-        return '<script>'+original.replace('</script','<\\/script')+'</script>'
+        deferred.append('<script>'+original.replace('</script','<\\/script')+'</script>')
+        return ''
     html=re.sub(r'<script src="([^"]+)" defer></script>',js,html)
     if prelude: html=html.replace('</head>','<script>'+prelude+'</script></head>')
-    return html
+    return html.replace('</body>', ''.join(deferred)+'</body>')
 settings={
  'open':True,'homeUpcomingEnabled':True,'homeUpcomingCount':2,'homeUpcomingLayout':'grid','homeUpcomingHideEmpty':True,'eventsEnabled':True,
  'seasonArchiveEnabled':True,'homeSeasonHighlightsEnabled':True,'homeSeasonHighlightsCount':2,'homeSeasonHighlightsStyle':'cards','homeSeasonHighlightsHideEmpty':True,
