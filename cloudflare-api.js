@@ -21,6 +21,7 @@ const SSCircle = (() => {
     }
     if (!r.ok) {
       const err = new Error(data.error || 'Terjadi kesalahan (' + r.status + ').');
+      err.status = r.status;
       if (Number.isFinite(data.remainingSeconds))
         err.remainingSeconds = data.remainingSeconds;
       throw err;
@@ -108,7 +109,7 @@ const SSCircle = (() => {
       const form = await api('/admin/form');
       return { ...form, submissions: await this.getSubmissions() };
     },
-    saveForm: (settings, pages) => api('/admin/form', jsonOptions('PUT', { settings, pages })),
+    saveForm: (settings, pages, revision) => api('/admin/form', jsonOptions('PUT', { settings, pages, revision })),
     changeStatus: (id, status, reason = '') => api('/admin/status', jsonOptions('PATCH', { id, status, reason })),
     deleteSubmissions: (payload) => api('/admin/delete-submissions', jsonOptions('POST', payload)),
     getMediaLibrary: () => api('/admin/media-library'),
