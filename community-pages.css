@@ -335,3 +335,171 @@ body.rules-page .rules-consent { width: 100%; }
 .admin-page .season-admin-sublist .ssc-sort-handle,.admin-page .season-admin-summary>.ssc-sort-handle{flex:none;touch-action:none}
 @media(max-width:640px){.season-archive-main{padding-top:6.5rem}.season-archive-card-head{flex-direction:column}.home-season-cards[data-layout=timeline] .home-season-card img{max-width:34%}.admin-page .season-admin-dates,.admin-page .season-admin-rank{grid-template-columns:1fr}.admin-page .season-admin-summary{flex-wrap:wrap}.home-season-header>a{width:100%;text-align:center}}
 @media(prefers-reduced-motion:reduce){.home-season-card{transition:none}}
+
+
+/* V10.32 — Perbaikan lebar section Homepage di grid 12 kolom.
+   Tanpa grid-column, Upcoming Events hanya mendapat satu kolom (sekitar 70px),
+   sehingga poster dan setiap kata terpotong. */
+.home-page .home-content-sections > .home-upcoming,
+.home-page .home-content-sections > .home-season-highlights {
+  grid-column: 1 / -1;
+  width: min(1180px, calc(100% - clamp(32px, 6vw, 92px)));
+  max-width: 100%;
+  min-width: 0;
+  justify-self: center;
+  margin-inline: auto;
+}
+.home-page .home-upcoming-heading > div,
+.home-page .home-season-header > div {flex: 1 1 260px; min-width: 0;}
+.home-page .home-upcoming-heading > a,
+.home-page .home-season-header > a {
+  flex: 0 1 auto;
+  width: auto;
+  max-width: 100%;
+  white-space: normal;
+  text-align: center;
+}
+.home-page .home-upcoming-cards,
+.home-page .home-season-cards {
+  width: 100%; max-width: 100%; min-width: 0;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%,285px),1fr));
+}
+.home-page .home-upcoming-card,
+.home-page .home-season-card {min-width: 0; max-width: 100%;}
+.home-page .home-upcoming-card-body,
+.home-page .home-season-card-content {min-width: 0; overflow-wrap: anywhere;}
+.home-page .home-upcoming-card > img,
+.home-page .home-season-card > img {max-width: 100%;}
+
+/* Arsip publik: ranking dan gallery menyesuaikan panjang nama dan skor. */
+.season-page .season-archive-main,
+.season-page .season-archive-timeline,
+.season-page .season-archive-card,
+.season-page .season-archive-card-head,
+.season-page .season-archive-details-body,
+.season-page .season-archive-group {min-width:0;max-width:100%;box-sizing:border-box;}
+.season-page .season-archive-timeline {grid-template-columns:minmax(0,1fr);}
+.season-page .season-archive-gallery,
+.season-page .season-archive-awards {grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));}
+.season-page .season-archive-feature,
+.season-page .season-archive-award,
+.season-page .season-archive-photo {min-width:0;max-width:100%;overflow-wrap:anywhere;}
+.season-page .season-archive-ranking {
+  padding: 0;
+  list-style: none;
+  counter-reset: season-rank;
+  min-width: 0;
+}
+.season-page .season-archive-ranking li {
+  counter-increment: season-rank;
+  display: grid;
+  grid-template-columns: auto minmax(0,1fr) minmax(0,38%);
+  align-items: center;
+  gap: clamp(.4rem,1.7vw,.85rem);
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.season-page .season-archive-ranking li::before {
+  content: counter(season-rank) '.';
+  color: var(--season-muted);
+  font-weight: 700;
+}
+.season-page .season-archive-ranking li strong,
+.season-page .season-archive-ranking li span {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+.season-page .season-archive-ranking li span {
+  float: none;
+  text-align: right;
+  justify-self: end;
+}
+
+/* Admin: jangan biarkan input, tanggal, tombol, atau toolbar memperlebar kartu. */
+.admin-page #seasons-admin-editor,
+.admin-page #seasons-admin-editor .season-admin-list,
+.admin-page #seasons-admin-editor .season-admin-season,
+.admin-page #seasons-admin-editor .season-admin-body,
+.admin-page #seasons-admin-editor .season-admin-subsection,
+.admin-page #seasons-admin-editor .season-admin-subsection-content,
+.admin-page #seasons-admin-editor .season-admin-sublist,
+.admin-page #seasons-admin-editor .season-admin-mini,
+.admin-page #seasons-admin-editor .season-admin-mini-body,
+.admin-page #seasons-admin-editor .season-admin-rank,
+.admin-page #seasons-admin-editor .season-admin-dates,
+.admin-page #seasons-admin-editor .field-group,
+.admin-page #seasons-admin-editor .season-admin-media {min-width:0;max-width:100%;box-sizing:border-box;}
+.admin-page #seasons-admin-editor :is(input,textarea,select) {
+  min-width: 0;
+  max-width: 100%;
+  width: 100%;
+  box-sizing: border-box;
+}
+.admin-page #seasons-admin-editor :is(.season-admin-summary,.season-admin-mini>summary) {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.admin-page #seasons-admin-editor :is(.season-admin-rank,.season-admin-summary) > .button {
+  max-width: 100%;
+  white-space: normal;
+}
+.admin-page #seasons-admin-editor .season-admin-rank > .field-group {min-width:0;}
+.admin-page #seasons-admin-editor .season-admin-rank > .button {justify-self:start;}
+.admin-page #seasons-admin-editor .season-admin-mini > summary {white-space:normal;}
+.admin-page #seasons-admin-editor .season-admin-count {white-space:normal;overflow-wrap:anywhere;}
+.admin-page #seasons-admin-editor .rules-admin-toolbar {min-width:0;flex-wrap:wrap;}
+
+@media (max-width:700px) {
+  .home-page .home-content-sections > .home-upcoming,
+  .home-page .home-content-sections > .home-season-highlights {
+    width: calc(100% - 32px);
+  }
+  .home-page .home-upcoming-heading,
+  .home-page .home-season-header {align-items:stretch;}
+  .home-page .home-upcoming-heading > a,
+  .home-page .home-season-header > a {width:100%;}
+  .home-page .home-upcoming-cards,
+  .home-page .home-season-cards {grid-template-columns:minmax(0,1fr);}
+  .home-page .home-upcoming-cards[data-layout=slider] .home-upcoming-card {
+    flex-basis: min(86%,360px);
+  }
+  .season-page .season-archive-timeline {padding-left:12px;}
+  .season-page .season-archive-state {max-width:100%;white-space:normal;}
+  .admin-page #seasons-admin-editor .season-admin-rank {
+    grid-template-columns:auto minmax(0,1fr);
+    align-items:start;
+  }
+  .admin-page #seasons-admin-editor .season-admin-rank > .field-group {grid-column:2;}
+  .admin-page #seasons-admin-editor .season-admin-rank > .button {grid-column:2;}
+}
+@media (max-width:420px) {
+  .home-page .home-content-sections > .home-upcoming,
+  .home-page .home-content-sections > .home-season-highlights {width:calc(100% - 24px);}
+  .home-page .home-upcoming-card-body,
+  .home-page .home-season-card-content {padding:.85rem;}
+  .home-page .home-season-cards[data-layout=timeline] .home-season-card {
+    flex-direction:column;
+  }
+  .home-page .home-season-cards[data-layout=timeline] .home-season-card img {
+    max-width:100%;width:100%;min-height:0;height:150px;
+  }
+  .season-page .season-archive-main {width:calc(100% - 24px);}
+  .season-page .season-archive-card-head {padding:.85rem;}
+  .season-page .season-archive-details-body {padding:0 .85rem 1.1rem;}
+  .season-page .season-archive-ranking li {
+    grid-template-columns:auto minmax(0,1fr);
+    gap:.2rem .6rem;
+  }
+  .season-page .season-archive-ranking li span {
+    grid-column:2;
+    justify-self:start;
+    text-align:left;
+  }
+  .admin-page #seasons-admin-editor .season-admin-summary {gap:.3rem;padding:.65rem;}
+  .admin-page #seasons-admin-editor .season-admin-body {padding:.65rem;}
+  .admin-page #seasons-admin-editor .season-admin-mini-body {padding:.6rem;}
+}
