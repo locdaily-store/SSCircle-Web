@@ -56,6 +56,9 @@ jobs:
       - name: Uji warna CSP dan tampilan HP
         run: python tests/browser_smoke.py
 
+      - name: Uji responsif Upcoming Events, Season Archive, dan Admin Control
+        run: python tests/layout_regression.py
+
       - name: Periksa file sensitif (pemeriksaan dasar)
         shell: bash
         run: |
