@@ -33,7 +33,14 @@ now=datetime.now(timezone.utc)
 settings['eventsItems']=[{'id':'opening-s6','title':'Opening SSCircle Season 6','image':'assets/sscircle-community-icon.png','startAt':(now+timedelta(days=25)).isoformat().replace('+00:00','Z'),'endAt':(now+timedelta(days=26)).isoformat().replace('+00:00','Z'),'location':'Minecraft SSCircle Server'}]
 
 with sync_playwright() as p:
- browser=p.chromium.launch(headless=True,executable_path=os.getenv('SSC_CHROME_BIN','/usr/bin/chromium'),args=['--no-sandbox','--disable-dev-shm-usage'])
+ launch_kwargs={'headless':True,'args':['--no-sandbox','--disable-dev-shm-usage']}
+ # Playwright installs Chromium under its own cache on GitHub Actions, not /usr/bin.
+ chrome_path=os.getenv('SSC_CHROME_BIN')
+ if not chrome_path and Path('/usr/bin/chromium').exists():
+  chrome_path='/usr/bin/chromium'
+ if chrome_path:
+  launch_kwargs['executable_path']=chrome_path
+ browser=p.chromium.launch(**launch_kwargs)
  home=page_source('index.html')
  seasons=page_source('seasons.html')
  admin=page_source('admin.html')
