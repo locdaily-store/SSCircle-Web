@@ -8,9 +8,10 @@
     <meta name="description" content="Voting komunitas SSCircle Server.">
     <title>Voting Komunitas | SSCircle Server</title>
     <link rel="icon" href="assets/sscircle-logo.png" type="image/png">
-    <link rel="stylesheet" href="style.css?v=10.26.0">
+    <link rel="stylesheet" href="style.css?v=10.30.0">
     <script src="color-theme.js?v=10.26.0" defer></script>
-    <script src="voting.js?v=10.26.0" defer></script>
+    <script src="voting.js?v=10.30.0" defer></script>
+    <link rel="stylesheet" href="community-pages.css?v=10.30.0">
   </head>
   <body class="home-page voting-page theme-v3">
 
@@ -71,11 +72,7 @@
             <button id="vote-player-logout" type="button" class="home-button home-button-secondary">Keluar</button>
           </div>
         </div>
-        <!-- Formulir pengisian data -->
-        <form id="vote-form" class="vote-form" hidden>
-          <div id="vote-options" class="vote-options"></div>
-          <button id="vote-submit" class="home-button home-button-primary" type="submit">Kirim Voting</button>
-        </form>
+        <div id="vote-questions" class="vote-questions" hidden></div>
         <p id="vote-message" class="vote-message" role="status" aria-live="polite"></p>
       </section>
       <section id="vote-results-section" class="vote-results-section home-reveal" hidden>

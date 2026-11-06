@@ -1320,6 +1320,30 @@ window.SSCircleHomeAdmin = (() => {
     toggle(gallery, 'homeShowGallery', 'Tampilkan galeri', '');
     formGrid(gallery, [['homeGalleryEyebrow', 'Label galeri', 'input'], ['homeGalleryTitle', 'Judul galeri', 'input'], ['homeGalleryText', 'Deskripsi galeri', 'textarea']]);
     galleryEditor(gallery);
+    const upcoming = section('Upcoming Events · Jadwal Homepage', 'Kartu event terdekat otomatis mengambil data dari Atur Event & Jadwal. Tidak perlu menambahkan jadwal dua kali.');
+    toggle(upcoming, 'homeUpcomingEnabled', 'Tampilkan Upcoming Events di Homepage', 'Halaman Event khusus tetap tersedia meskipun kartu di Homepage disembunyikan.');
+    formGrid(upcoming, [
+      ['homeUpcomingTitle','Judul kartu Event','input'],
+      ['homeUpcomingDescription','Deskripsi singkat','textarea'],
+      ['homeUpcomingButton','Teks tombol ke jadwal lengkap','input']
+    ]);
+    const upcomingCount = node('label','field-group');
+    upcomingCount.append(node('span','field-label','Jumlah event yang ditampilkan (1–3)'));
+    const countChoice = node('select');
+    for (const n of [1,2,3]){const o=node('option','',String(n));o.value=String(n);countChoice.append(o);}
+    countChoice.value=String([1,2,3].includes(Number(data.settings.homeUpcomingCount))?data.settings.homeUpcomingCount:2);
+    countChoice.onchange=()=>{data.settings.homeUpcomingCount=Number(countChoice.value);changed();};
+    upcomingCount.append(countChoice);upcoming.append(upcomingCount);
+    const upcomingLayout = node('label','field-group');upcomingLayout.append(node('span','field-label','Tata letak kartu'));
+    const layoutChoice=node('select');for(const [value,title] of [['grid','Grid responsif'],['slider','Slider horizontal']]){const o=node('option','',title);o.value=value;layoutChoice.append(o);}
+    layoutChoice.value=data.settings.homeUpcomingLayout==='slider'?'slider':'grid';
+    layoutChoice.onchange=()=>{data.settings.homeUpcomingLayout=layoutChoice.value;changed();};
+    upcomingLayout.append(layoutChoice);upcoming.append(upcomingLayout);
+    toggle(upcoming,'homeUpcomingOngoingFirst','Prioritaskan event berlangsung','Event yang sedang berlangsung muncul lebih dahulu.');
+    toggle(upcoming,'homeUpcomingHideEmpty','Sembunyikan jika belum ada event','Homepage tetap ringkas tanpa kartu kosong.');
+    const upcomingOpen=node('a','button secondary','Buka Atur Event & Jadwal ↗');upcomingOpen.href='#events-admin';
+    upcomingOpen.onclick=(event)=>{event.preventDefault();document.querySelector('[data-tab="events-admin"]')?.click();};
+    upcoming.append(upcomingOpen);
     const process = section('06 · Alur bergabung', 'Penjelasan singkat langkah bergabung ke SSCircle.');
     toggle(process, 'homeShowProcess', 'Tampilkan alur pendaftaran', '');
     formGrid(process, [['homeProcessTitle', 'Judul bagian', 'input'], ['homeProcessText', 'Deskripsi alur', 'textarea']]);
@@ -1414,6 +1438,7 @@ window.SSCircleHomeAdmin = (() => {
       intro: [basics, welcome, video],
       about: [about],
       gallery: [gallery],
+      upcoming: [upcoming],
       process: [process],
       community: [community],
       profile: [profile],

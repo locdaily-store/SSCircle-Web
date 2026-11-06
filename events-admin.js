@@ -3,7 +3,7 @@
 window.SSCircleEventsAdmin = (() => {
   const $ = id => document.getElementById(id);
   const el = (tag, cls, text) => { const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n; };
-  let model=null, changed=()=>{}, mobile=false, timer=0, installed=false;
+  let model=null, changed=()=>{}, mobile=false, timer=0, installed=false, openedEvent='';
   const uuid=()=> 'event-'+crypto.randomUUID().replace(/-/g,'').slice(0,12);
   function mark(){changed();schedule();}
   function field(label,value,onChange,{multiline=false,max=300,type='text',help=''}={}){
@@ -55,12 +55,14 @@ window.SSCircleEventsAdmin = (() => {
       const start=new Date(Date.now()+86400000);start.setMinutes(0,0,0);
       const end=new Date(start.getTime()+7200000);
       s.eventsItems.push({id:uuid(),title:'Event baru',description:'',location:'',image:'',startAt:start.toISOString(),endAt:end.toISOString()});
-      mark();renderEditor();
+      openedEvent=s.eventsItems.at(-1).id;mark();renderEditor();
     },'primary'));
     root.append(bar);
     if(!s.eventsItems.length)root.append(el('p','panel events-admin-empty','Belum ada event. Klik “+ Tambah event” untuk mulai membuat jadwal.'));
+    const eventList = el('div','events-admin-sort-list'); root.append(eventList);
     s.eventsItems.forEach((item,index)=>{
-      const details=el('details','rules-admin-category events-admin-event');details.open=index===s.eventsItems.length-1;
+      const details=el('details','rules-admin-category events-admin-event');details.open=openedEvent===item.id;
+      details.addEventListener('toggle',()=>{if(details.open)openedEvent=item.id;});
       const head=el('summary'),title=el('strong','',item.title||'Event baru');
       head.append(title,el('span','rules-admin-count',status(item)));
       const main=el('div','rules-admin-category-body');
@@ -87,8 +89,11 @@ window.SSCircleEventsAdmin = (() => {
         onSelect:src=>{item.image=src;mark();renderEditor();},compact:true
       });
       main.append(media);
-      details.append(head,main);root.append(details);
+      details.append(head,main);eventList.append(details);
     });
+    window.SSCircleSort?.attach(eventList,{item:'.events-admin-event',handleTarget:'summary',onMove:(from,to)=>{
+      const moved=s.eventsItems.splice(from,1)[0];s.eventsItems.splice(to,0,moved);mark();renderEditor();
+    }});
   }
   function sizePreview(){const shell=$('events-admin-preview-window'),frame=$('events-admin-preview-frame');if(!shell||!frame)return;
     const width=mobile?390:1150,height=mobile?850:860;

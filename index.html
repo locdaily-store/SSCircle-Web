@@ -9,11 +9,12 @@
     <title>SSCircle Server | Official Website</title>
     <link rel="icon" href="assets/sscircle-logo.png" type="image/png">
     <link rel="preload" href="assets/gallery/sscircle-01.webp" as="image">
-    <link rel="stylesheet" href="style.css?v=10.29.0">
+    <link rel="stylesheet" href="style.css?v=10.30.0">
     <script src="color-theme.js?v=10.26.0" defer></script>
     <script src="cloudflare-api.js?v=10.26.0" defer></script>
     <script src="social-links.js?v=10.26.0" defer></script>
-    <script src="homepage.js?v=10.26.0" defer></script>
+    <script src="homepage.js?v=10.30.0" defer></script>
+    <link rel="stylesheet" href="community-pages.css?v=10.30.0">
   </head>
   <body class="home-page theme-v3">
 
@@ -130,6 +131,15 @@
           </div>
         </section>
 
+        <!-- Upcoming Events: editor dan posisi dikelola melalui Atur Homepage. -->
+        <section class="home-upcoming home-container home-reveal" id="home-upcoming" hidden>
+          <div class="home-section-label"><span></span><i></i><span>COMMUNITY EVENTS</span></div>
+          <div class="home-upcoming-heading">
+            <div><h2 id="home-upcoming-title">Upcoming Events</h2><p id="home-upcoming-description"></p></div>
+            <a id="home-upcoming-link" class="home-button home-button-secondary" href="events.html">Lihat Seluruh Jadwal ↗</a>
+          </div>
+          <div id="home-upcoming-cards" class="home-upcoming-cards"></div>
+        </section>
         <!-- Komunitas dan media sosial -->
         <section class="home-community home-container home-reveal" id="komunitas">
           <div class="home-section-label">
