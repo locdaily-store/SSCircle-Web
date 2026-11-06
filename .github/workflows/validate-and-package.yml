@@ -1,0 +1,123 @@
+name: Periksa dan kemas SSCircle untuk Cloudflare
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-and-package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Ambil kode SSCircle
+        uses: actions/checkout@v4
+
+      - name: Pasang Node.js untuk pemeriksaan JavaScript
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Periksa file wajib dan sintaks
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in index.html admin.html registration.html status.html voting.html _worker.js _routes.json; do
+            test -f "$file" || { echo "File wajib hilang: $file"; exit 1; }
+          done
+          while IFS= read -r -d '' file; do
+            node --check "$file"
+          done < <(find . -type f -name '*.js' ! -path './.git/*' ! -path './.github/*' ! -path './node_modules/*' -print0)
+          python -c 'import json; json.load(open("_routes.json", encoding="utf-8"))'
+
+      - name: Periksa file sensitif (pemeriksaan dasar)
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path, PurePosixPath
+          import re, subprocess, sys
+
+          tracked = [PurePosixPath(p.decode('utf-8')) for p in subprocess.check_output(['git','ls-files','-z']).split(b'\0') if p]
+          secret_suffixes = {'.db','.sqlite','.sqlite3','.sql','.dump','.pem','.key','.p12','.pfx','.bak','.backup','.zip','.7z','.rar','.log'}
+          secret_names = {'credentials.json','secrets.json','id_rsa','id_ed25519'}
+          for relative in tracked:
+              name = relative.name.lower()
+              if name.startswith('.env') or name.startswith('.dev.vars') or name in secret_names or name.startswith('service-account') or relative.suffix.lower() in secret_suffixes:
+                  sys.exit(f'File berisiko ikut di-commit: {relative}; hapus dari Git dan rotasi credential jika perlu')
+
+          patterns = [
+              ('private key',re.compile(r'-----BEGIN (?:RSA |OPENSSH |EC |DSA )?PRIVATE KEY-----')),
+              ('GitHub token',re.compile(r'\b(?:gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,})\b')),
+              ('AWS access key',re.compile(r'\b(?:AKIA|ASIA)[A-Z0-9]{16}\b')),
+              ('API key inline',re.compile(r"""(?i)\b(?:api[_-]?token|api[_-]?key|client[_-]?secret|admin[_-]?password|session[_-]?secret)\b\s*[:=]\s*['\"][^'\"]{8,}['\"]""")),
+          ]
+          checked = 0
+          for relative in tracked:
+              # Definisi regex di workflow memang berisi pola token. Jangan memicu false positive atas definisinya sendiri.
+              if str(relative).startswith('.github/workflows/'):
+                  continue
+              path = Path(relative)
+              if path.suffix.lower() not in {'.js','.html','.css','.json','.md','.txt','.yaml','.yml','.xml','.toml'}:
+                  continue
+              text = path.read_text('utf-8', errors='replace')
+              checked += 1
+              for label, regex in patterns:
+                  if regex.search(text):
+                      sys.exit(f'Kemungkinan {label} ditemukan pada {relative}. Hentikan commit dan periksa secara manual.')
+          print(f'Pemeriksaan dasar secret lolos pada {checked} file teks; ini bukan audit keamanan menyeluruh.')
+          PY
+
+      - name: Kemas ZIP Cloudflare dari root repository
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path, PurePosixPath
+          from zipfile import ZipFile, ZIP_DEFLATED
+          import subprocess, sys
+
+          tracked = sorted([PurePosixPath(p.decode('utf-8')) for p in subprocess.check_output(['git','ls-files','-z']).split(b'\0') if p])
+          root_ext = {'.html','.js','.css','.json','.txt','.xml','.webmanifest','.svg','.png','.jpg','.jpeg','.webp','.gif','.ico','.woff','.woff2','.mp3','.mp4','.webm'}
+          asset_ext = root_ext | {'.ogg','.ttf','.otf','.avif','.wasm'}
+          required = {'index.html','admin.html','registration.html','status.html','voting.html','_worker.js','_routes.json'}
+          extra_root = {'_headers','_redirects','_version.txt','robots.txt','favicon.ico'}
+          excluded_dirs = {'.github','docs','scripts','tests','.vscode'}
+          excluded_root = {'.gitignore','.gitattributes','README.md','CONTRIBUTING.md','SECURITY.md','PANDUAN-GITHUB.md'}
+          site = []
+          for rel in tracked:
+              path = Path(rel)
+              if not path.exists():
+                  sys.exit(f'File terlacak hilang: {rel}')
+              if path.is_symlink():
+                  sys.exit(f'Symlink tidak diizinkan dalam ZIP: {rel}')
+              parts = rel.parts
+              if parts[0] in excluded_dirs or (len(parts) == 1 and (rel.name in excluded_root or rel.suffix.lower() == '.md')):
+                  continue
+              if len(parts) == 1 and (rel.name in extra_root or rel.suffix.lower() in root_ext):
+                  site.append((path, str(rel)))
+              elif parts[0] == 'assets' and len(parts) > 1 and rel.suffix.lower() in asset_ext:
+                  site.append((path, str(rel)))
+              else:
+                  sys.exit(f'File/folder tak dikenal: {rel}. Tinjau sebelum menambahnya ke paket Cloudflare.')
+          missing = required - {name for _,name in site}
+          if missing:
+              sys.exit(f'File penting Cloudflare tidak ditemukan: {sorted(missing)}')
+          output = Path('SSCircle-Cloudflare-Upload.zip')
+          with ZipFile(output, 'w', compression=ZIP_DEFLATED, compresslevel=6) as z:
+              for path, name in site:
+                  z.write(path, arcname=name)
+          print(f'Paket dibuat: {output} ({len(site)} file; root ZIP langsung berisi index.html dan _worker.js).')
+          PY
+
+      - name: Simpan ZIP Cloudflare sebagai artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: SSCircle-Cloudflare-Upload
+          path: SSCircle-Cloudflare-Upload.zip
+          if-no-files-found: error
+          retention-days: 14
