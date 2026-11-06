@@ -84,6 +84,13 @@ with sync_playwright() as p:
     rankWidth:document.querySelector('.season-archive-ranking li').getBoundingClientRect().width})''')
   assert vals['ranks']==3
   assert vals['scrollWidth']<=w+2,('Season Archive overflow',w,vals)
+  # Compact card: state badge remains near its title, not at bottom of empty space.
+  gap=page.evaluate('''() => {
+    const h=document.querySelector('.season-archive-card-head');
+    return h.querySelector('.season-archive-state').getBoundingClientRect().top-
+      h.querySelector('h2').getBoundingClientRect().bottom;
+  }''')
+  assert gap<170,('Season card blank gap',w,gap)
   print('Archive',w,vals)
   page.close()
  for w in (320,390,768,1280):
@@ -118,6 +125,16 @@ with sync_playwright() as p:
     cards:document.querySelectorAll('.season-admin-season').length})''')
   assert vals['cards']==2,('Admin Season cards missing',w,vals)
   assert vals['editorScrollWidth']<=vals['editorWidth']+2,('Admin editor overflow',w,vals)
+  assert page.locator('.season-admin-rank-fields').count()>=3,('Ranking fields missing',w)
+  assert page.locator('.season-admin-rank-top > .ssc-sort-handle').count()>=2,('Ranking drag handles missing',w)
+  assert page.locator('.sidebar-group').count()==4,('Sidebar groups missing',w)
+  assert page.locator('.dashboard-sidebar [data-tab]').count()==13,('Sidebar links missing',w)
+  if w<=390:
+    page.locator('#admin-nav-toggle').click()
+    assert page.locator('#admin-nav-toggle').get_attribute('aria-expanded')=='true'
+    page.locator('.dashboard-sidebar [data-tab="seasons-admin"]').click()
+    assert page.locator('#admin-nav-toggle').get_attribute('aria-expanded')=='false'
+    assert page.locator('#admin-nav-current').inner_text()=='Season & Sejarah'
   # document can have other global admin chrome overflow; ignore unrelated components
   print('Admin',w,vals,'errors',errors[:3])
   page.close()

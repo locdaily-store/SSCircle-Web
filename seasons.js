@@ -37,7 +37,8 @@
       headText.append(el('h2','',season.title||'Season SSCircle'));
       const dates=[dateLabel(season.archiveStartDate),dateLabel(season.archiveEndDate)].filter(Boolean);
       if(dates.length)headText.append(el('p','season-archive-dates',dates.join(' – ')));
-      if(season.archiveSummary)headText.append(el('p','season-archive-summary',season.archiveSummary));
+      const summary=typeof season.archiveSummary==='string'?season.archiveSummary.trim():'';
+      if(summary)headText.append(el('p','season-archive-summary',summary));
       const badge=el('span','season-archive-state',season.archiveStatus==='active'?'Sedang Berlangsung':'Arsip Season');
       heading.append(headText,badge);card.append(heading);
       const detail=el('details','season-archive-details');
