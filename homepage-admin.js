@@ -1419,7 +1419,14 @@ window.SSCircleHomeAdmin = (() => {
     layoutSelect.value=state.settings.homeSeasonHighlightsStyle||'cards';layoutSelect.onchange=()=>{state.settings.homeSeasonHighlightsStyle=layoutSelect.value;changed();};
     layoutLabel.append(layoutSelect);hiOptions.append(layoutLabel);highlights.append(hiOptions);
     toggle(highlights, 'homeSeasonHighlightsHideEmpty', 'Sembunyikan bagian jika belum ada season', 'Homepage tetap rapi ketika arsip belum diisi.');
-    highlights.append(node('p','field-help','Kelola foto, penghargaan dan cerita di menu “Atur Season & Sejarah”. Leaderboard tetap menggunakan data yang sama.'));
+    const publishedCount=(Array.isArray(state.settings.homeLeaderboardSeasons)?state.settings.homeLeaderboardSeasons:[]).filter(season=>season?.archivePublished===true).length;
+    highlights.append(node('p','field-help', publishedCount
+      ? `${publishedCount} season dipublikasikan. Pastikan halaman arsip aktif agar cuplikannya tampil.`
+      : 'Belum ada season yang dipublikasikan. Aktifkan Season Archive dan publikasikan setidaknya satu season di Atur Season & Sejarah.'));
+    const goToSeasons=node('button','button secondary','Kelola Season & Sejarah ↗');
+    goToSeasons.type='button';
+    goToSeasons.onclick=()=>document.querySelector('[data-tab="seasons-admin"]')?.click();
+    highlights.append(goToSeasons);
     const statusSection = section('11 · Cek Status & Kode Saya', 'Atur kartu Homepage dan seluruh pengaturan halaman Cek Status dari satu tempat.');
     formGrid(statusSection, [
       ['homeStatusEyebrow', 'Label kecil', 'input'],
@@ -1461,6 +1468,7 @@ window.SSCircleHomeAdmin = (() => {
       community: [community],
       profile: [profile],
       leaderboard: [leaderboard],
+      'season-highlights': [highlights],
       status: [statusSection],
       design: [visual]
     });
