@@ -79,6 +79,7 @@ window.SSCircleRulesAdmin = (() => {
     checkbox.onchange = () => { s.rulesEnabled = checkbox.checked; mark(); };
     toggle.append(checkbox, el('span', '', 'Wajib membaca dan menyetujui aturan sebelum mendaftar'));
     settings.append(toggle, el('p', 'field-help', 'Saat aktif, pengunjung diarahkan ke Server Rules sebelum membuka Registration.'));
+    settings.append(el('p','field-help','Kewajiban bergabung ke Discord SSCircle Community dan tombol Gabung Discord ditampilkan otomatis di Server Rules, termasuk untuk aturan lama. Alamat undangan mengikuti pengaturan Discord pada Atur Homepage.'));
     for (const [key, label, multiline, max] of [
       ['rulesBadge','Label kecil di atas judul',false,90],
       ['rulesTitle','Judul halaman',false,140],
