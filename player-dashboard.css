@@ -145,3 +145,20 @@
 .player-security .player-actions{display:flex;flex-wrap:wrap;gap:8px}
 .player-security .player-actions .player-action{flex:1 1 155px;font-size:11px}
 @media(max-width:440px){.player-device .player-action{width:100%}}
+
+/* V10.44 Account Security & Recovery */
+.player-recovery-box,.player-security-subsection{display:grid;gap:11px;min-width:0;padding:14px;border-radius:13px;border:1px solid var(--player-border);background:var(--player-tint)}
+.player-recovery-box strong,.player-security-subsection h3{margin:0;font-size:14px;color:var(--ssc-text,#fff)}
+.player-security-subsection-title{display:flex;align-items:center;justify-content:space-between;gap:9px;flex-wrap:wrap}
+.player-security-subsection-title h3{margin:0}
+.player-security-subsection-title button{font-size:11px}
+.player-security-history{display:grid;gap:8px;min-width:0;max-height:400px;overflow-y:auto}
+.player-security-history-item{display:grid;gap:5px;padding:11px 12px;border-radius:10px;background:var(--player-paper);border:1px solid var(--player-border)}
+.player-security-history-item strong{font-size:12px;line-height:1.5;overflow-wrap:anywhere}
+.player-security-history-item small{font-size:11px;line-height:1.5;color:var(--player-quiet);overflow-wrap:anywhere}
+.player-device-actions{display:flex!important;flex:1 1 180px;align-items:center;justify-content:flex-end;gap:6px;flex-wrap:wrap}
+.player-device-actions button{font-size:11px;padding:8px 10px}
+.player-device-editor{flex:1 1 100%;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.player-device-editor input{min-width:0;flex:1 1 125px;border:1px solid var(--player-border);border-radius:9px;padding:10px;background:var(--player-paper);color:var(--ssc-text,#fff);font:inherit;font-size:12px}
+.player-device-editor input:focus-visible{outline:2px solid var(--ssc-primary,#ad8bd9);outline-offset:2px}
+@media(max-width:520px){.player-recovery-box,.player-security-subsection{padding:11px}.player-device-actions{justify-content:flex-start}.player-device-actions button{flex:1 1 auto}.player-device-editor input{flex-basis:100%}}

@@ -84,3 +84,31 @@ test('Notification Center manages only selected message IDs via the protected AP
  assert.match(worker,/new Set\(ids\)\.size!==ids\.length/);
  assert.match(worker,/WHERE application_id=\? AND id IN/);
 });
+
+
+test('V10.44 account recovery requires the verified Mail Box flow rather than username alone',()=>{
+ const ui=source('my-sscircle.html');
+ const script=source('player-dashboard.js');
+ assert.match(ui,/id="player-recovery-request"/);
+ assert.match(ui,/id="player-recovery-show"/);
+ assert.match(ui,/id="player-recovery-back"/);
+ assert.match(script,/\/api\/player\/mailbox\/request-activation/);
+ assert.match(script,/window\.SSCircleMailbox/);
+ assert.doesNotMatch(ui,/type="email".*pemulihan/i);
+});
+test('V10.44 credential and device management use only private authenticated APIs',()=>{
+ const worker=source('_worker.js');
+ const script=source('player-dashboard.js');
+ const html=source('my-sscircle.html');
+ assert.match(worker,/CREATE TABLE IF NOT EXISTS member_security_events/);
+ assert.match(worker,/if\(path==='\/api\/player\/security\/password\/change'/);
+ assert.match(worker,/if\(path==='\/api\/player\/security\/history'/);
+ assert.match(worker,/if\(path==='\/api\/player\/security\/device\/rename'/);
+ assert.match(script,/\/api\/player\/security\/password\/change/);
+ assert.match(script,/\/api\/player\/security\/history/);
+ assert.match(script,/\/api\/player\/security\/device\/rename/);
+ assert.match(html,/id="player-change-password-form"/);
+ assert.match(html,/id="player-security-history"/);
+ assert.match(script,/textContent=labels\[event\.type\]/);
+ assert.doesNotMatch(worker,/member_security_events.*client_ip/);
+});

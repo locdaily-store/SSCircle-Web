@@ -264,3 +264,84 @@ test('Worker does not invoke PBKDF2: activation and login work with browser proo
   assert.equal((await t.call('/api/player/security/login',{method:'POST',
     data:{code:CODE,password:'12345678'}})).status,200);
 });
+
+
+test('V10.44: riwayat keamanan hanya tersedia dengan sesi password dan tanpa rahasia',async()=>{
+ const t=fixture();
+ assert.equal((await t.call('/api/player/security/history')).status,403);
+ assert.equal((await t.call('/api/player/security/device/rename',{method:'POST',
+   data:{id:ID,label:'HP saya'}})).status,403);
+ const a=await activate(t);
+ const response=await t.call('/api/player/security/history');
+ assert.equal(response.status,200,JSON.stringify(response.data));
+ assert.ok(response.data.events.some(event=>event.type==='password_activated'));
+ const json=JSON.stringify(response.data);
+ assert.equal(json.includes(a.invitation),false);
+ assert.equal(json.includes(a.password),false);
+ assert.equal(json.includes('password_hash'),false);
+ assert.equal(json.includes('token_hash'),false);
+ assert.equal(json.includes('CF-Connecting-IP'),false);
+});
+
+test('V10.44: ubah nama perangkat memerlukan sesi kuat dan melarang akses perangkat lain',async()=>{
+ const t=fixture();await activate(t);
+ const before=await t.call('/api/player/security/sessions');
+ const id=before.data.sessions[0].id;
+ const other='33333333-3333-4333-8333-333333333333';
+ const call=(data)=>t.call('/api/player/security/device/rename',{method:'POST',data});
+ assert.equal((await call({id:other,label:'Perangkat tak dikenal'})).status,404);
+ assert.equal((await call({id,label:'<script>alert(1)</script>'})).status,400);
+ assert.equal((await call({id,label:'X'})).status,400);
+ assert.equal((await call({id,label:'HP Utama'})).status,200);
+ const after=await t.call('/api/player/security/sessions');
+ assert.equal(after.data.sessions[0].client,'HP Utama');
+ const event=await t.call('/api/player/security/history');
+ assert.equal(event.data.events[0].type,'device_renamed');
+ assert.ok(event.data.events.length>=2);
+});
+
+test('V10.44: ganti password memverifikasi password lama dan mencabut seluruh sesi lama',async()=>{
+ const t=fixture(),a=await activate(t);
+ const oldSession=t.cookies.secure,legacy=t.cookies.legacy;
+ const original=t.db.prepare('SELECT password_salt,password_hash FROM member_credentials WHERE application_id=?').get(ID);
+ const oldProof=pbkdf2Sync(a.password,original.password_salt,220000,32,'sha256').toString('base64url');
+ const salt=Buffer.alloc(16,41).toString('base64url'),password='PasswordBaru#2044';
+ const proof=pbkdf2Sync(password,salt,220000,32,'sha256').toString('base64url');
+ const change=(data)=>t.call('/api/player/security/password/change',{method:'POST',data});
+ assert.equal((await change({currentProof:'A'.repeat(43),salt,proof})).status,403);
+ assert.equal((await change({currentProof:oldProof,salt:'wrong',proof})).status,400);
+ const changed=await change({currentProof:oldProof,salt,proof});
+ assert.equal(changed.status,200,JSON.stringify(changed.data));
+ assert.equal(changed.data.changed,true);
+ assert.equal(changed.data.authenticated,true);
+ assert.equal((await t.call('/api/player/security/history',{cookie:legacy+'; '+oldSession})).status,403);
+ const current=await t.call('/api/player/security/sessions');
+ assert.equal(current.data.sessions.length,1);
+ assert.equal(current.data.sessions[0].current,true);
+ const events=await t.call('/api/player/security/history');
+ assert.equal(events.data.events.some(row=>row.type==='password_changed'),true);
+ assert.equal((await t.call('/api/player/security/login',{method:'POST',
+   data:{code:CODE,password:a.password}})).status,401);
+ assert.equal((await t.call('/api/player/security/login',{method:'POST',
+   data:{code:CODE,password}})).status,200);
+});
+
+test('V10.44: reset lewat kode admin memutus perangkat lama dan tetap mempertahankan profil',async()=>{
+ const t=fixture(),a=await activate(t);
+ await t.call('/api/player/profile',{method:'PUT',data:profile});
+ const oldCookie=t.cookies.legacy+'; '+t.cookies.secure;
+ const invitation=await t.call('/api/admin/member-invite',{auth:'admin',method:'POST',
+   data:{id:ID,verification:'identity-confirmed'}});
+ assert.equal(invitation.status,200);
+ const reset=await t.call('/api/player/security/activate',{method:'POST',
+   data:{invite:invitation.data.invite,password:'PasswordPulih#2044'}});
+ assert.equal(reset.status,200,JSON.stringify(reset.data));
+ assert.equal((await t.call('/api/player/security/state',{cookie:oldCookie})).data.authenticated,false);
+ assert.equal((await t.call('/api/player/profile')).data.profile.displayName,'Builder SSCircle');
+ const events=await t.call('/api/player/security/history');
+ assert.equal(events.data.events.some(row=>row.type==='password_recovered'),true);
+ assert.equal((await t.call('/api/player/security/login',{method:'POST',
+   data:{code:CODE,password:a.password}})).status,401);
+ assert.equal((await t.call('/api/player/security/login',{method:'POST',
+   data:{code:CODE,password:'PasswordPulih#2044'}})).status,200);
+});
