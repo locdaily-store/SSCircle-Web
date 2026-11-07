@@ -37,6 +37,8 @@ test('pendaftar tidak dapat langsung membuka /registration atau mengirim formuli
   const api=await request('/api/rules'); const data=await api.json();
   assert.equal(api.status,200);assert.equal(data.rulesSections.length,2);
   assert.equal(data.rulesSections.reduce((n,s)=>n+s.items.length,0),16);
+  assert.equal(data.discordRequired,true);
+  assert.equal(data.discordInviteUrl,'https://discord.gg/vQQSgY2GRS');
   assert.ok(data.version);
   const denied=await request('/api/apply',{method:'POST',body:{answers:{},website:''}});
   assert.equal(denied.status,403);assert.match((await denied.json()).error,/Server Rules/);
@@ -45,7 +47,10 @@ test('tanda tangan aturan mengizinkan akses dan menolak versi yang sudah berubah
   const {request,row}=setup();
   const data=await (await request('/api/rules')).json();
   assert.equal((await request('/api/rules/agree',{method:'POST',body:{agreed:false,version:data.version}})).status,400);
-  const approved=await request('/api/rules/agree',{method:'POST',body:{agreed:true,version:data.version}});
+  const missingDiscord=await request('/api/rules/agree',{method:'POST',body:{agreed:true,version:data.version}});
+  assert.equal(missingDiscord.status,400);
+  assert.match((await missingDiscord.json()).error,/Discord/);
+  const approved=await request('/api/rules/agree',{method:'POST',body:{agreed:true,discordAcknowledged:true,version:data.version}});
   assert.equal(approved.status,200);
   const setCookie=approved.headers.get('Set-Cookie');
   assert.match(setCookie,/HttpOnly/);assert.match(setCookie,/SameSite=Lax/);assert.match(setCookie,/Secure/);
