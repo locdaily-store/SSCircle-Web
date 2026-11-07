@@ -223,12 +223,15 @@
     }
     button.disabled=true;securityMessage('Memverifikasi undangan dan membuat akun aman...');
     try{
-      await request('/api/player/security/activate',{method:'POST',
+      const result=await request('/api/player/security/activate',{method:'POST',
         headers:{'Content-Type':'application/json'},body:JSON.stringify({
           invite:$('player-invite-secret').value.trim(),password
         })});
       $('player-activate-form').reset();
-      await loadSecurityState();securityMessage('Akun aman berhasil diaktifkan. Password tidak disimpan di browser.');
+      await loadSecurityState();
+      securityMessage(result.loginRequired
+        ? 'Akun sudah berhasil diaktifkan. Masuk menggunakan password dashboard yang baru dibuat.'
+        : 'Akun aman berhasil diaktifkan. Password tidak disimpan di browser.');
     }catch(error){
       securityMessage('Aktivasi gagal: '+error.message);
       if(error.status===429)activationCooldown(error.remainingSeconds||300);
