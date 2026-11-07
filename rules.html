@@ -8,10 +8,10 @@
     <title>Server Rules | SSCircle Server</title>
     <link rel="icon" type="image/png" href="assets/sscircle-logo.png">
     <link rel="stylesheet" href="style.css?v=10.31.0">
-    <link rel="stylesheet" href="community-pages.css?v=10.31.0">
+    <link rel="stylesheet" href="community-pages.css?v=10.39.0">
     <script src="color-theme.js?v=10.26.0" defer></script>
     <script src="site-shell.js?v=10.31.0" defer></script>
-    <script src="rules.js?v=10.29.0" defer></script>
+    <script src="rules.js?v=10.39.0" defer></script>
   </head>
   <body class="home-page rules-page theme-v3">
     <!-- Header halaman peraturan -->
@@ -44,6 +44,28 @@
       <div id="rules-sections" class="rules-sections" aria-live="polite">
         <p class="rules-loading">Memuat peraturan server...</p>
       </div>
+
+      <!-- Kewajiban komunitas ditampilkan juga untuk aturan lama yang tersimpan. -->
+      <section class="rules-discord-required" aria-labelledby="rules-discord-title">
+        <div class="rules-discord-content">
+          <span class="rules-discord-icon" aria-hidden="true">♧</span>
+          <div>
+            <span class="rules-discord-eyebrow">WAJIB UNTUK ANGGOTA SSCIRCLE</span>
+            <h2 id="rules-discord-title">Bergabung ke Discord SSCircle Community</h2>
+            <p>Setiap pendaftar wajib bergabung ke Discord SSCircle Community. Pengumuman server, koordinasi, dan informasi penting disampaikan melalui komunitas Discord.</p>
+          </div>
+        </div>
+        <a id="rules-discord-join" class="rules-discord-button"
+           href="https://discord.gg/vQQSgY2GRS" target="_blank" rel="noopener noreferrer">
+          <img src="assets/discord-logo.png" width="21" height="21" alt="">
+          Gabung Discord Community <span aria-hidden="true">↗</span>
+        </a>
+        <label class="rules-discord-confirm" for="rules-discord-check">
+          <input id="rules-discord-check" type="checkbox">
+          <span>Saya sudah bergabung ke Discord SSCircle Community dan bersedia mengikuti informasi komunitas.</span>
+        </label>
+        <p class="rules-discord-hint">Centang setelah bergabung. Konfirmasi ini berupa pernyataan pemain, bukan pemeriksaan otomatis akun Discord.</p>
+      </section>
 
       <!-- Persetujuan wajib di bagian paling bawah -->
       <section class="rules-consent" id="rules-consent" aria-labelledby="rules-consent-heading">

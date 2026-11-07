@@ -23,7 +23,16 @@ function fixture(){
   const DB={prepare(sql){let params=[],stmt;try{stmt=db.prepare(sql)}catch(e){throw Error('SQL '+e.message+' :: '+sql)}
     return {bind(...xs){params=xs;return this},async first(){return stmt.get(...params)||null},async all(){return {results:stmt.all(...params)}},async run(){let r=stmt.run(...params);return {meta:{changes:r.changes}}}};
   }};
-  const env={DB,ADMIN_PASSWORD:pass,SESSION_SECRET:secret,ASSETS:{fetch:async()=>new Response('asset',{status:200})}};
+  DB.batch=async statements=>{
+   db.exec('BEGIN IMMEDIATE');
+   try {
+     const results=[];
+     for(const statement of statements)results.push(await statement.run());
+     db.exec('COMMIT');
+     return results;
+   }catch(error){db.exec('ROLLBACK');throw error;}
+ };
+ const env={DB,ADMIN_PASSWORD:pass,SESSION_SECRET:secret,ASSETS:{fetch:async()=>new Response('asset',{status:200})}};
   const exp=Math.floor(Date.now()/1000)+3600;
   let legacy=signed('ssc_player',{id:ID,exp},secret+'|player-session');
   let admin=signed('ssc_s6_admin',{exp},secret+'|'+pass);
@@ -46,7 +55,7 @@ function fixture(){
     if(update)absorb(response);
     return {status:response.status,data:result,response};
   }
-  return {call,db,cookies};
+  return {call,db,cookies,env};
 }
 const profile={displayName:'Builder SSCircle',bio:'Best Builder S6',visibility:'private',showStats:false,eventAlerts:true};
 async function activate(t){
@@ -126,4 +135,64 @@ test('akun menunggu/ditolak tidak bisa dibuatkan undangan dan link admin tidak m
   assert.equal((await t.call('/api/player/security/activate',{method:'POST',data:{invite:second.data.invite,password:'PasswordKuat#2026'}})).status,200);
   const row=t.db.prepare('SELECT secret_hash FROM member_activation_invites WHERE application_id=?').get(ID);
   assert.notEqual(row.secret_hash,second.data.invite);
+});
+
+test('password 8 karakter bisa digunakan; hash gagal tidak membakar kode aktivasi',async()=>{
+  const t=fixture();
+  const invitation=(await t.call('/api/admin/member-invite',{method:'POST',auth:'admin',
+    data:{id:ID,verification:'identity-confirmed'}})).data.invite;
+  const original=t.env.DB.batch;
+  t.env.DB.batch=async()=>{throw Error('Simulated temporary transaction outage');};
+  const failed=await t.call('/api/player/security/activate',{method:'POST',
+    data:{invite:invitation,password:'Pass#123'}});
+  assert.equal(failed.status,503);
+  assert.match(failed.data.error,/Kode aktivasi tidak dibatalkan/);
+  assert.match(failed.data.supportCode,/^[0-9a-f]{8}$/);
+  assert.equal(t.db.prepare('SELECT used_at FROM member_activation_invites WHERE application_id=?').get(ID).used_at,null);
+  assert.equal(t.db.prepare('SELECT COUNT(*) AS n FROM member_credentials').get().n,0);
+  t.env.DB.batch=original;
+  const retry=await t.call('/api/player/security/activate',{method:'POST',
+    data:{invite:invitation,password:'Pass#123'}});
+  assert.equal(retry.status,200,JSON.stringify(retry.data));
+  assert.equal((await t.call('/api/player/security/state')).data.authenticated,true);
+});
+
+test('cooldown aktivasi tepat lima menit dan password kurang dari 8 ditolak',async()=>{
+  const t=fixture();
+  const invitation=(await t.call('/api/admin/member-invite',{method:'POST',auth:'admin',
+    data:{id:ID,verification:'identity-confirmed'}})).data.invite;
+  const tooShort=await t.call('/api/player/security/activate',{method:'POST',
+    data:{invite:invitation,password:'Pass123'}});
+  assert.equal(tooShort.status,400);
+  for(let i=1;i<5;i++)await t.call('/api/player/security/activate',{method:'POST',
+    data:{invite:'Z'.repeat(32),password:'Pass#123'}});
+  const blocked=await t.call('/api/player/security/activate',{method:'POST',
+    data:{invite:invitation,password:'Pass#123'}});
+  assert.equal(blocked.status,429);
+  assert.equal(blocked.data.remainingSeconds<=300,true);
+  assert.equal(blocked.data.remainingSeconds>0,true);
+  assert.match(blocked.data.error,/percobaan aktivasi/);
+});
+
+test('sesi yang gagal dibuat tidak dianggap aktivasi gagal, password tetap tersimpan',async()=>{
+  const t=fixture();
+  const invitation=(await t.call('/api/admin/member-invite',{method:'POST',auth:'admin',
+    data:{id:ID,verification:'identity-confirmed'}})).data.invite;
+  const originalPrepare=t.env.DB.prepare;
+  t.env.DB.prepare=function(sql){
+    if(/INSERT INTO member_secure_sessions/.test(sql))throw Error('Temporary session outage');
+    return originalPrepare(sql);
+  };
+  const result=await t.call('/api/player/security/activate',{method:'POST',
+    data:{invite:invitation,password:'Kunci#123'}});
+  assert.equal(result.status,200,JSON.stringify(result.data));
+  assert.equal(result.data.activated,true);
+  assert.equal(result.data.loginRequired,true);
+  const credential=t.db.prepare('SELECT password_hash FROM member_credentials WHERE application_id=?').get(ID);
+  assert.ok(credential?.password_hash);
+  assert.notEqual(t.db.prepare('SELECT used_at FROM member_activation_invites WHERE application_id=?').get(ID).used_at,null);
+  t.env.DB.prepare=originalPrepare;
+  const login=await t.call('/api/player/security/login',{method:'POST',
+    data:{code:CODE,password:'Kunci#123'}});
+  assert.equal(login.status,200,JSON.stringify(login.data));
 });

@@ -87,9 +87,43 @@ with sync_playwright() as p:
         assert page.locator('#status-result a[href="/mailbox"]').is_visible()
         assert page.locator('#status-result a[href="/my-sscircle"]').is_visible()
         assert page.evaluate('document.documentElement.scrollWidth<=innerWidth+2')
+        # The eye icon must reveal and re-hide the same typed password.
+        page.locator('#status-secure-login-panel > summary').click()
+        password_input=page.locator('#status-secure-password')
+        password_input.fill('KataSandi#123')
+        eye=page.locator('#status-secure-password + .ssc-password-eye')
+        assert eye.is_visible(),('Missing password eye icon',width)
+        eye.click()
+        assert password_input.get_attribute('type')=='text'
+        assert password_input.input_value()=='KataSandi#123'
+        eye.click()
+        assert password_input.get_attribute('type')=='password'
+        assert page.evaluate('document.documentElement.scrollWidth<=innerWidth+2')
         assert not errs,('Status JS',width,errs)
         print('STATUS',width,'STAYS ON PAGE, PASS')
         page.close()
+    # Discord requirement must appear even when the existing saved categories
+    # have no Discord rule; the invite must be a clickable official link.
+    rules_mock='''window.fetch=async path=>{
+      const p=String(path);
+      const data=p==='/api/rules'?{
+        registrationOpen:true,rulesEnabled:true,version:'signed-test-version',
+        discordRequired:true,discordInviteUrl:'https://discord.gg/vQQSgY2GRS'
+      }:{settings:{homeDiscordUrl:'https://discord.gg/vQQSgY2GRS'}};
+      return new Response(JSON.stringify(data),{status:200,
+        headers:{'Content-Type':'application/json'}});
+    };'''
+    for width in (320,390,768,1280):
+        rules=browser.new_page(viewport={'width':width,'height':850})
+        rule_errors=[]
+        rules.on('pageerror',lambda e:rule_errors.append(str(e)))
+        rules.set_content(inline('rules.html',rules_mock),wait_until='domcontentloaded')
+        assert rules.locator('#rules-discord-join').is_visible()
+        assert rules.locator('#rules-discord-join').get_attribute('href')=='https://discord.gg/vQQSgY2GRS'
+        assert rules.locator('#rules-discord-check').is_visible()
+        assert rules.evaluate('document.documentElement.scrollWidth<=innerWidth+2'),('Discord rules overflow',width)
+        assert not rule_errors,('Rules Javascript',width,rule_errors)
+        rules.close()
     page=browser.new_page(viewport={'width':390,'height':950})
     page.on('dialog',lambda d:d.accept())
     page.set_content(inline('admin.html',admin_mock),wait_until='domcontentloaded')

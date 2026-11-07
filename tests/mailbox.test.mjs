@@ -25,6 +25,15 @@ function fixture(){
  return {bind(...values){args=values;return this;},async first(){return statement.get(...args)||null;},
   async run(){const res=statement.run(...args);return {meta:{changes:res.changes}};},
   async all(){return {results:statement.all(...args)}}};}};
+ DB.batch=async statements=>{
+   db.exec('BEGIN IMMEDIATE');
+   try {
+     const results=[];
+     for(const statement of statements)results.push(await statement.run());
+     db.exec('COMMIT');
+     return results;
+   }catch(error){db.exec('ROLLBACK');throw error;}
+ };
  const env={DB,SESSION_SECRET:SECRET,ADMIN_PASSWORD:ADMIN,
   ASSETS:{fetch:async()=>new Response('private content',{status:200})}};
  const expires=Math.floor(Date.now()/1000)+3600;
