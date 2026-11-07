@@ -128,3 +128,20 @@
 .player-award small{font-size:10px;color:var(--player-quiet)}
 .player-award p{font-size:11px;line-height:1.6}
 @media(max-width:420px){.player-setting-actions{align-items:stretch}.player-setting-actions button{width:100%}}
+/* V10.37: keamanan anggota */
+.player-security{display:grid;gap:14px;min-width:0}
+.player-security>div:not(.player-section-head){min-width:0}
+.player-security [hidden]{display:none!important}
+.player-security #player-security-activate,
+.player-security #player-security-login,
+.player-security #player-security-active{display:grid;gap:13px;min-width:0}
+.player-device-list{display:grid;gap:9px;min-width:0}
+.player-device{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;min-width:0;padding:11px 12px;background:var(--player-tint);border:1px solid var(--player-border);border-radius:11px}
+.player-device>div{flex:1 1 160px;min-width:0;display:grid;gap:4px}
+.player-device strong{font-size:11px;overflow-wrap:anywhere}
+.player-device small{font-size:10px;color:var(--player-quiet);overflow-wrap:anywhere}
+.player-device button{flex:0 1 auto}
+#player-edit-requirement:not([hidden]){border:1px solid var(--player-border);border-radius:9px;padding:10px 12px;background:var(--player-tint)}
+.player-security .player-actions{display:flex;flex-wrap:wrap;gap:8px}
+.player-security .player-actions .player-action{flex:1 1 155px;font-size:11px}
+@media(max-width:440px){.player-device .player-action{width:100%}}

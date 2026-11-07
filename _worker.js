@@ -1920,23 +1920,265 @@ function memberAwards(settings,id) {
       .map(a=>({seasonId:season.id,seasonTitle:season.title,
         title:a.title,description:a.description || ''})));
 }
+/* SSCircle V10.37: independently-verified account activation, secure sessions.
+   Registration codes do not grant permission to set/replace a dashboard password. */
+const MEMBER_SECURE_COOKIE = 'ssc_member_secure';
+const MEMBER_SECURE_SECONDS = 7 * 24 * 3600;
+const MEMBER_INVITE_SECONDS = 24 * 3600;
+const MEMBER_PASSWORD_ITERATIONS = 220000;
+const memberSecurityReady = new WeakSet();
+async function ensureMemberSecurity(env) {
+  if (memberSecurityReady.has(env.DB)) return;
+  await ensureMemberCenter(env);
+  const statements = [
+    `CREATE TABLE IF NOT EXISTS member_credentials (
+      application_id TEXT PRIMARY KEY, password_salt TEXT NOT NULL,
+      password_hash TEXT NOT NULL, iterations INTEGER NOT NULL,
+      failed_attempts INTEGER NOT NULL DEFAULT 0, locked_until INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+      FOREIGN KEY(application_id) REFERENCES submissions(id) ON DELETE CASCADE)`,
+    `CREATE TABLE IF NOT EXISTS member_activation_invites (
+      application_id TEXT PRIMARY KEY, secret_hash TEXT NOT NULL,
+      expires_at INTEGER NOT NULL, used_at TEXT, created_at TEXT NOT NULL,
+      FOREIGN KEY(application_id) REFERENCES submissions(id) ON DELETE CASCADE)`,
+    `CREATE TABLE IF NOT EXISTS member_secure_sessions (
+      id TEXT PRIMARY KEY, application_id TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE,
+      client_label TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL,
+      expires_at INTEGER NOT NULL, revoked_at TEXT,
+      FOREIGN KEY(application_id) REFERENCES submissions(id) ON DELETE CASCADE)`,
+    'CREATE INDEX IF NOT EXISTS idx_ssc_secure_member ON member_secure_sessions(application_id,expires_at)'
+  ];
+  for (const statement of statements) await env.DB.prepare(statement).run();
+  memberSecurityReady.add(env.DB);
+}
+function readMemberSecureCookie(req) {
+  return (req.headers.get('Cookie') || '').split(';').map(x=>x.trim())
+    .find(x=>x.startsWith(MEMBER_SECURE_COOKIE+'='))?.slice(MEMBER_SECURE_COOKIE.length+1)||'';
+}
+const memberSecureCookie = (value,age)=>
+  MEMBER_SECURE_COOKIE+'='+value+'; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age='+age;
+const memberInviteHash=(env,code)=>hmac(env.SESSION_SECRET+'|member-invite',code);
+async function memberDerivePassword(password,salt,iterations=MEMBER_PASSWORD_ITERATIONS) {
+  const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(password),
+    'PBKDF2',false,['deriveBits']);
+  const derived=await crypto.subtle.deriveBits({
+    name:'PBKDF2',hash:'SHA-256',salt:new TextEncoder().encode(salt),iterations
+  },key,256);
+  return b64(new Uint8Array(derived));
+}
+function memberPasswordValid(value) {
+  return typeof value==='string' && value.length>=12 && value.length<=128
+    && !/[\x00-\x1f\x7f]/.test(value);
+}
+function memberAgent(req) {
+  return s(req.headers.get('User-Agent')||'Perangkat tidak dikenal',105);
+}
+async function memberStrongSession(req,env,application) {
+  if (!application || application.status!=='accepted' || !env.SESSION_SECRET) return null;
+  const token=readMemberSecureCookie(req), parts=token.split('.');
+  if(parts.length!==2)return null;
+  const signature=await hmac(env.SESSION_SECRET+'|member-secure',parts[0]);
+  if(!safeEq(signature,parts[1]))return null;
+  try {
+    const payload=JSON.parse(unb64(parts[0])), now=Math.floor(Date.now()/1000);
+    if(payload.id!==application.id || typeof payload.sid!=='string' ||
+       !/^[0-9a-f-]{36}$/.test(payload.sid) ||
+       !Number.isSafeInteger(payload.exp) || payload.exp<=now ||
+       (Number(payload.epoch)||0)!==await memberEpoch(env,application.id))return null;
+    await ensureMemberSecurity(env);
+    return await env.DB.prepare(`SELECT id,client_label,created_at,expires_at
+      FROM member_secure_sessions WHERE id=? AND application_id=? AND token_hash=?
+      AND revoked_at IS NULL AND expires_at>?`)
+      .bind(payload.sid,application.id,await digest(token),now).first();
+  } catch {return null;}
+}
+async function memberIssueSession(env,req,app) {
+  const id=uid(),expires=Math.floor(Date.now()/1000)+MEMBER_SECURE_SECONDS;
+  const part=b64(JSON.stringify({id:app.id,sid:id,epoch:await memberEpoch(env,app.id),
+    exp:expires,nonce:uid()}));
+  const token=part+'.'+await hmac(env.SESSION_SECRET+'|member-secure',part);
+  await env.DB.prepare(`INSERT INTO member_secure_sessions
+    (id,application_id,token_hash,client_label,created_at,expires_at)
+    VALUES(?,?,?,?,?,?)`).bind(id,app.id,await digest(token),
+      memberAgent(req),new Date().toISOString(),expires).run();
+  return token;
+}
+function memberStrongResponse(value,token,legacy=null) {
+  const response=J(value);
+  response.headers.append('Set-Cookie',memberSecureCookie(token,MEMBER_SECURE_SECONDS));
+  if(legacy) {
+    response.headers.append('Set-Cookie',playerCookie(legacy,PLAYER_SESSION_SECONDS));
+    response.headers.append('Set-Cookie',oldPlayerCookie('',0));
+  }
+  return response;
+}
+async function memberSecurityAPI(req,env,path,method) {
+  if(path.startsWith('/api/admin/')) {
+    if(!await admin(req,env))return bad('Silakan masuk ke Admin Control.',401);
+    await ensureMemberSecurity(env);
+    if(path==='/api/admin/member-invite' && method==='POST') {
+      if(!await rateLimit(env,req,'member-invite-issue',30,900))
+        return bad('Terlalu banyak permintaan aktivasi.',429);
+      const value=await body(req,1500);
+      if(!/^[0-9a-f-]{36}$/.test(value?.id||'') ||
+         value?.verification!=='identity-confirmed')
+        return bad('Konfirmasi verifikasi identitas dan ID anggota diperlukan.',400);
+      const app=await env.DB.prepare('SELECT id,status FROM submissions WHERE id=?')
+        .bind(value.id).first();
+      if(!app || app.status!=='accepted')return bad('Hanya anggota Diterima yang dapat diaktivasi.',403);
+      const secret=b64(crypto.getRandomValues(new Uint8Array(24))),
+        hashed=await memberInviteHash(env,secret),
+        expiration=Math.floor(Date.now()/1000)+MEMBER_INVITE_SECONDS,
+        now=new Date().toISOString();
+      await env.DB.prepare(`INSERT INTO member_activation_invites
+        (application_id,secret_hash,expires_at,created_at,used_at)
+        VALUES(?,?,?,?,NULL) ON CONFLICT(application_id) DO UPDATE SET
+        secret_hash=excluded.secret_hash,expires_at=excluded.expires_at,
+        created_at=excluded.created_at,used_at=NULL`)
+        .bind(value.id,hashed,expiration,now).run();
+      // Return plaintext exactly once to the verifying admin. Only the keyed hash persists.
+      return J({ok:true,invite:secret,expiresAt:new Date(expiration*1000).toISOString()});
+    }
+    return bad('Endpoint keamanan admin tidak ditemukan.',404);
+  }
+  if(path==='/api/player/security/login' && method==='POST') {
+    if(!await rateLimit(env,req,'member-password-login',8,900))
+      return bad('Terlalu banyak percobaan login. Coba kembali nanti.',429);
+    const value=await body(req,1800);
+    if(typeof value?.code!=='string'||typeof value.password!=='string'||
+       value.password.length>128)return bad('Kode atau password tidak sesuai.',401);
+    await ensureMemberSecurity(env);
+    const app=await applicationByCode(env,value.code);
+    if(!app||app.status!=='accepted')return bad('Kode atau password tidak sesuai.',401);
+    const credential=await env.DB.prepare('SELECT * FROM member_credentials WHERE application_id=?')
+      .bind(app.id).first();
+    if(!credential)return bad('Kode atau password tidak sesuai.',401);
+    const now=Math.floor(Date.now()/1000);
+    if(Number(credential.locked_until)>now)
+      return bad('Akun terkunci sementara. Coba kembali nanti.',429);
+    const actual=await memberDerivePassword(value.password,credential.password_salt,
+      Number(credential.iterations));
+    if(!safeEq(actual,credential.password_hash)) {
+      // Increment atomically so concurrent bad attempts cannot overwrite each other.
+      await env.DB.prepare(`UPDATE member_credentials SET failed_attempts=failed_attempts+1,
+        locked_until=CASE WHEN failed_attempts>=5 THEN ? ELSE locked_until END
+        WHERE application_id=?`).bind(now+900,app.id).run();
+      return bad('Kode atau password tidak sesuai.',401);
+    }
+    await env.DB.prepare(`UPDATE member_credentials SET failed_attempts=0,locked_until=0
+      WHERE application_id=?`).bind(app.id).run();
+    const secure=await memberIssueSession(env,req,app);
+    return memberStrongResponse({ok:true,authenticated:true},secure,await signPlayer(env,app.id));
+  }
+  const app=await playerSession(req,env);
+  if(!app||app.status!=='accepted')
+    return bad('Silakan masuk dengan kode pendaftaran yang sudah Diterima.',401);
+  await ensureMemberSecurity(env);
+  const active=await memberStrongSession(req,env,app);
+  if(path==='/api/player/security/state' && method==='GET') {
+    const row=await env.DB.prepare('SELECT application_id FROM member_credentials WHERE application_id=?')
+      .bind(app.id).first();
+    return J({authenticated:!!active,hasPassword:!!row,
+      session:active?{id:active.id,client:active.client_label,createdAt:active.created_at}:null});
+  }
+  if(path==='/api/player/security/activate' && method==='POST') {
+    if(!await rateLimit(env,req,'member-password-activate',5,900))
+      return bad('Terlalu banyak percobaan aktivasi. Coba lagi nanti.',429);
+    const value=await body(req,1800);
+    if(!memberPasswordValid(value?.password)||
+       typeof value?.invite!=='string'||!/^[A-Za-z0-9_-]{32}$/.test(value.invite))
+      return bad('Kode aktivasi atau password tidak valid. Password minimal 12 karakter.',400);
+    const now=Math.floor(Date.now()/1000),stamp=new Date().toISOString();
+    const hashed=await memberInviteHash(env,value.invite);
+    // Atomic one-use claim. A competing replay cannot change the password.
+    const claimed=await env.DB.prepare(`UPDATE member_activation_invites SET used_at=?
+      WHERE application_id=? AND secret_hash=? AND used_at IS NULL AND expires_at>?`)
+      .bind(stamp,app.id,hashed,now).run();
+    if(!(claimed.meta?.changes>0))
+      return bad('Kode aktivasi salah, sudah digunakan, atau kedaluwarsa.',403);
+    const salt=b64(crypto.getRandomValues(new Uint8Array(16)));
+    const passwordHash=await memberDerivePassword(value.password,salt);
+    await env.DB.prepare(`INSERT INTO member_credentials(application_id,password_salt,
+      password_hash,iterations,failed_attempts,locked_until,created_at,updated_at)
+      VALUES(?,?,?,?,0,0,?,?) ON CONFLICT(application_id) DO UPDATE SET
+      password_salt=excluded.password_salt,password_hash=excluded.password_hash,
+      iterations=excluded.iterations,failed_attempts=0,locked_until=0,
+      updated_at=excluded.updated_at`).bind(app.id,salt,passwordHash,
+        MEMBER_PASSWORD_ITERATIONS,stamp,stamp).run();
+    await env.DB.prepare(`UPDATE member_secure_sessions SET revoked_at=?
+      WHERE application_id=? AND revoked_at IS NULL`).bind(stamp,app.id).run();
+    const secure=await memberIssueSession(env,req,app);
+    return memberStrongResponse({ok:true,authenticated:true,activated:true},secure);
+  }
+  if(path==='/api/player/security/logout' && method==='POST') {
+    if(active) await env.DB.prepare(`UPDATE member_secure_sessions SET revoked_at=?
+      WHERE id=? AND application_id=? AND revoked_at IS NULL`)
+      .bind(new Date().toISOString(),active.id,app.id).run();
+    const response=J({ok:true});
+    response.headers.append('Set-Cookie',memberSecureCookie('',0));
+    return response;
+  }
+  if(!active)return bad('Masuk dengan password dashboard untuk melanjutkan.',403);
+  if(path==='/api/player/security/sessions' && method==='GET') {
+    const now=Math.floor(Date.now()/1000);
+    const rows=await env.DB.prepare(`SELECT id,client_label,created_at,expires_at
+      FROM member_secure_sessions WHERE application_id=? AND revoked_at IS NULL AND expires_at>?
+      ORDER BY created_at DESC LIMIT 30`).bind(app.id,now).all();
+    return J({sessions:(rows.results||[]).map(row=>({
+      id:row.id,client:row.client_label,createdAt:row.created_at,
+      expiresAt:new Date(Number(row.expires_at)*1000).toISOString(),
+      current:row.id===active.id
+    }))});
+  }
+  if(path==='/api/player/security/revoke' && method==='POST') {
+    const value=await body(req,500);
+    if(!/^[0-9a-f-]{36}$/.test(value?.id||''))return bad('ID sesi tidak valid.',400);
+    await env.DB.prepare(`UPDATE member_secure_sessions SET revoked_at=?
+      WHERE id=? AND application_id=? AND revoked_at IS NULL`)
+      .bind(new Date().toISOString(),value.id,app.id).run();
+    const response=J({ok:true});
+    if(value.id===active.id) response.headers.append('Set-Cookie',memberSecureCookie('',0));
+    return response;
+  }
+  if(path==='/api/player/security/logout-all' && method==='POST') {
+    const stamp=new Date().toISOString();
+    await env.DB.prepare(`UPDATE member_secure_sessions SET revoked_at=?
+      WHERE application_id=? AND revoked_at IS NULL`).bind(stamp,app.id).run();
+    await env.DB.prepare(`INSERT INTO member_profiles(application_id,session_epoch,updated_at)
+      VALUES(?,1,?) ON CONFLICT(application_id) DO UPDATE SET
+      session_epoch=session_epoch+1,updated_at=excluded.updated_at`)
+      .bind(app.id,stamp).run();
+    const response=J({ok:true});
+    response.headers.append('Set-Cookie',memberSecureCookie('',0));
+    response.headers.append('Set-Cookie',playerCookie('',0));
+    response.headers.append('Set-Cookie',oldPlayerCookie('',0));
+    return response;
+  }
+  return bad('Endpoint keamanan anggota tidak ditemukan.',404);
+}
+
 async function memberCenterAPI(req,env,path,method) {
   if (path.startsWith('/api/admin/')) {
     if (!await admin(req,env)) return bad('Silakan masuk ke Admin Control.',401);
     await ensureMemberCenter(env);
     if (path==='/api/admin/member-center' && method==='GET') {
+      await ensureMailbox(env);
       const url=new URL(req.url), offset=Math.max(0,Math.min(100000,Number.parseInt(url.searchParams.get('offset')||'0',10)||0));
       const rows=await env.DB.prepare(`SELECT s.id,s.status,s.submitted_at,
         COALESCE(p.display_name,'') AS display_name,
         COALESCE(p.bio,'') AS bio,COALESCE(p.visibility,'private') AS visibility,
         COALESCE(p.session_epoch,0) AS session_epoch,
         (SELECT COUNT(*) FROM minecraft_accounts m WHERE m.application_id=s.id) AS linked_count,
+        (SELECT COUNT(*) FROM member_secure_sessions ms WHERE ms.application_id=s.id AND ms.revoked_at IS NULL AND ms.expires_at>strftime('%s','now')) AS secure_sessions,
+        (SELECT status FROM member_activation_requests mr WHERE mr.application_id=s.id) AS activation_request,
+        EXISTS(SELECT 1 FROM member_credentials mc WHERE mc.application_id=s.id) AS secure_active,
         (SELECT MAX(last_synced_at) FROM player_stat_snapshots ps WHERE ps.application_id=s.id) AS last_sync
         FROM submissions s LEFT JOIN member_profiles p ON p.application_id=s.id
         ORDER BY s.submitted_at DESC LIMIT 101 OFFSET ?`).bind(offset).all();
       const items=(rows.results||[]).slice(0,100).map(a=>({
         id:a.id,status:a.status,submittedAt:a.submitted_at,displayName:a.display_name,
         visibility:a.visibility,sessionEpoch:a.session_epoch,linkedCount:a.linked_count||0,
+        secureActive:!!a.secure_active,secureSessions:a.secure_sessions||0,activationRequest:a.activation_request||'none',
         lastSync:a.last_sync||null
       }));
       const policy=await env.DB.prepare('SELECT * FROM member_policy WHERE id=1').first();
@@ -1969,6 +2211,8 @@ async function memberCenterAPI(req,env,path,method) {
         VALUES(?,1,?) ON CONFLICT(application_id) DO UPDATE SET
         session_epoch=session_epoch+1,updated_at=excluded.updated_at`)
         .bind(value.id,new Date().toISOString()).run();
+      await ensureMemberSecurity(env);
+      await env.DB.prepare('UPDATE member_secure_sessions SET revoked_at=? WHERE application_id=? AND revoked_at IS NULL').bind(new Date().toISOString(),value.id).run();
       return J({ok:true,message:'Semua sesi anggota sebelumnya sudah dicabut.'});
     }
     return bad('Endpoint pengelolaan anggota tidak ditemukan.',404);
@@ -1978,6 +2222,9 @@ async function memberCenterAPI(req,env,path,method) {
     return bad('Hanya anggota SSCircle yang diterima dapat mengakses profil.',403);
   await ensureMemberCenter(env);
   if(path==='/api/player/profile' && method==='GET') {
+    await ensureMemberSecurity(env);
+    const hasCredentials=await env.DB.prepare('SELECT application_id FROM member_credentials WHERE application_id=?').bind(application.id).first();
+    if(hasCredentials && !await memberStrongSession(req,env,application)) return bad('Masuk dengan password dashboard untuk melihat profil.',403);
     const profileRow=await env.DB.prepare('SELECT * FROM member_profiles WHERE application_id=?').bind(application.id).first();
     const policyRow=await env.DB.prepare('SELECT * FROM member_policy WHERE id=1').first();
     const accounts=await env.DB.prepare(`SELECT provider,username,verified_at
@@ -1993,6 +2240,7 @@ async function memberCenterAPI(req,env,path,method) {
       achievements:memberAwards(form.settings,application.id)});
   }
   if(path==='/api/player/profile' && method==='PUT') {
+    if(!await memberStrongSession(req,env,application)) return bad('Aktifkan dan masuk menggunakan password dashboard sebelum mengubah profil.',403);
     if(!await rateLimit(env,req,'member-profile-update',12,900))
       return bad('Terlalu banyak pembaruan profil. Coba lagi nanti.',429);
     const value=await body(req,2000);
@@ -2023,6 +2271,179 @@ async function memberCenterAPI(req,env,path,method) {
     return J({ok:true,profile:result});
   }
   return bad('Endpoint profil tidak ditemukan.',404);
+}
+
+/* SSCircle V10.38 - in-site Mail Box.
+   Registration-code sessions are bearer sessions. Activation remains gated
+   behind independently verified admin approval; mailbox is not second factor. */
+const mailboxSchemaReady = new WeakSet();
+async function ensureMailbox(env) {
+  if(mailboxSchemaReady.has(env.DB)) return;
+  await ensureMemberSecurity(env);
+  const sql=[
+    `CREATE TABLE IF NOT EXISTS member_activation_requests (
+      application_id TEXT PRIMARY KEY, requested_at TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending', updated_at TEXT NOT NULL,
+      FOREIGN KEY(application_id) REFERENCES submissions(id) ON DELETE CASCADE)`,
+    `CREATE TABLE IF NOT EXISTS member_mailbox_approvals (
+      application_id TEXT PRIMARY KEY, approved_at TEXT NOT NULL,
+      consumed_at TEXT, FOREIGN KEY(application_id) REFERENCES submissions(id) ON DELETE CASCADE)`,
+    `CREATE TABLE IF NOT EXISTS member_mailbox (
+      id TEXT PRIMARY KEY, application_id TEXT NOT NULL, type TEXT NOT NULL,
+      title TEXT NOT NULL, content TEXT NOT NULL DEFAULT '',
+      encrypted_secret TEXT, secret_nonce TEXT, expires_at INTEGER,
+      created_at TEXT NOT NULL, read_at TEXT,
+      FOREIGN KEY(application_id) REFERENCES submissions(id) ON DELETE CASCADE)`,
+    'CREATE INDEX IF NOT EXISTS idx_ssc_mailbox_owner ON member_mailbox(application_id,created_at)'
+  ];
+  for(const statement of sql) await env.DB.prepare(statement).run();
+  mailboxSchemaReady.add(env.DB);
+}
+async function mailboxKey(env){
+  const raw=await crypto.subtle.digest('SHA-256',
+    new TextEncoder().encode(env.SESSION_SECRET+'|sscircle-mailbox-aes-v1'));
+  return crypto.subtle.importKey('raw',raw,{name:'AES-GCM'},false,['encrypt','decrypt']);
+}
+function mailboxUnb64(v){
+  const normalized=v.replace(/-/g,'+').replace(/_/g,'/');
+  return Uint8Array.from(atob(normalized), c=>c.charCodeAt(0));
+}
+async function mailboxSeal(env,code){
+  const nonce=crypto.getRandomValues(new Uint8Array(12));
+  const encrypted=await crypto.subtle.encrypt({name:'AES-GCM',iv:nonce},
+    await mailboxKey(env),new TextEncoder().encode(code));
+  return {encrypted:b64(new Uint8Array(encrypted)),nonce:b64(nonce)};
+}
+async function mailboxUnseal(env,encrypted,nonce){
+  const bytes=await crypto.subtle.decrypt({name:'AES-GCM',iv:mailboxUnb64(nonce)},
+    await mailboxKey(env),mailboxUnb64(encrypted));
+  return new TextDecoder().decode(bytes);
+}
+async function mailboxNote(env,memberId,type,title,content,extras={}){
+  const id=uid(),now=new Date().toISOString();
+  await env.DB.prepare(`INSERT INTO member_mailbox
+    (id,application_id,type,title,content,encrypted_secret,secret_nonce,expires_at,created_at)
+    VALUES(?,?,?,?,?,?,?,?,?)`).bind(id,memberId,type,title,content,
+      extras.encrypted||null,extras.nonce||null,extras.expires||null,now).run();
+  return id;
+}
+async function mailboxIssueInvite(env,memberId){
+  // The approval is one-use: generated codes can be retrieved in the mailbox
+  // until they expire, but repeated requests cannot bypass another approval.
+  const now=Math.floor(Date.now()/1000),stamp=new Date().toISOString();
+  const approval=await env.DB.prepare(`UPDATE member_mailbox_approvals SET consumed_at=?
+    WHERE application_id=? AND consumed_at IS NULL`).bind(stamp,memberId).run();
+  if(!(approval.meta?.changes>0)) return null;
+  const secret=b64(crypto.getRandomValues(new Uint8Array(24))),
+    hashed=await memberInviteHash(env,secret),expires=now+MEMBER_INVITE_SECONDS;
+  await env.DB.prepare(`INSERT INTO member_activation_invites
+    (application_id,secret_hash,expires_at,created_at,used_at)
+    VALUES(?,?,?,?,NULL) ON CONFLICT(application_id) DO UPDATE SET
+    secret_hash=excluded.secret_hash,expires_at=excluded.expires_at,
+    created_at=excluded.created_at,used_at=NULL`)
+    .bind(memberId,hashed,expires,stamp).run();
+  const sealed=await mailboxSeal(env,secret);
+  await mailboxNote(env,memberId,'activation','Kode aktivasi akun tersedia',
+    'Kode aktivasi berlaku 24 jam dan hanya dapat dipakai satu kali. Simpan password dashboard secara pribadi.',
+    {...sealed,expires});
+  await env.DB.prepare(`UPDATE member_activation_requests SET status='sent',updated_at=?
+    WHERE application_id=?`).bind(stamp,memberId).run();
+  return {expiresAt:new Date(expires*1000).toISOString()};
+}
+async function mailboxAPI(req,env,path,method){
+  if(path==='/api/admin/mailbox/approve' && method==='POST'){
+    if(!await admin(req,env))return bad('Masuk sebagai admin terlebih dahulu.',401);
+    if(!await rateLimit(env,req,'mailbox-approve',25,900))return bad('Terlalu banyak permintaan.',429);
+    const payload=await body(req,800);
+    if(!/^[0-9a-f-]{36}$/.test(payload?.id||'') || payload?.verification!=='identity-confirmed')
+      return bad('Verifikasi kepemilikan akun diperlukan.',400);
+    await ensureMailbox(env);
+    const app=await env.DB.prepare('SELECT id,status FROM submissions WHERE id=?').bind(payload.id).first();
+    if(!app || app.status!=='accepted')return bad('Anggota belum memenuhi syarat.',403);
+    const now=new Date().toISOString();
+    await env.DB.prepare(`INSERT INTO member_mailbox_approvals(application_id,approved_at,consumed_at)
+      VALUES(?,?,NULL) ON CONFLICT(application_id) DO UPDATE SET
+      approved_at=excluded.approved_at,consumed_at=NULL`)
+      .bind(app.id,now).run();
+    const request=await env.DB.prepare('SELECT status FROM member_activation_requests WHERE application_id=?')
+      .bind(app.id).first();
+    const issued=request?.status==='pending' ? await mailboxIssueInvite(env,app.id) : null;
+    return J({ok:true,delivered:!!issued,message:issued?
+      'Kode aktivasi otomatis dikirim ke Mail Box anggota.':
+      'Identitas telah dikonfirmasi. Kode akan dikirim saat anggota memintanya.'});
+  }
+  const account=await playerSession(req,env);
+  if(!account || account.status!=='accepted')
+    return bad('Mail Box hanya tersedia untuk anggota yang diterima.',403);
+  await ensureMailbox(env);
+  if(path==='/api/player/mailbox' && method==='GET'){
+    const rows=await env.DB.prepare(`SELECT id,type,title,content,created_at,read_at,
+      expires_at,encrypted_secret FROM member_mailbox WHERE application_id=?
+      ORDER BY created_at DESC LIMIT 60`).bind(account.id).all();
+    const request=await env.DB.prepare('SELECT status FROM member_activation_requests WHERE application_id=?')
+      .bind(account.id).first();
+    const invite=await env.DB.prepare('SELECT expires_at,used_at FROM member_activation_invites WHERE application_id=?')
+      .bind(account.id).first();
+    return J({items:(rows.results||[]).map(row=>({id:row.id,type:row.type,
+      title:row.title,content:row.content,createdAt:row.created_at,
+      read:!!row.read_at,expiresAt:row.expires_at?new Date(row.expires_at*1000).toISOString():null,
+      canReveal:!!row.encrypted_secret && row.expires_at>Math.floor(Date.now()/1000) &&
+        invite?.used_at===null && invite?.expires_at===row.expires_at})),
+      activationRequest:request?.status||'none'});
+  }
+  if(path==='/api/player/mailbox/request-activation' && method==='POST'){
+    if(!await rateLimit(env,req,'mailbox-activation',4,3600))
+      return bad('Terlalu banyak permintaan kode. Coba lagi nanti.',429);
+    const pending=await env.DB.prepare('SELECT status FROM member_activation_requests WHERE application_id=?')
+      .bind(account.id).first();
+    const invite=await env.DB.prepare(`SELECT expires_at,used_at FROM member_activation_invites
+      WHERE application_id=?`).bind(account.id).first();
+    if(pending?.status==='sent' && invite?.used_at===null && invite.expires_at>Date.now()/1000)
+      return J({ok:true,delivered:true,message:'Kode masih tersedia di Mail Box.'});
+    if(pending?.status==='pending')
+      return J({ok:true,delivered:false,message:'Permintaan sedang menunggu verifikasi kepemilikan akun.'});
+    const stamp=new Date().toISOString();
+    await env.DB.prepare(`INSERT INTO member_activation_requests(application_id,requested_at,status,updated_at)
+      VALUES(? ,?,'pending',?) ON CONFLICT(application_id) DO UPDATE SET
+      requested_at=excluded.requested_at,status='pending',updated_at=excluded.updated_at`)
+      .bind(account.id,stamp,stamp).run();
+    const result=await mailboxIssueInvite(env,account.id);
+    if(!result){
+      await mailboxNote(env,account.id,'information','Permintaan aktivasi diterima',
+        'Permintaanmu sudah tercatat. Demi keamanan, kode akan dikirim otomatis setelah tim SSCircle memverifikasi identitasmu.');
+    }
+    return J({ok:true,delivered:!!result,message:result?
+      'Kode aktivasi telah dikirim ke Mail Box.':
+      'Permintaan sudah masuk ke Mail Box dan menunggu pemeriksaan identitas.'});
+  }
+  if(path==='/api/player/mailbox/reveal' && method==='POST'){
+    if(!await rateLimit(env,req,'mailbox-reveal',15,900))return bad('Terlalu banyak percobaan.',429);
+    const payload=await body(req,250);
+    if(!/^[0-9a-f-]{36}$/.test(payload?.id||''))return bad('Pesan tidak tersedia.',404);
+    const row=await env.DB.prepare(`SELECT encrypted_secret,secret_nonce,expires_at
+      FROM member_mailbox WHERE id=? AND application_id=? AND type='activation'`)
+      .bind(payload.id,account.id).first();
+    const invite=await env.DB.prepare('SELECT expires_at,used_at FROM member_activation_invites WHERE application_id=?')
+      .bind(account.id).first();
+    if(!row?.encrypted_secret || row.expires_at<=Date.now()/1000 ||
+       invite?.used_at!==null || invite?.expires_at!==row.expires_at)
+      return bad('Kode sudah digunakan atau kedaluwarsa.',410);
+    const code=await mailboxUnseal(env,row.encrypted_secret,row.secret_nonce);
+    if(!safeEq(await memberInviteHash(env,code),
+      (await env.DB.prepare('SELECT secret_hash FROM member_activation_invites WHERE application_id=?')
+        .bind(account.id).first())?.secret_hash||'')) return bad('Kode tidak tersedia.',410);
+    await env.DB.prepare('UPDATE member_mailbox SET read_at=? WHERE id=? AND application_id=?')
+      .bind(new Date().toISOString(),payload.id,account.id).run();
+    return J({ok:true,code});
+  }
+  if(path==='/api/player/mailbox/read' && method==='POST'){
+    const payload=await body(req,250);
+    if(!/^[0-9a-f-]{36}$/.test(payload?.id||''))return bad('Pesan tidak ditemukan.',404);
+    await env.DB.prepare(`UPDATE member_mailbox SET read_at=COALESCE(read_at,?)
+      WHERE id=? AND application_id=?`).bind(new Date().toISOString(),payload.id,account.id).run();
+    return J({ok:true});
+  }
+  return bad('Halaman Mail Box tidak tersedia.',404);
 }
 
 async function route(req, env) {
@@ -2097,10 +2518,31 @@ async function route(req, env) {
     headers.set('X-Robots-Tag','noindex, nofollow');
     return new Response(response.body,{status:response.status,statusText:response.statusText,headers});
   }
+  // Guard Mail Box HTML in addition to its private API.
+  if ((path==='/mailbox' || path==='/mailbox.html') && ['GET','HEAD'].includes(method)) {
+    if(!env.DB || !env.SESSION_SECRET) return new Response('Halaman belum tersedia.',{status:503});
+    const account=await playerSession(req,env);
+    if(!account || account.status!=='accepted')return new Response(null,{status:302,headers:{
+      Location:'/status.html?akses-mailbox=perlu-masuk#kode-milikku',
+      'Cache-Control':'private, no-store',Vary:'Cookie'
+    }});
+    if(path==='/mailbox.html')return new Response(null,{status:302,headers:{
+      Location:'/mailbox','Cache-Control':'private, no-store',Vary:'Cookie'
+    }});
+    const response=await env.ASSETS.fetch(req);
+    const headers=new Headers(response.headers);headers.set('Cache-Control','private, no-store');
+    headers.set('Vary','Cookie');headers.set('X-Robots-Tag','noindex, nofollow');
+    return new Response(response.body,{status:response.status,headers});
+  }
   // Proteksi juga dokumen HTML, bukan hanya tombol UI: URL voting langsung tidak bisa dibuka oleh kode Pending/Rejected.
   if ((path === '/voting.html' || path === '/voting') && (method === 'GET' || method === 'HEAD')) {
     if (!env.DB || !env.SESSION_SECRET)
       return Response.redirect(new URL('/status.html?akses-voting=belum-tersedia#kode-milikku', url), 302);
+    const voteSettings=formFrom(await readSettingsRow(env)).settings;
+    if(voteSettings.homeVotingEnabled!==true) return new Response(null,{status:302,headers:{
+      Location:'/status.html?akses-voting=ditutup#kode-milikku',
+      'Cache-Control':'private, no-store',Vary:'Cookie'
+    }});
     const application = await playerSession(req, env);
     if (!application || application.status !== VOTING_ACCEPTED_STATUS) {
       const status = application?.status === 'pending' ? 'menunggu' : application?.status === 'rejected' ? 'ditolak' : 'perlu-masuk';
@@ -2165,6 +2607,11 @@ async function route(req, env) {
     'DELETE'
   ].includes(method))
     return bad('Metode tidak tersedia.', 405);
+  if ((path.startsWith('/api/player/mailbox') || path==='/api/admin/mailbox/approve') &&
+      ['GET','POST'].includes(method))
+    return await mailboxAPI(req,env,path,method);
+  if ((path.startsWith('/api/player/security/') || path==='/api/admin/member-invite') && ['GET','POST'].includes(method))
+    return await memberSecurityAPI(req,env,path,method);
   if ((path==='/api/player/profile' || path.startsWith('/api/admin/member-')) &&
       ((path==='/api/player/profile' && ['GET','PUT'].includes(method)) ||
        (path.startsWith('/api/admin/member-') && ['GET','PUT','POST'].includes(method))))
@@ -2211,12 +2658,18 @@ async function route(req, env) {
     const f = formFrom(await env.DB.prepare('SELECT * FROM form_config WHERE id=1').first());
     return J({ remainingSeconds: f.settings.cooldownMinutes > 0 ? await cooldownLeft(env, req) : 0 });
   }
+  if (path==='/api/voting/status' && method==='GET') {
+    const settings=formFrom(await readSettingsRow(env)).settings;
+    return J({enabled:settings.homeVotingEnabled===true,active:votingRuntime(settings).active});
+  }
   if (path === '/api/voting' && method === 'GET') {
     const application = await playerSession(req, env);
     if (!application)
       return bad('Masuk dengan kode pendaftaran yang sudah Diterima untuk membuka voting.', 401);
     if (application.status !== VOTING_ACCEPTED_STATUS)
       return bad('Voting hanya untuk pendaftar berstatus Diterima.', 403);
+    const visibility=formFrom(await readSettingsRow(env)).settings;
+    if(visibility.homeVotingEnabled!==true)return bad('Voting sedang ditutup oleh pengelola SSCircle.',403);
     return J(await publicVotingPayload(env,application));
   }
   if (path === '/api/voting/vote' && method === 'POST')
@@ -2248,15 +2701,23 @@ async function route(req, env) {
     return playerCookieResponse({ authenticated: true, ...playerPublicInfo(application) }, await signPlayer(env, application.id), PLAYER_SESSION_SECONDS);
   }
   if (path === '/api/player/logout' && method === 'POST') {
-    const token = readPlayerCookie(req);
-    if (token && await playerSession(req, env)) {
-      try {
-        const payload = JSON.parse(unb64(token.split('.')[0]));
-        await env.DB.prepare('INSERT OR IGNORE INTO revoked_sessions(token_hash,expires_at) VALUES (?,?)').bind(await digest(token), payload.exp).run();
-      }
-      catch { }
+    const token=readPlayerCookie(req), member=await playerSession(req,env);
+    if(member){
+      // Revoke secure token BEFORE revoking the legacy member session.
+      try{
+        const active=await memberStrongSession(req,env,member);
+        if(active)await env.DB.prepare('UPDATE member_secure_sessions SET revoked_at=? WHERE id=? AND application_id=? AND revoked_at IS NULL')
+          .bind(new Date().toISOString(),active.id,member.id).run();
+      }catch(error){console.error('[SSCircle] Member secure logout:',error);}
+      try{
+        const payload=JSON.parse(unb64(token.split('.')[0]));
+        await env.DB.prepare('INSERT OR IGNORE INTO revoked_sessions(token_hash,expires_at) VALUES (?,?)')
+          .bind(await digest(token),payload.exp).run();
+      }catch(error){console.error('[SSCircle] Member legacy logout:',error);}
     }
-    return playerCookieResponse({ ok: true }, '', 0);
+    const response=playerCookieResponse({ok:true},'',0);
+    response.headers.append('Set-Cookie',memberSecureCookie('',0));
+    return response;
   }
   if (path === '/api/status-check' && method === 'POST') {
     if (!env.SESSION_SECRET)

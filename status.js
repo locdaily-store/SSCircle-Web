@@ -92,21 +92,37 @@
     return result;
   };
   const params = new URLSearchParams(location.search);
+  // Strong member login bypasses the legacy code-only dashboard unlock path.
+  $('status-secure-login-form').addEventListener('submit',async event=>{
+    event.preventDefault();
+    const button=$('status-secure-login-button'),hint=$('status-secure-help');
+    if(button.disabled)return;
+    button.disabled=true;hint.textContent='Memeriksa password dashboard...';
+    try{
+      await playerRequest('/api/player/security/login',{
+        code:$('status-secure-code').value,password:$('status-secure-password').value
+      });
+      $('status-secure-password').value='';
+      location.assign('/my-sscircle');
+    }catch(error){hint.textContent='Tidak dapat masuk: '+error.message;button.disabled=false;}
+  });
   const votingAccess = params.get('akses-voting');
   const dashboardAccess = params.get('akses-dashboard');
-  if (votingAccess || dashboardAccess) {
+  const mailboxAccess = params.get('akses-mailbox');
+  if (votingAccess || dashboardAccess || mailboxAccess) {
     const notices = {
       'perlu-masuk': 'Untuk membuka voting, masuk menggunakan kode pendaftaran berstatus Diterima. Kode Menunggu dan Ditolak tidak mempunyai akses.',
       menunggu: 'Pendaftaranmu masih Menunggu. Voting hanya dapat dibuka setelah admin menerima pendaftaranmu.',
       ditolak: 'Pendaftaranmu Ditolak, jadi kamu belum dapat masuk ke voting.',
-      'belum-tersedia': 'Layanan voting belum tersedia. Silakan coba lagi nanti.'
+      'belum-tersedia': 'Layanan voting belum tersedia. Silakan coba lagi nanti.',
+      'ditutup': 'Voting sedang ditutup oleh admin SSCircle. Cek kembali setelah dibuka.'
     };
     const dashboardNotices = {
       'perlu-masuk': 'Untuk membuka My SSCircle, masuk dengan kode pendaftaran milikmu yang sudah Diterima.',
       menunggu: 'Pendaftaranmu masih Menunggu. Dashboard anggota tersedia setelah admin menerima pendaftaranmu.',
       ditolak: 'Pendaftaranmu Ditolak. Dashboard anggota belum dapat dibuka.'
     };
-    $('status-voting-notice').textContent = dashboardAccess ? (dashboardNotices[dashboardAccess] || dashboardNotices['perlu-masuk']) : (notices[votingAccess] || notices['perlu-masuk']);
+    $('status-voting-notice').textContent = mailboxAccess ? 'Masuk dahulu dengan kode pendaftaran yang sudah Diterima untuk membuka Mail Box pribadimu.' : dashboardAccess ? (dashboardNotices[dashboardAccess] || dashboardNotices['perlu-masuk']) : (notices[votingAccess] || notices['perlu-masuk']);
     $('status-voting-notice').hidden = false;
     $('kode-milikku').open = true;
   }
@@ -115,7 +131,8 @@
     $('status-my-code-logged').hidden = !active;
     $('status-my-code-login').hidden = active;
     const accepted = active && account.status === 'accepted';
-    $('status-voting-entry').hidden = !accepted;
+    $('status-voting-entry').hidden = !accepted || settings.homeVotingEnabled!==true;
+    $('status-mailbox-entry').hidden = !accepted;
     $('status-dashboard-entry').hidden = !accepted;
     if (active && !accepted) {
       $('status-voting-notice').hidden = false;
@@ -217,7 +234,8 @@
       if (result.submittedAt)
         card.append(text('small', '', 'Dikirim: ' + new Date(result.submittedAt).toLocaleString('id-ID')));
       if (result.status === 'accepted') {
-        const link = text('a', 'button primary status-voting-result-link', 'Masuk ke Voting ↗');
+        const link = text('a', 'button secondary status-voting-result-link', 'Masuk ke Voting ↗');
+        link.hidden = settings.homeVotingEnabled!==true;
         link.href = '/voting';
         let redirecting = false;
         const openVoting = async () => {
@@ -246,11 +264,13 @@
           event.preventDefault();
           void openVoting();
         });
-        card.append(link);
+        const dash = text('a','button primary','Buka My SSCircle ↗');
+        dash.href='/my-sscircle';
+        const mailbox = text('a','button secondary','Lihat Mail Box ↗');
+        mailbox.href='/mailbox';
+        card.append(dash,mailbox,link);
         root.append(card);
-        // Sesuai alur pendaftaran: kode Diterima langsung masuk ke Voting.
-        // Jika autentikasi gagal, tetap tampilkan hasil status dan tombol untuk mencoba lagi.
-        void openVoting();
+        // Status adalah halaman informatif. Voting hanya lewat klik secara sadar.
       }
       else {
         root.append(card);

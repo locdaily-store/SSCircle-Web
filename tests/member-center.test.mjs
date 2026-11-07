@@ -61,25 +61,19 @@ test('dashboard memisahkan profil privat dari dokumen publik dan award lama',asy
   assert.equal(publicData.data.settings.homeLeaderboardSeasons[0].archiveAwards[0].memberId,undefined);
   assert.equal(publicData.data.settings.homeLeaderboardSeasons[0].archiveAwards[0].title,'Best Builder');
 });
-test('pengaturan profil disimpan dan mengikuti kebijakan admin',async()=>{
+test('pengaturan privat memerlukan sesi aman dan kebijakan admin tersimpan',async()=>{
   const t=fixture();
-  const edited=await t.req('/api/player/profile',{method:'PUT',
-    payload:{displayName:'Pemain S6',bio:'Membangun kastil.',visibility:'public',showStats:true,eventAlerts:false}});
-  assert.equal(edited.status,200,JSON.stringify(edited.data));
-  assert.equal(edited.data.profile.visibility,'private');
+  const edited=await t.req('/api/player/profile',{method:'PUT',payload:{
+    displayName:'Pemain S6',bio:'Membangun kastil.',visibility:'public',showStats:true,eventAlerts:false}});
+  assert.equal(edited.status,403,'Sesi kode pendaftaran tidak berhak mengedit profil');
   const policy=await t.req('/api/admin/member-policy',{method:'PUT',cookie:t.admin,
     payload:{allowBio:true,allowPublic:true,allowStats:true,allowEventAlerts:true}});
   assert.equal(policy.status,200,JSON.stringify(policy.data));
-  const nowPublic=await t.req('/api/player/profile',{method:'PUT',
-    payload:{displayName:'Pemain S6',bio:'Membangun kastil.',visibility:'public',showStats:true,eventAlerts:true}});
-  assert.equal(nowPublic.status,200,JSON.stringify(nowPublic.data));
-  assert.equal(nowPublic.data.profile.visibility,'public');
   const refreshed=await t.req('/api/player/profile');
-  assert.equal(refreshed.data.profile.displayName,'Pemain S6');
-  assert.equal(refreshed.data.profile.bio,'Membangun kastil.');
-  const bad=await t.req('/api/player/profile',{method:'PUT',
-    payload:{displayName:'<script>',bio:'',visibility:'public',showStats:true,eventAlerts:true}});
-  assert.equal(bad.status,400);
+  assert.equal(refreshed.status,200);
+  assert.equal(refreshed.data.policy.allowPublic,true);
+  assert.equal(refreshed.data.profile.visibility,'private');
+  // Pengeditan setelah login password diuji oleh security.test.mjs.
 });
 test('admin dapat melihat anggota dan mencabut seluruh token sesi lama',async()=>{
   const t=fixture();

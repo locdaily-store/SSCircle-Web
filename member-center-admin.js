@@ -50,11 +50,16 @@ window.SSCircleMemberCenterAdmin = (() => {
       const meta=el('div','member-admin-member-meta');
       const status={accepted:'Diterima',pending:'Menunggu',rejected:'Ditolak'}[m.status]||m.status;
       meta.append(el('span','member-admin-chip',status),el('span','',m.linkedCount+' akun Minecraft'));
+      if(actions)meta.append(el('span','member-admin-chip',m.secureActive?'Password aktif':'Belum aktivasi'),el('span','',String(m.secureSessions||0)+' sesi aman'));
+      if(actions&&m.activationRequest==='pending')meta.append(el('span','member-admin-chip','Menunggu verifikasi aktivasi'));
       if(m.lastSync)meta.append(el('small','','Sync: '+new Date(m.lastSync).toLocaleString('id-ID')));
       else meta.append(el('small','','Statistik: belum tersedia'));
       card.append(info,meta);
       if(actions){
-        card.append(button('Cabut sesi',()=>revoke(m),'button secondary member-admin-danger'));
+        const actions=el('div','member-admin-actions');
+        actions.append(button('Verifikasi & kirim kode ke Mail Box',()=>issueInvite(m),'button secondary'),
+          button('Cabut sesi',()=>revoke(m),'button secondary member-admin-danger'));
+        card.append(actions);
       }
       list.append(card);
     }
@@ -114,7 +119,7 @@ window.SSCircleMemberCenterAdmin = (() => {
         document.querySelector('[data-tab="seasons-admin"]')?.click();
       },'button primary'));
     }else if(current==='policy'){
-      content.append(heading('Profile Settings','Atur fitur yang boleh digunakan pemain. Pengaturan ini disimpan di Cloudflare D1.'));
+      content.append(heading('Profile Settings','Atur fitur yang boleh digunakan pemain. Pengaturan tersimpan untuk semua anggota.'));
       const form=el('form','member-admin-policy');
       const fields=[['allowBio','Izinkan pemain mengedit bio'],['allowPublic','Izinkan opsi profil publik'],['allowStats','Izinkan statistik ditampilkan'],['allowEventAlerts','Izinkan pengingat event']];
       const controls={};
@@ -134,8 +139,10 @@ window.SSCircleMemberCenterAdmin = (() => {
       },'button primary');
       form.append(save);content.append(form);
     }else if(current==='security'){
-      content.append(heading('Login & Security','Cabut seluruh sesi login anggota ketika terjadi kehilangan akses atau penyalahgunaan kode.'));
-      content.append(el('p','member-admin-advisory','Penting: login memakai kode pendaftaran lama belum menjadi autentikasi kuat. Kode yang bocor harus ditangani melalui prosedur pemulihan terverifikasi sebelum account linking diaktifkan.'));
+      content.append(heading('Login & Security','Periksa kepemilikan akun melalui jalur terpisah, lalu kirim kode secara otomatis ke Mail Box anggota.'));
+      const inviteResult=el('div','member-admin-invite-result');inviteResult.id='member-admin-invite-result';
+      inviteResult.hidden=true;content.append(inviteResult);
+      content.append(el('p','member-admin-advisory','Status Diterima saja bukan bukti kepemilikan akun. Pastikan pemohon telah membuktikan identitas melalui kontak resmi komunitas. Kode akan diterbitkan otomatis di Mail Box setelah verifikasi, tanpa admin menyalin atau mengirim kode secara manual.'));
       renderTable(content,snapshot.items.filter(m=>m.status==='accepted'),true);
     }else if(current==='seasons'){
       content.append(heading('Season Statistics','Penghargaan dari Season Archive ditampilkan tanpa duplikasi. Statistik permainan per season akan aktif ketika plugin sync siap.'));
@@ -150,6 +157,25 @@ window.SSCircleMemberCenterAdmin = (() => {
       content.append(el('p','member-admin-advisory','Waktu bermain, kematian dan mob kill per season belum tersedia sampai plugin terverifikasi mengirim data.'));
     }
     content.append(note);root.append(content);
+  }
+  async function issueInvite(member){
+    if(member.status!=='accepted')return;
+    const confirmed=window.confirm('Sudah memverifikasi identitas '+memberName(member)+' melalui kontak resmi yang berbeda dari kode pendaftaran? Jika yakin, sistem akan mengirim kode secara otomatis ke Mail Box.');
+    if(!confirmed)return;
+    message('Memproses verifikasi anggota...');
+    try{
+      const result=await api('/api/admin/mailbox/approve',{method:'POST',body:JSON.stringify({
+        id:member.id,verification:'identity-confirmed'
+      })});
+      const panel=document.getElementById('member-admin-invite-result');
+      if(panel){
+        panel.replaceChildren();panel.hidden=false;
+        panel.append(el('strong','',result.delivered?'Kode otomatis dikirim':'Permintaan berikutnya otomatis diproses'));
+        panel.append(el('p','',result.message));
+      }
+      message(result.message);
+      await refreshData();
+    }catch(error){message('Gagal memverifikasi akun: '+error.message,true)}
   }
   async function revoke(member){
     const confirm=window.SSCNotice?.confirm

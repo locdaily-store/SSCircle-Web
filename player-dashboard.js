@@ -125,6 +125,126 @@
       button.disabled=false;
     }
   });
+  // V10.37 member security. Never treat the registration-code cookie as proof
+  // of ownership for private account changes.
+  let playerCodeForSecureLogin = '';
+  let strongAuthorized = false;
+  function lockPrivateControls(locked) {
+    strongAuthorized=!locked;
+    for(const field of $('player-settings-form').querySelectorAll('input,textarea,select,button'))
+      field.disabled=locked;
+    $('player-edit-requirement').hidden=!locked;
+  }
+  function showSecurityMode(mode) {
+    $('player-security-activate').hidden=mode!=='activate';
+    $('player-security-login').hidden=mode!=='login';
+    $('player-security-active').hidden=mode!=='active';
+    $('player-security-state').textContent=mode==='active'?'Terlindungi':mode==='login'?'Terkunci':'Belum diaktifkan';
+    lockPrivateControls(mode!=='active');
+  }
+  const securityMessage=(message)=>{$('player-security-message').textContent=message;};
+  async function listDevices() {
+    const result=await request('/api/player/security/sessions');
+    const list=$('player-device-list');list.replaceChildren();
+    const sessions=result.sessions||[];
+    if(!sessions.length){const note=document.createElement('p');note.textContent='Belum ada perangkat aktif.';list.append(note);return;}
+    for(const session of sessions){
+      const card=document.createElement('div');card.className='player-device';
+      const block=document.createElement('div');
+      const name=document.createElement('strong');name.textContent=(session.current?'Perangkat ini · ':'')+(session.client||'Browser');
+      const sub=document.createElement('small');
+      sub.textContent='Masuk: '+new Date(session.createdAt).toLocaleString('id-ID');
+      block.append(name,sub);
+      const revoke=document.createElement('button');revoke.type='button';
+      revoke.className='player-action player-action-secondary';revoke.textContent='Cabut sesi';
+      revoke.addEventListener('click',async()=>{
+        revoke.disabled=true;
+        try{
+          await request('/api/player/security/revoke',{
+            method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:session.id})
+          });
+          await loadSecurityState();
+          if(session.current) securityMessage('Dashboard dikunci. Masuk kembali dengan password.');
+        }catch(error){securityMessage(error.message);revoke.disabled=false;}
+      });
+      card.append(block,revoke);list.append(card);
+    }
+  }
+  async function loadSecurityState(){
+    try {
+      const state=await request('/api/player/security/state');
+      const mode=state.authenticated?'active':state.hasPassword?'login':'activate';
+      showSecurityMode(mode);
+      securityMessage(state.authenticated?'Akun aman aktif pada perangkat ini.':'');
+      if(state.authenticated){await listDevices();await loadProfile();}
+      return mode;
+    }catch(error){
+      showSecurityMode('login');
+      securityMessage('Gagal memeriksa keamanan akun: '+error.message);
+      return 'error';
+    }
+  }
+  $('player-request-activation').addEventListener('click',async()=>{
+    const button=$('player-request-activation');button.disabled=true;
+    const label=$('player-activation-notice');label.textContent='Mengirim permintaan...';
+    try{
+      const response=await request('/api/player/mailbox/request-activation',{
+        method:'POST',headers:{'Content-Type':'application/json'},body:'{}'
+      });
+      label.textContent=response.message;
+      // Direct the member to their own in-site mailbox after a successful request.
+      location.assign('/mailbox?activation=requested');
+    }catch(error){label.textContent='Permintaan tidak berhasil: '+error.message}
+    finally{button.disabled=false;}
+  });
+  $('player-activate-form').addEventListener('submit',async e=>{
+    e.preventDefault();const button=$('player-activate-submit');if(button.disabled)return;
+    const password=$('player-activate-password').value;
+    if(password.length<12||password!==$('player-activate-repeat').value){
+      securityMessage('Password minimal 12 karakter dan kedua isian harus sama.');return;
+    }
+    button.disabled=true;securityMessage('Memverifikasi undangan dan membuat akun aman...');
+    try{
+      await request('/api/player/security/activate',{method:'POST',
+        headers:{'Content-Type':'application/json'},body:JSON.stringify({
+          invite:$('player-invite-secret').value.trim(),password
+        })});
+      $('player-activate-form').reset();
+      await loadSecurityState();securityMessage('Akun aman berhasil diaktifkan. Password tidak disimpan di browser.');
+    }catch(error){securityMessage('Aktivasi gagal: '+error.message)}
+    finally{button.disabled=false;}
+  });
+  $('player-password-login-form').addEventListener('submit',async e=>{
+    e.preventDefault();const button=$('player-password-login-submit');if(button.disabled)return;
+    button.disabled=true;securityMessage('Memeriksa password...');
+    try{
+      await request('/api/player/security/login',{method:'POST',
+        headers:{'Content-Type':'application/json'},body:JSON.stringify({
+          code:playerCodeForSecureLogin,password:$('player-dashboard-password').value
+        })});
+      $('player-password-login-form').reset();
+      await loadSecurityState();
+    }catch(error){securityMessage('Tidak dapat masuk: '+error.message)}
+    finally{button.disabled=false;}
+  });
+  $('player-refresh-devices').addEventListener('click',async()=>{
+    try{await listDevices();securityMessage('Daftar perangkat diperbarui.');}
+    catch(error){securityMessage(error.message)}
+  });
+  $('player-signout-secure').addEventListener('click',async()=>{
+    try{await request('/api/player/security/logout',{method:'POST',
+      headers:{'Content-Type':'application/json'},body:'{}'});
+      await loadSecurityState();securityMessage('Dashboard berhasil dikunci pada perangkat ini.');
+    }catch(error){securityMessage(error.message)}
+  });
+  $('player-signout-all').addEventListener('click',async()=>{
+    if(!confirm('Keluar dari semua perangkat, termasuk sesi kode pendaftaran?'))return;
+    try{await request('/api/player/security/logout-all',{method:'POST',
+      headers:{'Content-Type':'application/json'},body:'{}'});
+      location.replace('/status.html#kode-milikku');
+    }catch(error){securityMessage(error.message)}
+  });
+
   async function load() {
     if (loading) return;
     loading = true;
@@ -144,9 +264,10 @@
       }
       $('player-member-id').textContent = memberLabel(player.code);
       $('player-joined-at').textContent = formatJoined(player.submittedAt);
+      playerCodeForSecureLogin = player.code || '';
       pending.hidden = true;
       content.hidden = false;
-      await loadProfile();
+      await loadSecurityState();
     } catch (error) {
       if (error.status === 401) {
         location.replace('/status.html?akses-dashboard=perlu-masuk#kode-milikku');

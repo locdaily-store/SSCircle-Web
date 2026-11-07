@@ -469,7 +469,7 @@ window.SSCircleVoteAdmin = (() => {
     const statusCard = card('01 · Status Voting', 'Aktifkan sesi dan tentukan siapa yang dapat berpartisipasi.');
     const controls = el('div', 'ssc-vote-controls');
     statusCard.append(controls);
-    toggle(controls, 'homeVotingEnabled', 'Voting aktif', 'Tombol voting di Homepage otomatis mengikuti pengaturan ini.');
+    toggle(controls, 'homeVotingEnabled', 'Buka akses Voting', 'Saat dimatikan, halaman dan API Voting tidak bisa dibuka oleh pemain, termasuk lewat tautan langsung.');
     controls.append(el('p', 'field-help', 'Pemain masuk memakai kode pendaftaran yang terverifikasi. Satu pendaftaran hanya mendapat satu suara per sesi.'));
     toggle(controls, 'homeVotingPermanent', 'Tanpa batas waktu', 'Jika dimatikan, voting akan berhenti pada waktu yang ditentukan.');
     const dateField = el('label', 'field-group');

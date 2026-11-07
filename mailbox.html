@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#120b20">
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="description" content="Mail Box pribadi anggota SSCircle Server: notifikasi keanggotaan dan kode aktivasi.">
+  <title>Mail Box | SSCircle Server</title>
+  <link rel="icon" href="assets/sscircle-logo.png" type="image/png">
+  <link rel="stylesheet" href="style.css?v=10.38.0">
+  <link rel="stylesheet" href="mailbox.css?v=10.38.0">
+  <script src="color-theme.js?v=10.38.0" defer></script>
+  <script src="site-shell.js?v=10.38.0" defer></script>
+  <script src="mailbox.js?v=10.38.0" defer></script>
+</head>
+<body class="home-page mailbox-page theme-v3">
+  <header class="home-header" id="top">
+    <a class="home-brand" href="./" aria-label="Kembali ke beranda">
+      <img id="home-logo" src="assets/sscircle-logo.png" alt="" width="41" height="41">
+      <span><strong>SSCircle</strong><small>SERVER</small></span>
+    </a>
+    <nav class="home-nav" aria-label="Navigasi utama">
+      <a class="home-nav-link" href="./">Beranda</a>
+      <a class="home-nav-link" href="status.html">Cek Status</a>
+      <a class="home-nav-link" href="/my-sscircle">My SSCircle</a>
+      <a class="home-nav-join" href="/mailbox" aria-current="page">Mail Box</a>
+    </nav>
+    <button class="home-menu-button" type="button" id="home-menu-button" aria-label="Buka menu navigasi" aria-expanded="false">☰</button>
+  </header>
+  <main class="mailbox-main home-container">
+    <section class="mailbox-hero">
+      <div>
+        <span class="mailbox-eyebrow">SSCIRCLE / MEMBER MAIL BOX</span>
+        <h1>Mail <em>Box.</em></h1>
+        <p>Semua pemberitahuan keanggotaanmu berada di satu tempat. Pesan pribadi hanya tersedia saat kamu masuk sebagai pendaftar yang telah diterima.</p>
+      </div>
+      <span class="mailbox-hero-icon" aria-hidden="true">✉</span>
+    </section>
+    <section class="mailbox-request mailbox-surface" aria-labelledby="mailbox-request-heading">
+      <div class="mailbox-request-copy">
+        <span class="mailbox-eyebrow">ACCOUNT ACTIVATION</span>
+        <h2 id="mailbox-request-heading">Kode aktivasi akun</h2>
+        <p>Ajukan kode aktivasi. Permintaan langsung masuk ke Mail Box. Jika identitasmu sudah diperiksa admin, kode dikirim otomatis. Jika belum, pesan akan memberi tahu bahwa verifikasi diperlukan.</p>
+        <small>Persetujuan pendaftaran tidak otomatis membuktikan kepemilikan akun. Kode bersifat pribadi dan berlaku 24 jam.</small>
+      </div>
+      <button type="button" id="mailbox-request-button" class="mailbox-primary">Minta kode aktivasi</button>
+    </section>
+    <p id="mailbox-message" class="mailbox-message" role="status" aria-live="polite">Memuat pesan...</p>
+    <section class="mailbox-grid" aria-label="Pesan pribadi">
+      <div class="mailbox-surface mailbox-inbox">
+        <div class="mailbox-inbox-head"><h2>Kotak masuk <span id="mailbox-unread" class="mailbox-count" hidden>0</span></h2><button type="button" id="mailbox-refresh">Perbarui</button></div>
+        <div role="group" class="mailbox-filters" aria-label="Filter pesan">
+          <button type="button" class="mailbox-filter is-current" data-filter="all" aria-pressed="true">Semua</button>
+          <button type="button" class="mailbox-filter" data-filter="unread" aria-pressed="false">Belum dibaca</button>
+          <button type="button" class="mailbox-filter" data-filter="activation" aria-pressed="false">Aktivasi</button>
+        </div>
+        <div id="mailbox-list" class="mailbox-list" aria-live="polite"></div>
+      </div>
+      <article class="mailbox-surface mailbox-detail" aria-labelledby="mailbox-detail-heading">
+        <div id="mailbox-detail-empty" class="mailbox-detail-empty"><span aria-hidden="true">✉</span><h2 id="mailbox-detail-heading">Pilih pesan</h2><p>Pilih salah satu pesan dari kotak masuk untuk melihat isinya di sini.</p></div>
+        <div id="mailbox-detail-content" hidden>
+          <span class="mailbox-eyebrow" id="mailbox-detail-category">PEMBERITAHUAN</span>
+          <h2 id="mailbox-detail-title"></h2>
+          <time id="mailbox-detail-time"></time>
+          <p id="mailbox-detail-body"></p>
+          <div id="mailbox-secret-panel" hidden class="mailbox-secret-panel">
+            <p>Kode bersifat rahasia. Jangan bagikan kepada pemain lain.</p>
+            <button type="button" id="mailbox-reveal" class="mailbox-secondary">Tampilkan kode</button>
+            <div class="mailbox-secret-row" id="mailbox-secret-row" hidden>
+              <code id="mailbox-secret-value"></code>
+              <button type="button" id="mailbox-copy" class="mailbox-primary">Salin kode</button>
+            </div>
+            <small id="mailbox-secret-status" role="status"></small>
+          </div>
+        </div>
+      </article>
+    </section>
+    <p class="mailbox-privacy">Akun belum teraktivasi masih menggunakan sesi kode pendaftaran untuk membaca pesan. Jaga kerahasiaannya dan hubungi pengurus bila kode tersebut diketahui orang lain.</p>
+  </main>
+  <footer class="home-footer ssc-unified-footer">
+    <div class="home-container home-footer-content ssc-footer-content">
+      <div class="home-footer-mark"><img id="home-footer-logo" src="assets/sscircle-logo.png" alt="" width="27" height="27"><span>SSCircle Server</span></div>
+      <span id="home-footer-text">One circle. Endless stories.</span>
+      <div class="home-footer-links"><a href="./">Beranda</a><a href="status.html">Cek Status</a><a href="/my-sscircle">My SSCircle</a></div>
+      <small>© 2026 SSCircle Server</small>
+    </div>
+  </footer>
+</body>
+</html>
