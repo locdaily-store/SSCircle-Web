@@ -1884,6 +1884,41 @@ async function route(req, env) {
     if(path==='/seasons.html') return new Response(null,{status:302,headers:{Location:'/seasons'+url.search,'Cache-Control':'no-store'}});
     return env.ASSETS.fetch(req);
   }
+  // My SSCircle only renders for a signed-in, accepted applicant.
+  // Static assets alone cannot bypass this guard: both route variants are checked.
+  if ((path === '/my-sscircle' || path === '/my-sscircle.html') && (method === 'GET' || method === 'HEAD')) {
+    if (!env.DB || !env.SESSION_SECRET)
+      return new Response('Dashboard pemain belum tersedia.', {status:503,headers:{'Content-Type':'text/plain; charset=utf-8','Cache-Control':'no-store'}});
+    const member = await playerSession(req, env);
+    if (!member || member.status !== 'accepted') {
+      const access = member?.status === 'pending' ? 'menunggu' : member?.status === 'rejected' ? 'ditolak' : 'perlu-masuk';
+      return new Response(null, {status:302,headers:{
+        Location:'/status.html?akses-dashboard='+access+'#kode-milikku',
+        'Cache-Control':'private, no-store',
+        Vary:'Cookie'
+      }});
+    }
+    if (path === '/my-sscircle.html')
+      return new Response(null,{status:302,headers:{
+        Location:'/my-sscircle'+url.search,
+        'Cache-Control':'private, no-store',Vary:'Cookie'
+      }});
+    const response=await env.ASSETS.fetch(req);
+    // Never forward a redirect back to this protected route.
+    if (response.status >= 300 && response.status < 400) {
+      const redirected=response.headers.get('Location');
+      if (redirected) {
+        const target=new URL(redirected,url);
+        if (target.origin === url.origin && ['/my-sscircle','/my-sscircle.html'].includes(target.pathname))
+          return new Response('Dashboard pemain sementara belum bisa dimuat.',{status:502,headers:{'Content-Type':'text/plain; charset=utf-8','Cache-Control':'no-store'}});
+      }
+    }
+    const headers=new Headers(response.headers);
+    headers.set('Cache-Control','private, no-store');
+    headers.set('Vary','Cookie');
+    headers.set('X-Robots-Tag','noindex, nofollow');
+    return new Response(response.body,{status:response.status,statusText:response.statusText,headers});
+  }
   // Proteksi juga dokumen HTML, bukan hanya tombol UI: URL voting langsung tidak bisa dibuka oleh kode Pending/Rejected.
   if ((path === '/voting.html' || path === '/voting') && (method === 'GET' || method === 'HEAD')) {
     if (!env.DB || !env.SESSION_SECRET)
