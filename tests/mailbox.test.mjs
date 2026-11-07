@@ -54,7 +54,7 @@ function fixture(){
   let data=null;try{data=await response.clone().json()}catch{}
   return {status:response.status,data,response};
  }
- return {request,db,member,another,admin};
+ return {request,db,member,another,admin,env};
 }
 
 test('permintaan diterima dicatat tetapi tidak membocorkan kode sebelum verifikasi identitas',async()=>{
@@ -167,4 +167,31 @@ test('Mail Box delete only affects owner, while a live activation code stays ava
   assert.ok(activation);
   assert.equal((await x.request('/api/player/mailbox/delete',{method:'POST',body:{id:activation.id}})).status,409);
   assert.equal((await x.request('/api/player/mailbox/reveal',{method:'POST',body:{id:activation.id}})).status,200);
+});
+
+test('failed transaction restores approval so a later request can issue one invite',async()=>{
+ const x=fixture();
+ await x.request('/api/player/mailbox/request-activation',{method:'POST',body:{}});
+ const originalBatch=x.env.DB.batch;
+ x.env.DB.batch=async()=>{throw Error('temporary transaction failure');};
+ const failed=await x.request('/api/admin/mailbox/approve',{method:'POST',cookie:x.admin,
+   body:{id:ID,verification:'identity-confirmed'}});
+ assert.equal(failed.status,503);
+ assert.equal(x.db.prepare('SELECT consumed_at FROM member_mailbox_approvals WHERE application_id=?').get(ID).consumed_at,null);
+ assert.equal(x.db.prepare("SELECT COUNT(*) AS n FROM member_mailbox WHERE type='activation'").get().n,0);
+ x.env.DB.batch=originalBatch;
+ const retry=await x.request('/api/player/mailbox/request-activation',{method:'POST',body:{}});
+ assert.equal(retry.status,200,JSON.stringify(retry.data));
+ assert.equal(retry.data.delivered,true);
+ const mailbox=await x.request('/api/player/mailbox');
+ assert.equal(mailbox.data.items.filter(item=>item.canReveal).length,1);
+});
+
+test('mark-as-read checks ownership and keeps normal repeat reads idempotent',async()=>{
+ const x=fixture();
+ await x.request('/api/player/mailbox/request-activation',{method:'POST',body:{}});
+ const id=(await x.request('/api/player/mailbox')).data.items[0].id;
+ assert.equal((await x.request('/api/player/mailbox/read',{method:'POST',cookie:x.another,body:{id}})).status,404);
+ assert.equal((await x.request('/api/player/mailbox/read',{method:'POST',body:{id}})).status,200);
+ assert.equal((await x.request('/api/player/mailbox/read',{method:'POST',body:{id}})).status,200);
 });
