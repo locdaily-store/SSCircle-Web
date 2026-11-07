@@ -57,6 +57,9 @@ jobs:
       - name: Uji penghubung akun Minecraft dan verifikasi server
         run: node --test tests/minecraft-link.test.mjs
 
+      - name: Uji kontrak plugin Paper Direct tanpa Velocity
+        run: node --test tests/paper-link.test.mjs
+
       - name: Uji konfigurasi Profile dan modal
         run: node --test tests/profile-ui.test.mjs
 
@@ -124,7 +127,7 @@ jobs:
           asset_ext = root_ext | {'.ogg','.ttf','.otf','.avif','.wasm'}
           required = {'index.html','admin.html','registration.html','status.html','voting.html','_worker.js','_routes.json'}
           extra_root = {'_headers','_redirects','_version.txt','robots.txt','favicon.ico'}
-          excluded_dirs = {'.github','docs','scripts','tests','.vscode','minecraft-link-velocity'}
+          excluded_dirs = {'.github','docs','scripts','tests','.vscode','minecraft-link-velocity','minecraft-link-paper'}
           excluded_root = {'.gitignore','.gitattributes','README.md','CONTRIBUTING.md','SECURITY.md','PANDUAN-GITHUB.md','rules-defaults.json'}
           site = []
           for rel in tracked:
@@ -185,5 +188,32 @@ jobs:
         with:
           name: SSCircle-Minecraft-Link-Velocity
           path: minecraft-link-velocity/build/libs/*.jar
+          if-no-files-found: error
+          retention-days: 14
+
+  build-paper-link:
+    name: Bangun SSCircle Player Sync untuk Paper 26.3
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Ambil sumber plugin Paper
+        uses: actions/checkout@v4
+      - name: Pasang Java 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - name: Siapkan Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - name: Kompilasi SSCircle Player Sync Paper
+        run: gradle -p minecraft-link-paper clean build --no-daemon --stacktrace
+      - name: Simpan JAR Paper
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: SSCircle-Player-Sync-Paper
+          path: minecraft-link-paper/build/libs/*.jar
           if-no-files-found: error
           retention-days: 14
