@@ -2691,6 +2691,13 @@ async function minecraftLinkClaim(req,env){
   ).bind(nonce,now).run();
   if(!(nonceResult.meta?.changes>0))return bad('Permintaan ini sudah pernah diproses.',409);
   await env.DB.prepare('DELETE FROM minecraft_link_nonces WHERE seen_at<?').bind(now-300).run();
+  // Old unconfirmed claims must never reserve an identity forever.
+  const stampNow=new Date().toISOString();
+  await env.DB.prepare(
+    'DELETE FROM minecraft_link_claims WHERE challenge_id IN (SELECT id FROM minecraft_link_challenges WHERE expires_at<=?)'
+  ).bind(stampNow).run();
+  await env.DB.prepare('DELETE FROM minecraft_link_challenges WHERE expires_at<=?')
+    .bind(stampNow).run();
   const challenge=await env.DB.prepare(
     'SELECT id,application_id,expires_at,claimed_at FROM minecraft_link_challenges WHERE code_hash=?'
   ).bind(await mcCodeHash(env,bodyValue.code)).first();
