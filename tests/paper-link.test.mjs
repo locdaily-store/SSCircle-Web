@@ -54,7 +54,7 @@ test('Paper Direct: no insecure default endpoint or secrets in shipped config',(
 });
 
 test('V10.45.2: safe tab-completion shows matching commands and hides admin-only reload',()=>{
- assert.match(manifest,/version: '10\.45\.2'/);
+ assert.match(manifest,/version: '10\.45\.3'/);
  assert.match(paper,/implements CommandExecutor, TabCompleter, Listener/);
  assert.match(paper,/public List<String> onTabComplete\(CommandSender sender, Command command, String alias, String\[\] args\)/);
  assert.match(paper,/if \(args\.length != 1\) return List\.of\(\)/);
@@ -71,7 +71,23 @@ test('V10.45.2: explain both independent failures without exposing shared secret
  assert.match(paper,/Kunci komunikasi website:/);
  assert.match(paper,/Konfigurasi website:/);
  assert.match(paper,/online-mode=true di server\.properties/);
- assert.match(paper,/SSCIRCLE_LINK_SERVER_SECRET lalu restart Paper/);
+ assert.match(paper,/server-secret\.txt/);
+ assert.match(paper,/SecretFileStore\.loadOrCreate/);
+ assert.match(paper,/secretSource/);
  assert.match(paper,/String secret = System\.getenv\(SECRET_ENV\)/);
  assert.doesNotMatch(paper,/sender\.sendMessage\(.*signingSecret\)/);
+});
+
+test('V10.45.3: secret fallback to a private generated file without exposing token',()=>{
+ const localSecret=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/SecretFileStore.java',import.meta.url),'utf8');
+ assert.match(localSecret,/SecureRandom/);
+ assert.match(localSecret,/rw-------/);
+ assert.match(localSecret,/CREATE_NEW|createFile/);
+ assert.match(localSecret,/server-secret\.txt/);
+ assert.match(paper,/System\.getenv\(SECRET_ENV\)/);
+ assert.match(paper,/SecretFileStore\.isValidSecret\(secret\)/);
+ assert.match(paper,/SecretFileStore\.loadOrCreate\(getDataFolder\(\)\.toPath\(\)\)/);
+ assert.match(paper,/"file privat plugin"/);
+ assert.match(paper,/Samakan isi server-secret\.txt dengan secret/);
+ assert.doesNotMatch(paper,/sender\.sendMessage\([^\n]*signingSecret/);
 });
