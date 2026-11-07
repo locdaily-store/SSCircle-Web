@@ -115,7 +115,8 @@ with sync_playwright() as p:
   page.evaluate('''settings=>{
     document.querySelectorAll('.tab-page').forEach(e=>e.classList.add('hide'));
     document.getElementById('seasons-admin').classList.remove('hide');
-    window.SSCircleSeasonsAdmin.render({settings:structuredClone(settings),pages:[],submissions:[]},()=>{});
+    window.__seasonFixture={settings:structuredClone(settings),pages:[],submissions:[]};
+    window.SSCircleSeasonsAdmin.render(window.__seasonFixture,()=>{});
   }''',settings)
   page.evaluate('''() => {
     const first=document.querySelector('#seasons-admin-editor .season-admin-season');
@@ -128,6 +129,24 @@ with sync_playwright() as p:
     cards:document.querySelectorAll('.season-admin-season').length})''')
   assert vals['cards']==2,('Admin Season cards missing',w,vals)
   assert vals['editorScrollWidth']<=vals['editorWidth']+2,('Admin editor overflow',w,vals)
+  # Native checkboxes must never inherit width:100% from text inputs.
+  geometry=page.evaluate('''() => {
+    const editor=document.getElementById('seasons-admin-editor');
+    const switcher=editor.querySelector('.season-admin-page-settings .season-admin-toggle');
+    const check=switcher.querySelector('input[type=checkbox]').getBoundingClientRect();
+    const copy=switcher.querySelector('.season-admin-toggle-copy').getBoundingClientRect();
+    const group=editor.querySelector('.season-admin-fieldset').getBoundingClientRect();
+    return {checkWidth:check.width,checkHeight:check.height,gap:copy.left-check.right,
+      editorWidth:editor.clientWidth,groupWidth:group.width,
+      fieldsets:editor.querySelectorAll('.season-admin-fieldset').length,
+      switchWidth:switcher.getBoundingClientRect().width}
+  }''')
+  assert 16<=geometry['checkWidth']<=24,('Checkbox stretched',w,geometry)
+  assert 0<=geometry['gap']<=28,('Checkbox detached from its label',w,geometry)
+  assert geometry['groupWidth']<=geometry['editorWidth']+2,('Fieldset overflow',w,geometry)
+  assert geometry['fieldsets']>=6,('Missing season form groups',w,geometry)
+  page.locator('.season-admin-page-settings .season-admin-toggle input[type=checkbox]').check()
+  assert page.evaluate('window.__seasonFixture.settings.seasonArchiveEnabled') is True,('Season toggle did not update',w)
   assert page.locator('.season-admin-rank-fields').count()>=3,('Ranking fields missing',w)
   assert page.locator('.season-admin-rank-top > .ssc-sort-handle').count()>=2,('Ranking drag handles missing',w)
   assert page.locator('.sidebar-group').count()==4,('Sidebar groups missing',w)

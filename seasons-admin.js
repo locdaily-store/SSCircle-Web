@@ -15,8 +15,26 @@ window.SSCircleSeasonsAdmin = (() => {
     if(help)wrap.append(el('small','field-help',help));return wrap;
   };
   const action=(label,onClick,primary=false)=>{const b=el('button','button '+(primary?'primary':'secondary'),label);b.type='button';b.onclick=onClick;return b;};
-  const toggle=(label,checked,change)=>{const wrapper=el('label','rules-admin-switch'),check=el('input');check.type='checkbox';check.checked=checked===true;
-    check.onchange=()=>{change(check.checked);mark();};wrapper.append(check,el('span','',label));return wrapper;};
+  // A dedicated switch keeps the control beside its label even in a wide editor.
+  const toggle=(label,checked,change,help='')=>{
+    const wrapper=el('label','rules-admin-switch season-admin-toggle');
+    const check=el('input');check.type='checkbox';check.checked=checked===true;
+    check.onchange=()=>{change(check.checked);mark();};
+    const copy=el('span','season-admin-toggle-copy');
+    copy.append(el('strong','',label));
+    if(help)copy.append(el('small','',help));
+    wrapper.append(check,copy);
+    return wrapper;
+  };
+  const editorGroup=(title,description='')=>{
+    const section=el('section','season-admin-fieldset');
+    const head=el('div','season-admin-fieldset-head');
+    head.append(el('h3','',title));
+    if(description)head.append(el('p','',description));
+    const content=el('div','season-admin-fieldset-content');
+    section.append(head,content);
+    return {section,content};
+  };
   function mediaField(parent,label,object,key,rerender){
     const slot=el('div','season-admin-media');slot.append(el('span','field-label',label));
     if(object[key]){
@@ -56,30 +74,61 @@ window.SSCircleSeasonsAdmin = (() => {
     }));body.append(section);
   }
   function seasonCard(season,index){
-    const card=el('details','season-admin-season');card.dataset.id=season.id;card.open=expanded.has(season.id);
+    const card=el('details','season-admin-season');
+    card.dataset.id=season.id;
+    card.open=expanded.has(season.id);
     card.addEventListener('toggle',()=>{if(card.open)expanded.add(season.id);else expanded.delete(season.id);});
     const summary=el('summary','season-admin-summary');
     summary.append(el('strong','',season.title||'Season '+(index+1)));
     summary.append(el('span','season-admin-count',`${season.archivePublished?'Publik':'Draft'} · ${(season.entries||[]).length} pemain`));
     card.append(summary);
     const body=el('div','season-admin-body');
-    body.append(toggle('Publikasikan season ini ke halaman arsip',season.archivePublished,v=>season.archivePublished=v));
-    body.append(inputField('Nama season',season.title,v=>{season.title=v;summary.querySelector('strong').textContent=v||'Season';},{max:120}));
+
+    const info=editorGroup('01 · Informasi season','Identitas, waktu berlangsung, dan cerita singkat season.');
+    info.content.append(toggle('Publikasikan season ini',season.archivePublished,v=>season.archivePublished=v,'Tampilkan cerita season ini di arsip publik.'));
+    const mainFields=el('div','season-admin-info-grid');
+    const nameField=inputField('Nama season',season.title,v=>{
+      season.title=v;
+      summary.querySelector('strong').textContent=v||'Season';
+    },{max:120});
+    nameField.classList.add('season-admin-name');
+    mainFields.append(nameField);
+    const status=el('label','field-group season-admin-status');
+    status.append(el('span','field-label','Status season'));
+    const choice=el('select');
+    for(const [value,label] of [['active','Sedang berlangsung'],['ended','Selesai / Arsip']]){
+      const option=el('option','',label);option.value=value;choice.append(option);
+    }
+    choice.value=season.archiveStatus||'ended';
+    choice.onchange=()=>{season.archiveStatus=choice.value;mark();};
+    status.append(choice);mainFields.append(status);
     const dates=el('div','season-admin-dates');
     dates.append(inputField('Tanggal mulai',season.archiveStartDate,v=>season.archiveStartDate=v,{type:'date'}));
-    dates.append(inputField('Tanggal selesai (opsional)',season.archiveEndDate,v=>season.archiveEndDate=v,{type:'date'}));body.append(dates);
-    const status=el('label','field-group');status.append(el('span','field-label','Status season'));
-    const choice=el('select');for(const [value,label] of [['active','Sedang berlangsung'],['ended','Selesai / Arsip']]){
-      const o=el('option','',label);o.value=value;choice.append(o);
-    }choice.value=season.archiveStatus||'ended';choice.onchange=()=>{season.archiveStatus=choice.value;mark();};status.append(choice);body.append(status);
-    body.append(inputField('Cerita singkat / highlight season',season.archiveSummary,v=>season.archiveSummary=v,{multiline:true,max:1200}));
-    mediaField(body,'Foto sampul season',season,'archiveCover',renderEditor);
-    makeSublist(body,season,'archiveMemories','Foto kenangan',12,()=>({src:'',caption:''}),[['caption','Keterangan foto','text',240]],'src');
-    makeSublist(body,season,'archiveBuilds','Bangunan terbaik',8,()=>({title:'Bangunan baru',builder:'',src:'',description:''}),[
-      ['title','Nama bangunan','text',120],['builder','Nama builder','text',100],['description','Cerita bangunan','textarea',350]],'src');
-    makeSublist(body,season,'archiveAwards','Penghargaan',12,()=>({title:'Penghargaan baru',player:'',description:''}),[
-      ['title','Kategori penghargaan','text',120],['player','Nama pemain','text',100],['description','Keterangan','textarea',350]]);
-    const ranking=el('details','season-admin-subsection');ranking.append(el('summary','','Leaderboard season ('+(season.entries||[]).length+'/20)'));
+    dates.append(inputField('Tanggal selesai (opsional)',season.archiveEndDate,v=>season.archiveEndDate=v,{type:'date'}));
+    mainFields.append(dates);
+    const story=inputField('Cerita singkat / highlight season',season.archiveSummary,v=>season.archiveSummary=v,{multiline:true,max:1200});
+    story.classList.add('season-admin-story');
+    mainFields.append(story);
+    info.content.append(mainFields);
+    body.append(info.section);
+
+    const media=editorGroup('02 · Dokumentasi','Sampul, foto kenangan, dan bangunan pilihan.');
+    mediaField(media.content,'Foto sampul season',season,'archiveCover',renderEditor);
+    makeSublist(media.content,season,'archiveMemories','Foto kenangan',12,
+      ()=>({src:'',caption:''}),[['caption','Keterangan foto','text',240]],'src');
+    makeSublist(media.content,season,'archiveBuilds','Bangunan terbaik',8,
+      ()=>({title:'Bangunan baru',builder:'',src:'',description:''}),
+      [['title','Nama bangunan','text',120],['builder','Nama builder','text',100],
+       ['description','Cerita bangunan','textarea',350]],'src');
+    body.append(media.section);
+
+    const achievement=editorGroup('03 · Prestasi & pemain','Catat penghargaan dan urutan pemain untuk season ini.');
+    makeSublist(achievement.content,season,'archiveAwards','Penghargaan',12,
+      ()=>({title:'Penghargaan baru',player:'',description:''}),
+      [['title','Kategori penghargaan','text',120],['player','Nama pemain','text',100],
+       ['description','Keterangan','textarea',350]]);
+    const ranking=el('details','season-admin-subsection');
+    ranking.append(el('summary','',`Leaderboard season (${season.entries.length}/20)`));
     const inner=el('div','season-admin-subsection-content');ranking.append(inner);
     const list=el('div','season-admin-sublist');inner.append(list);
     const repaint=()=>{
@@ -98,27 +147,40 @@ window.SSCircleSeasonsAdmin = (() => {
         season.entries.splice(to,0,season.entries.splice(from,1)[0]);mark();repaint();
       }});
     };
-    repaint();inner.append(action('+ Tambah pemain',()=>{
+    repaint();
+    const addPlayer=action('+ Tambah pemain',()=>{
       if(season.entries.length>=20)return SSCNotice.alert('Maksimal 20 pemain per season.');
       season.entries.push({name:'',score:''});mark();repaint();ranking.open=true;
-    }));
-    body.append(ranking);
-    body.append(action('Hapus season',async()=>{
+    });
+    addPlayer.classList.add('season-admin-add-player');
+    inner.append(addPlayer);
+    achievement.content.append(ranking);
+    body.append(achievement.section);
+
+    const footer=el('div','season-admin-delete-row');
+    const deleteButton=action('Hapus season',async()=>{
       if(!await window.SSCNotice.confirm('Hapus season ini beserta seluruh riwayat dan Leaderboard?',{danger:true,confirmText:'Hapus season'}))return;
       model.settings.homeLeaderboardSeasons.splice(index,1);expanded.delete(season.id);mark();renderEditor();
-    }));card.append(body);return card;
+    });
+    deleteButton.classList.add('season-admin-delete');
+    footer.append(deleteButton);body.append(footer);
+    card.append(body);return card;
   }
   function renderEditor(){if(!model)return;
     const s=model.settings,root=$('seasons-admin-editor');if(!root)return;root.replaceChildren();
     s.homeLeaderboardSeasons ||= [];
-    const main=el('section','panel rules-admin-panel');
-    main.classList.add('season-admin-page-settings');
-    main.append(el('h2','','Pengaturan halaman arsip'));
-    main.append(toggle('Aktifkan halaman Season Archive untuk publik',s.seasonArchiveEnabled,v=>s.seasonArchiveEnabled=v));
-    main.append(inputField('Judul halaman',s.seasonArchiveTitle,v=>s.seasonArchiveTitle=v,{max:160}));
-    main.append(inputField('Deskripsi pembuka',s.seasonArchiveDescription,v=>s.seasonArchiveDescription=v,{multiline:true,max:900}));
-    main.append(inputField('Pesan saat arsip kosong',s.seasonArchiveEmptyText,v=>s.seasonArchiveEmptyText=v,{max:350}));
-    main.append(el('p','field-help','Data season sama dengan Leaderboard lama. Season baru tetap sebagai draft sampai dipublikasikan.'));
+    const main=el('section','panel rules-admin-panel season-admin-page-settings');
+    const intro=el('div','season-admin-page-intro');
+    intro.append(el('h2','','Pengaturan halaman arsip'));
+    intro.append(el('p','','Atur halaman Season Archive yang dilihat pengunjung.'));
+    main.append(intro);
+    main.append(toggle('Tampilkan Season Archive',s.seasonArchiveEnabled,v=>s.seasonArchiveEnabled=v,'Halaman arsip dapat dikunjungi ketika pengaturan ini aktif.'));
+    const mainFields=el('div','season-admin-page-fields');
+    mainFields.append(inputField('Judul halaman',s.seasonArchiveTitle,v=>s.seasonArchiveTitle=v,{max:160}));
+    mainFields.append(inputField('Deskripsi pembuka',s.seasonArchiveDescription,v=>s.seasonArchiveDescription=v,{multiline:true,max:900}));
+    mainFields.append(inputField('Pesan saat arsip kosong',s.seasonArchiveEmptyText,v=>s.seasonArchiveEmptyText=v,{max:350}));
+    main.append(mainFields);
+    main.append(el('p','season-admin-help','Data season tetap terhubung dengan Leaderboard lama. Season baru tersimpan sebagai draft sampai dipublikasikan.'));
     root.append(main);
     const bar=el('div','rules-admin-toolbar season-admin-toolbar');
     const overview=el('div','season-admin-toolbar-copy');
