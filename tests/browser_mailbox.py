@@ -185,6 +185,48 @@ with sync_playwright() as p:
     recovery.locator('#ssc-mailbox-refresh').click()
     recovery.locator('#ssc-mailbox-list .mailbox-item').first.wait_for()
     assert recovery.locator('#ssc-mailbox-signin').is_hidden()
+    # V10.43: selection checkbox never offers an active activation code for deletion.
+    recovery.locator('#ssc-mailbox-select-mode').click()
+    assert recovery.locator('.ssc-mailbox-select-control input').count()==2
+    assert recovery.locator('.ssc-mailbox-select-control input').first.is_disabled()
+    recovery.locator('#ssc-mailbox-select-all').click()
+    assert recovery.locator('#ssc-mailbox-selected-count').inner_text()=='1 dipilih'
+    recovery.on('dialog',lambda d:d.accept())
+    recovery.locator('#ssc-mailbox-delete-selected').click()
+    recovery.wait_for_function("document.querySelectorAll('#ssc-mailbox-list .mailbox-item').length === 1")
+    assert recovery.locator('#ssc-mailbox-list .mailbox-item').count()==1
     recovery.close()
+
+    # V10.43: Profile Studio can reorder with pointer and has a real mobile preview switch.
+    studio=browser.new_page(viewport={'width':430,'height':890})
+    editor=(ROOT/'profile-admin.js').read_text(encoding='utf-8')
+    studio_css=(ROOT/'profile-ui.css').read_text(encoding='utf-8')
+    shell='<!doctype html><html><head><style>'+studio_css+'</style></head><body>'
+    shell+='<div id="profile-admin-root"></div><div id="profile-preview-devices">'
+    shell+='<button type="button" data-profile-device="desktop">Desktop</button>'
+    shell+='<button type="button" data-profile-device="mobile">HP</button></div>'
+    shell+='<div id="profile-preview-stage" data-device="desktop"></div>'
+    shell+='<script>'+editor.replace('</script','<\\/script')+'</script></body></html>'
+    studio.set_content(shell,wait_until='domcontentloaded')
+    studio.evaluate("""() => window.SSCircleProfileAdmin.render({settings:{
+      profilePageTitle:'Profile',profilePageSubtitle:'Pratinjau profil anggota',
+      profilePageLayout:'sidebar',profilePageHeroStyle:'default',profilePageCardStyle:'soft',
+      profilePageSections:['welcome','security','preferences','achievements','linking','stats','explore'],
+      profilePageHidden:[]
+    }},()=>{})""")
+    assert studio.locator('.ssc-profile-admin-card').count()==7
+    assert studio.locator('[data-section-id="security"] input[type=checkbox]').is_disabled()
+    studio.locator('[data-profile-device="mobile"]').click()
+    assert studio.locator('#profile-preview-stage').get_attribute('data-device')=='mobile'
+    first=studio.locator('.ssc-profile-drag-handle').first.bounding_box()
+    third=studio.locator('.ssc-profile-admin-card').nth(2).bounding_box()
+    studio.mouse.move(first['x']+first['width']/2,first['y']+first['height']/2)
+    studio.mouse.down()
+    studio.mouse.move(third['x']+third['width']/2,third['y']+third['height']*.8,steps=6)
+    studio.mouse.up()
+    studio.wait_for_function("document.querySelector('.ssc-profile-admin-card').dataset.sectionId !== 'welcome'")
+    assert studio.locator('.ssc-profile-admin-card').first.get_attribute('data-section-id')=='security'
+    assert studio.evaluate('document.documentElement.scrollWidth<=innerWidth+2')
+    studio.close()
     browser.close()
     print('BROWSER MAILBOX REGRESSION PASS')

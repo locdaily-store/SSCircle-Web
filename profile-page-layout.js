@@ -1,4 +1,4 @@
-/* SSCircle V10.41: public design settings for the private Profile page. */
+/* SSCircle V10.43: validated Profile Studio presentation on member and preview. */
 'use strict';
 window.SSCircleProfileLayout=(()=>{
   const ids=['welcome','security','preferences','achievements','linking','stats','explore'];
@@ -9,6 +9,8 @@ window.SSCircleProfileLayout=(()=>{
       settings.profilePageTitle.trim():'Profile').slice(0,90);
     const subtitle=(typeof settings.profilePageSubtitle==='string'&&settings.profilePageSubtitle.trim()?
       settings.profilePageSubtitle.trim():'Ruang pribadi anggota SSCircle.').slice(0,350);
+    main.classList.toggle('is-profile-compact',settings.profilePageHeroStyle==='compact');
+    main.classList.toggle('is-profile-outlined',settings.profilePageCardStyle==='outlined');
     const heading=document.getElementById('player-heading');
     if(heading){
       const accent=document.createElement('em');

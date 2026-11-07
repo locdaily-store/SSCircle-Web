@@ -52,3 +52,35 @@ test('Mail Box handles loading, recovery and duplicate deletes',()=>{
  assert.match(widget,/if\(deleting\)return/);
  assert.match(worker,/await env\.DB\.batch\(\[/);
 });
+
+test('Profile Studio has touch reorder, a mobile preview and validated presentation choices',()=>{
+ const editor=source('profile-admin.js');
+ const html=source('admin.html');
+ const worker=source('_worker.js');
+ const layout=source('profile-page-layout.js');
+ assert.match(editor,/pointerdown/);
+ assert.match(editor,/setPointerCapture/);
+ assert.match(editor,/pointercancel/);
+ assert.match(editor,/ArrowUp/);
+ assert.match(editor,/profilePageHeroStyle/);
+ assert.match(editor,/profilePageCardStyle/);
+ assert.match(editor,/id!=='security'/);
+ assert.match(html,/id="profile-preview-devices"/);
+ assert.match(html,/data-profile-device="mobile"/);
+ assert.match(layout,/is-profile-outlined/);
+ assert.match(worker,/out\.profilePageHeroStyle/);
+ assert.match(worker,/out\.profilePageCardStyle/);
+});
+
+test('Notification Center manages only selected message IDs via the protected API',()=>{
+ const widget=source('mailbox-widget.js');
+ const worker=source('_worker.js');
+ assert.match(widget,/ssc-mailbox-select-all/);
+ assert.match(widget,/ssc-mailbox-mark-selected/);
+ assert.match(widget,/ssc-mailbox-delete-selected/);
+ assert.match(widget,/!item\.canReveal/);
+ assert.match(widget,/\/api\/player\/mailbox\/manage/);
+ assert.match(worker,/if\(path==='\/api\/player\/mailbox\/manage'/);
+ assert.match(worker,/new Set\(ids\)\.size!==ids\.length/);
+ assert.match(worker,/WHERE application_id=\? AND id IN/);
+});

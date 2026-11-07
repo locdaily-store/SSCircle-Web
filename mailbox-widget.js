@@ -1,4 +1,4 @@
-/* SSCircle V10.42: resilient private Mail Box dialog. Never inserts server text as HTML. */
+/* SSCircle V10.43: safe multi-select Notification Center. Server text is textContent only. */
 'use strict';
 (() => {
   if (window.SSCircleMailbox) return;
@@ -23,6 +23,15 @@
     '<button type="button" class="mailbox-filter is-current" data-ssc-filter="all" aria-pressed="true">Semua</button>',
     '<button type="button" class="mailbox-filter" data-ssc-filter="unread" aria-pressed="false">Belum dibaca</button>',
     '<button type="button" class="mailbox-filter" data-ssc-filter="activation" aria-pressed="false">Aktivasi</button></div>',
+    '<div class="ssc-mailbox-selection-bar">',
+    '<button type="button" class="mailbox-secondary" id="ssc-mailbox-select-mode" aria-pressed="false">Pilih pesan</button>',
+    '<div id="ssc-mailbox-bulk-actions" class="ssc-mailbox-bulk-actions" hidden>',
+    '<span id="ssc-mailbox-selected-count" aria-live="polite">0 dipilih</span>',
+    '<button type="button" class="mailbox-secondary" id="ssc-mailbox-select-all">Pilih semua</button>',
+    '<button type="button" class="mailbox-secondary" id="ssc-mailbox-mark-selected">Tandai dibaca</button>',
+    '<button type="button" class="ssc-mailbox-delete" id="ssc-mailbox-delete-selected">Hapus terpilih</button>',
+    '</div></div>',
+    '<p class="ssc-mailbox-selection-hint" id="ssc-mailbox-select-hint" hidden>Kode aktivasi yang masih berlaku tidak dapat dipilih untuk penghapusan.</p>',
     '<div class="mailbox-list" id="ssc-mailbox-list" aria-live="polite"></div></section>',
     '<section class="mailbox-surface mailbox-detail" aria-label="Isi notifikasi">',
     '<div class="mailbox-detail-empty" id="ssc-mailbox-empty"><span aria-hidden="true">✉</span><h3>Pilih notifikasi</h3>',
@@ -39,7 +48,8 @@
   ].join('');
   document.body.append(dialog);
   const $=id=>dialog.querySelector('#'+id);
-  let items=[],current=null,filter='all',lastTrigger=null,refreshTask=null,loaded=false,loadFailed=false,deleting=false;
+  let items=[],current=null,filter='all',lastTrigger=null,refreshTask=null,loaded=false,loadFailed=false,deleting=false,
+    selecting=false,selected=new Set(),managing=false;
   const fmt=date=>{
     const value=new Date(date);
     return Number.isFinite(value.getTime())?value.toLocaleString('id-ID',{
@@ -78,12 +88,26 @@
     $('ssc-mailbox-code').textContent='';
     $('ssc-mailbox-secret-row').hidden=true;
   }
+  function shownItems(){
+    return items.filter(item=>filter==='all'||(filter==='unread'&&!item.read)||
+      (filter==='activation'&&['activation','information'].includes(item.type)));
+  }
+  function updateSelection(){
+    $('ssc-mailbox-select-mode').textContent=selecting?'Batal pilih':'Pilih pesan';
+    $('ssc-mailbox-select-mode').setAttribute('aria-pressed',String(selecting));
+    $('ssc-mailbox-bulk-actions').hidden=!selecting;
+    $('ssc-mailbox-select-hint').hidden=!selecting;
+    $('ssc-mailbox-selected-count').textContent=selected.size+' dipilih';
+    $('ssc-mailbox-mark-selected').disabled=managing||selected.size===0;
+    $('ssc-mailbox-delete-selected').disabled=managing||selected.size===0;
+    $('ssc-mailbox-select-all').disabled=managing||shownItems().every(item=>item.canReveal);
+    $('ssc-mailbox-select-mode').disabled=managing;
+  }
   function draw(){
     const root=$('ssc-mailbox-list');
     root.replaceChildren();
     updateCount();
-    const shown=items.filter(item=>filter==='all'||(filter==='unread'&&!item.read)||
-      (filter==='activation'&&['activation','information'].includes(item.type)));
+    const shown=shownItems();
     if(!shown.length){
       const hint=document.createElement('p');hint.className='mailbox-empty';
       hint.textContent=loadFailed?'Gagal memuat pesan. Tekan Perbarui untuk mencoba lagi.':
@@ -107,8 +131,22 @@
         dot.setAttribute('aria-label','Belum dibaca');button.append(dot);
       }
       button.addEventListener('click',()=>void read(item));
-      root.append(button);
+      if(selecting){
+        const row=document.createElement('div');row.className='ssc-mailbox-select-entry';
+        const label=document.createElement('label');label.className='ssc-mailbox-select-control';
+        const checkbox=document.createElement('input');checkbox.type='checkbox';
+        checkbox.checked=selected.has(item.id);
+        checkbox.disabled=!!item.canReveal||managing;
+        checkbox.setAttribute('aria-label','Pilih notifikasi '+item.title);
+        checkbox.addEventListener('change',()=>{
+          if(checkbox.checked)selected.add(item.id);else selected.delete(item.id);
+          updateSelection();
+        });
+        const indicator=document.createElement('span');indicator.setAttribute('aria-hidden','true');
+        label.append(checkbox,indicator);row.append(label,button);root.append(row);
+      }else root.append(button);
     }
+    updateSelection();
   }
   async function read(item){
     current=item;
@@ -143,7 +181,7 @@
       try{
         const value=await api('/api/player/mailbox');
         items=Array.isArray(value.items)?value.items:[];
-        loaded=true;loadFailed=false;
+        selected.clear();loaded=true;loadFailed=false;
         $('ssc-mailbox-signin').hidden=true;
         if(current){
           const next=items.find(item=>item.id===current.id);
@@ -154,7 +192,7 @@
           'Permintaan kode menunggu verifikasi pengurus.':'Notifikasi sudah diperbarui.');
       }catch(error){
         // Never retain a previous account's messages after an auth or network failure.
-        items=[];emptyDetail();loaded=true;loadFailed=true;draw();
+        items=[];selected.clear();selecting=false;emptyDetail();loaded=true;loadFailed=true;draw();
         $('ssc-mailbox-signin').hidden=![401,403].includes(error.status);
         if(!silent||dialog.open)notify([401,403].includes(error.status)?
           'Masuk dengan akun berstatus Diterima melalui Cek Status untuk membuka Mail Box.':
@@ -174,11 +212,52 @@
     await refresh();
   }
   $('ssc-mailbox-close').addEventListener('click',()=>dialog.close());
-  dialog.addEventListener('close',()=>{emptyDetail();lastTrigger?.focus?.();});
+  dialog.addEventListener('close',()=>{
+    selected.clear();selecting=false;emptyDetail();draw();lastTrigger?.focus?.();
+  });
   dialog.addEventListener('click',e=>{
     if(e.target===dialog)dialog.close();
   });
   $('ssc-mailbox-refresh').addEventListener('click',()=>void refresh());
+  $('ssc-mailbox-select-mode').addEventListener('click',()=>{
+    if(managing)return;
+    selecting=!selecting;selected.clear();draw();
+  });
+  $('ssc-mailbox-select-all').addEventListener('click',()=>{
+    if(managing)return;
+    const visible=shownItems().filter(item=>!item.canReveal);
+    const allSelected=visible.length>0&&visible.every(item=>selected.has(item.id));
+    for(const item of visible){
+      if(allSelected)selected.delete(item.id);else selected.add(item.id);
+    }
+    draw();
+  });
+  async function manageSelected(action){
+    if(managing||!selected.size)return;
+    const ids=Array.from(selected);
+    if(action==='delete'&&!window.confirm('Hapus '+ids.length+' notifikasi terpilih? Tindakan ini tidak dapat dibatalkan.'))return;
+    managing=true;updateSelection();
+    try{
+      const response=await api('/api/player/mailbox/manage','POST',{action,ids});
+      if(action==='delete'){
+        items=items.filter(item=>!selected.has(item.id));
+        if(current&&selected.has(current.id))emptyDetail();
+      }else{
+        items.forEach(item=>{if(selected.has(item.id))item.read=true;});
+      }
+      selected.clear();selecting=false;draw();
+      notify(action==='delete'?
+        (response.deleted||0)+' notifikasi berhasil dihapus.':
+        ids.length+' notifikasi ditandai sudah dibaca.');
+    }catch(error){
+      notify(error.message,true);
+      if([401,403,404,409].includes(error.status)){
+        await refresh(true);notify(error.message,true);
+      }
+    }finally{managing=false;draw();}
+  }
+  $('ssc-mailbox-mark-selected').addEventListener('click',()=>void manageSelected('read'));
+  $('ssc-mailbox-delete-selected').addEventListener('click',()=>void manageSelected('delete'));
   dialog.querySelectorAll('[data-ssc-filter]').forEach(button=>button.addEventListener('click',()=>{
     filter=button.dataset.sscFilter;
     dialog.querySelectorAll('[data-ssc-filter]').forEach(b=>{

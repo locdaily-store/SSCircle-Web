@@ -1,4 +1,4 @@
-/* SSCircle V10.42: Profile, resilient Mail Box modal and clear login recovery. */
+/* SSCircle V10.43: Profile Studio and multi-select notification center. */
 .player-dashboard [hidden]{display:none!important}
 .player-layout.is-stacked{grid-template-columns:minmax(0,1fr)}
 .player-layout.is-stacked .player-side{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -54,3 +54,45 @@
 .ssc-mailbox-modal .mailbox-list[aria-busy="true"]{opacity:.72}
 .ssc-mailbox-modal :is(button,a):focus-visible{outline:2px solid var(--ssc-primary,#c9a4f4);outline-offset:3px}
 @media(max-width:450px){.ssc-mailbox-feedback{align-items:flex-start;flex-direction:column}}
+
+/* Profile Studio controls: pointer drag and accessible button fallback. */
+.ssc-profile-admin-card{transition:border-color .18s,box-shadow .18s,background .18s;animation:ssc-profile-arrive .2s ease-out}
+.ssc-profile-admin-card.is-dragging{position:relative;z-index:5;border-color:var(--ssc-primary,#c6a4f7);box-shadow:0 14px 28px #0007;transition:none;opacity:.92}
+.ssc-profile-admin-card.is-drop-before{box-shadow:inset 0 3px var(--ssc-primary,#c6a4f7)}
+.ssc-profile-admin-card.is-drop-after{box-shadow:inset 0 -3px var(--ssc-primary,#c6a4f7)}
+.ssc-profile-drag-handle{touch-action:none;user-select:none;flex:0 0 36px;height:36px;display:grid;place-items:center;border-radius:9px;border:1px solid var(--ssc-border,#62457d);background:transparent;color:var(--ssc-text,#fff);font-size:24px;line-height:1;cursor:grab}
+.ssc-profile-drag-handle:active{cursor:grabbing}
+.ssc-profile-drag-handle:focus-visible{outline:2px solid var(--ssc-primary,#c6a4f7);outline-offset:2px}
+.ssc-profile-admin-switch{flex:1}
+.ssc-profile-sort-status{font-size:12px;color:var(--ssc-primary,#c6a4f7);margin:0;min-height:1em}
+.ssc-profile-preview-devices{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+.ssc-profile-preview-devices button{min-width:82px;padding:8px 12px}
+.ssc-profile-preview-devices button.is-current{background:var(--ssc-primary,#c6a4f7);color:var(--ssc-bg,#150d20);border-color:var(--ssc-primary,#c6a4f7)}
+.ssc-profile-preview-stage{min-width:0;display:flex;justify-content:center;overflow:hidden;border:1px solid var(--ssc-border,#62457d);border-radius:13px;background:var(--ssc-bg,#150d20)}
+.ssc-profile-preview-stage iframe{flex:0 0 auto;border:0;border-radius:0;transition:width .25s ease,height .25s ease}
+.ssc-profile-preview-stage[data-device="desktop"] iframe{width:100%;height:650px}
+.ssc-profile-preview-stage[data-device="mobile"] iframe{width:min(390px,100%);height:680px;border-inline:1px solid var(--ssc-border,#62457d)}
+.player-main.is-profile-compact .player-hero{min-height:0;padding:19px 24px;gap:10px;border-radius:15px}
+.player-main.is-profile-compact .player-hero h1{font-size:clamp(26px,3.5vw,40px)}
+.player-main.is-profile-compact .player-hero-mark{width:74px;border-radius:18px}
+.player-main.is-profile-outlined .player-card{background:var(--ssc-panel,#21182e);border:1.5px solid color-mix(in srgb,var(--ssc-primary,#c6a4f7) 65%,var(--ssc-border,#62457d));box-shadow:none}
+@keyframes ssc-profile-arrive{from{opacity:.75;filter:brightness(1.2)}to{opacity:1;filter:none}}
+@media(max-width:550px){.ssc-profile-admin-card{gap:6px;padding:9px 7px}.ssc-profile-admin-arrows button{min-width:29px;padding:5px 6px}.ssc-profile-admin-switch{font-size:11px}.ssc-profile-drag-handle{flex-basis:31px;height:33px}.ssc-profile-preview-devices button{flex:1}}
+@media(prefers-reduced-motion:reduce){.ssc-profile-admin-card{animation:none;transition:none}.ssc-profile-preview-stage iframe{transition:none}}
+
+/* Notification Center multi-selection, active-code safeguards and mobile controls. */
+.ssc-mailbox-selection-bar{display:flex;align-items:center;flex-wrap:wrap;gap:8px;min-width:0}
+.ssc-mailbox-selection-bar>button{padding:8px 10px;min-height:34px;font-size:11px}
+.ssc-mailbox-bulk-actions{display:flex;flex:1 1 200px;align-items:center;flex-wrap:wrap;gap:6px}
+.ssc-mailbox-bulk-actions[hidden]{display:none!important}
+.ssc-mailbox-bulk-actions>span{font-size:11px;color:var(--ssc-muted,#c7bbd0);margin-right:auto}
+.ssc-mailbox-bulk-actions button{font-size:11px;padding:8px 10px;min-height:34px;border-radius:9px}
+.ssc-mailbox-bulk-actions button:disabled{opacity:.5;cursor:not-allowed}
+.ssc-mailbox-selection-hint{font-size:11px;line-height:1.5;color:var(--ssc-muted,#c7bbd0);margin:0}
+.ssc-mailbox-select-entry{display:flex;align-items:stretch;gap:7px;min-width:0}
+.ssc-mailbox-select-entry .mailbox-item{flex:1;min-width:0}
+.ssc-mailbox-select-control{display:flex;align-items:center;justify-content:center;flex:0 0 30px;cursor:pointer}
+.ssc-mailbox-select-control input{width:17px;height:17px;margin:0;accent-color:var(--ssc-primary,#c6a4f7);cursor:pointer}
+.ssc-mailbox-select-control input:disabled{opacity:.35;cursor:not-allowed}
+.ssc-mailbox-select-control>span{display:none}
+@media(max-width:520px){.ssc-mailbox-bulk-actions{flex-basis:100%}.ssc-mailbox-bulk-actions button{flex:1 1 auto}.ssc-mailbox-selection-bar>button{width:100%}}

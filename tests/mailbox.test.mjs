@@ -215,3 +215,39 @@ test('if D1 committed but response was lost, same invite remains recoverable',as
  assert.equal(repeated.data.delivered,true);
  assert.equal(x.db.prepare("SELECT COUNT(*) AS n FROM member_mailbox WHERE type='activation'").get().n,1);
 });
+
+test('Mail Box batch actions reject other members and never delete a live code',async()=>{
+ const x=fixture();
+ await x.request('/api/player/mailbox/request-activation',{method:'POST',body:{}});
+ await x.request('/api/admin/mailbox/approve',{method:'POST',cookie:x.admin,
+   body:{id:ID,verification:'identity-confirmed'}});
+ const list=(await x.request('/api/player/mailbox')).data.items;
+ const code=list.find(item=>item.canReveal);
+ const info=list.find(item=>item.type==='information');
+ assert.ok(code&&info);
+ const call=(action,ids,cookie)=>x.request('/api/player/mailbox/manage',{
+   method:'POST',body:{action,ids},...(cookie?{cookie}:{})});
+ assert.equal((await call('delete',[info.id,code.id])).status,409);
+ assert.equal((await call('delete',[info.id],x.another)).status,404);
+ assert.equal((await call('read',[info.id],x.another)).status,404);
+ assert.equal((await call('delete',[info.id,info.id])).status,400);
+ assert.equal((await call('read',[])).status,400);
+ assert.equal((await call('read',['invalid'])).status,400);
+ assert.equal((await call('read',[info.id])).status,200);
+ assert.equal((await x.request('/api/player/mailbox')).data.items.find(item=>item.id===info.id).read,true);
+ const deleted=await call('delete',[info.id]);
+ assert.equal(deleted.status,200,JSON.stringify(deleted.data));
+ assert.equal(deleted.data.deleted,1);
+ const after=(await x.request('/api/player/mailbox')).data.items;
+ assert.equal(after.some(item=>item.id===info.id),false);
+ assert.equal(after.some(item=>item.id===code.id&&item.canReveal),true);
+});
+
+test('Mail Box batch operations require an accepted member session',async()=>{
+ const x=fixture();
+ assert.equal((await x.request('/api/player/mailbox/manage',{
+   method:'POST',cookie:'',body:{action:'read',ids:[ID]}})).status,403);
+ x.db.prepare('UPDATE submissions SET status=? WHERE id=?').run('rejected',ID);
+ assert.equal((await x.request('/api/player/mailbox/manage',{
+   method:'POST',body:{action:'delete',ids:[ID]}})).status,403);
+});

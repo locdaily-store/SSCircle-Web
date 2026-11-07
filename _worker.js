@@ -696,6 +696,8 @@ const DEFAULTS = {
   profilePageTitle: 'Profile',
   profilePageSubtitle: 'Ruang pribadimu untuk melihat keanggotaan, aktivitas, dan perjalanan bersama komunitas SSCircle.',
   profilePageLayout: 'sidebar',
+  profilePageHeroStyle: 'default',
+  profilePageCardStyle: 'soft',
   profilePageSections: ['welcome','security','preferences','achievements','linking','stats','explore'],
   profilePageHidden: [],
   introEnabled: true,
@@ -1125,6 +1127,8 @@ function settingsValid(input) {
   out.profilePageTitle = s(input.profilePageTitle || DEFAULTS.profilePageTitle, 90);
   out.profilePageSubtitle = s(input.profilePageSubtitle || DEFAULTS.profilePageSubtitle, 350);
   out.profilePageLayout = input.profilePageLayout === 'stacked' ? 'stacked' : 'sidebar';
+  out.profilePageHeroStyle = input.profilePageHeroStyle === 'compact' ? 'compact' : 'default';
+  out.profilePageCardStyle = input.profilePageCardStyle === 'outlined' ? 'outlined' : 'soft';
   const profileSections = DEFAULTS.profilePageSections;
   const order = input.profilePageSections === undefined ? profileSections : input.profilePageSections;
   if (!Array.isArray(order) || order.length !== profileSections.length ||
@@ -2557,6 +2561,50 @@ async function mailboxAPI(req,env,path,method){
     await env.DB.prepare('UPDATE member_mailbox SET read_at=? WHERE id=? AND application_id=?')
       .bind(new Date().toISOString(),payload.id,account.id).run();
     return J({ok:true,code});
+  }
+  if(path==='/api/player/mailbox/manage' && method==='POST'){
+    const payload=await body(req,3500);
+    const ids=payload?.ids;
+    if(!['read','delete'].includes(payload?.action) ||
+      !Array.isArray(ids) || !ids.length || ids.length>60 ||
+      new Set(ids).size!==ids.length ||
+      ids.some(id=>typeof id!=='string'||!/^[0-9a-f-]{36}$/.test(id)))
+      return bad('Pilihan notifikasi tidak valid.',400);
+    const placeholders=ids.map(()=>'?').join(',');
+    const found=await env.DB.prepare(
+      `SELECT id,type,expires_at FROM member_mailbox WHERE application_id=? AND id IN (${placeholders})`)
+      .bind(account.id,...ids).all();
+    if((found.results||[]).length!==ids.length)return bad('Notifikasi tidak ditemukan.',404);
+    if(payload.action==='delete'){
+      const latest=await env.DB.prepare(
+        "SELECT id FROM member_mailbox WHERE application_id=? AND type='activation' ORDER BY rowid DESC LIMIT 1")
+        .bind(account.id).first();
+      const invite=await env.DB.prepare(
+        'SELECT expires_at,used_at FROM member_activation_invites WHERE application_id=?')
+        .bind(account.id).first();
+      if(found.results.some(row=>row.id===latest?.id && row.type==='activation' &&
+        row.expires_at>Date.now()/1000 && invite?.used_at===null &&
+        invite?.expires_at===row.expires_at))
+        return bad('Kode aktivasi yang masih berlaku tidak boleh dihapus.',409);
+      // The conditions below independently protect the active activation message
+      // if its status changes between verification and deletion.
+      const deleted=await env.DB.prepare(
+        `DELETE FROM member_mailbox WHERE application_id=? AND id IN (${placeholders})
+        AND NOT (type='activation' AND id=(
+          SELECT id FROM member_mailbox WHERE application_id=? AND type='activation'
+          ORDER BY rowid DESC LIMIT 1)
+          AND expires_at>? AND EXISTS (
+            SELECT 1 FROM member_activation_invites
+            WHERE application_id=? AND used_at IS NULL
+            AND expires_at=member_mailbox.expires_at))`)
+        .bind(account.id,...ids,account.id,Math.floor(Date.now()/1000),account.id).run();
+      return J({ok:true,deleted:Number(deleted.meta?.changes||0)});
+    }
+    const marked=await env.DB.prepare(
+      `UPDATE member_mailbox SET read_at=COALESCE(read_at,?)
+      WHERE application_id=? AND id IN (${placeholders})`)
+      .bind(new Date().toISOString(),account.id,...ids).run();
+    return J({ok:true,updated:Number(marked.meta?.changes||0)});
   }
   if(path==='/api/player/mailbox/delete' && method==='POST'){
     const payload=await body(req,250);
