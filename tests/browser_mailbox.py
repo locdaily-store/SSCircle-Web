@@ -101,6 +101,7 @@ with sync_playwright() as p:
         page.locator('#ssc-mailbox-list .mailbox-item').nth(1).click()
         assert page.locator('#ssc-mailbox-delete').is_enabled()
         page.locator('#ssc-mailbox-delete').click()
+        page.wait_for_function("document.querySelectorAll('#ssc-mailbox-list .mailbox-item').length === 1")
         assert page.locator('#ssc-mailbox-list .mailbox-item').count()==1
         page.locator('#ssc-mailbox-close').click()
         assert not page.locator('#ssc-mailbox-dialog').is_visible()
