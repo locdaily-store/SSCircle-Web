@@ -236,7 +236,7 @@
       if(error.status===429) {
         securityMessage(error.message);
         activationCooldown(error.remainingSeconds||300);
-      } else if(error.status===503 || !error.status) {
+      } else if(error.status>=500 || !error.status) {
         // An interrupted request may have succeeded before the connection failed.
         // Recheck persisted account state rather than declaring a one-use code invalid.
         const mode=await loadSecurityState();
