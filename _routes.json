@@ -9,7 +9,9 @@
     "/rules",
     "/rules.html",
     "/seasons",
-    "/seasons.html"
+    "/seasons.html",
+    "/my-sscircle",
+    "/my-sscircle.html"
   ],
   "exclude": []
 }

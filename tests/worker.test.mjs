@@ -116,3 +116,31 @@ test('Tampilan formulir tidak mengganti nama S6 atau Season 6', async () => {
   const actual = runInNewContext(`${formatter}\nsafePublicText('SSCircle S6 - Season 6')`);
   assert.equal(actual, 'SSCircle S6 - Season 6');
 });
+
+test('My SSCircle: URL dan API member hanya membuka data saat sesi Diterima', async () => {
+  const { env, setStatus } = setup();
+  for (const path of ['/my-sscircle', '/my-sscircle.html']) {
+    const guest = await fetchWorker(env, path, 'GET', undefined, '');
+    assert.equal(guest.status, 302, path + ' guest');
+    assert.match(guest.headers.get('location'), /akses-dashboard=perlu-masuk/);
+    for (const [status, notice] of [['pending','menunggu'],['rejected','ditolak']]) {
+      setStatus(status);
+      const response = await fetchWorker(env, path, 'GET', undefined, playerCookie);
+      assert.equal(response.status, 302, status);
+      assert.match(response.headers.get('location'), new RegExp('akses-dashboard=' + notice));
+    }
+    setStatus('accepted');
+    const response = await fetchWorker(env, path, 'GET', undefined, playerCookie);
+    assert.equal(response.status, path.endsWith('.html') ? 302 : 200, path);
+    assert.match(response.headers.get('cache-control'), /private.*no-store/i);
+    assert.equal(response.headers.get('vary'), 'Cookie');
+  }
+  const api = await fetchWorker(env, '/api/player/me', 'GET', undefined, playerCookie);
+  assert.equal(api.status, 200);
+  const data = await api.json();
+  assert.equal(data.authenticated, true);
+  assert.equal(data.status, 'accepted');
+  assert.equal(data.code, 'AAAABBBBCCCCDDDDEEEE');
+  assert.equal((await fetchWorker(env, '/api/player/me', 'GET', undefined, '')).status, 401);
+  assert.equal((await fetchWorker(env, '/api/player/logout', 'GET', undefined, playerCookie)).status, 404);
+});

@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#120b20">
+  <meta name="description" content="My SSCircle: halaman pribadi anggota SSCircle Server. Lihat status keanggotaan dan akses komunitas.">
+  <meta name="robots" content="noindex,nofollow">
+  <title>My SSCircle | Player Dashboard</title>
+  <link rel="icon" href="assets/sscircle-logo.png" type="image/png">
+  <link rel="stylesheet" href="style.css?v=10.35.0">
+  <link rel="stylesheet" href="player-dashboard.css?v=10.35.0">
+  <script src="color-theme.js?v=10.35.0" defer></script>
+  <script src="site-shell.js?v=10.35.0" defer></script>
+  <script src="player-dashboard.js?v=10.35.0" defer></script>
+</head>
+<body class="home-page player-page theme-v3">
+  <header class="home-header" id="top">
+    <a href="./" class="home-brand" aria-label="Kembali ke beranda SSCircle">
+      <img id="home-logo" src="assets/sscircle-logo.png" width="41" height="41" alt="Logo SSCircle">
+      <span><strong>SSCircle</strong><small>SERVER</small></span>
+    </a>
+    <nav class="home-nav" aria-label="Navigasi utama">
+      <a class="home-nav-link" href="./">Beranda</a>
+      <a class="home-nav-link" href="events.html">Event</a>
+      <a class="home-nav-link" data-season-link href="seasons.html" hidden>Seasons</a>
+      <a class="home-nav-link" href="status.html">Cek Status</a>
+      <a class="home-nav-join" href="/my-sscircle" aria-current="page">My SSCircle</a>
+    </nav>
+    <button type="button" class="home-menu-button" id="home-menu-button" aria-label="Buka menu navigasi" aria-expanded="false">☰</button>
+  </header>
+
+  <main class="player-main home-container" id="player-main">
+    <section class="player-hero" aria-labelledby="player-heading">
+      <div class="player-hero-copy">
+        <span class="player-overline"><span class="player-online-dot" aria-hidden="true"></span> SSCIRCLE / MEMBER SPACE</span>
+        <h1 id="player-heading">My <em>SSCircle.</em></h1>
+        <p>Ruang pribadimu untuk melihat keanggotaan, aktivitas, dan perjalanan bersama komunitas SSCircle.</p>
+      </div>
+      <div class="player-hero-mark" aria-hidden="true"><img src="assets/sscircle-logo.png" alt=""></div>
+    </section>
+
+    <p class="player-notice player-loading" id="player-loading" role="status" aria-live="polite">Memeriksa sesi keanggotaan...</p>
+    <section id="player-error" class="player-error" hidden aria-live="polite">
+      <h2>Dashboard belum bisa dibuka</h2>
+      <p id="player-error-message">Tidak dapat memuat data anggota. Periksa koneksi, lalu coba lagi.</p>
+      <div class="player-actions">
+        <button id="player-retry" class="player-action player-action-primary" type="button">Coba lagi</button>
+        <a class="player-action player-action-secondary" href="status.html#kode-milikku">Cek login</a>
+      </div>
+    </section>
+
+    <div class="player-layout" id="player-content" hidden>
+      <aside class="player-side">
+        <section class="player-card player-profile" aria-labelledby="player-profile-title">
+          <div class="player-avatar" aria-hidden="true">
+            <img id="player-avatar-image" src="assets/sscircle-logo.png" alt="" width="72" height="72">
+          </div>
+          <div class="player-profile-info">
+            <span class="player-overline">PROFIL ANGGOTA</span>
+            <h2 id="player-profile-title">Anggota SSCircle</h2>
+            <span class="player-verified"><span aria-hidden="true">✓</span> Pendaftaran diterima</span>
+          </div>
+          <div class="player-profile-meta">
+            <div><span>ID Anggota</span><strong id="player-member-id">Memuat...</strong></div>
+            <div><span>Bergabung sejak</span><strong id="player-joined-at">Memuat...</strong></div>
+            <div><span>Jenis Minecraft</span><strong id="player-edition">Belum terhubung</strong></div>
+          </div>
+          <p class="player-helper">Profil ini terhubung ke pendaftaran SSCircle milikmu. Identitas Minecraft akan muncul setelah proses verifikasi tersedia.</p>
+        </section>
+        <section class="player-card player-help" aria-labelledby="player-help-title">
+          <h2 id="player-help-title">Akun &amp; bantuan</h2>
+          <p>Kode pendaftaran adalah kunci login saat ini. Jangan bagikan ke pemain lain.</p>
+          <a class="player-mini-link" href="status.html#kode-milikku">Lihat kode pendaftaran <span aria-hidden="true">↗</span></a>
+          <button class="player-mini-link player-logout" id="player-logout" type="button">Keluar dari akun <span aria-hidden="true">↗</span></button>
+        </section>
+      </aside>
+
+      <div class="player-dashboard">
+        <section class="player-card player-welcome" aria-labelledby="player-welcome-title">
+          <div>
+            <span class="player-overline">MEMBER DASHBOARD</span>
+            <h2 id="player-welcome-title">Selamat datang di SSCircle!</h2>
+            <p>Keanggotaanmu sudah aktif. Di sini kamu dapat mengikuti perkembangan komunitas dan, nantinya, melihat statistik Minecraft secara otomatis.</p>
+          </div>
+          <span class="player-state"><span aria-hidden="true">●</span> Anggota aktif</span>
+        </section>
+
+        <section class="player-card player-linking" aria-labelledby="player-link-title">
+          <div class="player-section-head">
+            <div><span class="player-overline">MINECRAFT ACCOUNT</span><h2 id="player-link-title">Hubungkan akun Minecraft</h2></div>
+            <span class="player-tag">Tahap berikutnya</span>
+          </div>
+          <p>Hubungkan akun Java Premium, Java Non-Premium, atau Bedrock milikmu lewat kode verifikasi dari dalam game.</p>
+          <div class="player-link-placeholder" role="status">
+            <span class="player-link-symbol" aria-hidden="true">⌁</span>
+            <div><strong>Belum terhubung</strong><small>Fitur verifikasi akan tersedia setelah plugin SSCircle Player Sync dan API penghubung selesai dibuat.</small></div>
+          </div>
+          <p class="player-helper">Tidak perlu memasukkan password Minecraft ke website ini.</p>
+        </section>
+
+        <section class="player-card player-stats" aria-labelledby="player-stats-title">
+          <div class="player-section-head">
+            <div><span class="player-overline">YOUR JOURNEY</span><h2 id="player-stats-title">Statistik permainan</h2></div>
+            <span class="player-tag">Menunggu sinkronisasi</span>
+          </div>
+          <div class="player-stat-grid">
+            <div class="player-stat"><span>Waktu bermain</span><strong>Belum tersedia</strong></div>
+            <div class="player-stat"><span>Kematian</span><strong>Belum tersedia</strong></div>
+            <div class="player-stat"><span>Mob dikalahkan</span><strong>Belum tersedia</strong></div>
+            <div class="player-stat"><span>Season diikuti</span><strong>Belum tersedia</strong></div>
+          </div>
+          <p class="player-helper">Angka tidak ditampilkan sebelum data benar-benar dikirim dari Minecraft. Jadi tidak ada statistik palsu atau angka nol yang menyesatkan.</p>
+        </section>
+
+        <section class="player-card player-explore" aria-labelledby="player-explore-title">
+          <div class="player-section-head">
+            <div><span class="player-overline">THE COMMUNITY</span><h2 id="player-explore-title">Jelajahi SSCircle</h2></div>
+          </div>
+          <div class="player-shortcuts">
+            <a href="/voting" class="player-shortcut"><span aria-hidden="true">◉</span><div><strong>Voting komunitas</strong><small>Ikuti voting yang sedang berlangsung</small></div><span aria-hidden="true">↗</span></a>
+            <a href="events.html" class="player-shortcut"><span aria-hidden="true">▦</span><div><strong>Event &amp; jadwal</strong><small>Lihat agenda SSCircle berikutnya</small></div><span aria-hidden="true">↗</span></a>
+            <a href="seasons.html" data-season-link class="player-shortcut" hidden><span aria-hidden="true">★</span><div><strong>Season Archive</strong><small>Jelajahi sejarah dan Hall of Fame</small></div><span aria-hidden="true">↗</span></a>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+  <footer class="home-footer ssc-unified-footer">
+    <div class="home-container home-footer-content ssc-footer-content">
+      <div class="home-footer-mark"><img id="home-footer-logo" src="assets/sscircle-logo.png" alt="" width="27" height="27"><span>SSCircle Server</span></div>
+      <span id="home-footer-text">One circle. Endless stories.</span>
+      <div class="home-footer-links"><a href="./">Beranda</a><a href="status.html">Cek Status</a><a href="events.html">Event</a><a href="rules.html">Peraturan Server</a></div>
+      <small>© 2026 SSCircle Server</small>
+    </div>
+  </footer>
+</body>
+</html>

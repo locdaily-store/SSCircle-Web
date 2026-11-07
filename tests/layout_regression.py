@@ -47,6 +47,14 @@ with sync_playwright() as p:
  home=page_source('index.html')
  seasons=page_source('seasons.html')
  admin=page_source('admin.html')
+ player=page_source('my-sscircle.html', prelude='''
+window.fetch=async url => {
+ const path=String(url);
+ if(path==='/api/player/me') return new Response(JSON.stringify({authenticated:true,status:'accepted',code:'AAAABBBBCCCCDDDDEEEE',submittedAt:'2026-11-07T12:00:00Z'}),{status:200,headers:{'Content-Type':'application/json'}});
+ if(path==='/api/form') return new Response(JSON.stringify({settings:{seasonArchiveEnabled:true}}),{status:200,headers:{'Content-Type':'application/json'}});
+ return new Response('{}',{status:404,headers:{'Content-Type':'application/json'}});
+};
+''')
  for w in (320,390,768,1280,1920):
   page=browser.new_page(viewport={'width':w,'height':900}, device_scale_factor=1)
   errors=[]
@@ -159,6 +167,28 @@ with sync_playwright() as p:
     assert page.locator('#admin-nav-current').inner_text()=='Season & Sejarah'
   # document can have other global admin chrome overflow; ignore unrelated components
   print('Admin',w,vals,'errors',errors[:3])
+  page.close()
+ for w in (320,390,768,1280,1920):
+  page=browser.new_page(viewport={'width':w,'height':850})
+  errors=[]
+  page.on('pageerror',lambda e:errors.append(str(e)))
+  page.set_content(player,wait_until='domcontentloaded')
+  page.locator('#player-content').wait_for(state='visible',timeout=4000)
+  vals=page.evaluate('''() => ({
+    viewport: innerWidth, docWidth: document.documentElement.scrollWidth,
+    cardWidth: document.querySelector('.player-profile').getBoundingClientRect().width,
+    status: document.querySelector('.player-verified').textContent,
+    hasUnverifiedStats: document.querySelectorAll('.player-stat strong').length,
+    hiddenError: document.getElementById('player-error').hidden
+  })''')
+  assert vals['docWidth']<=w+2,('Player Dashboard overflow',w,vals)
+  assert vals['cardWidth']>200,('Profile card too narrow',w,vals)
+  assert vals['hiddenError'],('Dashboard error visible',w,vals)
+  assert vals['hasUnverifiedStats']==4,('Dashboard status cards missing',w,vals)
+  assert page.locator('#player-member-id').inner_text()=='SSC-••••EEEE',('Member label must not reveal login code',w)
+  assert page.locator('#player-link-title').is_visible()
+  assert not errors,('Player dashboard Javascript failed',w,errors)
+  print('Player Dashboard',w,vals)
   page.close()
  browser.close()
 print('Responsive regression: PASS')
