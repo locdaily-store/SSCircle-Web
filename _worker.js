@@ -1855,36 +1855,36 @@ const memberCenterReady = new WeakSet();
 async function ensureMemberCenter(env) {
   if (memberCenterReady.has(env.DB)) return;
   const statements = [
-    \`CREATE TABLE IF NOT EXISTS member_profiles (
+    `CREATE TABLE IF NOT EXISTS member_profiles (
       application_id TEXT PRIMARY KEY, display_name TEXT NOT NULL DEFAULT '',
       bio TEXT NOT NULL DEFAULT '', visibility TEXT NOT NULL DEFAULT 'private',
       show_stats INTEGER NOT NULL DEFAULT 0, event_alerts INTEGER NOT NULL DEFAULT 1,
       session_epoch INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL DEFAULT '',
-      FOREIGN KEY(application_id) REFERENCES submissions(id) ON DELETE CASCADE)\`,
-    \`CREATE TABLE IF NOT EXISTS member_policy (
+      FOREIGN KEY(application_id) REFERENCES submissions(id) ON DELETE CASCADE)`,
+    `CREATE TABLE IF NOT EXISTS member_policy (
       id INTEGER PRIMARY KEY CHECK(id=1), allow_bio INTEGER NOT NULL DEFAULT 1,
       allow_public INTEGER NOT NULL DEFAULT 0, allow_stats INTEGER NOT NULL DEFAULT 1,
       allow_event_alerts INTEGER NOT NULL DEFAULT 1,
-      updated_at TEXT NOT NULL DEFAULT '')\`,
-    \`CREATE TABLE IF NOT EXISTS minecraft_accounts (
+      updated_at TEXT NOT NULL DEFAULT '')`,
+    `CREATE TABLE IF NOT EXISTS minecraft_accounts (
       id TEXT PRIMARY KEY, application_id TEXT NOT NULL,
       provider TEXT NOT NULL, provider_id TEXT NOT NULL, username TEXT NOT NULL,
       verified_at TEXT NOT NULL,
       UNIQUE(provider,provider_id),
-      FOREIGN KEY(application_id) REFERENCES submissions(id) ON DELETE CASCADE)\`,
-    \`CREATE TABLE IF NOT EXISTS player_stat_snapshots (
+      FOREIGN KEY(application_id) REFERENCES submissions(id) ON DELETE CASCADE)`,
+    `CREATE TABLE IF NOT EXISTS player_stat_snapshots (
       application_id TEXT NOT NULL, season_id TEXT NOT NULL DEFAULT '',
       playtime_seconds INTEGER NOT NULL DEFAULT 0, deaths INTEGER NOT NULL DEFAULT 0,
       mob_kills INTEGER NOT NULL DEFAULT 0, blocks_mined INTEGER NOT NULL DEFAULT 0,
       last_synced_at TEXT NOT NULL DEFAULT '',
       PRIMARY KEY(application_id,season_id),
-      FOREIGN KEY(application_id) REFERENCES submissions(id) ON DELETE CASCADE)\`,
-    \`CREATE TABLE IF NOT EXISTS minecraft_link_challenges (
+      FOREIGN KEY(application_id) REFERENCES submissions(id) ON DELETE CASCADE)`,
+    `CREATE TABLE IF NOT EXISTS minecraft_link_challenges (
       id TEXT PRIMARY KEY, application_id TEXT NOT NULL,
       code_hash TEXT NOT NULL UNIQUE, expires_at TEXT NOT NULL,
       claimed_at TEXT, created_at TEXT NOT NULL,
-      FOREIGN KEY(application_id) REFERENCES submissions(id) ON DELETE CASCADE)\`,
-    \`INSERT OR IGNORE INTO member_policy(id) VALUES(1)\`
+      FOREIGN KEY(application_id) REFERENCES submissions(id) ON DELETE CASCADE)`,
+    `INSERT OR IGNORE INTO member_policy(id) VALUES(1)`
   ];
   for (const sql of statements) await env.DB.prepare(sql).run();
   memberCenterReady.add(env.DB);
@@ -1926,14 +1926,14 @@ async function memberCenterAPI(req,env,path,method) {
     await ensureMemberCenter(env);
     if (path==='/api/admin/member-center' && method==='GET') {
       const url=new URL(req.url), offset=Math.max(0,Math.min(100000,Number.parseInt(url.searchParams.get('offset')||'0',10)||0));
-      const rows=await env.DB.prepare(\`SELECT s.id,s.status,s.submitted_at,
+      const rows=await env.DB.prepare(`SELECT s.id,s.status,s.submitted_at,
         COALESCE(p.display_name,'') AS display_name,
         COALESCE(p.bio,'') AS bio,COALESCE(p.visibility,'private') AS visibility,
         COALESCE(p.session_epoch,0) AS session_epoch,
         (SELECT COUNT(*) FROM minecraft_accounts m WHERE m.application_id=s.id) AS linked_count,
         (SELECT MAX(last_synced_at) FROM player_stat_snapshots ps WHERE ps.application_id=s.id) AS last_sync
         FROM submissions s LEFT JOIN member_profiles p ON p.application_id=s.id
-        ORDER BY s.submitted_at DESC LIMIT 101 OFFSET ?\`).bind(offset).all();
+        ORDER BY s.submitted_at DESC LIMIT 101 OFFSET ?`).bind(offset).all();
       const items=(rows.results||[]).slice(0,100).map(a=>({
         id:a.id,status:a.status,submittedAt:a.submitted_at,displayName:a.display_name,
         visibility:a.visibility,sessionEpoch:a.session_epoch,linkedCount:a.linked_count||0,
@@ -1951,8 +1951,8 @@ async function memberCenterAPI(req,env,path,method) {
       const value=await body(req,1500);
       const keys=['allowBio','allowPublic','allowStats','allowEventAlerts'];
       if(keys.some(k=>typeof value[k]!=='boolean')) return bad('Pengaturan kebijakan tidak valid.',400);
-      await env.DB.prepare(\`UPDATE member_policy SET allow_bio=?,allow_public=?,allow_stats=?,
-        allow_event_alerts=?,updated_at=? WHERE id=1\`).bind(
+      await env.DB.prepare(`UPDATE member_policy SET allow_bio=?,allow_public=?,allow_stats=?,
+        allow_event_alerts=?,updated_at=? WHERE id=1`).bind(
           Number(value.allowBio),Number(value.allowPublic),Number(value.allowStats),
           Number(value.allowEventAlerts),new Date().toISOString()).run();
       return J({ok:true,policy:memberPolicy({
@@ -1965,9 +1965,9 @@ async function memberCenterAPI(req,env,path,method) {
       if(typeof value.id!=='string'||!/^[0-9a-f-]{36}$/.test(value.id))return bad('ID anggota tidak valid.',400);
       if(!await env.DB.prepare('SELECT id FROM submissions WHERE id=?').bind(value.id).first())
         return bad('Anggota tidak ditemukan.',404);
-      await env.DB.prepare(\`INSERT INTO member_profiles(application_id,session_epoch,updated_at)
+      await env.DB.prepare(`INSERT INTO member_profiles(application_id,session_epoch,updated_at)
         VALUES(?,1,?) ON CONFLICT(application_id) DO UPDATE SET
-        session_epoch=session_epoch+1,updated_at=excluded.updated_at\`)
+        session_epoch=session_epoch+1,updated_at=excluded.updated_at`)
         .bind(value.id,new Date().toISOString()).run();
       return J({ok:true,message:'Semua sesi anggota sebelumnya sudah dicabut.'});
     }
@@ -1980,11 +1980,11 @@ async function memberCenterAPI(req,env,path,method) {
   if(path==='/api/player/profile' && method==='GET') {
     const profileRow=await env.DB.prepare('SELECT * FROM member_profiles WHERE application_id=?').bind(application.id).first();
     const policyRow=await env.DB.prepare('SELECT * FROM member_policy WHERE id=1').first();
-    const accounts=await env.DB.prepare(\`SELECT provider,username,verified_at
-      FROM minecraft_accounts WHERE application_id=? ORDER BY verified_at DESC\`).bind(application.id).all();
-    const stats=await env.DB.prepare(\`SELECT season_id,playtime_seconds,deaths,mob_kills,
+    const accounts=await env.DB.prepare(`SELECT provider,username,verified_at
+      FROM minecraft_accounts WHERE application_id=? ORDER BY verified_at DESC`).bind(application.id).all();
+    const stats=await env.DB.prepare(`SELECT season_id,playtime_seconds,deaths,mob_kills,
       blocks_mined,last_synced_at FROM player_stat_snapshots WHERE application_id=?
-      ORDER BY season_id ASC LIMIT 25\`).bind(application.id).all();
+      ORDER BY season_id ASC LIMIT 25`).bind(application.id).all();
     const form=formFrom(await readSettingsRow(env));
     return J({profile:memberProfile(profileRow),policy:memberPolicy(policyRow),
       accounts:(accounts.results||[]).map(a=>({provider:a.provider,username:a.username,verifiedAt:a.verified_at})),
@@ -2014,10 +2014,10 @@ async function memberCenterAPI(req,env,path,method) {
       visibility,showStats:policy.allowStats?value.showStats:false,
       eventAlerts:policy.allowEventAlerts?value.eventAlerts:false
     };
-    await env.DB.prepare(\`INSERT INTO member_profiles(application_id,display_name,bio,visibility,show_stats,event_alerts,updated_at)
+    await env.DB.prepare(`INSERT INTO member_profiles(application_id,display_name,bio,visibility,show_stats,event_alerts,updated_at)
       VALUES(?,?,?,?,?,?,?) ON CONFLICT(application_id) DO UPDATE SET
       display_name=excluded.display_name,bio=excluded.bio,visibility=excluded.visibility,
-      show_stats=excluded.show_stats,event_alerts=excluded.event_alerts,updated_at=excluded.updated_at\`)
+      show_stats=excluded.show_stats,event_alerts=excluded.event_alerts,updated_at=excluded.updated_at`)
       .bind(application.id,result.displayName,result.bio,result.visibility,
         Number(result.showStats),Number(result.eventAlerts),new Date().toISOString()).run();
     return J({ok:true,profile:result});
