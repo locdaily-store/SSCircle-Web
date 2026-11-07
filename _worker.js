@@ -2445,12 +2445,12 @@ async function mailboxIssueInvite(env,memberId){
   } catch(error) {
     // A lost response may happen *after* D1 committed. Never restore approval
     // if our message exists, otherwise a retry could issue a second valid code.
-    let committed=false;
+    let committed=null;
     try {
       committed=!!(await env.DB.prepare('SELECT id FROM member_mailbox WHERE id=? AND application_id=?')
         .bind(messageId,memberId).first());
-    } catch { /* Treat an unreadable commit state as uncertain. */ }
-    if(!committed) {
+    } catch { /* Unknown state: do not restore a potentially consumed approval. */ }
+    if(committed===false) {
       // Restore only our own claim. A new admin approval must not be changed.
       try {
         await env.DB.prepare(`UPDATE member_mailbox_approvals SET consumed_at=NULL
@@ -2458,6 +2458,7 @@ async function mailboxIssueInvite(env,memberId){
       } catch { /* Keep original error; admin can re-approve after recovery. */ }
       throw error;
     }
+    if(committed===null)throw error;
   }
   return {expiresAt:new Date(expires*1000).toISOString()};
 }
