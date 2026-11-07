@@ -26,6 +26,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -40,6 +42,8 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
     private static final long COMMAND_COOLDOWN_MS = 6000L;
     private static final String SECRET_ENV = "SSCIRCLE_LINK_SERVER_SECRET";
     private static final String CLAIM_PATH = "/api/minecraft/link/claim";
+    private static final String DIAGNOSE_PATH = "/api/minecraft/link/diagnose";
+    private static final Pattern RESPONSE_CODE = Pattern.compile("\\\"code\\\"\\s*:\\s*\\\"([A-Z_]{4,40})\\\"");
 
     private final Map<UUID, Long> lastRequestAt = new ConcurrentHashMap<>();
     private HttpClient http;
@@ -113,7 +117,10 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
         String prefix = args[0].toLowerCase(Locale.ROOT);
         List<String> options = new ArrayList<>(List.of("help", "status"));
         if (sender instanceof Player) options.add("link");
-        if (sender.hasPermission("sscircle.admin")) options.add("reload");
+        if (sender.hasPermission("sscircle.admin")) {
+            options.add("diagnose");
+            options.add("reload");
+        }
         return options.stream().filter(option -> option.startsWith(prefix)).sorted().toList();
     }
 
@@ -125,6 +132,7 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
             sender.sendMessage("/sscircle link <kode> - Hubungkan akun dari Profile website");
         }
         if (sender.hasPermission("sscircle.admin")) {
+            sender.sendMessage("/sscircle diagnose - Periksa koneksi HTTPS dan kecocokan secret tanpa kode");
             sender.sendMessage("/sscircle reload - Muat ulang pengaturan website");
         }
         sender.sendMessage("Tekan Tab setelah /sscircle untuk memilih subperintah.");
@@ -134,6 +142,14 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (args.length == 0 || (args.length == 1 && args[0].equalsIgnoreCase("help"))) {
             showHelp(sender);
+            return true;
+        }
+        if (args.length == 1 && args[0].equalsIgnoreCase("diagnose")) {
+            if (!sender.hasPermission("sscircle.admin")) {
+                sender.sendMessage("Hanya pengurus yang boleh menjalankan diagnosis koneksi.");
+                return true;
+            }
+            runDiagnostic(sender);
             return true;
         }
         if (args.length == 1 && args[0].equalsIgnoreCase("reload")) {
@@ -243,6 +259,89 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
         return true;
     }
 
+    // Do not send player identity or a one-time code during diagnosis.
+    private void runDiagnostic(CommandSender sender) {
+        if (!hasConnectionSettings()) {
+            sender.sendMessage("SSCircle: alamat HTTPS atau secret proses Paper belum terkonfigurasi.");
+            sender.sendMessage("Gunakan /sscircle status untuk melihat komponen yang belum lengkap.");
+            return;
+        }
+        try {
+            String json = "{}";
+            long timestamp = System.currentTimeMillis() / 1000L;
+            String nonce = UUID.randomUUID().toString();
+            String signedText = "POST\n" + DIAGNOSE_PATH + "\n" + timestamp + "\n" + nonce + "\n" + json;
+            String signature = hmac(signingSecret, signedText);
+            HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(endpoint + DIAGNOSE_PATH))
+                .timeout(Duration.ofSeconds(REQUEST_TIMEOUT_SECONDS))
+                .header("Content-Type", "application/json")
+                .header("X-SSC-Timestamp", Long.toString(timestamp))
+                .header("X-SSC-Nonce", nonce)
+                .header("X-SSC-Signature", signature)
+                .POST(HttpRequest.BodyPublishers.ofString(json, StandardCharsets.UTF_8))
+                .build();
+            sender.sendMessage("SSCircle: memeriksa jalur HTTPS dan signature dari website...");
+            http.sendAsync(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+                .whenComplete((response, error) -> {
+                    if (!isEnabled()) return;
+                    try {
+                        getServer().getScheduler().runTask(this, () -> {
+                            if (sender instanceof Player player && !player.isOnline()) return;
+                            if (error != null || response == null) {
+                                sender.sendMessage("SSCircle: gagal menghubungi website HTTPS. Periksa domain, DNS dan internet.");
+                            } else if (response.statusCode() == 200 && "DIAGNOSTIC_OK".equals(safeResponseCode(response))) {
+                                sender.sendMessage("SSCircle: sambungan WEBSITE BERHASIL. Secret Paper dan Cloudflare cocok.");
+                                sender.sendMessage("Jika link tetap ditolak, buat kode baru lalu periksa status akun di Profile.");
+                            } else {
+                                sender.sendMessage("SSCircle: diagnosis website HTTP " + response.statusCode()
+                                    + ". " + safeFailureReason(response));
+                            }
+                        });
+                    } catch (IllegalPluginAccessException ignored) {
+                        // Paper shutdown; do not use Bukkit from the HTTP callback.
+                    }
+                });
+        } catch (Exception ex) {
+            getLogger().warning("SSCircle: gagal membangun request diagnosis HTTPS.");
+            sender.sendMessage("SSCircle: diagnosis belum dapat dijalankan.");
+        }
+    }
+
+    private static String safeResponseCode(HttpResponse<String> response) {
+        String body = response.body();
+        if (body == null || body.length() > 2000) return "";
+        Matcher matcher = RESPONSE_CODE.matcher(body);
+        if (!matcher.find()) return "";
+        String code = matcher.group(1);
+        return switch (code) {
+            case "DIAGNOSTIC_OK", "CLOCK_SKEW", "SIGNATURE_INVALID", "HEADERS_INVALID",
+                "SERVER_SECRET_MISSING", "IDENTITY_INVALID", "MEMBER_NOT_ACCEPTED" -> code;
+            default -> "";
+        };
+    }
+
+    // Only map known safe protocol categories. Never echo arbitrary HTML, URLs,
+    // tokens, signatures or response bodies from a proxy/WAF to Minecraft.
+    private static String safeFailureReason(HttpResponse<String> response) {
+        String code = safeResponseCode(response);
+        return switch (code) {
+            case "CLOCK_SKEW" -> "Jam PC berbeda lebih dari 90 detik dari website. Sinkronkan waktu Windows.";
+            case "SIGNATURE_INVALID" -> "Secret di Paper dan Cloudflare berbeda. Periksa juga environment Production/Preview.";
+            case "HEADERS_INVALID" -> "Header signature/timestamp rusak; periksa versi plugin dan proxy HTTP.";
+            case "SERVER_SECRET_MISSING" -> "Secret belum aktif pada deployment Cloudflare yang dituju.";
+            case "IDENTITY_INVALID" -> "Identitas pemain tidak diterima oleh backend, bukan masalah kode.";
+            case "MEMBER_NOT_ACCEPTED" -> "Akun pendaftar website tidak lagi berstatus Diterima.";
+            default -> switch (response.statusCode()) {
+                case 401 -> "Autentikasi ditolak tanpa kode SSCircle. Periksa secret dan proteksi Cloudflare.";
+                case 403 -> "Akses website ditolak. Periksa Cloudflare Access/WAF atau deployment; belum tentu masalah identitas.";
+                case 404 -> "Endpoint tidak ditemukan. Deploy website SSCircle terbaru ke domain yang digunakan plugin.";
+                case 503 -> "Layanan SSCircle belum siap pada deployment website.";
+                default -> "Website mengembalikan status tidak terduga. Periksa deployment dan log Cloudflare.";
+            };
+        };
+    }
+
     private void deliverResult(UUID uuid, HttpResponse<String> response, Throwable failure) {
         Player player = Bukkit.getPlayer(uuid);
         if (player == null || !player.isOnline()) return;
@@ -258,7 +357,8 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
         } else if (status == 409) {
             player.sendMessage("Kode sudah digunakan atau identitas sudah ditautkan. Periksa Profile.");
         } else if (status == 401 || status == 403) {
-            player.sendMessage("Verifikasi ditolak. Hubungi pengurus untuk memeriksa konfigurasi keamanan.");
+            player.sendMessage("Verifikasi ditolak (HTTP " + status + "). " + safeFailureReason(response));
+            player.sendMessage("OP dapat menjalankan /sscircle diagnose tanpa menggunakan kode baru.");
         } else if (status == 503) {
             player.sendMessage("Fitur linking website belum diaktifkan. Hubungi pengurus SSCircle.");
         } else {
