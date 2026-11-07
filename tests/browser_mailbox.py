@@ -40,9 +40,13 @@ window.fetch=async (url,opts={})=>{
  else if(p==='/api/status-check'){window.__statusChecked++;o={status:'accepted',submittedAt:'2026-11-07T12:00:00Z'};}
  else if(p==='/api/player/login')o={authenticated:true,status:'accepted',code:'AAAABBBBCCCCDDDDEEEE'};
  else if(p==='/api/player/me')o={authenticated:true,status:'accepted',code:'AAAABBBBCCCCDDDDEEEE'};
+ else if(p==='/api/player/mailbox')o=__MAILBOX__;
+ else if(p==='/api/player/mailbox/reveal')o={ok:true,code:'ExAMple-activation-TOKEN-abc123'};
+ else if(p==='/api/player/mailbox/delete')o={ok:true};
+ else if(p==='/api/player/mailbox/read')o={ok:true};
  else o={ok:true};
  return new Response(JSON.stringify(o),{status:200,headers:{'Content-Type':'application/json'}});
-};'''
+};'''.replace('__MAILBOX__',json.dumps(mailbox_data))
 admin_data={'items':[{'id':'11111111-1111-4111-8111-111111111111','status':'accepted','displayName':'Anggota-SSCircle','linkedCount':0,'secureActive':False,'secureSessions':0,'activationRequest':'pending','lastSync':None}],
  'awards':[],'hasMore':False,'policy':{'allowBio':True,'allowPublic':False,'allowStats':True,'allowEventAlerts':True},'total':1}
 admin_mock='''window.fetch=async(path,options={})=>{
@@ -87,6 +91,19 @@ with sync_playwright() as p:
         assert page.locator('#status-result a[href="/mailbox"]').is_visible()
         assert page.locator('#status-result a[href="/my-sscircle"]').is_visible()
         assert page.evaluate('document.documentElement.scrollWidth<=innerWidth+2')
+        # A member reads and removes notifications without navigating away.
+        page.on('dialog',lambda d:d.accept())
+        page.locator('#status-result a[href="/mailbox"]').click()
+        page.locator('#ssc-mailbox-dialog[open]').wait_for(state='visible')
+        assert page.locator('#ssc-mailbox-list .mailbox-item').count()==2
+        page.locator('#ssc-mailbox-list .mailbox-item').first.click()
+        assert page.locator('#ssc-mailbox-delete').is_disabled(), 'Active activation code must be preserved'
+        page.locator('#ssc-mailbox-list .mailbox-item').nth(1).click()
+        assert page.locator('#ssc-mailbox-delete').is_enabled()
+        page.locator('#ssc-mailbox-delete').click()
+        assert page.locator('#ssc-mailbox-list .mailbox-item').count()==1
+        page.locator('#ssc-mailbox-close').click()
+        assert not page.locator('#ssc-mailbox-dialog').is_visible()
         # The eye icon must reveal and re-hide the same typed password.
         page.locator('#status-secure-login-panel > summary').click()
         password_input=page.locator('#status-secure-password')
