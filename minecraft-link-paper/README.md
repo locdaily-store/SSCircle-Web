@@ -1,4 +1,4 @@
-# SSCircle Player Sync Paper · V10.45.3 (Direct, tanpa Velocity)
+# SSCircle Player Sync Paper · V10.45.4 (Direct, tanpa Velocity)
 
 ## Persyaratan
 - **Paper 26.3, Java 25+, satu server online-mode**. Server memiliki koneksi internet keluar via HTTPS menuju website SSCircle di Cloudflare Pages + D1.
@@ -11,13 +11,13 @@
 2. Gunakan Paper 26.3 dan Java 25. Jangan jalankan Velocity.
 3. Di `server.properties`: `online-mode=true`, `server-port=25565`, `server-ip=127.0.0.1` untuk lokal satu PC. Untuk akses LAN sesuaikan IP setelah uji awal.
 4. Di `config/paper-global.yml`: `proxies.velocity.enabled: false`. Di `spigot.yml`: `settings.bungeecord: false`. Jangan biarkan proxy forwarding aktif.
-5. Salin artifact `SSCircle-Player-Sync-Paper-10.45.3.jar` ke `Paper/plugins/`, lalu jalankan Paper sekali.
+5. Salin artifact `SSCircle-Player-Sync-Paper-10.45.4.jar` ke `Paper/plugins/`, lalu jalankan Paper sekali.
 6. Edit `Paper/plugins/SSCirclePlayerSync/config.yml`: ubah `endpoint` menjadi **domain HTTPS website SSCircle** tanpa path.
-7. Di Windows, tambahkan environment variable pengguna `SSCIRCLE_LINK_SERVER_SECRET` (Secret terenkripsi yang sama harus aktif di Cloudflare). Tutup semua jendela launcher/terminal lama, jalankan ulang Paper.
+7. Buat file privat `plugins/SSCirclePlayerSync/server-secret.txt` berisi secret satu baris yang **sama persis** dengan `SSCIRCLE_LINK_SERVER_SECRET` di Cloudflare Pages (Production/Preview sesuai domain). File ini mengalahkan environment variable Windows yang lama. Jalankan `/sscircle reload` sebagai OP, lalu `/sscircle status` dan `/sscircle diagnose`. Jika file tidak ada, plugin menggunakan environment yang valid; jika keduanya tidak ada, plugin membuat kunci lokal baru yang tetap harus disamakan dengan Cloudflare.
 8. Buka Minecraft Java Premium, Multiplayer → `127.0.0.1:25565`. Perintah `/sscircle status` harus memperlihatkan konfigurasi siap dan Java Premium.
 9. Masuk Profile website SSCircle sebagai anggota diterima **dengan password dashboard**, klik Buat kode penghubung, jalankan `/sscircle link SC-...` di Minecraft, lalu kembali ke Profile → Perbarui status → Konfirmasi identitas.
 
-## Perbaikan V10.45.3: tab completion dan diagnosis
+## Perbaikan V10.45.4: tab completion dan diagnosis
 - Ketik `/sscircle` lalu **spasi dan Tab** untuk memilih `help`, `status`, `link`; `reload` hanya muncul bagi pemain yang memiliki izin admin/OP.
 - Jalankan `/sscircle` tanpa argumen atau `/sscircle help` untuk melihat daftar dan deskripsi perintah.
 - Kode sekali pakai **tidak di-autocomplete** karena diambil secara privat dari website.
@@ -31,7 +31,7 @@
 - `/sscircle help`: tampilkan daftar pilihan perintah.
 - `/sscircle status`: status konfigurasi dan jenis identitas yang terbaca, **bukan** bukti akun sudah linked.
 - `/sscircle link <kode>`: klaim kode sekali pakai 10 menit; tautan **belum selesai** sampai dikonfirmasi di website.
-- `/sscircle reload`: untuk operator; memuat ulang URL website pada config; perubahan environment variable biasanya butuh restart proses.
+- `/sscircle reload`: untuk OP; membaca ulang alamat website dan file secret privat tanpa restart. Perubahan environment variable memerlukan restart Paper.
 - Untuk mengganti akun, Profile website → Putuskan tautan (memerlukan verifikasi password).
 
 ## Keamanan & batasan
@@ -40,7 +40,7 @@
 - Untuk Bedrock, pasang **Geyser-Spigot** dan **Floodgate-Spigot** pada Paper. Atur auth-type Floodgate pada Geyser. Plugin akan meminta bukti XUID melalui Floodgate; jika API Floodgate tidak ada/bermasalah, seluruh klaim ditolak, bukan dianggap Premium.
 - JAR V10.45 untuk Velocity **tidak perlu dipakai** dalam mode ini. Jangan menginstal plugin Velocity di Paper.
 - Tidak mengirim playtime, deaths, atau statistik otomatis; itu tahap terpisah.
-- Secret tidak disimpan pada file config dan tidak ditampilkan di chat/log. Perintah linking berisi kode sekali pakai; jangan gunakan pada livestream saat menampilkan chat/console secara publik.
+- Secret hanya boleh disimpan di file privat plugin atau environment proses, **bukan** `config.yml`, folder website/ZIP, chat, atau log. Perintah linking berisi kode sekali pakai; jangan gunakan pada livestream saat menampilkan chat/console secara publik.
 - Build CI membuktikan kompilasi; tes langsung pada Paper+Floodgate+Cloudflare staging tetap wajib sebelum server publik.
 
 ## Jika gagal
@@ -52,11 +52,11 @@
 - HTTP 404/410: kode sudah habis/keliru atau domain tidak cocok.
 - Cloudflare website belum mengeluarkan kode: cek binding D1 `DB`, `SESSION_SECRET`, login password dashboard, dan `SSCIRCLE_LINK_SERVER_SECRET` Cloudflare.
 
-Dokumentasi lengkap pemasangan: `docs/V10.45.3-PAPER-DIRECT.md`.
+Dokumentasi lengkap pemasangan: `docs/V10.45.4-PAPER-DIRECT.md`.
 
-## V10.45.3: Diagnosis koneksi website
+## V10.45.4: Diagnosis koneksi website
 
-Jalankan /sscircle diagnose sebagai OP atau dari console, setelah ZIP website SSCircle V10.45.3 terpasang di Cloudflare. Plugin menguji sambungan HTTPS dan HMAC menggunakan payload kosong tanpa kode link atau identitas pemain.
+Jalankan /sscircle diagnose sebagai OP atau dari console, setelah ZIP website SSCircle V10.45.4 terpasang di Cloudflare. Plugin menguji sambungan HTTPS dan HMAC menggunakan payload kosong tanpa kode link atau identitas pemain.
 
 - Sambungan WEBSITE BERHASIL: domain dan secret telah cocok secara end-to-end.
 - HTTP 401 SIGNATURE_INVALID: secret Paper dan Cloudflare berbeda, atau environment Production / Preview salah.
@@ -67,3 +67,9 @@ Jalankan /sscircle diagnose sebagai OP atau dari console, setelah ZIP website SS
 - HTTP 401/403 saat link: Minecraft kini menampilkan kategori aman jika disediakan website, tanpa membocorkan kode rahasia.
 
 Jika diagnosa berhasil, buat kode penghubung baru dan lakukan link dari Minecraft. Secret, kode link, HMAC dan token tidak boleh dibagikan.
+
+## V10.45.4: Perbaikan autentikasi 401 SIGNATURE_INVALID
+
+Saat kunci di Windows tidak konsisten dengan Cloudflare, salin **satu kunci yang identik** ke dua tempat: file privat server `plugins/SSCirclePlayerSync/server-secret.txt` (satu baris ASCII tanpa tanda kutip, 32–256 karakter) dan Cloudflare Pages → Settings → Variables and Secrets → `SSCIRCLE_LINK_SERVER_SECRET` pada environment Production/Preview yang dipakai domain. Lakukan deployment ulang Cloudflare bila perubahan secret belum aktif. File lokal diprioritaskan atas environment lama. Jalankan `/sscircle reload`, `/sscircle status` (OP bisa melihat *sumber* kunci tanpa melihat nilainya) lalu `/sscircle diagnose` sampai koneksi dinyatakan berhasil. Setelah itu buat kode link baru di Profile.
+
+Jika file dan environment sama-sama kosong, plugin membuat file token acak sekali saja. **Token ini tidak otomatis tersalin ke Cloudflare** sehingga kedua sisi harus tetap dipasangkan secara privat. Jangan mengunggahnya ke GitHub, folder situs, pesan chat, atau tangkapan layar. Jangan menonaktifkan HMAC, online-mode, atau proteksi Cloudflare untuk mengatasi masalah.
