@@ -23,11 +23,13 @@
     <script src="registration-preview.js?v=10.26.0" defer></script>
     <script src="color-theme-admin.js?v=10.31.0" defer></script>
     <script src="member-center-admin.js?v=10.37.0" defer></script>
+    <script src="profile-admin.js?v=10.41.0" defer></script>
     <script src="admin.js?v=10.33.0" defer></script>
     <script src="form-insert-rail.js?v=10.26.0" defer></script>
     <script src="spreadsheet.js?v=10.26.0" defer></script>
     <link rel="stylesheet" href="password-visibility.css?v=10.39.0">
   <script src="password-visibility.js?v=10.39.0" defer></script>
+  <link rel="stylesheet" href="profile-ui.css?v=10.41.0">
 </head>
   <body class="admin-page theme-v3">
     <div class="ambient ambient-a" aria-hidden="true"></div>
@@ -84,6 +86,7 @@
                 <button type="button" class="side-link" data-tab="homepage"><span class="side-icon" aria-hidden="true">⌂</span><span>Homepage</span></button>
                 <button type="button" class="side-link" data-tab="events-admin"><span class="side-icon" aria-hidden="true">▦</span><span>Event &amp; Jadwal</span></button>
                 <button type="button" class="side-link" data-tab="seasons-admin"><span class="side-icon" aria-hidden="true">★</span><span>Season &amp; Sejarah</span></button>
+                <button type="button" class="side-link" data-tab="profile-admin"><span class="side-icon" aria-hidden="true">♙</span><span>Profile</span></button>
                 <button type="button" class="side-link" data-tab="voting-admin"><span class="side-icon" aria-hidden="true">◉</span><span>Voting</span></button>
                 <button type="button" class="side-link" data-tab="rules-admin"><span class="side-icon" aria-hidden="true">▤</span><span>Server Rules</span></button>
               </section>
@@ -153,6 +156,27 @@
               </div>
               <div id="members-admin-root" class="members-admin-root" aria-live="polite">
                 <p class="field-help">Buka menu untuk memuat data anggota.</p>
+              </div>
+            </section>
+            <!-- Profile layout settings; player security policies stay in Kelola Pemain. -->
+            <section id="profile-admin" class="tab-page hide">
+              <div class="dashboard-heading heading-with-button">
+                <div>
+                  <div class="overline">SSCIRCLE / PROFILE DESIGN</div>
+                  <h1>Atur Profile<span class="dot-accent">.</span></h1>
+                  <p>Ubah judul, tata letak, dan susunan kartu. Pengaturan akun dan privasi tetap di Kelola Pemain.</p>
+                </div>
+                <button type="button" id="save-profile-page" class="button primary">Simpan tampilan Profile ✓</button>
+              </div>
+              <div class="ssc-profile-admin-layout">
+                <div id="profile-admin-root"></div>
+                <aside class="panel ssc-profile-admin-preview">
+                  <h2>Live preview Profile</h2>
+                  <p>Contoh tampilan yang tidak mengambil data pemain sebenarnya.</p>
+                  <iframe id="profile-admin-preview-frame" title="Live preview halaman Profile" src="profile-preview.html?ssc_theme_preview=1" loading="lazy"></iframe>
+                  <p>Ubah warna kartu, teks, tombol, dan latar melalui Atur Warna.</p>
+                  <button type="button" class="button secondary" id="profile-open-theme">Buka Atur Warna</button>
+                </aside>
               </div>
             </section>
             <!-- Pengaturan Homepage -->
@@ -451,6 +475,7 @@
                       <option value="rules.html">Server Rules</option>
                       <option value="events.html">Event Calendar</option>
                       <option value="seasons.html">Season Archive</option>
+                       <option value="profile-preview.html">Profile (pratinjau)</option>
                     </select>
                     <button type="button" id="theme-preview-desktop" class="button secondary">Desktop</button>
                     <button type="button" id="theme-preview-mobile" class="button secondary">HP</button>

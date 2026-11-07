@@ -23,7 +23,7 @@
 .ssc-profile-admin-preview p{font-size:12px;color:var(--ssc-muted,#c7bbd0)}
 .ssc-mailbox-trigger{display:inline-flex;align-items:center;gap:7px;justify-content:center;font:inherit;cursor:pointer}
 .ssc-mailbox-trigger [data-mailbox-count]{font-size:10px;border-radius:100px;background:var(--ssc-primary,#ba98df);color:var(--ssc-bg,#130b20);min-width:18px;padding:2px 5px;text-align:center}
-.ssc-mailbox-modal.mailbox-page{position:fixed;inset:0;margin:auto;box-sizing:border-box;width:min(980px,calc(100vw - 24px));max-width:980px;max-height:min(88dvh,900px);overflow:auto;padding:0;border:1px solid var(--ssc-border,#62457d);border-radius:18px;background:var(--ssc-bg,#150d20);color:var(--ssc-text,#fff);font:inherit;box-shadow:0 28px 85px #0009;overscroll-behavior:contain}
+.ssc-mailbox-modal.mailbox-page{min-height:0;position:fixed;inset:0;margin:auto;box-sizing:border-box;width:min(980px,calc(100vw - 24px));max-width:980px;max-height:min(88dvh,900px);overflow:auto;padding:0;border:1px solid var(--ssc-border,#62457d);border-radius:18px;background:var(--ssc-bg,#150d20);color:var(--ssc-text,#fff);font:inherit;box-shadow:0 28px 85px #0009;overscroll-behavior:contain}
 .ssc-mailbox-modal:not([open]){display:none!important}
 .ssc-mailbox-modal::backdrop{background:#070311b7;backdrop-filter:blur(6px)}
 .ssc-mailbox-head{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:17px clamp(16px,3vw,27px);border-bottom:1px solid var(--ssc-border,#62457d);position:sticky;top:0;z-index:2;background:var(--ssc-bg,#150d20)}
