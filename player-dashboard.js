@@ -148,27 +148,87 @@
     const result=await request('/api/player/security/sessions');
     const list=$('player-device-list');list.replaceChildren();
     const sessions=result.sessions||[];
-    if(!sessions.length){const note=document.createElement('p');note.textContent='Belum ada perangkat aktif.';list.append(note);return;}
+    if(!sessions.length){
+      list.append(Object.assign(document.createElement('p'),{textContent:'Belum ada perangkat aktif.'}));return;
+    }
     for(const session of sessions){
       const card=document.createElement('div');card.className='player-device';
       const block=document.createElement('div');
-      const name=document.createElement('strong');name.textContent=(session.current?'Perangkat ini · ':'')+(session.client||'Browser');
+      const name=document.createElement('strong');
+      name.textContent=(session.current?'Perangkat ini · ':'')+(session.client||'Browser');
       const sub=document.createElement('small');
-      sub.textContent='Masuk: '+new Date(session.createdAt).toLocaleString('id-ID');
+      sub.textContent='Masuk: '+new Date(session.createdAt).toLocaleString('id-ID')+
+        ' · Berakhir: '+new Date(session.expiresAt).toLocaleString('id-ID');
       block.append(name,sub);
+      const actions=document.createElement('div');actions.className='player-device-actions';
+      const rename=document.createElement('button');rename.type='button';
+      rename.className='player-action player-action-secondary';rename.textContent='Ubah nama';
+      rename.addEventListener('click',()=>{
+        if(actions.querySelector('input'))return;
+        const field=document.createElement('input');field.type='text';field.maxLength=40;
+        field.className='player-device-label-input';field.value=session.client||'';
+        field.placeholder='Contoh: HP saya';field.setAttribute('aria-label','Nama perangkat');
+        const save=document.createElement('button');save.type='button';
+        save.className='player-action player-action-primary';save.textContent='Simpan';
+        const cancel=document.createElement('button');cancel.type='button';
+        cancel.className='player-action player-action-secondary';cancel.textContent='Batal';
+        const editor=document.createElement('div');editor.className='player-device-editor';
+        editor.append(field,save,cancel);actions.append(editor);
+        rename.disabled=true;field.focus();field.select();
+        cancel.addEventListener('click',()=>{editor.remove();rename.disabled=false;rename.focus();});
+        save.addEventListener('click',async()=>{
+          const label=field.value.trim();
+          if(label.length<2||label.length>40){securityMessage('Nama perangkat harus 2–40 karakter.');return;}
+          save.disabled=true;
+          try{
+            await request('/api/player/security/device/rename',{method:'POST',
+              headers:{'Content-Type':'application/json'},body:JSON.stringify({id:session.id,label})});
+            await listDevices();await loadSecurityHistory();
+            securityMessage('Nama perangkat diperbarui.');
+          }catch(error){securityMessage(error.message);save.disabled=false;}
+        });
+      });
       const revoke=document.createElement('button');revoke.type='button';
       revoke.className='player-action player-action-secondary';revoke.textContent='Cabut sesi';
       revoke.addEventListener('click',async()=>{
+        if(!window.confirm('Cabut akses dashboard pada perangkat ini?'))return;
         revoke.disabled=true;
         try{
-          await request('/api/player/security/revoke',{
-            method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:session.id})
-          });
+          await request('/api/player/security/revoke',{method:'POST',
+            headers:{'Content-Type':'application/json'},body:JSON.stringify({id:session.id})});
           await loadSecurityState();
-          if(session.current) securityMessage('Dashboard dikunci. Masuk kembali dengan password.');
+          if(session.current)securityMessage('Dashboard dikunci. Masuk kembali dengan password.');
+          else securityMessage('Perangkat berhasil dikeluarkan.');
         }catch(error){securityMessage(error.message);revoke.disabled=false;}
       });
-      card.append(block,revoke);list.append(card);
+      actions.append(rename,revoke);card.append(block,actions);list.append(card);
+    }
+  }
+  async function loadSecurityHistory(){
+    const box=$('player-security-history');
+    box.replaceChildren();
+    const res=await request('/api/player/security/history');
+    const events=Array.isArray(res.events)?res.events:[];
+    const labels={
+      login_success:'Login password berhasil',login_locked:'Akun terkunci sementara setelah percobaan login',
+      password_activated:'Password dashboard diaktifkan',
+      password_recovered:'Password dipulihkan melalui verifikasi admin',
+      password_changed:'Password dashboard diganti',
+      device_renamed:'Nama perangkat diperbarui',device_revoked:'Sesi perangkat dicabut',
+      session_locked:'Dashboard dikunci pada perangkat',all_sessions_revoked:'Semua perangkat dikeluarkan'
+    };
+    if(!events.length){
+      box.append(Object.assign(document.createElement('p'),{
+        textContent:'Belum ada aktivitas keamanan yang tercatat.'}));return;
+    }
+    for(const event of events){
+      const row=document.createElement('div');row.className='player-security-history-item';
+      const main=document.createElement('strong');
+      main.textContent=labels[event.type]||'Aktivitas keamanan akun';
+      const meta=document.createElement('small');
+      meta.textContent=new Date(event.at).toLocaleString('id-ID')+
+        ' · '+String(event.client||'Perangkat tidak diketahui').slice(0,105);
+      row.append(main,meta);box.append(row);
     }
   }
   async function loadSecurityState(){
@@ -177,7 +237,11 @@
       const mode=state.authenticated?'active':state.hasPassword?'login':'activate';
       showSecurityMode(mode);
       securityMessage(state.authenticated?'Akun aman aktif pada perangkat ini.':'');
-      if(state.authenticated){await listDevices();await loadProfile();}
+      $('player-recovery-back').hidden=!state.hasPassword;
+      if(state.authenticated){
+        await listDevices();await loadProfile();
+        try{await loadSecurityHistory();}catch{securityMessage('Riwayat keamanan belum dapat dimuat. Coba Perbarui.');}
+      }
       return mode;
     }catch(error){
       showSecurityMode('login');
@@ -197,6 +261,31 @@
       await window.SSCircleMailbox?.open();
     }catch(error){label.textContent='Permintaan tidak berhasil: '+error.message}
     finally{button.disabled=false;}
+  });
+  $('player-recovery-request').addEventListener('click',async()=>{
+    const button=$('player-recovery-request');if(button.disabled)return;
+    button.disabled=true;securityMessage('Mengajukan pemulihan akun...');
+    try{
+      const data=await request('/api/player/mailbox/request-activation',{method:'POST',
+        headers:{'Content-Type':'application/json'},body:'{}'});
+      securityMessage(data.delivered?
+        'Kode pemulihan tersedia di Mail Box. Gunakan tombol Sudah punya kode untuk membuat password baru.':
+        'Permintaan dicatat. Pengurus harus memverifikasi identitasmu sebelum kode dikirim ke Mail Box.');
+      await window.SSCircleMailbox?.open();
+    }catch(error){securityMessage('Pemulihan belum dapat diajukan: '+error.message);}
+    finally{button.disabled=false;}
+  });
+  $('player-recovery-show').addEventListener('click',()=>{
+    showSecurityMode('activate');
+    $('player-security-state').textContent='Pemulihan';
+    $('player-recovery-back').hidden=false;
+    $('player-activate-submit').textContent='Simpan password baru';
+    securityMessage('Masukkan kode pemulihan dari Mail Box. Setelah berhasil, seluruh sesi lama akan dicabut.');
+  });
+  $('player-recovery-back').addEventListener('click',()=>{
+    $('player-activate-form').reset();
+    $('player-activate-submit').textContent='Aktifkan akun aman';
+    showSecurityMode('login');securityMessage('');
   });
   let activationCountdown=null;
   function activationCooldown(seconds){
@@ -261,6 +350,43 @@
       $('player-password-login-form').reset();
       await loadSecurityState();
     }catch(error){securityMessage('Tidak dapat masuk: '+error.message)}
+    finally{button.disabled=false;}
+  });
+  $('player-change-password-form').addEventListener('submit',async event=>{
+    event.preventDefault();
+    const button=$('player-change-password-submit');if(button.disabled)return;
+    const oldPassword=$('player-current-password').value,
+      newPassword=$('player-new-password').value,
+      repeat=$('player-new-password-repeat').value;
+    if(newPassword.length<8||newPassword.length>128||newPassword!==repeat){
+      securityMessage('Password baru harus 8–128 karakter dan kedua isian harus sama.');return;
+    }
+    if(oldPassword===newPassword){
+      securityMessage('Password baru harus berbeda dari password sebelumnya.');return;
+    }
+    if(!window.confirm('Ganti password dan keluarkan perangkat lain?'))return;
+    button.disabled=true;securityMessage('Memverifikasi password lama pada perangkat ini...');
+    try{
+      const old=await window.SSCirclePassword.login(playerCodeForSecureLogin,oldPassword);
+      const newer=await window.SSCirclePassword.create(newPassword);
+      const result=await request('/api/player/security/password/change',{method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({currentProof:old.proof,...newer})});
+      $('player-change-password-form').reset();
+      const mode=await loadSecurityState();
+      securityMessage(result.loginRequired||mode==='login'
+        ?'Password berhasil diganti. Masuk kembali memakai password baru.'
+        :'Password berhasil diganti. Perangkat lain sudah dikeluarkan.');
+    }catch(error){
+      securityMessage(error.status>=500?
+        'Belum dapat memastikan penyimpanan. Coba masuk menggunakan password baru sebelum mengulangi perubahan.':
+        'Gagal mengganti password: '+error.message);
+    }finally{button.disabled=false;}
+  });
+  $('player-refresh-security-history').addEventListener('click',async()=>{
+    const button=$('player-refresh-security-history');button.disabled=true;
+    try{await loadSecurityHistory();securityMessage('Riwayat keamanan diperbarui.');}
+    catch(error){securityMessage('Riwayat belum dapat dimuat: '+error.message);}
     finally{button.disabled=false;}
   });
   $('player-refresh-devices').addEventListener('click',async()=>{
