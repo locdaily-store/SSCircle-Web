@@ -9,7 +9,7 @@ softdepend: [floodgate]
 commands:
   sscircle:
     description: Hubungkan akun Minecraft dengan Profile SSCircle
-    usage: /sscircle [help|status|link <kode>|reload]
+    usage: /sscircle [help|status|link <kode>|diagnose|reload]
 permissions:
   sscircle.admin:
     description: Memuat ulang konfigurasi SSCircle Player Sync
