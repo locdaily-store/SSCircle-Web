@@ -49,6 +49,7 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
     private HttpClient http;
     private String endpoint = "";
     private String signingSecret = "";
+    private String secretSource = "tidak tersedia";
 
     @Override
     public void onEnable() {
@@ -80,11 +81,20 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
     private void readSettings() {
         endpoint = "";
         signingSecret = "";
-        String secret = System.getenv(SECRET_ENV);
-        if (secret == null || secret.length() < 32) {
-            getLogger().warning("SSCIRCLE_LINK_SERVER_SECRET belum tersedia atau terlalu pendek pada proses Paper.");
-        } else {
-            signingSecret = secret;
+        secretSource = "tidak tersedia";
+        try {
+            SecretFileStore.ResolvedSecret resolved = SecretFileStore.resolve(
+                getDataFolder().toPath(), System.getenv(SECRET_ENV));
+            signingSecret = resolved.value();
+            secretSource = resolved.source();
+            if (resolved.generated()) {
+                getLogger().warning("Kunci baru dibuat pada plugins/SSCirclePlayerSync/server-secret.txt.");
+                getLogger().warning("Kunci ini HARUS disamakan dengan SSCIRCLE_LINK_SERVER_SECRET Cloudflare.");
+            } else {
+                getLogger().info("Kunci SSCircle dibaca dari " + secretSource + " (nilai dirahasiakan).");
+            }
+        } catch (java.io.IOException ex) {
+            getLogger().warning("File secret lokal tidak dapat dibaca. Periksa isinya dan izin folder.");
         }
         String configuredUrl = getConfig().getString("endpoint", "").trim();
         try {
@@ -159,7 +169,8 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
             }
             reloadConfig();
             readSettings();
-            sender.sendMessage("Pengaturan SSCircle dibaca ulang. Secret lingkungan tetap memerlukan restart.");
+            sender.sendMessage("Konfigurasi dan file secret SSCircle sudah diperiksa ulang.");
+            sender.sendMessage("Environment Windows yang berubah tetap membutuhkan restart proses Paper.");
             return true;
         }
         if (args.length == 1 && args[0].equalsIgnoreCase("status")) {
@@ -167,8 +178,12 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
             sender.sendMessage("Alamat website HTTPS: " +
                 (endpoint.isBlank() ? "belum valid - periksa plugins/SSCirclePlayerSync/config.yml" : "terkonfigurasi"));
             sender.sendMessage("Kunci komunikasi website: " +
-                (signingSecret.length() >= 32 ? "terbaca" :
-                "belum terbaca - atur environment variable SSCIRCLE_LINK_SERVER_SECRET lalu restart Paper"));
+                (SecretFileStore.isValidSecret(signingSecret) ? "terbaca" :
+                "belum terbaca - periksa plugins/SSCirclePlayerSync/server-secret.txt"));
+            if (sender.hasPermission("sscircle.admin")) {
+                sender.sendMessage("Sumber kunci aktif: " + secretSource);
+                sender.sendMessage("File server-secret.txt mengalahkan environment variable Windows bila tersedia.");
+            }
             sender.sendMessage("Konfigurasi website: " +
                 (hasConnectionSettings() ? "siap (belum menguji koneksi internet)" : "belum lengkap"));
             if (!Bukkit.getOnlineMode()) {
@@ -327,7 +342,7 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
         String code = safeResponseCode(response);
         return switch (code) {
             case "CLOCK_SKEW" -> "Jam PC berbeda lebih dari 90 detik dari website. Sinkronkan waktu Windows.";
-            case "SIGNATURE_INVALID" -> "Secret di Paper dan Cloudflare berbeda. Periksa juga environment Production/Preview.";
+            case "SIGNATURE_INVALID" -> "Kunci Paper tidak cocok dengan Cloudflare. Periksa /sscircle status dan samakan server-secret.txt dengan secret Production/Preview.";
             case "HEADERS_INVALID" -> "Header signature/timestamp rusak; periksa versi plugin dan proxy HTTP.";
             case "SERVER_SECRET_MISSING" -> "Secret belum aktif pada deployment Cloudflare yang dituju.";
             case "IDENTITY_INVALID" -> "Identitas pemain tidak diterima oleh backend, bukan masalah kode.";
@@ -410,7 +425,7 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
     }
 
     private boolean hasConnectionSettings() {
-        return !endpoint.isEmpty() && signingSecret.length() >= 32;
+        return !endpoint.isEmpty() && SecretFileStore.isValidSecret(signingSecret);
     }
 
     private static String hmac(String secret, String message) throws Exception {
