@@ -1,9 +1,9 @@
-# SSCircle Player Sync Paper · V10.45.2 (Direct, tanpa Velocity)
+# SSCircle Player Sync Paper · V10.45.3 (Direct, tanpa Velocity)
 
 ## Persyaratan
 - **Paper 26.3, Java 25+, satu server online-mode**. Server memiliki koneksi internet keluar via HTTPS menuju website SSCircle di Cloudflare Pages + D1.
 - SSCircle website backend minimal V10.45 (endpoint `/api/minecraft/link/claim` dan Profile dengan password dashboard).
-- Secret server `SSCIRCLE_LINK_SERVER_SECRET` acak (minimum 32 karakter) disetel **sama** pada proses Paper dan Cloudflare Pages.
+- Secret server `SSCIRCLE_LINK_SERVER_SECRET` acak (minimum 32 karakter) di Cloudflare Pages dan dibaca oleh Paper dari environment variable **atau** file privat `plugins/SSCirclePlayerSync/server-secret.txt` yang bisa dibuat otomatis. Nilainya **harus sama persis**.
 - Gunakan akun Minecraft Java Premium autentik untuk tes pertama; Bedrock opsional setelah Geyser + Floodgate terpasang dan lolos uji.
 
 ## Instalasi Windows paling sederhana
@@ -11,13 +11,13 @@
 2. Gunakan Paper 26.3 dan Java 25. Jangan jalankan Velocity.
 3. Di `server.properties`: `online-mode=true`, `server-port=25565`, `server-ip=127.0.0.1` untuk lokal satu PC. Untuk akses LAN sesuaikan IP setelah uji awal.
 4. Di `config/paper-global.yml`: `proxies.velocity.enabled: false`. Di `spigot.yml`: `settings.bungeecord: false`. Jangan biarkan proxy forwarding aktif.
-5. Salin artifact `SSCircle-Player-Sync-Paper-10.45.2.jar` ke `Paper/plugins/`, lalu jalankan Paper sekali.
+5. Salin artifact `SSCircle-Player-Sync-Paper-10.45.3.jar` ke `Paper/plugins/`, lalu jalankan Paper sekali.
 6. Edit `Paper/plugins/SSCirclePlayerSync/config.yml`: ubah `endpoint` menjadi **domain HTTPS website SSCircle** tanpa path.
-7. Di Windows, tambahkan environment variable pengguna `SSCIRCLE_LINK_SERVER_SECRET` (Secret terenkripsi yang sama harus aktif di Cloudflare). Tutup semua jendela launcher/terminal lama, jalankan ulang Paper.
+7. Di Windows **tidak perlu** mengatur environment variable. Jika variabel tersebut tidak ada, plugin V10.45.3 membuat file privat `plugins/SSCirclePlayerSync/server-secret.txt` dengan token acak kuat. Buka file itu secara privat, salin nilainya ke secret `SSCIRCLE_LINK_SERVER_SECRET` di Cloudflare (atau isi file dengan nilai secret Cloudflare yang sudah ada), lalu gunakan `/sscircle reload` sebagai OP atau restart Paper. Jangan menyimpan secret pada `config.yml`.
 8. Buka Minecraft Java Premium, Multiplayer → `127.0.0.1:25565`. Perintah `/sscircle status` harus memperlihatkan konfigurasi siap dan Java Premium.
 9. Masuk Profile website SSCircle sebagai anggota diterima **dengan password dashboard**, klik Buat kode penghubung, jalankan `/sscircle link SC-...` di Minecraft, lalu kembali ke Profile → Perbarui status → Konfirmasi identitas.
 
-## Perbaikan V10.45.2: tab completion dan diagnosis
+## Perbaikan V10.45.3: tab completion dan diagnosis
 - Ketik `/sscircle` lalu **spasi dan Tab** untuk memilih `help`, `status`, `link`; `reload` hanya muncul bagi pemain yang memiliki izin admin/OP.
 - Jalankan `/sscircle` tanpa argumen atau `/sscircle help` untuk melihat daftar dan deskripsi perintah.
 - Kode sekali pakai **tidak di-autocomplete** karena diambil secara privat dari website.
@@ -31,7 +31,7 @@
 - `/sscircle help`: tampilkan daftar pilihan perintah.
 - `/sscircle status`: status konfigurasi dan jenis identitas yang terbaca, **bukan** bukti akun sudah linked.
 - `/sscircle link <kode>`: klaim kode sekali pakai 10 menit; tautan **belum selesai** sampai dikonfirmasi di website.
-- `/sscircle reload`: untuk operator; memuat ulang URL website pada config; perubahan environment variable biasanya butuh restart proses.
+- `/sscircle reload`: untuk operator; memuat ulang URL website dan file secret lokal tanpa restart. Perubahan environment variable proses masih memerlukan restart.
 - Untuk mengganti akun, Profile website → Putuskan tautan (memerlukan verifikasi password).
 
 ## Keamanan & batasan
@@ -52,4 +52,4 @@
 - HTTP 404/410: kode sudah habis/keliru atau domain tidak cocok.
 - Cloudflare website belum mengeluarkan kode: cek binding D1 `DB`, `SESSION_SECRET`, login password dashboard, dan `SSCIRCLE_LINK_SERVER_SECRET` Cloudflare.
 
-Dokumentasi lengkap pemasangan: `docs/V10.45.2-PAPER-DIRECT.md`.
+Dokumentasi lengkap pemasangan: `docs/V10.45.3-PAPER-DIRECT.md`.
