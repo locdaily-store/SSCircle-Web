@@ -26,6 +26,16 @@
     if (space >= 0) $('rules-heading').append(element('em', '', title.slice(space + 1)));
     $('rules-description').textContent = state.rulesDescription || '';
     $('rules-reminder').textContent = state.rulesReminder || '';
+    // The invite URL comes from the same SSCircle Discord setting as Homepage.
+    const rawDiscord=state.discordInviteUrl||state.homeDiscordUrl||'https://discord.gg/vQQSgY2GRS';
+    let discordHref='https://discord.gg/vQQSgY2GRS';
+    try {
+      const url=new URL(rawDiscord);
+      if(url.protocol==='https:' && ['discord.gg','discord.com'].includes(url.hostname.toLowerCase())
+        && !url.username && !url.password &&
+        /^\/(invite\/)?[A-Za-z0-9-]{3,}\/?$/.test(url.pathname)) discordHref=url.href;
+    } catch { /* Keep the built-in official invite. */ }
+    $('rules-discord-join').href=discordHref;
     $('rules-consent-heading').textContent = state.rulesConsentTitle || defaults.rulesConsentTitle;
     $('rules-meta-left').textContent = state.rulesMetaLeft || '';
     $('rules-meta-right').textContent = state.rulesMetaRight || '';
@@ -72,7 +82,7 @@
     const canAgree = reachedBottom && state.registrationOpen && state.rulesEnabled !== false && !preview;
     $('rules-agree').disabled = !canAgree;
     if (!canAgree) $('rules-agree').checked = false;
-    $('rules-continue').disabled = busy || !canAgree || !$('rules-agree').checked;
+    $('rules-continue').disabled = busy || !canAgree || !$('rules-agree').checked || !$('rules-discord-check').checked;
     $('rules-scroll-status').textContent = preview
       ? 'Mode pratinjau. Persetujuan tidak dikirim.'
       : !state.registrationOpen
@@ -112,8 +122,9 @@
     }
   }
   $('rules-agree').addEventListener('change', updateConsent);
+  $('rules-discord-check').addEventListener('change', updateConsent);
   $('rules-continue').addEventListener('click', async () => {
-    if (busy || preview || !reachedBottom || !$('rules-agree').checked || !state.version) return;
+    if (busy || preview || !reachedBottom || !$('rules-agree').checked || !$('rules-discord-check').checked || !state.version) return;
     busy = true;
     $('rules-feedback').textContent = '';
     updateConsent();
@@ -121,7 +132,7 @@
       const response = await fetch('/api/rules/agree', {
         method: 'POST', credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agreed: true, version: state.version })
+        body: JSON.stringify({ agreed: true, discordAcknowledged: true, version: state.version })
       });
       const result = await response.json();
       if (!response.ok) throw Error(result.error || 'Persetujuan gagal disimpan.');
