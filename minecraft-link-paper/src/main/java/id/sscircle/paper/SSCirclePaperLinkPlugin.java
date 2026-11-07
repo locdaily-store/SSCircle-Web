@@ -45,6 +45,7 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
     private HttpClient http;
     private String endpoint = "";
     private String signingSecret = "";
+    private String secretSource = "tidak tersedia";
 
     @Override
     public void onEnable() {
@@ -76,11 +77,29 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
     private void readSettings() {
         endpoint = "";
         signingSecret = "";
+        secretSource = "tidak tersedia";
         String secret = System.getenv(SECRET_ENV);
-        if (secret == null || secret.length() < 32) {
-            getLogger().warning("SSCIRCLE_LINK_SERVER_SECRET belum tersedia atau terlalu pendek pada proses Paper.");
-        } else {
+        if (SecretFileStore.isValidSecret(secret)) {
             signingSecret = secret;
+            secretSource = "environment proses Paper";
+        } else {
+            // Windows launchers/panels may not inherit user environment variables.
+            // Keep the shared secret in a server-local file, NEVER in website assets.
+            try {
+                java.nio.file.Path localFile = getDataFolder().toPath().resolve(SecretFileStore.FILE_NAME);
+                boolean existed = java.nio.file.Files.exists(localFile, java.nio.file.LinkOption.NOFOLLOW_LINKS);
+                signingSecret = SecretFileStore.loadOrCreate(getDataFolder().toPath());
+                secretSource = "file privat plugin";
+                if (!existed) {
+                    getLogger().warning("Secret lokal baru telah dibuat pada plugins/SSCirclePlayerSync/server-secret.txt.");
+                    getLogger().warning("Salin isinya ke secret SSCIRCLE_LINK_SERVER_SECRET di Cloudflare. Jangan bagikan nilainya.");
+                } else {
+                    getLogger().info("Kunci komunikasi dibaca dari file privat plugin (tidak ditampilkan dalam log).");
+                }
+            } catch (java.io.IOException error) {
+                getLogger().warning("File server-secret.txt tidak dapat dibaca/dibuat. Periksa hak akses folder plugin dan isi kunci.");
+                getLogger().warning("Lingkungan proses Paper tidak menyediakan secret yang valid.");
+            }
         }
         String configuredUrl = getConfig().getString("endpoint", "").trim();
         try {
@@ -99,7 +118,7 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
             if (hasConnectionSettings()) {
                 getLogger().info("Alamat website dan kunci server terbaca. Koneksi HTTPS belum diuji.");
             } else {
-                getLogger().warning("Alamat website sudah valid, tetapi secret masih belum tersedia.");
+                getLogger().warning("Alamat website sudah valid, tetapi kunci komunikasi belum tersedia.");
             }
         } catch (IllegalArgumentException ex) {
             getLogger().warning("Alamat website tidak valid. Periksa plugins/SSCirclePlayerSync/config.yml.");
@@ -143,7 +162,8 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
             }
             reloadConfig();
             readSettings();
-            sender.sendMessage("Pengaturan SSCircle dibaca ulang. Secret lingkungan tetap memerlukan restart.");
+            sender.sendMessage("Pengaturan SSCircle dibaca ulang. File secret lokal langsung diperiksa.");
+            sender.sendMessage("Jika memakai variabel lingkungan Windows, restart proses Paper untuk memperbaruinya.");
             return true;
         }
         if (args.length == 1 && args[0].equalsIgnoreCase("status")) {
@@ -151,8 +171,14 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
             sender.sendMessage("Alamat website HTTPS: " +
                 (endpoint.isBlank() ? "belum valid - periksa plugins/SSCirclePlayerSync/config.yml" : "terkonfigurasi"));
             sender.sendMessage("Kunci komunikasi website: " +
-                (signingSecret.length() >= 32 ? "terbaca" :
-                "belum terbaca - atur environment variable SSCIRCLE_LINK_SERVER_SECRET lalu restart Paper"));
+                (SecretFileStore.isValidSecret(signingSecret) ? "terbaca" :
+                "belum terbaca - periksa plugins/SSCirclePlayerSync/server-secret.txt"));
+            if (sender.hasPermission("sscircle.admin")) {
+                sender.sendMessage("Sumber kunci: " + secretSource);
+                if ("file privat plugin".equals(secretSource)) {
+                    sender.sendMessage("Samakan isi server-secret.txt dengan secret SSCIRCLE_LINK_SERVER_SECRET di Cloudflare.");
+                }
+            }
             sender.sendMessage("Konfigurasi website: " +
                 (hasConnectionSettings() ? "siap (belum menguji koneksi internet)" : "belum lengkap"));
             if (!Bukkit.getOnlineMode()) {
@@ -310,7 +336,7 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
     }
 
     private boolean hasConnectionSettings() {
-        return !endpoint.isEmpty() && signingSecret.length() >= 32;
+        return !endpoint.isEmpty() && SecretFileStore.isValidSecret(signingSecret);
     }
 
     private static String hmac(String secret, String message) throws Exception {
