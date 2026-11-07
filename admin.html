@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#160a28">
     <link rel="stylesheet" href="style.css?v=10.31.0">
-    <link rel="stylesheet" href="community-pages.css?v=10.34.0">
+    <link rel="stylesheet" href="community-pages.css?v=10.36.0">
     <title>Admin Control · SSCircle Server</title>
     <link rel="icon" type="image/png" href="assets/sscircle-logo.png">
     <script src="color-theme.js?v=10.26.0" defer></script>
@@ -22,6 +22,7 @@
     <script src="seasons-admin.js?v=10.34.0" defer></script>
     <script src="registration-preview.js?v=10.26.0" defer></script>
     <script src="color-theme-admin.js?v=10.31.0" defer></script>
+    <script src="member-center-admin.js?v=10.36.0" defer></script>
     <script src="admin.js?v=10.33.0" defer></script>
     <script src="form-insert-rail.js?v=10.26.0" defer></script>
     <script src="spreadsheet.js?v=10.26.0" defer></script>
@@ -89,6 +90,7 @@
                 <button type="button" class="side-link" data-tab="appearance"><span class="side-icon" aria-hidden="true">✧</span><span>Registration</span></button>
                 <button type="button" class="side-link" data-tab="form"><span class="side-icon" aria-hidden="true">▤</span><span>Formulir</span></button>
                 <button type="button" class="side-link" data-tab="answers"><span class="side-icon" aria-hidden="true">☷</span><span>Jawaban pendaftar</span> <span id="nav-count" class="nav-count">0</span></button>
+                <button type="button" class="side-link" data-tab="members-admin"><span class="side-icon" aria-hidden="true">♙</span><span>Kelola Pemain</span></button>
                 <button type="button" class="side-link" data-tab="analytics"><span class="side-icon" aria-hidden="true">◉</span><span>Analitik jawaban</span></button>
                 <button type="button" class="side-link" data-tab="spreadsheet"><span class="side-icon" aria-hidden="true">▦</span><span>Spreadsheet</span></button>
               </section>
@@ -135,6 +137,20 @@
                 <div class="export-actions">
                   <button class="button primary" id="open-spreadsheet">▦ Buka spreadsheet ↗</button>
                 </div>
+              </div>
+            </section>
+            <!-- Player Dashboard: satu pusat pengelolaan anggota dan arsip prestasi. -->
+            <section id="members-admin" class="tab-page hide">
+              <div class="dashboard-heading">
+                <div>
+                  <div class="overline">SSCIRCLE / MEMBER MANAGEMENT</div>
+                  <h1>Kelola Pemain<span class="dot-accent">.</span></h1>
+                  <p>Kelola keanggotaan, akun Minecraft, privasi, sesi login, dan prestasi tanpa menggandakan data Season Archive.</p>
+                </div>
+                <span class="season-tag">MEMBER CONTROL</span>
+              </div>
+              <div id="members-admin-root" class="members-admin-root" aria-live="polite">
+                <p class="field-help">Buka menu untuk memuat data anggota.</p>
               </div>
             </section>
             <!-- Pengaturan Homepage -->
