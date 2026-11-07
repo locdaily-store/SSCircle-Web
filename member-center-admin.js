@@ -95,10 +95,33 @@ window.SSCircleMemberCenterAdmin = (() => {
       tools.append(input,statuses);
       content.append(tools,list);drawList();
     }else if(current==='verify'){
-      content.append(heading('Verifikasi akun Minecraft','Hanya akun yang lolos autentikasi plugin boleh dianggap terverifikasi.'));
+      content.append(heading('Verifikasi akun Minecraft',
+        'Identitas berasal dari plugin server terautentikasi dan dikonfirmasi oleh anggota. Tidak dapat dibuat dengan mengganti nama pemain.'));
       const verified=snapshot.items.filter(m=>m.linkedCount>0);
       renderTable(content,verified);
-      if(!verified.length)content.append(empty('Belum ada akun terverifikasi. Integrasi Velocity, LibreLogin, dan Floodgate masih menjadi tahap selanjutnya.'));
+      if(!verified.length)content.append(empty('Belum ada akun Minecraft yang terverifikasi.'));
+      const details=el('div','member-admin-list');
+      const show=button('Lihat identitas yang tertaut',async()=>{
+        show.disabled=true;details.replaceChildren();
+        try{
+          const data=await api('/api/admin/minecraft/links');
+          if(!data.links?.length){details.append(empty('Belum ada akun tertaut.'));return;}
+          const label={java_premium:'Java Premium',java_offline:'Java Non-Premium',bedrock:'Bedrock'};
+          for(const linked of data.links){
+            const card=el('article','member-admin-member');
+            const owner=snapshot.items.find(member=>member.id===linked.memberId);
+            const info=el('div','member-admin-member-info');
+            info.append(el('strong','',linked.username),
+              el('small','',(label[linked.provider]||'Minecraft')+' · '+(owner?memberName(owner):String(linked.memberId).slice(0,8).toUpperCase())));
+            const meta=el('div','member-admin-member-meta');
+            meta.append(el('span','member-admin-chip','Terverifikasi'),
+              el('small','','Sejak: '+new Date(linked.linkedAt).toLocaleString('id-ID')));
+            card.append(info,meta);details.append(card);
+          }
+        }catch(error){details.append(empty('Identitas belum dapat dimuat: '+error.message));}
+        finally{show.disabled=false;}
+      },'button secondary');
+      content.append(show,details);
     }else if(current==='stats'){
       content.append(heading('Player Statistics','Memantau status sinkronisasi. Statistik tidak dibuat secara manual di website.'));
       renderTable(content,snapshot.items.filter(m=>m.lastSync));
