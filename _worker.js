@@ -1910,6 +1910,15 @@ async function ensureMemberCenter(env) {
       code_hash TEXT NOT NULL UNIQUE, expires_at TEXT NOT NULL,
       claimed_at TEXT, created_at TEXT NOT NULL,
       FOREIGN KEY(application_id) REFERENCES submissions(id) ON DELETE CASCADE)`,
+    `CREATE TABLE IF NOT EXISTS minecraft_link_claims (
+      challenge_id TEXT PRIMARY KEY, provider TEXT NOT NULL,
+      provider_id TEXT NOT NULL, username TEXT NOT NULL,
+      auth_source TEXT NOT NULL, claimed_at TEXT NOT NULL,
+      UNIQUE(provider,provider_id),
+      FOREIGN KEY(challenge_id) REFERENCES minecraft_link_challenges(id) ON DELETE CASCADE)`,
+    `CREATE TABLE IF NOT EXISTS minecraft_link_nonces (
+      nonce TEXT PRIMARY KEY, seen_at INTEGER NOT NULL)`,
+    'CREATE INDEX IF NOT EXISTS idx_ssc_link_challenges_member ON minecraft_link_challenges(application_id,created_at)',
     `INSERT OR IGNORE INTO member_policy(id) VALUES(1)`
   ];
   for (const sql of statements) await env.DB.prepare(sql).run();
@@ -2516,6 +2525,212 @@ async function mailboxNote(env,memberId,type,title,content,extras={}){
       extras.encrypted||null,extras.nonce||null,extras.expires||null,now).run();
   return id;
 }
+
+/* SSCircle V10.45: a browser session cannot assert a Minecraft identity.
+   The server claim is signed, short-lived, nonce-protected and only *pending*
+   until the verified member explicitly confirms it in Profile. */
+const MINECRAFT_LINK_TTL=10*60;
+const MINECRAFT_LINK_CODE=/^SC-[A-Za-z0-9_-]{24}$/;
+const MC_UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const mcCodeHash=(env,code)=>hmac(env.SESSION_SECRET+'|minecraft-link-code',code);
+async function minecraftLinkAPI(req,env,path,method){
+  if(path==='/api/admin/minecraft/links' && method==='GET'){
+    if(!await admin(req,env))return bad('Masuk ke Admin Control.',401);
+    await ensureMemberCenter(env);
+    const rows=await env.DB.prepare(
+      'SELECT application_id,provider,username,verified_at FROM minecraft_accounts ORDER BY verified_at DESC LIMIT 100'
+    ).all();
+    return J({links:(rows.results||[]).map(r=>({
+      memberId:r.application_id,provider:r.provider,username:r.username,linkedAt:r.verified_at
+    }))});
+  }
+  const app=await playerSession(req,env);
+  if(!app||app.status!=='accepted')
+    return bad('Masuk sebagai anggota SSCircle yang sudah diterima.',403);
+  await ensureMemberSecurity(env);
+  const active=await memberStrongSession(req,env,app);
+  if(!active)return bad('Buka Profile dengan password dashboard sebelum menghubungkan akun Minecraft.',403);
+  await ensureMemberCenter(env);
+  const linked=await env.DB.prepare(
+    'SELECT provider,provider_id,username,verified_at FROM minecraft_accounts WHERE application_id=? ORDER BY verified_at DESC LIMIT 1'
+  ).bind(app.id).first();
+  if(path==='/api/player/minecraft/link/state' && method==='GET'){
+    const challenge=await env.DB.prepare(
+      'SELECT id,expires_at,claimed_at,created_at FROM minecraft_link_challenges WHERE application_id=? ORDER BY created_at DESC LIMIT 1'
+    ).bind(app.id).first();
+    let pending=null;
+    if(challenge&&challenge.expires_at>new Date().toISOString()){
+      const claim=await env.DB.prepare(
+        'SELECT provider,username,auth_source FROM minecraft_link_claims WHERE challenge_id=?'
+      ).bind(challenge.id).first();
+      pending={status:claim?'needs_confirmation':'waiting_in_game',
+        expiresAt:challenge.expires_at,
+        identity:claim?{provider:claim.provider,username:claim.username}:null};
+    }
+    return J({linked:linked?{
+      provider:linked.provider,username:linked.username,verifiedAt:linked.verified_at
+    }:null,pending,serverReady:typeof env.SSCIRCLE_LINK_SERVER_SECRET==='string'&&
+      env.SSCIRCLE_LINK_SERVER_SECRET.length>=32});
+  }
+  if(path==='/api/player/minecraft/link/create' && method==='POST'){
+    if(linked)return bad('Akun Minecraft sudah terhubung. Putuskan tautan terlebih dahulu.',409);
+    if(!env.SSCIRCLE_LINK_SERVER_SECRET||env.SSCIRCLE_LINK_SERVER_SECRET.length<32)
+      return bad('Penghubung Minecraft belum diaktifkan oleh pengelola server.',503);
+    if(!await rateLimit(env,req,'minecraft-link-create',5,900))
+      return bad('Terlalu banyak kode dibuat. Coba lagi nanti.',429);
+    const code='SC-'+b64(crypto.getRandomValues(new Uint8Array(18)));
+    const timestamp=new Date().toISOString();
+    const expires=new Date(Date.now()+MINECRAFT_LINK_TTL*1000).toISOString();
+    await env.DB.batch([
+      env.DB.prepare(
+        'DELETE FROM minecraft_link_claims WHERE challenge_id IN (SELECT id FROM minecraft_link_challenges WHERE application_id=?)'
+      ).bind(app.id),
+      env.DB.prepare('DELETE FROM minecraft_link_challenges WHERE application_id=?').bind(app.id),
+      env.DB.prepare(
+        'INSERT INTO minecraft_link_challenges(id,application_id,code_hash,expires_at,claimed_at,created_at) VALUES(?,?,?,?,NULL,?)'
+      ).bind(uid(),app.id,await mcCodeHash(env,code),expires,timestamp)
+    ]);
+    return J({ok:true,code,expiresAt:expires,command:'/sscircle link '+code});
+  }
+  if(path==='/api/player/minecraft/link/cancel' && method==='POST'){
+    await env.DB.batch([
+      env.DB.prepare(
+        'DELETE FROM minecraft_link_claims WHERE challenge_id IN (SELECT id FROM minecraft_link_challenges WHERE application_id=?)'
+      ).bind(app.id),
+      env.DB.prepare('DELETE FROM minecraft_link_challenges WHERE application_id=?').bind(app.id)
+    ]);
+    return J({ok:true});
+  }
+  if(path==='/api/player/minecraft/link/confirm' && method==='POST'){
+    if(linked)return bad('Akun Minecraft ini sudah memiliki tautan.',409);
+    const challenge=await env.DB.prepare(
+      'SELECT id,expires_at FROM minecraft_link_challenges WHERE application_id=? ORDER BY created_at DESC LIMIT 1'
+    ).bind(app.id).first();
+    if(!challenge||challenge.expires_at<=new Date().toISOString())
+      return bad('Kode sudah kedaluwarsa. Buat kode baru.',410);
+    const claim=await env.DB.prepare(
+      'SELECT provider,provider_id,username FROM minecraft_link_claims WHERE challenge_id=?'
+    ).bind(challenge.id).first();
+    if(!claim)return bad('Masukkan kode melalui Minecraft dan tunggu verifikasi server.',409);
+    const timestamp=new Date().toISOString();
+    try{
+      const results=await env.DB.batch([
+        env.DB.prepare(
+          'INSERT INTO minecraft_accounts(id,application_id,provider,provider_id,username,verified_at) '+
+          'SELECT ?,?,?,?,?,? WHERE NOT EXISTS(SELECT 1 FROM minecraft_accounts WHERE application_id=?)'
+        ).bind(uid(),app.id,claim.provider,claim.provider_id,claim.username,timestamp,app.id),
+        env.DB.prepare(
+          'DELETE FROM minecraft_link_claims WHERE challenge_id IN (SELECT id FROM minecraft_link_challenges WHERE application_id=?)'
+        ).bind(app.id),
+        env.DB.prepare('DELETE FROM minecraft_link_challenges WHERE application_id=?').bind(app.id)
+      ]);
+      if(!(results?.[0]?.meta?.changes>0))
+        return bad('Akun sudah terhubung atau sedang diproses. Perbarui Profile.',409);
+    }catch{
+      return bad('Identitas Minecraft sudah digunakan oleh anggota lain atau sedang diproses.',409);
+    }
+    return J({ok:true,linked:{provider:claim.provider,username:claim.username,verifiedAt:timestamp}});
+  }
+  if(path==='/api/player/minecraft/link/unlink' && method==='POST'){
+    if(!await rateLimit(env,req,'minecraft-link-unlink',5,600))
+      return bad('Terlalu banyak percobaan. Coba lagi nanti.',429);
+    const value=await body(req,750);
+    if(!memberProofValid(value?.currentProof))return bad('Verifikasi password diperlukan.',400);
+    const credential=await env.DB.prepare('SELECT password_hash FROM member_credentials WHERE application_id=?')
+      .bind(app.id).first();
+    if(!credential)return bad('Password dashboard belum diaktifkan.',403);
+    const stored=String(credential.password_hash||'');
+    const valid=stored.startsWith('v2.')
+      ?safeEq(stored,'v2.'+await memberVerifier(value.currentProof))
+      :safeEq(stored,value.currentProof);
+    if(!valid)return bad('Password tidak sesuai.',403);
+    await env.DB.batch([
+      env.DB.prepare(
+        'DELETE FROM minecraft_link_claims WHERE challenge_id IN (SELECT id FROM minecraft_link_challenges WHERE application_id=?)'
+      ).bind(app.id),
+      env.DB.prepare('DELETE FROM minecraft_link_challenges WHERE application_id=?').bind(app.id),
+      env.DB.prepare('DELETE FROM minecraft_accounts WHERE application_id=?').bind(app.id)
+    ]);
+    return J({ok:true});
+  }
+  return bad('Endpoint Minecraft tidak ditemukan.',404);
+}
+async function minecraftLinkClaim(req,env){
+  const secret=env.SSCIRCLE_LINK_SERVER_SECRET;
+  if(typeof secret!=='string'||secret.length<32)
+    return bad('Layanan penghubung server belum dikonfigurasi.',503);
+  if(!String(req.headers.get('Content-Type')||'').toLowerCase().startsWith('application/json'))
+    return bad('Format permintaan tidak valid.',415);
+  const timestamp=Number(req.headers.get('X-SSC-Timestamp'));
+  const nonce=req.headers.get('X-SSC-Nonce')||'';
+  const signature=req.headers.get('X-SSC-Signature')||'';
+  const now=Math.floor(Date.now()/1000);
+  if(!Number.isSafeInteger(timestamp)||Math.abs(now-timestamp)>90 ||
+    !/^[0-9a-f-]{36}$/.test(nonce)||!/^[A-Za-z0-9_-]{43}$/.test(signature))
+    return bad('Verifikasi permintaan server gagal.',401);
+  const raw=await req.text();
+  if(raw.length>1500)return bad('Permintaan terlalu besar.',413);
+  const expected=await hmac(secret,'POST\n/api/minecraft/link/claim\n'+timestamp+'\n'+nonce+'\n'+raw);
+  if(!safeEq(signature,expected))return bad('Verifikasi permintaan server gagal.',401);
+  const bodyValue=parse(raw);
+  if(!bodyValue||!MINECRAFT_LINK_CODE.test(bodyValue.code||'') ||
+    typeof bodyValue.username!=='string'||bodyValue.username.length<1||
+    bodyValue.username.length>32||/[\x00-\x1f<>]/.test(bodyValue.username))
+    return bad('Kode atau identitas tidak valid.',400);
+  const checks={
+    java_premium:{source:'mojang-online',valid:MC_UUID.test(bodyValue.providerId||'')},
+    java_offline:{source:'librelogin-authenticated',valid:MC_UUID.test(bodyValue.providerId||'')},
+    bedrock:{source:'floodgate-xuid',valid:/^[0-9]{10,22}$/.test(bodyValue.providerId||'')}
+  };
+  const identity=checks[bodyValue.provider];
+  if(!identity||!identity.valid||identity.source!==bodyValue.authSource)
+    return bad('Identitas Minecraft tidak memiliki bukti autentikasi yang sah.',403);
+  await ensureMemberCenter(env);
+  const nonceResult=await env.DB.prepare(
+    'INSERT OR IGNORE INTO minecraft_link_nonces(nonce,seen_at) VALUES(?,?)'
+  ).bind(nonce,now).run();
+  if(!(nonceResult.meta?.changes>0))return bad('Permintaan ini sudah pernah diproses.',409);
+  await env.DB.prepare('DELETE FROM minecraft_link_nonces WHERE seen_at<?').bind(now-300).run();
+  // Old unconfirmed claims must never reserve an identity forever.
+  const stampNow=new Date().toISOString();
+  await env.DB.prepare(
+    'DELETE FROM minecraft_link_claims WHERE challenge_id IN (SELECT id FROM minecraft_link_challenges WHERE expires_at<=?)'
+  ).bind(stampNow).run();
+  await env.DB.prepare('DELETE FROM minecraft_link_challenges WHERE expires_at<=?')
+    .bind(stampNow).run();
+  const challenge=await env.DB.prepare(
+    'SELECT id,application_id,expires_at,claimed_at FROM minecraft_link_challenges WHERE code_hash=?'
+  ).bind(await mcCodeHash(env,bodyValue.code)).first();
+  if(!challenge||challenge.expires_at<=new Date().toISOString())
+    return bad('Kode tidak ditemukan atau kedaluwarsa.',404);
+  if(challenge.claimed_at)return bad('Kode sudah dipakai. Konfirmasi dari Profile.',409);
+  const owner=await env.DB.prepare('SELECT id,status FROM submissions WHERE id=?')
+    .bind(challenge.application_id).first();
+  if(owner?.status!=='accepted')return bad('Anggota tidak lagi memenuhi syarat.',403);
+  const used=await env.DB.prepare(
+    'SELECT application_id FROM minecraft_accounts WHERE application_id=? OR (provider=? AND provider_id=?) LIMIT 1'
+  ).bind(challenge.application_id,bodyValue.provider,bodyValue.providerId).first();
+  if(used)return bad('Akun Minecraft telah terhubung. Hubungi pengurus jika perlu pemindahan.',409);
+  const stamp=new Date().toISOString();
+  try{
+    const results=await env.DB.batch([
+      env.DB.prepare(
+        'UPDATE minecraft_link_challenges SET claimed_at=? WHERE id=? AND claimed_at IS NULL AND expires_at>?'
+      ).bind(stamp,challenge.id,stamp),
+      env.DB.prepare(
+        'INSERT INTO minecraft_link_claims(challenge_id,provider,provider_id,username,auth_source,claimed_at) '+
+        'SELECT ?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM minecraft_link_challenges WHERE id=? AND claimed_at=?)'
+      ).bind(challenge.id,bodyValue.provider,bodyValue.providerId,bodyValue.username,
+        bodyValue.authSource,stamp,challenge.id,stamp)
+    ]);
+    if(!(results?.[0]?.meta?.changes>0)||!(results?.[1]?.meta?.changes>0))
+      return bad('Kode sudah digunakan.',409);
+  }catch{
+    return bad('Identitas sedang ditautkan oleh anggota lain atau kode sudah digunakan.',409);
+  }
+  return J({ok:true,message:'Identitas terverifikasi. Buka Profile SSCircle lalu konfirmasi akun ini.'});
+}
+
 async function mailboxIssueInvite(env,memberId){
   // Generate and seal the secret before consuming approval. Publishing the
   // invite, private message and request status must be one D1 transaction.
@@ -2881,6 +3096,9 @@ async function route(req, env) {
     return env.ASSETS.fetch(req);
   if (!env.DB)
     return bad('Layanan pendaftaran sedang tidak tersedia. Silakan coba lagi nanti.', 503);
+  // Minecraft claim has a dedicated HMAC + nonce protocol, never browser cookies.
+  if(path==='/api/minecraft/link/claim' && method==='POST')
+    return await minecraftLinkClaim(req,env);
   if (!['GET', 'HEAD'].includes(method) && !sameOrigin(req))
     return bad('Asal permintaan ditolak.', 403);
   if (![
@@ -2892,6 +3110,9 @@ async function route(req, env) {
     'DELETE'
   ].includes(method))
     return bad('Metode tidak tersedia.', 405);
+  if ((path.startsWith('/api/player/minecraft/link/') || path==='/api/admin/minecraft/links') &&
+      ['GET','POST'].includes(method))
+    return await minecraftLinkAPI(req,env,path,method);
   if ((path.startsWith('/api/player/mailbox') || path==='/api/admin/mailbox/approve') &&
       ['GET','POST'].includes(method))
     return await mailboxAPI(req,env,path,method);

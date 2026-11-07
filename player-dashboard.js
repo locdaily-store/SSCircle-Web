@@ -141,6 +141,9 @@
     $('player-security-login').hidden=mode!=='login';
     $('player-security-active').hidden=mode!=='active';
     $('player-security-state').textContent=mode==='active'?'Terlindungi':mode==='login'?'Terkunci':'Belum diaktifkan';
+    $('player-link-locked').hidden=mode==='active';
+    $('player-link-panel').hidden=mode!=='active';
+    if(mode!=='active')$('player-link-notice').textContent='Masuk menggunakan password dashboard untuk menghubungkan Minecraft.';
     lockPrivateControls(mode!=='active');
   }
   const securityMessage=(message)=>{$('player-security-message').textContent=message;};
@@ -241,6 +244,7 @@
       if(state.authenticated){
         await listDevices();await loadProfile();
         try{await loadSecurityHistory();}catch{securityMessage('Riwayat keamanan belum dapat dimuat. Coba Perbarui.');}
+        try{await loadMinecraftLink();}catch(error){$('player-link-notice').textContent='Status Minecraft belum tersedia: '+error.message;}
       }
       return mode;
     }catch(error){
@@ -406,6 +410,126 @@
       location.replace('/status.html#kode-milikku');
     }catch(error){securityMessage(error.message)}
   });
+
+
+  // V10.45: account link stays private and must be confirmed after server attestation.
+  let linkCommand='',linkExpires='',linkBusy=false;
+  const mcProviderLabel=provider=>({
+    java_premium:'Java Premium',java_offline:'Java Non-Premium',bedrock:'Bedrock'
+  })[provider]||'Minecraft';
+  const linkNotice=message=>{$('player-link-notice').textContent=message;};
+  function renderMinecraftLink(data){
+    const linked=data?.linked||null,pending=data?.pending||null;
+    const ready=data?.serverReady===true;
+    $('player-link-tag').textContent=linked?'Terverifikasi':
+      pending?.status==='needs_confirmation'?'Perlu konfirmasi':
+      pending?'Menunggu Minecraft':ready?'Belum terhubung':'Belum diaktifkan';
+    $('player-link-connected').hidden=!linked;
+    $('player-link-waiting').hidden=!!linked||!!pending||!ready;
+    $('player-link-review').hidden=!!linked||pending?.status!=='needs_confirmation';
+    $('player-link-code-wrap').hidden=!!linked||!pending||
+      pending.status!=='waiting_in_game'||!linkCommand||!linkExpires||
+      Date.parse(linkExpires)<=Date.now();
+    $('player-link-cancel').hidden=!!linked||!pending;
+    $('player-link-create').disabled=!ready||!!linked||!!pending||linkBusy;
+    if(linked){
+      linkCommand='';linkExpires='';
+      $('player-link-connected-provider').textContent=mcProviderLabel(linked.provider);
+      $('player-link-connected-name').textContent=linked.username;
+      $('player-link-connected-date').textContent=
+        'Terhubung: '+new Date(linked.verifiedAt).toLocaleString('id-ID');
+      $('player-edition').textContent=mcProviderLabel(linked.provider);
+      linkNotice('Identitas Minecraft sudah berhasil ditautkan.');
+    }else if(pending?.status==='needs_confirmation'){
+      linkCommand='';linkExpires='';
+      $('player-link-review-provider').textContent=mcProviderLabel(pending.identity?.provider);
+      $('player-link-review-name').textContent=pending.identity?.username||'Akun Minecraft';
+      linkNotice('Konfirmasi hanya jika nama dan edisi yang ditampilkan benar.');
+    }else if(pending?.status==='waiting_in_game'){
+      if(linkCommand&&linkExpires&&Date.parse(linkExpires)>Date.now()){
+        $('player-link-command').textContent=linkCommand;
+        $('player-link-expires').textContent=
+          'Berlaku sampai '+new Date(linkExpires).toLocaleTimeString('id-ID');
+        linkNotice('Menunggu perintah dari server Minecraft. Halaman boleh diperbarui, tetapi kode hanya ditampilkan saat dibuat.');
+      }else linkNotice('Ada kode yang masih aktif, tetapi tidak ditampilkan ulang demi keamanan. Batalkan kode untuk membuat yang baru.');
+    }else if(!ready)linkNotice('Fitur linking belum diaktifkan oleh pengurus. Tidak ada akun Minecraft yang dihubungkan otomatis.');
+    else linkNotice('Belum ada akun Minecraft yang terhubung.');
+  }
+  async function loadMinecraftLink(){
+    if(!strongAuthorized)return;
+    const data=await request('/api/player/minecraft/link/state');
+    renderMinecraftLink(data);
+  }
+  $('player-link-create').addEventListener('click',async()=>{
+    if(linkBusy||!strongAuthorized)return;
+    linkBusy=true;$('player-link-create').disabled=true;linkNotice('Membuat kode aman...');
+    try{
+      const data=await request('/api/player/minecraft/link/create',{method:'POST',
+        headers:{'Content-Type':'application/json'},body:'{}'});
+      linkCommand=data.command;linkExpires=data.expiresAt;
+      await loadMinecraftLink();
+    }catch(error){linkNotice('Kode belum bisa dibuat: '+error.message);}
+    finally{linkBusy=false;$('player-link-create').disabled=false;}
+  });
+  $('player-link-copy').addEventListener('click',async()=>{
+    if(!linkCommand)return;
+    try{
+      await navigator.clipboard.writeText(linkCommand);
+      linkNotice('Perintah disalin. Tempel di chat server Minecraft SSCircle.');
+    }catch{linkNotice('Salin teks perintah secara manual dari kotak di atas.');}
+  });
+  $('player-link-refresh').addEventListener('click',async()=>{
+    const button=$('player-link-refresh');button.disabled=true;
+    try{await loadMinecraftLink();}catch(error){linkNotice('Tidak dapat memeriksa status: '+error.message);}
+    finally{button.disabled=false;}
+  });
+  $('player-link-cancel').addEventListener('click',async()=>{
+    if(!window.confirm('Batalkan kode penghubung Minecraft saat ini?'))return;
+    const button=$('player-link-cancel');button.disabled=true;
+    try{
+      await request('/api/player/minecraft/link/cancel',{method:'POST',
+        headers:{'Content-Type':'application/json'},body:'{}'});
+      linkCommand='';linkExpires='';await loadMinecraftLink();
+    }catch(error){linkNotice('Tidak dapat membatalkan kode: '+error.message);}
+    finally{button.disabled=false;}
+  });
+  $('player-link-confirm').addEventListener('click',async()=>{
+    if(!window.confirm('Identitas Minecraft di atas benar-benar milikmu?'))return;
+    const button=$('player-link-confirm');button.disabled=true;
+    try{
+      await request('/api/player/minecraft/link/confirm',{method:'POST',
+        headers:{'Content-Type':'application/json'},body:'{}'});
+      await loadMinecraftLink();await loadProfile();
+    }catch(error){linkNotice('Penautan belum berhasil: '+error.message);}
+    finally{button.disabled=false;}
+  });
+  $('player-link-show-unlink').addEventListener('click',()=>{
+    const form=$('player-link-unlink-form');
+    form.hidden=!form.hidden;
+    if(!form.hidden)$('player-link-unlink-password').focus();
+  });
+  $('player-link-unlink-form').addEventListener('submit',async event=>{
+    event.preventDefault();
+    if(!window.confirm('Putuskan tautan Minecraft dari akun SSCircle ini?'))return;
+    const button=$('player-link-unlink-submit');button.disabled=true;
+    try{
+      const payload=await window.SSCirclePassword.login(
+        playerCodeForSecureLogin,$('player-link-unlink-password').value);
+      await request('/api/player/minecraft/link/unlink',{method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({currentProof:payload.proof})});
+      $('player-link-unlink-form').reset();$('player-link-unlink-form').hidden=true;
+      await loadMinecraftLink();await loadProfile();
+      linkNotice('Tautan Minecraft berhasil diputuskan. Data historis komunitas tidak otomatis dihapus.');
+    }catch(error){linkNotice('Tidak dapat memutuskan tautan: '+error.message);}
+    finally{button.disabled=false;}
+  });
+  // Only poll while the member is looking at an already initiated claim.
+  setInterval(()=>{
+    if(!strongAuthorized||document.hidden||$('player-link-panel').hidden)return;
+    if(!$('player-link-cancel').hidden||!$('player-link-review').hidden)
+      void loadMinecraftLink().catch(()=>{});
+  },12000);
 
   async function load() {
     if (loading) return;

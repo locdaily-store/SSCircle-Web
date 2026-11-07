@@ -34,6 +34,15 @@ Buat:
 - Perintah Minecraft `/sscircle link <code>` hanya setelah auth plugin mengonfirmasi pemain sudah login.
 - Aturan collision: satu identitas Minecraft tidak boleh diklaim beberapa anggota tanpa prosedur transfer yang aman.
 
+## Implementasi V10.45 (pondasi linking yang sudah dikerjakan)
+- Website memiliki endpoint anggota untuk membuat kode, membatalkan, mengecek status, mengonfirmasi hasil verifikasi server, dan memutuskan tautan dengan password dashboard. Setiap kode hanya tampil saat dibuat.
+- Backend mengharuskan tanda tangan HMAC dari plugin, timestamp pendek, nonce satu kali, dan verifikasi identitas dari sumber terautentikasi. Identitas tidak langsung terhubung sebelum anggota menekan konfirmasi pada Profile.
+- Data kompatibel dengan tabel `minecraft_accounts` dan `minecraft_link_challenges` yang sudah tersedia. Tabel tambahan `minecraft_link_claims` dan `minecraft_link_nonces` dibuat otomatis secara aditif.
+- Admin Control memiliki daftar baca-saja identitas Minecraft tertaut, tanpa menyediakan input UUID/XUID bebas.
+- Source plugin Velocity dapat dibangun secara terpisah, mendukung Java Premium dengan online-mode proxy yang jelas dan Bedrock hanya ketika Floodgate memberi XUID terverifikasi. Akun Java Non-Premium tetap **diblokir** sampai adapter LibreLogin diverifikasi pada V10.46.
+- Bukti build/test CI belum cukup untuk menjamin server produksi: wajib uji Velocity + Floodgate + Cloudflare Pages/D1 di staging sebelum publik.
+- Secret `SSCIRCLE_LINK_SERVER_SECRET` disetel di Cloudflare dan proses Velocity. Jangan mengunggahnya sebagai file website atau menaruhnya di frontend.
+
 ## Rilis 4: Plugin SSCircle Player Sync
 Dua modul:
 1. **Velocity Bridge**: membaca status autentikasi terpercaya dari plugin login, mengklasifikasi Java Premium / Java Non-Premium / Bedrock. Data tidak boleh ditebak dari username atau offline UUID saja.

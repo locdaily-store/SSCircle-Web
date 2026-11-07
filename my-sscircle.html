@@ -9,7 +9,7 @@
   <title>Profile | SSCircle Server</title>
   <link rel="icon" href="assets/sscircle-logo.png" type="image/png">
   <link rel="stylesheet" href="style.css?v=10.35.0">
-  <link rel="stylesheet" href="player-dashboard.css?v=10.44.0">
+  <link rel="stylesheet" href="player-dashboard.css?v=10.45.0">
   <link rel="stylesheet" href="mailbox.css?v=10.41.0">
   <link rel="stylesheet" href="profile-ui.css?v=10.43.0">
   <script src="color-theme.js?v=10.35.0" defer></script>
@@ -17,7 +17,7 @@
   <script src="member-password-client.js?v=10.40.0" defer></script>
   <script src="profile-page-layout.js?v=10.43.0" defer></script>
   <script src="mailbox-widget.js?v=10.43.0" defer></script>
-  <script src="player-dashboard.js?v=10.44.0" defer></script>
+  <script src="player-dashboard.js?v=10.45.0" defer></script>
   <link rel="stylesheet" href="password-visibility.css?v=10.39.0">
   <script src="password-visibility.js?v=10.39.0" defer></script>
 </head>
@@ -217,14 +217,53 @@
         <section data-profile-section="linking" class="player-card player-linking" aria-labelledby="player-link-title">
           <div class="player-section-head">
             <div><span class="player-overline">MINECRAFT ACCOUNT</span><h2 id="player-link-title">Hubungkan akun Minecraft</h2></div>
-            <span class="player-tag">Tahap berikutnya</span>
+            <span class="player-tag" id="player-link-tag">Belum terhubung</span>
           </div>
-          <p>Hubungkan akun Java Premium, Java Non-Premium, atau Bedrock milikmu lewat kode verifikasi dari dalam game.</p>
-          <div class="player-link-placeholder" role="status">
+          <p>Hubungkan Profile SSCircle dengan identitas Minecraft yang diverifikasi server. Jangan pernah memasukkan password Minecraft ke website ini.</p>
+          <div id="player-link-locked" class="player-link-placeholder" role="status">
             <span class="player-link-symbol" aria-hidden="true">⌁</span>
-            <div><strong>Belum terhubung</strong><small>Fitur verifikasi akan tersedia setelah plugin SSCircle Player Sync dan API penghubung selesai dibuat.</small></div>
+            <div><strong>Perlu login password dashboard</strong><small>Buka bagian Keamanan akun terlebih dahulu untuk membuat dan mengelola tautan Minecraft.</small></div>
           </div>
-          <p class="player-helper">Tidak perlu memasukkan password Minecraft ke website ini.</p>
+          <div id="player-link-panel" class="player-link-panel" hidden>
+            <div id="player-link-waiting" class="player-link-step" hidden>
+              <strong>Langkah 1: buat kode penghubung</strong>
+              <p class="player-helper">Kode hanya berlaku selama 10 menit dan hanya dapat digunakan satu kali. Pastikan akun Minecraft sudah login dengan benar.</p>
+              <button class="player-action player-action-primary" type="button" id="player-link-create">Buat kode penghubung</button>
+            </div>
+            <div id="player-link-code-wrap" class="player-link-step" hidden>
+              <strong>Langkah 2: masukkan perintah di server Minecraft</strong>
+              <div class="player-link-command"><code id="player-link-command"></code>
+                <button class="player-action player-action-secondary" type="button" id="player-link-copy">Salin perintah</button></div>
+              <p class="player-helper" id="player-link-expires"></p>
+              <p class="player-helper">Buka chat Minecraft di server SSCircle, tempel perintah, lalu kembali ke Profile untuk konfirmasi. Gunakan kode baru jika sudah kedaluwarsa.</p>
+            </div>
+            <div id="player-link-review" class="player-link-step" hidden>
+              <strong>Langkah 3: konfirmasi identitas</strong>
+              <p class="player-helper">Server sudah memeriksa akun yang memasukkan kode ini. Pastikan identitas berikut benar sebelum menyimpan.</p>
+              <div class="player-link-identity"><span id="player-link-review-provider"></span><strong id="player-link-review-name"></strong></div>
+              <button class="player-action player-action-primary" type="button" id="player-link-confirm">Konfirmasi akun ini</button>
+              <p class="player-helper">Jika ini bukan akunmu, batalkan permintaan dan buat kode baru.</p>
+            </div>
+            <div id="player-link-connected" class="player-link-step" hidden>
+              <span class="player-link-success">✓ Akun Minecraft terverifikasi</span>
+              <div class="player-link-identity"><span id="player-link-connected-provider"></span>
+                <strong id="player-link-connected-name"></strong><small id="player-link-connected-date"></small></div>
+              <div class="player-link-unlink">
+                <button class="player-action player-action-secondary" id="player-link-show-unlink" type="button">Putuskan tautan</button>
+                <form class="player-settings-form" id="player-link-unlink-form" hidden>
+                  <p class="player-helper">Verifikasi ulang password dashboard untuk memutuskan tautan. Statistik historis tidak otomatis dihapus.</p>
+                  <label class="player-setting-field"><span>Password dashboard</span><input id="player-link-unlink-password" type="password" autocomplete="current-password" minlength="8" maxlength="128" required></label>
+                  <button class="player-action player-action-primary" id="player-link-unlink-submit" type="submit">Konfirmasi putuskan tautan</button>
+                </form>
+              </div>
+            </div>
+            <div class="player-actions" id="player-link-actions">
+              <button class="player-action player-action-secondary" type="button" id="player-link-refresh">Perbarui status</button>
+              <button class="player-action player-action-secondary" type="button" id="player-link-cancel" hidden>Batalkan kode</button>
+            </div>
+          </div>
+          <p id="player-link-notice" class="player-helper" role="status" aria-live="polite"></p>
+          <p class="player-helper">Dukungan autentikasi Minecraft mengikuti konfigurasi proxy. Mode Non-Premium hanya dapat diaktifkan setelah verifikasi plugin login tersedia.</p>
         </section>
 
         <section data-profile-section="stats" class="player-card player-stats" aria-labelledby="player-stats-title">

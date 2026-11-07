@@ -162,3 +162,22 @@
 .player-device-editor input{min-width:0;flex:1 1 125px;border:1px solid var(--player-border);border-radius:9px;padding:10px;background:var(--player-paper);color:var(--ssc-text,#fff);font:inherit;font-size:12px}
 .player-device-editor input:focus-visible{outline:2px solid var(--ssc-primary,#ad8bd9);outline-offset:2px}
 @media(max-width:520px){.player-recovery-box,.player-security-subsection{padding:11px}.player-device-actions{justify-content:flex-start}.player-device-actions button{flex:1 1 auto}.player-device-editor input{flex-basis:100%}}
+
+/* V10.45: member-side account linking, confirmation and accessible mobile layout */
+.player-link-panel{display:grid;gap:12px;min-width:0}
+.player-link-panel [hidden]{display:none!important}
+.player-link-step{display:grid;gap:12px;padding:15px;border:1px solid var(--player-border);background:var(--player-tint);border-radius:13px;min-width:0}
+.player-link-step>strong{font-size:14px}
+.player-link-command{display:flex;align-items:center;gap:9px;flex-wrap:wrap;min-width:0}
+.player-link-command code{display:block;flex:1 1 210px;padding:12px;border-radius:10px;border:1px solid var(--player-border);background:var(--player-paper);font:600 12px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;overflow-wrap:anywhere;user-select:all;color:var(--ssc-text,#fff)}
+.player-link-command button{flex:0 1 auto}
+.player-link-identity{display:flex;flex-direction:column;gap:6px;padding:13px 14px;border:1px solid var(--player-border);border-radius:11px;background:var(--player-paper);min-width:0}
+.player-link-identity>span{font-size:11px;color:var(--player-quiet)}
+.player-link-identity>strong{font-size:18px;overflow-wrap:anywhere}
+.player-link-identity>small{color:var(--player-quiet);font-size:11px}
+.player-link-success{display:inline-flex;align-items:center;gap:6px;font-weight:700;font-size:12px;color:var(--ssc-primary,#c6a4f7)}
+.player-link-unlink{display:grid;gap:10px}
+.player-link-unlink>form{padding:12px;border-radius:10px;border:1px solid var(--player-border)}
+.player-link-unlink>form[hidden]{display:none!important}
+#player-link-notice{overflow-wrap:anywhere}
+@media(max-width:520px){.player-link-step{padding:11px}.player-link-command button{flex:1 1 100%}.player-link-panel .player-actions{flex-wrap:wrap}.player-link-panel .player-actions button{flex:1 1 130px}}
