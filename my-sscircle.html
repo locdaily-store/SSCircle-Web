@@ -12,7 +12,9 @@
   <link rel="stylesheet" href="player-dashboard.css?v=10.37.0">
   <script src="color-theme.js?v=10.35.0" defer></script>
   <script src="site-shell.js?v=10.35.0" defer></script>
-  <script src="player-dashboard.js?v=10.37.0" defer></script>
+  <script src="player-dashboard.js?v=10.39.0" defer></script>
+  <link rel="stylesheet" href="password-visibility.css?v=10.39.0">
+  <script src="password-visibility.js?v=10.39.0" defer></script>
 </head>
 <body class="home-page player-page theme-v3">
   <header class="home-header" id="top">
@@ -101,9 +103,9 @@
               <label class="player-setting-field"><span>Kode aktivasi dari Mail Box</span>
                 <input id="player-invite-secret" type="password" autocomplete="off" maxlength="64" placeholder="Kode sekali pakai" required></label>
               <label class="player-setting-field"><span>Buat password dashboard</span>
-                <input id="player-activate-password" type="password" autocomplete="new-password" minlength="12" maxlength="128" placeholder="Minimal 12 karakter" required></label>
+                <input id="player-activate-password" type="password" autocomplete="new-password" minlength="8" maxlength="128" placeholder="Minimal 8 karakter" required></label>
               <label class="player-setting-field"><span>Ulangi password dashboard</span>
-                <input id="player-activate-repeat" type="password" autocomplete="new-password" minlength="12" maxlength="128" required></label>
+                <input id="player-activate-repeat" type="password" autocomplete="new-password" minlength="8" maxlength="128" required></label>
               <button id="player-activate-submit" class="player-action player-action-primary" type="submit">Aktifkan akun aman</button>
             </form>
           </div>
