@@ -159,7 +159,7 @@ function publicRules(settings) {
   return Object.fromEntries(ruleFields.map(key => [key, settings[key]]));
 }
 async function rulesVersion(settings) {
-  return digest(JSON.stringify(publicRules(settings)));
+  return digest(JSON.stringify({ ...publicRules(settings),discordRequired:true,discordInviteUrl:settings.homeDiscordUrl||HOME_DEFAULTS.homeDiscordUrl }));
 }
 async function rulesAgreed(req, env, settings) {
   if (settings.rulesEnabled !== true)
@@ -2666,7 +2666,7 @@ async function route(req, env) {
   }
   if (path === '/api/rules' && method === 'GET') {
     const settings = formFrom(await readSettingsRow(env)).settings;
-    return J({ ...publicRules(settings), registrationOpen: settings.open === true,
+    return J({ ...publicRules(settings), discordInviteUrl:settings.homeDiscordUrl||HOME_DEFAULTS.homeDiscordUrl, discordRequired:true, registrationOpen: settings.open === true,
       version: await rulesVersion(settings) });
   }
   if (path === '/api/rules/agree' && method === 'POST') {
@@ -2680,6 +2680,8 @@ async function route(req, env) {
       return bad('Pendaftaran sedang ditutup.', 403);
     if (settings.rulesEnabled === true && input.version !== await rulesVersion(settings))
       return bad('Peraturan telah diperbarui. Muat ulang dan baca aturan terbaru.', 409);
+    if (settings.rulesEnabled === true && input.discordAcknowledged !== true)
+      return bad('Bergabunglah ke Discord SSCircle Community dan centang konfirmasinya sebelum melanjutkan.', 400);
     const token = b64(JSON.stringify({ version: await rulesVersion(settings),
       exp: Math.floor(Date.now() / 1000) + RULES_AGE, nonce: uid() }));
     const signed = token + '.' + await hmac(env.SESSION_SECRET + '|server-rules', token);
