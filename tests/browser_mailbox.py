@@ -154,5 +154,37 @@ with sync_playwright() as p:
     assert page.locator('.member-admin-invite-secret').count()==0
     assert page.evaluate("document.querySelector('#members-admin-root').scrollWidth <= document.querySelector('#members-admin-root').clientWidth+2")
     page.close()
+    # V10.42: a transient error must clear private mail from the previous load.
+    recovery=browser.new_page(viewport={'width':390,'height':820})
+    widget_js=(ROOT/'mailbox-widget.js').read_text(encoding='utf-8')
+    mock_data=json.dumps({'items':messages,'activationRequest':'sent'})
+    recovery_mock="""window.__mailboxFailure=0;
+    window.fetch=async()=>{
+      let code=window.__mailboxFailure;
+      let data=code===0?__DATA__:{error:code===2?'Masuk kembali.':'Layanan belum tersedia.'};
+      return new Response(JSON.stringify(data),{
+        status:code===2?403:code===1?503:200,
+        headers:{'Content-Type':'application/json'}
+      });
+    };""".replace('__DATA__',mock_data)
+    shell='<!doctype html><html><body><button data-open-mailbox>Buka inbox</button>'
+    shell+='<script>'+recovery_mock+'</script><script>'+widget_js.replace('</script','<\\/script')+'</script></body></html>'
+    recovery.set_content(shell,wait_until='domcontentloaded')
+    recovery.get_by_text('Buka inbox').click()
+    recovery.locator('#ssc-mailbox-list .mailbox-item').first.wait_for()
+    assert recovery.locator('#ssc-mailbox-list .mailbox-item').count()==2
+    recovery.evaluate('window.__mailboxFailure=1')
+    recovery.locator('#ssc-mailbox-refresh').click()
+    recovery.get_by_text('Gagal memuat pesan. Tekan Perbarui untuk mencoba lagi.').wait_for()
+    assert recovery.locator('#ssc-mailbox-list .mailbox-item').count()==0
+    recovery.evaluate('window.__mailboxFailure=2')
+    recovery.locator('#ssc-mailbox-refresh').click()
+    recovery.locator('#ssc-mailbox-signin').wait_for(state='visible')
+    assert recovery.locator('#ssc-mailbox-signin').get_attribute('href')=='/status.html#kode-milikku'
+    recovery.evaluate('window.__mailboxFailure=0')
+    recovery.locator('#ssc-mailbox-refresh').click()
+    recovery.locator('#ssc-mailbox-list .mailbox-item').first.wait_for()
+    assert recovery.locator('#ssc-mailbox-signin').is_hidden()
+    recovery.close()
     browser.close()
     print('BROWSER MAILBOX REGRESSION PASS')
