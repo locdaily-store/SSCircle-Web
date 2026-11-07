@@ -196,3 +196,23 @@ test('sesi yang gagal dibuat tidak dianggap aktivasi gagal, password tetap tersi
     data:{code:CODE,password:'Kunci#123'}});
   assert.equal(login.status,200,JSON.stringify(login.data));
 });
+
+test('kesalahan tak terduga pada backend memberikan kode bantuan tanpa membocorkan query internal',async()=>{
+  const t=fixture();
+  const invitation=(await t.call('/api/admin/member-invite',{method:'POST',auth:'admin',
+    data:{id:ID,verification:'identity-confirmed'}})).data.invite;
+  const originalPrepare=t.env.DB.prepare;
+  t.env.DB.prepare=function(sql) {
+    if(sql.includes('SELECT secret_hash,expires_at,used_at FROM member_activation_invites'))
+      throw Error('Sensitive internal SQL error: member_activation_invites');
+    return originalPrepare(sql);
+  };
+  const response=await t.call('/api/player/security/activate',{method:'POST',
+    data:{invite:invitation,password:'Pass#123'}});
+  assert.equal(response.status,503,JSON.stringify(response.data));
+  assert.match(response.data.error,/Aktivasi belum dapat dipastikan/);
+  assert.match(response.data.supportCode,/^[0-9a-f]{8}$/);
+  assert.equal(JSON.stringify(response.data).includes('member_activation_invites'),false);
+  t.env.DB.prepare=originalPrepare;
+  assert.equal(t.db.prepare('SELECT used_at FROM member_activation_invites WHERE application_id=?').get(ID).used_at,null);
+});
