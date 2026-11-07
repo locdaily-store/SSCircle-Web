@@ -73,8 +73,8 @@ test('V10.45.2: explain both independent failures without exposing shared secret
  assert.match(paper,/Konfigurasi website:/);
  assert.match(paper,/online-mode=true di server\.properties/);
  assert.match(paper,/server-secret\.txt/);
- assert.match(paper,/SecretFileStore\\.resolve\\(/);
- assert.match(paper,/System\\.getenv\\(SECRET_ENV\\)/);
+ assert.match(paper,/SecretFileStore\.resolve\(/);
+ assert.match(paper,/System\.getenv\(SECRET_ENV\)/);
  assert.doesNotMatch(paper,/sender\.sendMessage\(.*signingSecret\)/);
 });
 
