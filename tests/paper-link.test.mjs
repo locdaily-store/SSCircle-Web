@@ -54,7 +54,7 @@ test('Paper Direct: no insecure default endpoint or secrets in shipped config',(
 });
 
 test('V10.45.2: safe tab-completion shows matching commands and hides admin-only reload',()=>{
- assert.match(manifest,/version: '10\.45\.3'/);
+ assert.match(manifest,/version: '10\.45\.4'/);
  assert.match(paper,/implements CommandExecutor, TabCompleter, Listener/);
  assert.match(paper,/public List<String> onTabComplete\(CommandSender sender, Command command, String alias, String\[\] args\)/);
  assert.match(paper,/if \(args\.length != 1\) return List\.of\(\)/);
@@ -72,13 +72,14 @@ test('V10.45.2: explain both independent failures without exposing shared secret
  assert.match(paper,/Kunci komunikasi website:/);
  assert.match(paper,/Konfigurasi website:/);
  assert.match(paper,/online-mode=true di server\.properties/);
- assert.match(paper,/SSCIRCLE_LINK_SERVER_SECRET lalu restart Paper/);
- assert.match(paper,/String secret = System\.getenv\(SECRET_ENV\)/);
+ assert.match(paper,/server-secret\.txt/);
+ assert.match(paper,/SecretFileStore\.resolve\(/);
+ assert.match(paper,/System\.getenv\(SECRET_ENV\)/);
  assert.doesNotMatch(paper,/sender\.sendMessage\(.*signingSecret\)/);
 });
 
 test('V10.45.3: operator-only signed diagnostic and safe error presentation',()=>{
- assert.match(manifest,/version: '10\.45\.3'/);
+ assert.match(manifest,/version: '10\.45\.4'/);
  assert.match(paper,/private static final String DIAGNOSE_PATH = "\/api\/minecraft\/link\/diagnose"/);
  assert.match(paper,/options\.add\("diagnose"\)/);
  assert.match(paper,/private void runDiagnostic\(CommandSender sender\)/);
@@ -91,4 +92,15 @@ test('V10.45.3: operator-only signed diagnostic and safe error presentation',()=
  assert.match(worker,/async function minecraftLinkDiagnose\(req,env\)/);
  assert.match(worker,/if\(path==='\/api\/minecraft\/link\/diagnose' && method==='POST'\)/);
  assert.doesNotMatch(paper,/sendMessage\(.*\.body\(\)\)/);
+});
+
+test('V10.45.4: private file overrides stale environment without leaking secret',()=>{
+ const local=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/SecretFileStore.java',import.meta.url),'utf8');
+ assert.match(local,/record ResolvedSecret/);
+ assert.match(local,/Files\.exists\(file, LinkOption\.NOFOLLOW_LINKS\)/);
+ assert.match(local,/return new ResolvedSecret\(loadOrCreate\(directory\), "file privat plugin", false\)/);
+ assert.match(local,/SecureRandom/);
+ assert.match(paper,/SecretFileStore\.resolve\(/);
+ assert.match(paper,/Sumber kunci aktif:/);
+ assert.doesNotMatch(paper,/sender\.sendMessage\([^\n]*signingSecret\)/);
 });
