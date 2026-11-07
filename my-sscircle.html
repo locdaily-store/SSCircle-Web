@@ -9,7 +9,7 @@
   <title>Profile | SSCircle Server</title>
   <link rel="icon" href="assets/sscircle-logo.png" type="image/png">
   <link rel="stylesheet" href="style.css?v=10.35.0">
-  <link rel="stylesheet" href="player-dashboard.css?v=10.37.0">
+  <link rel="stylesheet" href="player-dashboard.css?v=10.44.0">
   <link rel="stylesheet" href="mailbox.css?v=10.41.0">
   <link rel="stylesheet" href="profile-ui.css?v=10.43.0">
   <script src="color-theme.js?v=10.35.0" defer></script>
@@ -17,7 +17,7 @@
   <script src="member-password-client.js?v=10.40.0" defer></script>
   <script src="profile-page-layout.js?v=10.43.0" defer></script>
   <script src="mailbox-widget.js?v=10.43.0" defer></script>
-  <script src="player-dashboard.js?v=10.41.0" defer></script>
+  <script src="player-dashboard.js?v=10.44.0" defer></script>
   <link rel="stylesheet" href="password-visibility.css?v=10.39.0">
   <script src="password-visibility.js?v=10.39.0" defer></script>
 </head>
@@ -114,9 +114,18 @@
                 <input id="player-activate-repeat" type="password" autocomplete="new-password" minlength="8" maxlength="128" required></label>
               <button id="player-activate-submit" class="player-action player-action-primary" type="submit">Aktifkan akun aman</button>
             </form>
+            <button type="button" id="player-recovery-back" class="player-action player-action-secondary" hidden>Kembali ke login password</button>
           </div>
           <div id="player-security-login" hidden>
             <p class="player-helper">Akun sudah diaktifkan. Masuk dengan password untuk membuka profil dan pengaturan privat.</p>
+            <div class="player-recovery-box">
+              <strong>Lupa password?</strong>
+              <p class="player-helper">Kode pemulihan hanya diberikan setelah pengurus memverifikasi identitasmu. Kode yang disetujui dikirim ke Mail Box pribadi.</p>
+              <div class="player-actions">
+                <button type="button" class="player-action player-action-secondary" id="player-recovery-request">Minta kode pemulihan</button>
+                <button type="button" class="player-action player-action-secondary" id="player-recovery-show">Sudah punya kode</button>
+              </div>
+            </div>
             <form id="player-password-login-form" class="player-settings-form">
               <label class="player-setting-field"><span>Password dashboard</span>
                 <input id="player-dashboard-password" type="password" autocomplete="current-password" required></label>
@@ -130,6 +139,27 @@
               <button class="player-action player-action-secondary" id="player-refresh-devices" type="button">Perbarui perangkat</button>
               <button class="player-action player-action-secondary" id="player-signout-secure" type="button">Kunci dashboard ini</button>
               <button class="player-action player-action-secondary" id="player-signout-all" type="button">Keluar semua perangkat</button>
+            </div>
+            <div class="player-security-subsection">
+              <h3>Ganti password dashboard</h3>
+              <p class="player-helper">Password lama wajib diverifikasi. Sesudah berhasil, seluruh sesi sebelumnya dicabut dari perangkat lain.</p>
+              <form id="player-change-password-form" class="player-settings-form">
+                <label class="player-setting-field"><span>Password saat ini</span>
+                  <input id="player-current-password" type="password" autocomplete="current-password" minlength="8" maxlength="128" required></label>
+                <label class="player-setting-field"><span>Password baru</span>
+                  <input id="player-new-password" type="password" autocomplete="new-password" minlength="8" maxlength="128" required></label>
+                <label class="player-setting-field"><span>Ulangi password baru</span>
+                  <input id="player-new-password-repeat" type="password" autocomplete="new-password" minlength="8" maxlength="128" required></label>
+                <button class="player-action player-action-primary" type="submit" id="player-change-password-submit">Ganti password</button>
+              </form>
+            </div>
+            <div class="player-security-subsection">
+              <div class="player-security-subsection-title">
+                <h3>Riwayat keamanan akun</h3>
+                <button class="player-action player-action-secondary" type="button" id="player-refresh-security-history">Perbarui</button>
+              </div>
+              <p class="player-helper">Menampilkan 40 aktivitas terbaru tanpa password, kode aktivasi atau alamat IP.</p>
+              <div id="player-security-history" class="player-security-history" aria-live="polite"></div>
             </div>
           </div>
           <p id="player-security-message" class="player-helper" role="status" aria-live="polite"></p>
