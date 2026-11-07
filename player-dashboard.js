@@ -233,8 +233,19 @@
         ? 'Akun sudah berhasil diaktifkan. Masuk menggunakan password dashboard yang baru dibuat.'
         : 'Akun aman berhasil diaktifkan. Password tidak disimpan di browser.');
     }catch(error){
-      securityMessage('Aktivasi gagal: '+error.message);
-      if(error.status===429)activationCooldown(error.remainingSeconds||300);
+      if(error.status===429) {
+        securityMessage(error.message);
+        activationCooldown(error.remainingSeconds||300);
+      } else if(error.status===503 || error.status===0) {
+        // An interrupted request may have succeeded before the connection failed.
+        // Recheck persisted account state rather than declaring a one-use code invalid.
+        const mode=await loadSecurityState();
+        if(mode==='login'||mode==='active')
+          securityMessage('Akun telah dibuat. Masuk menggunakan password yang baru dibuat.');
+        else
+          securityMessage('Aktivasi belum dapat dipastikan. Kode mungkin masih berlaku. '+
+            'Jangan minta kode baru sebelum memeriksa Mail Box. '+error.message);
+      } else securityMessage('Aktivasi gagal: '+error.message);
     }finally{if(!activationCountdown)button.disabled=false;}
   });
   $('player-password-login-form').addEventListener('submit',async e=>{
