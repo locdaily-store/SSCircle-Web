@@ -2655,23 +2655,49 @@ async function minecraftLinkAPI(req,env,path,method){
   }
   return bad('Endpoint Minecraft tidak ditemukan.',404);
 }
+
+const minecraftLinkError=(code,message,status)=>J({error:message,code},status);
+// Signed, read-only connectivity check; no identity, code or secret is returned.
+async function minecraftLinkDiagnose(req,env){
+  const secret=env.SSCIRCLE_LINK_SERVER_SECRET;
+  if(typeof secret!=='string'||secret.length<32)
+    return minecraftLinkError('SERVER_SECRET_MISSING','Penghubung Minecraft website belum diaktifkan.',503);
+  if(!String(req.headers.get('Content-Type')||'').toLowerCase().startsWith('application/json'))
+    return minecraftLinkError('FORMAT_INVALID','Format permintaan salah.',415);
+  const timestamp=Number(req.headers.get('X-SSC-Timestamp'));
+  const nonce=req.headers.get('X-SSC-Nonce')||'';
+  const signature=req.headers.get('X-SSC-Signature')||'';
+  const now=Math.floor(Date.now()/1000);
+  if(!Number.isSafeInteger(timestamp)||Math.abs(now-timestamp)>90)
+    return minecraftLinkError('CLOCK_SKEW','Waktu server Minecraft tidak sinkron.',401);
+  if(!/^[0-9a-f-]{36}$/.test(nonce)||!/^[A-Za-z0-9_-]{43}$/.test(signature))
+    return minecraftLinkError('HEADERS_INVALID','Header keamanan tidak valid.',401);
+  const raw=await req.text();
+  if(raw!=='{}')return minecraftLinkError('PAYLOAD_INVALID','Permintaan diagnostik tidak valid.',400);
+  const expected=await hmac(secret,'POST\n/api/minecraft/link/diagnose\n'+timestamp+'\n'+nonce+'\n'+raw);
+  if(!safeEq(signature,expected))
+    return minecraftLinkError('SIGNATURE_INVALID','Kunci server dan website tidak cocok.',401);
+  return J({ok:true,code:'DIAGNOSTIC_OK'});
+}
+
 async function minecraftLinkClaim(req,env){
   const secret=env.SSCIRCLE_LINK_SERVER_SECRET;
   if(typeof secret!=='string'||secret.length<32)
-    return bad('Layanan penghubung server belum dikonfigurasi.',503);
+    return minecraftLinkError('SERVER_SECRET_MISSING','Penghubung Minecraft belum aktif.',503);
   if(!String(req.headers.get('Content-Type')||'').toLowerCase().startsWith('application/json'))
     return bad('Format permintaan tidak valid.',415);
   const timestamp=Number(req.headers.get('X-SSC-Timestamp'));
   const nonce=req.headers.get('X-SSC-Nonce')||'';
   const signature=req.headers.get('X-SSC-Signature')||'';
   const now=Math.floor(Date.now()/1000);
-  if(!Number.isSafeInteger(timestamp)||Math.abs(now-timestamp)>90 ||
-    !/^[0-9a-f-]{36}$/.test(nonce)||!/^[A-Za-z0-9_-]{43}$/.test(signature))
-    return bad('Verifikasi permintaan server gagal.',401);
+  if(!Number.isSafeInteger(timestamp)||Math.abs(now-timestamp)>90)
+    return minecraftLinkError('CLOCK_SKEW','Waktu server Minecraft tidak sinkron.',401);
+  if(!/^[0-9a-f-]{36}$/.test(nonce)||!/^[A-Za-z0-9_-]{43}$/.test(signature))
+    return minecraftLinkError('HEADERS_INVALID','Header keamanan tidak valid.',401);
   const raw=await req.text();
   if(raw.length>1500)return bad('Permintaan terlalu besar.',413);
   const expected=await hmac(secret,'POST\n/api/minecraft/link/claim\n'+timestamp+'\n'+nonce+'\n'+raw);
-  if(!safeEq(signature,expected))return bad('Verifikasi permintaan server gagal.',401);
+  if(!safeEq(signature,expected))return minecraftLinkError('SIGNATURE_INVALID','Kunci server dan website tidak cocok.',401);
   const bodyValue=parse(raw);
   if(!bodyValue||!MINECRAFT_LINK_CODE.test(bodyValue.code||'') ||
     typeof bodyValue.username!=='string'||bodyValue.username.length<1||
@@ -2684,7 +2710,7 @@ async function minecraftLinkClaim(req,env){
   };
   const identity=checks[bodyValue.provider];
   if(!identity||!identity.valid||identity.source!==bodyValue.authSource)
-    return bad('Identitas Minecraft tidak memiliki bukti autentikasi yang sah.',403);
+    return minecraftLinkError('IDENTITY_INVALID','Bukti identitas Minecraft tidak sesuai.',403);
   await ensureMemberCenter(env);
   const nonceResult=await env.DB.prepare(
     'INSERT OR IGNORE INTO minecraft_link_nonces(nonce,seen_at) VALUES(?,?)'
@@ -2706,7 +2732,7 @@ async function minecraftLinkClaim(req,env){
   if(challenge.claimed_at)return bad('Kode sudah dipakai. Konfirmasi dari Profile.',409);
   const owner=await env.DB.prepare('SELECT id,status FROM submissions WHERE id=?')
     .bind(challenge.application_id).first();
-  if(owner?.status!=='accepted')return bad('Anggota tidak lagi memenuhi syarat.',403);
+  if(owner?.status!=='accepted')return minecraftLinkError('MEMBER_NOT_ACCEPTED','Keanggotaan tidak lagi aktif.',403);
   const used=await env.DB.prepare(
     'SELECT application_id FROM minecraft_accounts WHERE application_id=? OR (provider=? AND provider_id=?) LIMIT 1'
   ).bind(challenge.application_id,bodyValue.provider,bodyValue.providerId).first();
@@ -3099,6 +3125,8 @@ async function route(req, env) {
   // Minecraft claim has a dedicated HMAC + nonce protocol, never browser cookies.
   if(path==='/api/minecraft/link/claim' && method==='POST')
     return await minecraftLinkClaim(req,env);
+  if(path==='/api/minecraft/link/diagnose' && method==='POST')
+    return await minecraftLinkDiagnose(req,env);
   if (!['GET', 'HEAD'].includes(method) && !sameOrigin(req))
     return bad('Asal permintaan ditolak.', 403);
   if (![
