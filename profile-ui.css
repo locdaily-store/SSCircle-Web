@@ -79,3 +79,20 @@
 @keyframes ssc-profile-arrive{from{opacity:.75;filter:brightness(1.2)}to{opacity:1;filter:none}}
 @media(max-width:550px){.ssc-profile-admin-card{gap:6px;padding:9px 7px}.ssc-profile-admin-arrows button{min-width:29px;padding:5px 6px}.ssc-profile-admin-switch{font-size:11px}.ssc-profile-drag-handle{flex-basis:31px;height:33px}.ssc-profile-preview-devices button{flex:1}}
 @media(prefers-reduced-motion:reduce){.ssc-profile-admin-card{animation:none;transition:none}.ssc-profile-preview-stage iframe{transition:none}}
+
+/* Notification Center multi-selection, active-code safeguards and mobile controls. */
+.ssc-mailbox-selection-bar{display:flex;align-items:center;flex-wrap:wrap;gap:8px;min-width:0}
+.ssc-mailbox-selection-bar>button{padding:8px 10px;min-height:34px;font-size:11px}
+.ssc-mailbox-bulk-actions{display:flex;flex:1 1 200px;align-items:center;flex-wrap:wrap;gap:6px}
+.ssc-mailbox-bulk-actions[hidden]{display:none!important}
+.ssc-mailbox-bulk-actions>span{font-size:11px;color:var(--ssc-muted,#c7bbd0);margin-right:auto}
+.ssc-mailbox-bulk-actions button{font-size:11px;padding:8px 10px;min-height:34px;border-radius:9px}
+.ssc-mailbox-bulk-actions button:disabled{opacity:.5;cursor:not-allowed}
+.ssc-mailbox-selection-hint{font-size:11px;line-height:1.5;color:var(--ssc-muted,#c7bbd0);margin:0}
+.ssc-mailbox-select-entry{display:flex;align-items:stretch;gap:7px;min-width:0}
+.ssc-mailbox-select-entry .mailbox-item{flex:1;min-width:0}
+.ssc-mailbox-select-control{display:flex;align-items:center;justify-content:center;flex:0 0 30px;cursor:pointer}
+.ssc-mailbox-select-control input{width:17px;height:17px;margin:0;accent-color:var(--ssc-primary,#c6a4f7);cursor:pointer}
+.ssc-mailbox-select-control input:disabled{opacity:.35;cursor:not-allowed}
+.ssc-mailbox-select-control>span{display:none}
+@media(max-width:520px){.ssc-mailbox-bulk-actions{flex-basis:100%}.ssc-mailbox-bulk-actions button{flex:1 1 auto}.ssc-mailbox-selection-bar>button{width:100%}}
