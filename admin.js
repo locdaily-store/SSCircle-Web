@@ -101,6 +101,8 @@ function tab(id) {
     window.SSCircleSeasonsAdmin?.schedule();
   if (id === 'members-admin')
     void window.SSCircleMemberCenterAdmin?.load();
+  if (id === 'profile-admin')
+    window.SSCircleProfileAdmin?.schedule();
   if (id === 'theme')
     window.SSCircleThemeEditor?.schedule();
   if (id === 'analytics')
@@ -164,6 +166,7 @@ async function refresh() {
   window.SSCircleRulesAdmin?.render(data, dirtyMark);
   window.SSCircleEventsAdmin?.render(data, dirtyMark);
   window.SSCircleSeasonsAdmin?.render(data, dirtyMark);
+  window.SSCircleProfileAdmin?.render(data, dirtyMark);
   if (data.settings.adminThemeEnabled === true)
     window.SSCircleTheme?.apply(data.settings);
   summary();
@@ -867,7 +870,8 @@ async function save() {
     '#save-theme-bottom',
     '#rules-admin-save',
     '#events-admin-save',
-    '#seasons-admin-save'
+    '#seasons-admin-save',
+    '#save-profile-page'
   ].map($).filter(Boolean);
   saveButtons.forEach(b => {
     b.disabled = true;
@@ -910,6 +914,8 @@ $('#save-theme-bottom').onclick = save;
 $('#rules-admin-save').onclick = save;
 $('#events-admin-save').onclick = save;
 $('#seasons-admin-save').onclick = save;
+$('#save-profile-page').onclick = save;
+$('#profile-open-theme').onclick = () => tab('theme');
 function optionPreview(q) {
   const card = make('div', 'preview-question');
   card.append(make('strong', '', q.title + (q.required ? ' *' : '')));

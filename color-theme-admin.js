@@ -28,6 +28,20 @@ window.SSCircleThemeEditor = (() => {
     ['.season-archive-photo', 'Foto kenangan'],
     ['.season-archive-award', 'Kartu Hall of Fame'],
     ['.season-archive-ranking', 'Peringkat pemain'],
+    ['.player-page', 'Profile: seluruh halaman'],
+    ['.player-hero', 'Profile: pembuka'],
+    ['.player-card', 'Profile: seluruh kartu'],
+    ['.player-profile', 'Profile: identitas anggota'],
+    ['.player-welcome', 'Profile: sambutan'],
+    ['.player-security', 'Profile: keamanan akun'],
+    ['.player-preferences', 'Profile: pengaturan pribadi'],
+    ['.player-achievements', 'Profile: penghargaan'],
+    ['.player-linking', 'Profile: akun Minecraft'],
+    ['.player-stats', 'Profile: statistik'],
+    ['.player-explore', 'Profile: pintasan komunitas'],
+    ['.ssc-mailbox-modal', 'Mail Box: pop-up'],
+    ['.mailbox-item', 'Mail Box: daftar pesan'],
+    ['.mailbox-detail', 'Mail Box: isi pesan'],
     ['.home-season-highlights', 'Bagian Season Highlights di Homepage'],
     ['.home-season-card', 'Kartu Season Highlights'],
     ['.home-header', 'Header Homepage'], ['.home-nav-link', 'Menu navigasi'],
@@ -181,6 +195,9 @@ window.SSCircleThemeEditor = (() => {
       }
       if ($('theme-preview-page').value === 'rules.html') {
         frame?.contentWindow?.postMessage({ type: 'ssc-rules-preview-settings', settings: JSON.parse(JSON.stringify(state.settings)) }, location.origin);
+      }
+      if ($('theme-preview-page').value === 'profile-preview.html') {
+        frame?.contentWindow?.postMessage({type:'ssc-profile-preview-settings',settings:JSON.parse(JSON.stringify(state.settings))},location.origin);
       }
       if ($('theme-preview-page').value === 'registration.html') {
         frame?.contentWindow?.postMessage({ type: 'ssc-registration-preview-settings', settings: JSON.parse(JSON.stringify(state.settings)), pages: JSON.parse(JSON.stringify(state.pages || [])) }, location.origin);

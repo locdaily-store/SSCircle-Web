@@ -103,7 +103,7 @@
       const data=await call('/api/player/mailbox/reveal','POST',{id:current.id});
       $('mailbox-secret-value').textContent=data.code;
       $('mailbox-secret-row').hidden=false;
-      $('mailbox-secret-status').textContent='Kode telah ditampilkan. Salin lalu gunakan di My SSCircle → Keamanan akun.';
+      $('mailbox-secret-status').textContent='Kode telah ditampilkan. Salin lalu gunakan di Profile → Keamanan akun.';
     }catch(error){$('mailbox-secret-status').textContent=error.message;
       $('mailbox-secret-row').hidden=true;current.canReveal=false;
     }finally{button.disabled=false;}

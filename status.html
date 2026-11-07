@@ -9,10 +9,13 @@
     <title>Cek Status | SSCircle Server</title>
     <link rel="icon" type="image/png" href="assets/sscircle-logo.png">
     <link rel="stylesheet" href="style.css?v=10.26.0">
+    <link rel="stylesheet" href="mailbox.css?v=10.41.0">
+    <link rel="stylesheet" href="profile-ui.css?v=10.41.0">
     <script src="color-theme.js?v=10.26.0" defer></script>
     <script src="cloudflare-api.js?v=10.26.0" defer></script>
     <script src="member-password-client.js?v=10.40.0" defer></script>
-    <script src="status.js?v=10.40.0" defer></script>
+    <script src="status.js?v=10.41.0" defer></script>
+    <script src="mailbox-widget.js?v=10.41.0" defer></script>
     <link rel="stylesheet" href="password-visibility.css?v=10.39.0">
   <script src="password-visibility.js?v=10.39.0" defer></script>
 </head>
@@ -58,7 +61,7 @@
           <div id="status-voting-notice" class="status-voting-notice" role="status" aria-live="polite" hidden></div>
           <div id="status-result" role="status" aria-live="polite"></div>
           <details class="status-my-code" id="status-secure-login-panel">
-            <summary class="status-my-code-summary"><span>Masuk aman ke My SSCircle</span> <span aria-hidden="true">⌄</span></summary>
+            <summary class="status-my-code-summary"><span>Masuk aman ke Profile</span> <span aria-hidden="true">⌄</span></summary>
             <div class="status-my-code-inside">
               <p class="status-my-code-description">Untuk anggota yang sudah mengaktifkan password dashboard. Login ini membuka profil pribadi tanpa bergantung hanya pada kode pendaftaran.</p>
               <form id="status-secure-login-form">
@@ -81,8 +84,8 @@
                   <button type="button" class="button primary" id="status-own-copy">Salin kode</button>
                   <button type="button" class="button secondary" id="status-check-own">Cek status saya ↗</button>
                   <a href="/voting" class="button secondary" id="status-voting-entry" hidden>Masuk Voting ↗</a>
-                  <a href="/mailbox" class="button secondary" id="status-mailbox-entry" hidden>Mail Box ↗</a>
-                  <a href="/my-sscircle" class="button secondary" id="status-dashboard-entry" hidden>Buka My SSCircle ↗</a>
+                  <a href="/mailbox" class="button secondary" id="status-mailbox-entry" data-open-mailbox hidden>✉ Mail Box</a>
+                  <a href="/my-sscircle" class="button secondary" id="status-dashboard-entry" hidden>Buka Profile ↗</a>
                   <button type="button" class="button secondary" id="status-own-logout">Keluar akun</button>
                 </div>
               </div>

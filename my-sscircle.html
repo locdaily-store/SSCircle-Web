@@ -4,16 +4,20 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#120b20">
-  <meta name="description" content="My SSCircle: halaman pribadi anggota SSCircle Server. Lihat status keanggotaan dan akses komunitas.">
+  <meta name="description" content="Profile: halaman pribadi anggota SSCircle Server. Lihat status keanggotaan dan akses komunitas.">
   <meta name="robots" content="noindex,nofollow">
-  <title>My SSCircle | Player Dashboard</title>
+  <title>Profile | SSCircle Server</title>
   <link rel="icon" href="assets/sscircle-logo.png" type="image/png">
   <link rel="stylesheet" href="style.css?v=10.35.0">
   <link rel="stylesheet" href="player-dashboard.css?v=10.37.0">
+  <link rel="stylesheet" href="mailbox.css?v=10.41.0">
+  <link rel="stylesheet" href="profile-ui.css?v=10.41.0">
   <script src="color-theme.js?v=10.35.0" defer></script>
   <script src="site-shell.js?v=10.35.0" defer></script>
   <script src="member-password-client.js?v=10.40.0" defer></script>
-  <script src="player-dashboard.js?v=10.40.0" defer></script>
+  <script src="profile-page-layout.js?v=10.41.0" defer></script>
+  <script src="mailbox-widget.js?v=10.41.0" defer></script>
+  <script src="player-dashboard.js?v=10.41.0" defer></script>
   <link rel="stylesheet" href="password-visibility.css?v=10.39.0">
   <script src="password-visibility.js?v=10.39.0" defer></script>
 </head>
@@ -28,7 +32,8 @@
       <a class="home-nav-link" href="events.html">Event</a>
       <a class="home-nav-link" data-season-link href="seasons.html" hidden>Seasons</a>
       <a class="home-nav-link" href="status.html">Cek Status</a>
-      <a class="home-nav-join" href="/my-sscircle" aria-current="page">My SSCircle</a>
+      <button class="home-nav-link ssc-mailbox-trigger" type="button" data-open-mailbox aria-label="Buka Mail Box">✉ <span data-mailbox-count hidden></span></button>
+      <a class="home-nav-join" href="/my-sscircle" aria-current="page">Profile</a>
     </nav>
     <button type="button" class="home-menu-button" id="home-menu-button" aria-label="Buka menu navigasi" aria-expanded="false">☰</button>
   </header>
@@ -37,8 +42,8 @@
     <section class="player-hero" aria-labelledby="player-heading">
       <div class="player-hero-copy">
         <span class="player-overline"><span class="player-online-dot" aria-hidden="true"></span> SSCIRCLE / MEMBER SPACE</span>
-        <h1 id="player-heading">My <em>SSCircle.</em></h1>
-        <p>Ruang pribadimu untuk melihat keanggotaan, aktivitas, dan perjalanan bersama komunitas SSCircle.</p>
+        <h1 id="player-heading">Profile<em>.</em></h1>
+        <p id="player-subtitle">Ruang pribadimu untuk melihat keanggotaan, aktivitas, dan perjalanan bersama komunitas SSCircle.</p>
       </div>
       <div class="player-hero-mark" aria-hidden="true"><img src="assets/sscircle-logo.png" alt=""></div>
     </section>
@@ -80,7 +85,7 @@
       </aside>
 
       <div class="player-dashboard">
-        <section class="player-card player-welcome" aria-labelledby="player-welcome-title">
+        <section data-profile-section="welcome" class="player-card player-welcome" aria-labelledby="player-welcome-title">
           <div>
             <span class="player-overline">MEMBER DASHBOARD</span>
             <h2 id="player-welcome-title">Selamat datang di SSCircle!</h2>
@@ -89,7 +94,7 @@
           <span class="player-state"><span aria-hidden="true">●</span> Anggota aktif</span>
         </section>
 
-        <section class="player-card player-security" aria-labelledby="player-security-title">
+        <section data-profile-section="security" class="player-card player-security" aria-labelledby="player-security-title">
           <div class="player-section-head">
             <div><span class="player-overline">ACCOUNT &amp; SECURITY</span>
               <h2 id="player-security-title">Keamanan akun</h2></div>
@@ -130,7 +135,7 @@
           <p id="player-security-message" class="player-helper" role="status" aria-live="polite"></p>
         </section>
 
-        <section class="player-card player-preferences" aria-labelledby="player-preferences-heading">
+        <section data-profile-section="preferences" class="player-card player-preferences" aria-labelledby="player-preferences-heading">
           <div class="player-section-head"><div>
             <span class="player-overline">YOUR PROFILE</span>
             <h2 id="player-preferences-heading">Pengaturan profil</h2>
@@ -168,7 +173,7 @@
           </form>
         </section>
 
-        <section class="player-card player-achievements" aria-labelledby="player-achievements-title">
+        <section data-profile-section="achievements" class="player-card player-achievements" aria-labelledby="player-achievements-title">
           <div class="player-section-head">
             <div><span class="player-overline">HALL OF FAME</span><h2 id="player-achievements-title">Penghargaan saya</h2></div>
             <span class="player-tag">Terhubung ke Season Archive</span>
@@ -179,7 +184,7 @@
           <p class="player-helper">Penghargaan dikelola sekali saja melalui Admin Control → Season &amp; Sejarah. Data akan otomatis muncul di sini jika penerima dipilih sebagai anggota yang benar.</p>
         </section>
 
-        <section class="player-card player-linking" aria-labelledby="player-link-title">
+        <section data-profile-section="linking" class="player-card player-linking" aria-labelledby="player-link-title">
           <div class="player-section-head">
             <div><span class="player-overline">MINECRAFT ACCOUNT</span><h2 id="player-link-title">Hubungkan akun Minecraft</h2></div>
             <span class="player-tag">Tahap berikutnya</span>
@@ -192,7 +197,7 @@
           <p class="player-helper">Tidak perlu memasukkan password Minecraft ke website ini.</p>
         </section>
 
-        <section class="player-card player-stats" aria-labelledby="player-stats-title">
+        <section data-profile-section="stats" class="player-card player-stats" aria-labelledby="player-stats-title">
           <div class="player-section-head">
             <div><span class="player-overline">YOUR JOURNEY</span><h2 id="player-stats-title">Statistik permainan</h2></div>
             <span class="player-tag">Menunggu sinkronisasi</span>
@@ -206,7 +211,7 @@
           <p class="player-helper">Angka tidak ditampilkan sebelum data benar-benar dikirim dari Minecraft. Jadi tidak ada statistik palsu atau angka nol yang menyesatkan.</p>
         </section>
 
-        <section class="player-card player-explore" aria-labelledby="player-explore-title">
+        <section data-profile-section="explore" class="player-card player-explore" aria-labelledby="player-explore-title">
           <div class="player-section-head">
             <div><span class="player-overline">THE COMMUNITY</span><h2 id="player-explore-title">Jelajahi SSCircle</h2></div>
           </div>

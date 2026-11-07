@@ -15,7 +15,10 @@
     <script src="social-links.js?v=10.26.0" defer></script>
     <script src="homepage.js?v=10.31.0" defer></script>
     <link rel="stylesheet" href="community-pages.css?v=10.32.0">
-  </head>
+    <link rel="stylesheet" href="mailbox.css?v=10.41.0">
+  <link rel="stylesheet" href="profile-ui.css?v=10.41.0">
+  <script src="mailbox-widget.js?v=10.41.0" defer></script>
+</head>
   <body class="home-page theme-v3">
 
     <!-- Header dan navigasi -->
@@ -30,8 +33,8 @@
         <a class="home-nav-link" href="events.html">Event</a>
           <a class="home-nav-link" data-season-link href="seasons.html" hidden>Seasons</a>
         <a class="home-nav-link" href="status.html">Cek Status</a>
-        <a class="home-nav-link" href="/my-sscircle">My SSCircle</a>
-        <a class="home-nav-link" href="/mailbox">Mail Box</a>
+        <a class="home-nav-link" href="/my-sscircle">Profile</a>
+        <a class="home-nav-link ssc-mailbox-trigger" href="/mailbox" data-open-mailbox aria-label="Buka Mail Box">✉ <span data-mailbox-count hidden></span></a>
         <a class="home-nav-join" href="registration.html">Pendaftaran <span aria-hidden="true">↗</span></a>
       </nav>
       <button type="button" class="home-menu-button" id="home-menu-button" aria-label="Buka menu navigasi" aria-expanded="false">☰</button>
@@ -249,7 +252,7 @@
         <div class="home-footer-links">
           <a href="registration.html">Registration</a>
           <a href="status.html">Cek Status</a>
-            <a href="/my-sscircle">My SSCircle</a>
+            <a href="/my-sscircle">Profile</a>
           <a href="rules.html">Peraturan Server</a>
           <a href="events.html">Event</a>
           <a href="seasons.html" data-season-link hidden>Seasons</a>

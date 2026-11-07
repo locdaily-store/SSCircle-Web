@@ -193,8 +193,8 @@
         method:'POST',headers:{'Content-Type':'application/json'},body:'{}'
       });
       label.textContent=response.message;
-      // Direct the member to their own in-site mailbox after a successful request.
-      location.assign('/mailbox?activation=requested');
+      // Keep the member in Profile and open their private notifications.
+      await window.SSCircleMailbox?.open();
     }catch(error){label.textContent='Permintaan tidak berhasil: '+error.message}
     finally{button.disabled=false;}
   });

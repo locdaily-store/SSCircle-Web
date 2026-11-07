@@ -71,7 +71,7 @@ test('permintaan diterima dicatat tetapi tidak membocorkan kode sebelum verifika
  assert.equal(noAdmin.status,401);
  assert.equal((await x.request('/api/player/mailbox',{cookie:''})).status,403);
  assert.equal((await x.request('/mailbox',{cookie:''})).status,302);
- assert.equal((await x.request('/mailbox',{cookie:x.another})).status,200);
+ assert.equal((await x.request('/mailbox',{cookie:x.another})).status,302);
  const denied=await x.request('/api/player/mailbox');
  assert.equal(denied.data.items[0].type,'information');
 });
@@ -146,4 +146,25 @@ test('pendaftar pending dan rejected tidak berhak melihat Mail Box',async()=>{
   assert.equal((await x.request('/api/player/mailbox/request-activation',{method:'POST',body:{}})).status,403);
   assert.equal((await x.request('/mailbox')).status,302);
  }
+});
+
+test('Mail Box delete only affects owner, while a live activation code stays available',async()=>{
+  const x=fixture();
+  const requested=await x.request('/api/player/mailbox/request-activation',{method:'POST',body:{}});
+  assert.equal(requested.status,200);
+  let list=await x.request('/api/player/mailbox');
+  const info=list.data.items.find(item=>item.type==='information');
+  assert.ok(info);
+  const outsider=await x.request('/api/player/mailbox/delete',{method:'POST',cookie:x.another,body:{id:info.id}});
+  assert.equal(outsider.status,404);
+  const deleted=await x.request('/api/player/mailbox/delete',{method:'POST',body:{id:info.id}});
+  assert.equal(deleted.status,200);
+  list=await x.request('/api/player/mailbox');
+  assert.equal(list.data.items.some(item=>item.id===info.id),false);
+  await x.request('/api/admin/mailbox/approve',{method:'POST',cookie:x.admin,
+    body:{id:ID,verification:'identity-confirmed'}});
+  const activation=(await x.request('/api/player/mailbox')).data.items.find(item=>item.canReveal);
+  assert.ok(activation);
+  assert.equal((await x.request('/api/player/mailbox/delete',{method:'POST',body:{id:activation.id}})).status,409);
+  assert.equal((await x.request('/api/player/mailbox/reveal',{method:'POST',body:{id:activation.id}})).status,200);
 });

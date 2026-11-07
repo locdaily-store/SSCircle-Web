@@ -692,6 +692,12 @@ const DEFAULTS = {
   cardGradientEnabled: false,
   adminThemeEnabled: false,
   themeOverrides: [],
+  // Profile presentation only. Membership/security rules are managed elsewhere.
+  profilePageTitle: 'Profile',
+  profilePageSubtitle: 'Ruang pribadimu untuk melihat keanggotaan, aktivitas, dan perjalanan bersama komunitas SSCircle.',
+  profilePageLayout: 'sidebar',
+  profilePageSections: ['welcome','security','preferences','achievements','linking','stats','explore'],
+  profilePageHidden: [],
   introEnabled: true,
   introTitle: 'SSCircle Server',
   introSubtitle: 'REGISTRATION',
@@ -1115,6 +1121,22 @@ function settingsValid(input) {
       throw Error('Selector, properti, atau warna pada aturan ke-' + (i + 1) + ' tidak valid.');
     return { selector, property, value, value2, angle: Math.round(angle) };
   });
+  // Validated admin layout values, never used as HTML or CSS selectors.
+  out.profilePageTitle = s(input.profilePageTitle || DEFAULTS.profilePageTitle, 90);
+  out.profilePageSubtitle = s(input.profilePageSubtitle || DEFAULTS.profilePageSubtitle, 350);
+  out.profilePageLayout = input.profilePageLayout === 'stacked' ? 'stacked' : 'sidebar';
+  const profileSections = DEFAULTS.profilePageSections;
+  const order = input.profilePageSections === undefined ? profileSections : input.profilePageSections;
+  if (!Array.isArray(order) || order.length !== profileSections.length ||
+      new Set(order).size !== profileSections.length ||
+      order.some(id => !profileSections.includes(id)))
+    throw Error('Urutan bagian Profile tidak valid.');
+  out.profilePageSections = order.slice();
+  const hidden = input.profilePageHidden === undefined ? [] : input.profilePageHidden;
+  if (!Array.isArray(hidden) || hidden.length > profileSections.length ||
+      hidden.some(id => !profileSections.includes(id) || id === 'security'))
+    throw Error('Bagian Profile yang disembunyikan tidak valid.');
+  out.profilePageHidden = [...new Set(hidden)];
   const themeAngle = Number(input.themeGradientAngle ?? 135);
   if (!Number.isFinite(themeAngle) || themeAngle < 0 || themeAngle > 360)
     throw Error('Sudut gradasi harus 0–360 derajat.');
@@ -2507,6 +2529,26 @@ async function mailboxAPI(req,env,path,method){
       .bind(new Date().toISOString(),payload.id,account.id).run();
     return J({ok:true,code});
   }
+  if(path==='/api/player/mailbox/delete' && method==='POST'){
+    const payload=await body(req,250);
+    if(!/^[0-9a-f-]{36}$/.test(payload?.id||''))return bad('Pesan tidak ditemukan.',404);
+    const row=await env.DB.prepare('SELECT id,type,expires_at FROM member_mailbox WHERE id=? AND application_id=?')
+      .bind(payload.id,account.id).first();
+    if(!row)return bad('Pesan tidak ditemukan.',404);
+    // Never remove the sole copy of a still-valid, one-use activation code.
+    if(row.type==='activation'){
+      const newest=await env.DB.prepare("SELECT id FROM member_mailbox WHERE application_id=? AND type='activation' ORDER BY rowid DESC LIMIT 1")
+        .bind(account.id).first();
+      const invite=await env.DB.prepare('SELECT expires_at,used_at FROM member_activation_invites WHERE application_id=?')
+        .bind(account.id).first();
+      if(row.id===newest?.id && row.expires_at>Date.now()/1000 &&
+         invite?.used_at===null && invite?.expires_at===row.expires_at)
+        return bad('Kode aktivasi masih berlaku. Gunakan atau tunggu kedaluwarsa sebelum menghapus pesan.',409);
+    }
+    await env.DB.prepare('DELETE FROM member_mailbox WHERE id=? AND application_id=?')
+      .bind(payload.id,account.id).run();
+    return J({ok:true});
+  }
   if(path==='/api/player/mailbox/read' && method==='POST'){
     const payload=await body(req,250);
     if(!/^[0-9a-f-]{36}$/.test(payload?.id||''))return bad('Pesan tidak ditemukan.',404);
@@ -2597,8 +2639,9 @@ async function route(req, env) {
       Location:'/status.html?akses-mailbox=perlu-masuk#kode-milikku',
       'Cache-Control':'private, no-store',Vary:'Cookie'
     }});
-    if(path==='/mailbox.html')return new Response(null,{status:302,headers:{
-      Location:'/mailbox','Cache-Control':'private, no-store',Vary:'Cookie'
+    // Legacy Mail Box URLs now open the private dialog inside Profile.
+    return new Response(null,{status:302,headers:{
+      Location:'/my-sscircle?mailbox=1','Cache-Control':'private, no-store',Vary:'Cookie'
     }});
     const response=await env.ASSETS.fetch(req);
     if(response.status>=300 && response.status<400){

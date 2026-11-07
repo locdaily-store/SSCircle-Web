@@ -1,0 +1,234 @@
+/* SSCircle V10.41: reusable private Mail Box dialog. Never inserts server text as HTML. */
+'use strict';
+(() => {
+  if (window.SSCircleMailbox) return;
+  const dialog=document.createElement('dialog');
+  dialog.id='ssc-mailbox-dialog';
+  dialog.className='mailbox-page ssc-mailbox-modal theme-v3';
+  dialog.setAttribute('aria-labelledby','ssc-mailbox-title');
+  dialog.innerHTML = [
+    '<div class="ssc-mailbox-head"><div><span class="mailbox-eyebrow">SSCIRCLE / NOTIFIKASI</span><h2 id="ssc-mailbox-title">Mail Box</h2></div>',
+    '<button type="button" class="ssc-mailbox-close" id="ssc-mailbox-close" aria-label="Tutup Mail Box">×</button></div>',
+    '<div class="ssc-mailbox-content">',
+    '<section class="mailbox-request mailbox-surface"><div class="mailbox-request-copy"><h3>Kode aktivasi akun</h3>',
+    '<p>Minta kode aktivasi di sini. Setelah identitas diverifikasi pengurus, kode tersedia di kotak masuk.</p>',
+    '</div><button type="button" id="ssc-mailbox-request" class="mailbox-primary">Minta kode</button></section>',
+    '<p class="mailbox-message" id="ssc-mailbox-message" role="status" aria-live="polite"></p>',
+    '<div class="mailbox-grid">',
+    '<section class="mailbox-surface mailbox-inbox" aria-label="Pesan pribadi">',
+    '<div class="mailbox-inbox-head"><h3>Notifikasi <span id="ssc-mailbox-unread" class="mailbox-count" hidden></span></h3>',
+    '<button type="button" id="ssc-mailbox-refresh">Perbarui</button></div>',
+    '<div role="group" class="mailbox-filters" aria-label="Filter pesan">',
+    '<button type="button" class="mailbox-filter is-current" data-ssc-filter="all" aria-pressed="true">Semua</button>',
+    '<button type="button" class="mailbox-filter" data-ssc-filter="unread" aria-pressed="false">Belum dibaca</button>',
+    '<button type="button" class="mailbox-filter" data-ssc-filter="activation" aria-pressed="false">Aktivasi</button></div>',
+    '<div class="mailbox-list" id="ssc-mailbox-list" aria-live="polite"></div></section>',
+    '<section class="mailbox-surface mailbox-detail" aria-label="Isi notifikasi">',
+    '<div class="mailbox-detail-empty" id="ssc-mailbox-empty"><span aria-hidden="true">✉</span><h3>Pilih notifikasi</h3>',
+    '<p>Tekan pesan untuk membaca isinya.</p></div>',
+    '<div id="ssc-mailbox-detail" hidden><span class="mailbox-eyebrow" id="ssc-mailbox-category"></span>',
+    '<h3 id="ssc-mailbox-subject"></h3><time id="ssc-mailbox-time"></time><p id="ssc-mailbox-body"></p>',
+    '<div class="mailbox-secret-panel" id="ssc-mailbox-secret" hidden><p>Kode bersifat pribadi, jangan dibagikan.</p>',
+    '<button type="button" class="mailbox-secondary" id="ssc-mailbox-reveal">Tampilkan kode</button>',
+    '<div class="mailbox-secret-row" id="ssc-mailbox-secret-row" hidden><code id="ssc-mailbox-code"></code>',
+    '<button type="button" class="mailbox-primary" id="ssc-mailbox-copy">Salin kode</button></div>',
+    '<small id="ssc-mailbox-secret-status" role="status"></small></div>',
+    '<button type="button" id="ssc-mailbox-delete" class="ssc-mailbox-delete">Hapus notifikasi</button></div></section></div>',
+    '<p class="mailbox-privacy">Kode pendaftaran tetap bersifat rahasia. Akun yang belum aktif memerlukan verifikasi pengurus untuk mendapatkan kode aktivasi.</p></div>'
+  ].join('');
+  document.body.append(dialog);
+  const $=id=>dialog.querySelector('#'+id);
+  let items=[],current=null,filter='all',busy=false,lastTrigger=null;
+  const fmt=date=>{
+    const value=new Date(date);
+    return Number.isFinite(value.getTime())?value.toLocaleString('id-ID',{
+      dateStyle:'medium',timeStyle:'short',timeZone:'Asia/Makassar'
+    }):'Tanggal tidak tersedia';
+  };
+  async function api(path,method='GET',payload){
+    const response=await fetch(path,{method,credentials:'same-origin',cache:'no-store',
+      headers:{Accept:'application/json',...(payload?{'Content-Type':'application/json'}:{})},
+      ...(payload?{body:JSON.stringify(payload)}:{})});
+    const data=await response.json().catch(()=>null);
+    if(!response.ok){
+      const error=new Error(data?.error||'Layanan pesan belum tersedia.');
+      error.status=response.status;
+      throw error;
+    }
+    return data;
+  }
+  function notify(text,error=false){
+    $('ssc-mailbox-message').textContent=text;
+    $('ssc-mailbox-message').dataset.warning=String(error);
+  }
+  function updateCount(){
+    const count=items.filter(item=>!item.read).length;
+    $('ssc-mailbox-unread').hidden=count===0;
+    $('ssc-mailbox-unread').textContent=String(count);
+    document.querySelectorAll('[data-mailbox-count]').forEach(badge=>{
+      badge.hidden=count===0;
+      badge.textContent=count>99?'99+':String(count);
+    });
+  }
+  function emptyDetail(){
+    current=null;
+    $('ssc-mailbox-empty').hidden=false;
+    $('ssc-mailbox-detail').hidden=true;
+    $('ssc-mailbox-code').textContent='';
+    $('ssc-mailbox-secret-row').hidden=true;
+  }
+  function draw(){
+    const root=$('ssc-mailbox-list');
+    root.replaceChildren();
+    updateCount();
+    const shown=items.filter(item=>filter==='all'||(filter==='unread'&&!item.read)||
+      (filter==='activation'&&['activation','information'].includes(item.type)));
+    if(!shown.length){
+      const hint=document.createElement('p');hint.className='mailbox-empty';
+      hint.textContent=items.length?'Tidak ada notifikasi pada filter ini.':'Belum ada notifikasi.';
+      root.append(hint);
+    }
+    for(const item of shown){
+      const button=document.createElement('button');
+      button.type='button';button.className='mailbox-item'+(!item.read?' is-unread':'')+
+        (current?.id===item.id?' is-selected':'');
+      const glyph=document.createElement('span');
+      glyph.className='mailbox-item-icon';glyph.textContent=item.type==='activation'?'✦':'✉';
+      const label=document.createElement('span');label.className='mailbox-item-text';
+      const title=document.createElement('strong');title.textContent=item.title;
+      const timestamp=document.createElement('small');timestamp.textContent=fmt(item.createdAt);
+      label.append(title,timestamp);
+      button.append(glyph,label);
+      if(!item.read){
+        const dot=document.createElement('span');dot.className='mailbox-unread-dot';
+        dot.setAttribute('aria-label','Belum dibaca');button.append(dot);
+      }
+      button.addEventListener('click',()=>void read(item));
+      root.append(button);
+    }
+  }
+  async function read(item){
+    current=item;
+    $('ssc-mailbox-empty').hidden=true;
+    $('ssc-mailbox-detail').hidden=false;
+    $('ssc-mailbox-category').textContent=item.type==='activation'?'AKTIVASI AKUN':'PEMBERITAHUAN';
+    $('ssc-mailbox-subject').textContent=item.title;
+    $('ssc-mailbox-time').textContent=fmt(item.createdAt);
+    $('ssc-mailbox-body').textContent=item.content;
+    $('ssc-mailbox-secret').hidden=item.type!=='activation';
+    $('ssc-mailbox-secret-row').hidden=true;
+    $('ssc-mailbox-code').textContent='';
+    $('ssc-mailbox-reveal').disabled=!item.canReveal;
+    $('ssc-mailbox-secret-status').textContent=item.canReveal?
+      'Kode dapat dibuka sampai masa berlakunya habis.':'Kode sudah dipakai atau kedaluwarsa.';
+    $('ssc-mailbox-delete').disabled=item.canReveal===true;
+    $('ssc-mailbox-delete').title=item.canReveal?'Kode aktif tidak boleh dihapus.':'Hapus notifikasi ini.';
+    draw();
+    if(!item.read){
+      item.read=true;draw();
+      try{await api('/api/player/mailbox/read','POST',{id:item.id});}
+      catch(error){item.read=false;draw();notify(error.message,true);}
+    }
+  }
+  async function refresh(silent=false){
+    if(busy)return;
+    busy=true;$('ssc-mailbox-refresh').disabled=true;
+    try{
+      const value=await api('/api/player/mailbox');
+      items=Array.isArray(value.items)?value.items:[];
+      if(current){
+        const next=items.find(item=>item.id===current.id);
+        if(next)await read(next);else emptyDetail();
+      }
+      draw();
+      if(!silent)notify(value.activationRequest==='pending'?
+        'Permintaan kode menunggu verifikasi pengurus.':'Notifikasi sudah diperbarui.');
+    }catch(error){
+      if(!silent)notify(error.status===403?
+        'Masuk dengan akun berstatus Diterima melalui Cek Status untuk membuka Mail Box.' : error.message,true);
+      if(error.status===403){
+        items=[];emptyDetail();draw();
+      }
+    }finally{busy=false;$('ssc-mailbox-refresh').disabled=false;}
+  }
+  async function open(trigger){
+    lastTrigger=trigger||document.activeElement;
+    if(typeof dialog.showModal==='function'&&!dialog.open)dialog.showModal();
+    else if(!dialog.open)dialog.setAttribute('open','');
+    $('ssc-mailbox-close').focus();
+    await refresh();
+  }
+  $('ssc-mailbox-close').addEventListener('click',()=>dialog.close());
+  dialog.addEventListener('close',()=>{emptyDetail();lastTrigger?.focus?.();});
+  dialog.addEventListener('click',e=>{
+    if(e.target===dialog)dialog.close();
+  });
+  $('ssc-mailbox-refresh').addEventListener('click',()=>void refresh());
+  dialog.querySelectorAll('[data-ssc-filter]').forEach(button=>button.addEventListener('click',()=>{
+    filter=button.dataset.sscFilter;
+    dialog.querySelectorAll('[data-ssc-filter]').forEach(b=>{
+      b.classList.toggle('is-current',b===button);
+      b.setAttribute('aria-pressed',String(b===button));
+    });
+    draw();
+  }));
+  $('ssc-mailbox-request').addEventListener('click',async()=>{
+    const button=$('ssc-mailbox-request');
+    button.disabled=true;notify('Memproses permintaan kode aktivasi...');
+    try{
+      const result=await api('/api/player/mailbox/request-activation','POST',{});
+      await refresh(true);notify(result.message);
+    }catch(error){notify(error.message,true)}
+    finally{button.disabled=false;}
+  });
+  $('ssc-mailbox-reveal').addEventListener('click',async()=>{
+    if(!current?.canReveal)return;
+    const id=current.id,button=$('ssc-mailbox-reveal');
+    button.disabled=true;
+    try{
+      const result=await api('/api/player/mailbox/reveal','POST',{id});
+      if(current?.id!==id)return;
+      $('ssc-mailbox-code').textContent=result.code;
+      $('ssc-mailbox-secret-row').hidden=false;
+      $('ssc-mailbox-secret-status').textContent='Salin dan gunakan kode ini di Profile → Keamanan akun.';
+    }catch(error){
+      $('ssc-mailbox-secret-status').textContent=error.message;
+      $('ssc-mailbox-secret-row').hidden=true;
+    }finally{button.disabled=false;}
+  });
+  $('ssc-mailbox-copy').addEventListener('click',async()=>{
+    const code=$('ssc-mailbox-code').textContent;
+    if(!code)return;
+    try{
+      await navigator.clipboard.writeText(code);
+      $('ssc-mailbox-secret-status').textContent='Kode disalin. Jangan bagikan kepada orang lain.';
+    }catch{
+      $('ssc-mailbox-secret-status').textContent='Pilih teks kode lalu salin secara manual.';
+    }
+  });
+  $('ssc-mailbox-delete').addEventListener('click',async()=>{
+    if(!current||current.canReveal)return;
+    const id=current.id,button=$('ssc-mailbox-delete');
+    if(!window.confirm('Hapus notifikasi ini dari Mail Box?'))return;
+    button.disabled=true;
+    try{
+      await api('/api/player/mailbox/delete','POST',{id});
+      items=items.filter(item=>item.id!==id);
+      emptyDetail();draw();notify('Notifikasi berhasil dihapus.');
+    }catch(error){notify(error.message,true)}
+    finally{button.disabled=false;}
+  });
+  document.addEventListener('click',event=>{
+    const trigger=event.target.closest?.('[data-open-mailbox],a[href="/mailbox"]');
+    if(!trigger)return;
+    event.preventDefault();
+    void open(trigger);
+  });
+  window.SSCircleMailbox={open:()=>open(),refresh};
+  if(document.body.classList.contains('player-page')&&
+     !new URLSearchParams(location.search).has('ssc_theme_preview')){
+    void refresh(true);
+    if(new URLSearchParams(location.search).get('mailbox')==='1')
+      void open();
+  }
+})();
