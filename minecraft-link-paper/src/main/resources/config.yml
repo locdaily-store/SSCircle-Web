@@ -2,6 +2,8 @@
 # Contoh: https://sscircle-testing.pages.dev
 endpoint: "https://example.pages.dev"
 
-# Keamanan: SSCIRCLE_LINK_SERVER_SECRET HARUS diberikan melalui
-# environment variable proses Paper (nilai sama dengan Cloudflare Pages).
-# Jangan simpan secret di config.yml, GitHub, atau teks situs.
+# Kunci SSCIRCLE_LINK_SERVER_SECRET harus sama dengan secret Cloudflare.
+# Jika ada, file privat plugins/SSCirclePlayerSync/server-secret.txt diprioritaskan
+# di atas environment proses Paper. Jika tidak ada keduanya, token acak dibuat
+# dan HARUS disamakan secara privat dengan Cloudflare.
+# Jangan pernah simpan secret dalam config.yml, GitHub, atau ZIP website.
