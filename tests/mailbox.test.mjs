@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {DatabaseSync} from 'node:sqlite';
-import {createHmac} from 'node:crypto';
+import {createHmac,pbkdf2Sync} from 'node:crypto';
 const source=readFileSync(new URL('../_worker.js',import.meta.url),'utf8');
 const worker=(await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'))).default;
 const SECRET='mailbox-regression-secret',ADMIN='mailbox-admin-verify';
@@ -41,10 +41,16 @@ function fixture(){
  const another=signed('ssc_player',{id:OTHER,exp:expires},SECRET+'|player-session');
  const admin=signed('ssc_s6_admin',{exp:expires},SECRET+'|'+ADMIN);
  async function request(path,{method='GET',body,cookie=member}={}){
+  let payload=body;
+  if(path==='/api/player/security/activate'&&body?.password?.length>=8){
+    const salt=Buffer.alloc(16,29).toString('base64url');
+    payload={invite:body.invite,salt,
+      proof:pbkdf2Sync(body.password,salt,220000,32,'sha256').toString('base64url')};
+  }
   const response=await worker.fetch(new Request('https://sscircle.example'+path,{method,
     headers:{Origin:'https://sscircle.example',Cookie:cookie, 'User-Agent':'test-mailbox',
-      ...(body?{'Content-Type':'application/json'}:{})},
-    ...(body?{body:JSON.stringify(body)}:{})}),env);
+      ...(payload?{'Content-Type':'application/json'}:{})},
+    ...(payload?{body:JSON.stringify(payload)}:{})}),env);
   let data=null;try{data=await response.clone().json()}catch{}
   return {status:response.status,data,response};
  }

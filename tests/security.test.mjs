@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {createHmac} from 'node:crypto';
+import {createHmac,pbkdf2Sync} from 'node:crypto';
 import {DatabaseSync} from 'node:sqlite';
 const code=readFileSync(new URL('../_worker.js',import.meta.url),'utf8');
 const worker=(await import('data:text/javascript;base64,'+Buffer.from(code).toString('base64'))).default;
@@ -45,12 +45,25 @@ function fixture(){
     }
   }
   async function call(path,{method='GET',data,auth='legacy',cookie,update=true}={}){
+    // Emulate the real browser KDF; the Worker never receives a raw password.
+    let payload=data;
+    if(path==='/api/player/security/activate' && data?.password?.length>=8){
+      const salt=Buffer.alloc(16,13).toString('base64url');
+      const proof=pbkdf2Sync(data.password,salt,220000,32,'sha256').toString('base64url');
+      payload={invite:data.invite,salt,proof};
+    }
+    if(path==='/api/player/security/login' && typeof data?.password==='string'){
+      const credential=db.prepare('SELECT password_salt,iterations FROM member_credentials WHERE application_id=?').get(ID);
+      const salt=credential?.password_salt||Buffer.alloc(16,14).toString('base64url');
+      const iterations=Number(credential?.iterations||220000);
+      payload={code:data.code,proof:pbkdf2Sync(data.password,salt,iterations,32,'sha256').toString('base64url')};
+    }
     const Cookie=cookie===undefined?(auth==='admin'?cookies.admin:
       auth==='guest'?'':cookies.legacy+(cookies.secure?'; '+cookies.secure:'')):cookie;
     const response=await worker.fetch(new Request('https://sscircle.example'+path,{method,
       headers:{Cookie,Origin:'https://sscircle.example','User-Agent':'Test Browser',
-        ...(data?{'Content-Type':'application/json'}:{})},
-      ...(data?{body:JSON.stringify(data)}:{})}),env);
+        ...(payload?{'Content-Type':'application/json'}:{})},
+      ...(payload?{body:JSON.stringify(payload)}:{})}),env);
     let result=null;try{result=await response.clone().json()}catch{}
     if(update)absorb(response);
     return {status:response.status,data:result,response};
@@ -215,4 +228,39 @@ test('kesalahan tak terduga pada backend memberikan kode bantuan tanpa membocork
   assert.equal(JSON.stringify(response.data).includes('member_activation_invites'),false);
   t.env.DB.prepare=originalPrepare;
   assert.equal(t.db.prepare('SELECT used_at FROM member_activation_invites WHERE application_id=?').get(ID).used_at,null);
+});
+
+test('API key-info tidak mengungkap status aktivasi dan login memigrasikan akun lama',async()=>{
+  const t=fixture();
+  const unknown=await t.call('/api/player/security/key-info',{method:'POST',data:{code:'00000000000000000000'}});
+  assert.equal(unknown.status,200);
+  assert.match(unknown.data.salt,/^[A-Za-z0-9_-]{22}$/);
+  const a=await activate(t);
+  const info=await t.call('/api/player/security/key-info',{method:'POST',data:{code:CODE}});
+  assert.equal(info.status,200);
+  assert.equal(info.data.iterations,220000);
+  const salt=t.db.prepare('SELECT password_salt FROM member_credentials WHERE application_id=?').get(ID).password_salt;
+  const legacyProof=pbkdf2Sync(a.password,salt,220000,32,'sha256').toString('base64url');
+  t.db.prepare('UPDATE member_credentials SET password_hash=? WHERE application_id=?').run(legacyProof,ID);
+  assert.equal((await t.call('/api/player/security/login',{method:'POST',data:{code:CODE,password:a.password}})).status,200);
+  const stored=t.db.prepare('SELECT password_hash FROM member_credentials WHERE application_id=?').get(ID).password_hash;
+  assert.match(stored,/^v2\.[A-Za-z0-9_-]{43}$/);
+  assert.notEqual(stored,legacyProof);
+  assert.equal((await t.call('/api/player/security/login',{method:'POST',
+    data:{code:CODE,password:'WrongPassword9'}})).status,401);
+  assert.equal((await t.call('/api/player/security/login',{method:'POST',data:{code:CODE,password:a.password}})).status,200);
+});
+
+test('Worker does not invoke PBKDF2: activation and login work with browser proof',async()=>{
+  const t=fixture();
+  const original=globalThis.crypto.subtle.deriveBits;
+  // No monkey patch needed: source assertion guards accidental heavy hashing.
+  assert.equal(code.includes('memberDerivePassword('),false);
+  assert.equal(code.includes("name:'PBKDF2'"),false);
+  const invitation=(await t.call('/api/admin/member-invite',{method:'POST',auth:'admin',
+    data:{id:ID,verification:'identity-confirmed'}})).data.invite;
+  assert.equal((await t.call('/api/player/security/activate',{method:'POST',
+    data:{invite:invitation,password:'12345678'}})).status,200);
+  assert.equal((await t.call('/api/player/security/login',{method:'POST',
+    data:{code:CODE,password:'12345678'}})).status,200);
 });

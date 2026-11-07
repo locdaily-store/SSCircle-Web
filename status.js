@@ -99,9 +99,9 @@
     if(button.disabled)return;
     button.disabled=true;hint.textContent='Memeriksa password dashboard...';
     try{
-      await playerRequest('/api/player/security/login',{
-        code:$('status-secure-code').value,password:$('status-secure-password').value
-      });
+      const payload=await window.SSCirclePassword.login(
+        $('status-secure-code').value,$('status-secure-password').value);
+      await playerRequest('/api/player/security/login',payload);
       $('status-secure-password').value='';
       location.assign('/my-sscircle');
     }catch(error){hint.textContent='Tidak dapat masuk: '+error.message;button.disabled=false;}

@@ -221,11 +221,13 @@
     if(password.length<8||password!==$('player-activate-repeat').value){
       securityMessage('Password minimal 8 karakter dan kedua isian harus sama.');return;
     }
-    button.disabled=true;securityMessage('Memverifikasi undangan dan membuat akun aman...');
+    button.disabled=true;securityMessage('Mengamankan password di perangkatmu...');
     try{
+      const secureInput=await window.SSCirclePassword.create(password);
+      securityMessage('Password aman. Menyimpan aktivasi akun...');
       const result=await request('/api/player/security/activate',{method:'POST',
         headers:{'Content-Type':'application/json'},body:JSON.stringify({
-          invite:$('player-invite-secret').value.trim(),password
+          invite:$('player-invite-secret').value.trim(),...secureInput
         })});
       $('player-activate-form').reset();
       await loadSecurityState();
@@ -252,10 +254,10 @@
     e.preventDefault();const button=$('player-password-login-submit');if(button.disabled)return;
     button.disabled=true;securityMessage('Memeriksa password...');
     try{
+      const payload=await window.SSCirclePassword.login(
+        playerCodeForSecureLogin,$('player-dashboard-password').value);
       await request('/api/player/security/login',{method:'POST',
-        headers:{'Content-Type':'application/json'},body:JSON.stringify({
-          code:playerCodeForSecureLogin,password:$('player-dashboard-password').value
-        })});
+        headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
       $('player-password-login-form').reset();
       await loadSecurityState();
     }catch(error){securityMessage('Tidak dapat masuk: '+error.message)}
