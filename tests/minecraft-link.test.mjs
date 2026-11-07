@@ -167,3 +167,12 @@ test('bedrock identity requires Floodgate authority, admin listing requires admi
  assert.equal((await x.call('/api/admin/minecraft/links',{cookie:''})).status,401);
  assert.equal((await x.call('/api/admin/minecraft/links',{cookie:x.admin})).json.links.length,1);
 });
+
+test('Velocity only asserts Java Premium after checking per-player Mojang authentication',()=>{
+ const java=readFileSync(new URL('../minecraft-link-velocity/src/main/java/id/sscircle/link/SSCircleLinkPlugin.java',import.meta.url),'utf8');
+ assert.match(java,/player\.isOnlineMode\(\)/);
+ assert.match(java,/getPlugin\("librelogin"\)/);
+ assert.match(java,/isFloodgatePlayer/);
+ assert.match(java,/SSCIRCLE_LINK_SERVER_SECRET/);
+ assert.doesNotMatch(java,/System\.out\.println\(.*code/);
+});
