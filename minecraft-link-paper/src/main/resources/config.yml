@@ -1,0 +1,7 @@
+# SSCircle Player Sync Paper • hanya HTTPS dan domain, tanpa /my-sscircle atau /api.
+# Contoh: https://sscircle-testing.pages.dev
+endpoint: "https://example.pages.dev"
+
+# Keamanan: SSCIRCLE_LINK_SERVER_SECRET HARUS diberikan melalui
+# environment variable proses Paper (nilai sama dengan Cloudflare Pages).
+# Jangan simpan secret di config.yml, GitHub, atau teks situs.
