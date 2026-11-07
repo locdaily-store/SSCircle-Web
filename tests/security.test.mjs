@@ -145,7 +145,9 @@ test('password 8 karakter bisa digunakan; hash gagal tidak membakar kode aktivas
   t.env.DB.batch=async()=>{throw Error('Simulated temporary transaction outage');};
   const failed=await t.call('/api/player/security/activate',{method:'POST',
     data:{invite:invitation,password:'Pass#123'}});
-  assert.equal(failed.status>=400,true);
+  assert.equal(failed.status,503);
+  assert.match(failed.data.error,/Kode aktivasi tidak dibatalkan/);
+  assert.match(failed.data.supportCode,/^[0-9a-f]{8}$/);
   assert.equal(t.db.prepare('SELECT used_at FROM member_activation_invites WHERE application_id=?').get(ID).used_at,null);
   assert.equal(t.db.prepare('SELECT COUNT(*) AS n FROM member_credentials').get().n,0);
   t.env.DB.batch=original;
@@ -170,4 +172,27 @@ test('cooldown aktivasi tepat lima menit dan password kurang dari 8 ditolak',asy
   assert.equal(blocked.data.remainingSeconds<=300,true);
   assert.equal(blocked.data.remainingSeconds>0,true);
   assert.match(blocked.data.error,/percobaan aktivasi/);
+});
+
+test('sesi yang gagal dibuat tidak dianggap aktivasi gagal, password tetap tersimpan',async()=>{
+  const t=fixture();
+  const invitation=(await t.call('/api/admin/member-invite',{method:'POST',auth:'admin',
+    data:{id:ID,verification:'identity-confirmed'}})).data.invite;
+  const originalPrepare=t.env.DB.prepare;
+  t.env.DB.prepare=function(sql){
+    if(/INSERT INTO member_secure_sessions/.test(sql))throw Error('Temporary session outage');
+    return originalPrepare(sql);
+  };
+  const result=await t.call('/api/player/security/activate',{method:'POST',
+    data:{invite:invitation,password:'Kunci#123'}});
+  assert.equal(result.status,200,JSON.stringify(result.data));
+  assert.equal(result.data.activated,true);
+  assert.equal(result.data.loginRequired,true);
+  const credential=t.db.prepare('SELECT password_hash FROM member_credentials WHERE application_id=?').get(ID);
+  assert.ok(credential?.password_hash);
+  assert.notEqual(t.db.prepare('SELECT used_at FROM member_activation_invites WHERE application_id=?').get(ID).used_at,null);
+  t.env.DB.prepare=originalPrepare;
+  const login=await t.call('/api/player/security/login',{method:'POST',
+    data:{code:CODE,password:'Kunci#123'}});
+  assert.equal(login.status,200,JSON.stringify(login.data));
 });
