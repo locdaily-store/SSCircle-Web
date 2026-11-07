@@ -168,7 +168,7 @@ window.fetch=async url => {
   assert page.locator('.season-admin-rank-top > .ssc-sort-handle').count()>=2,('Ranking drag handles missing',w)
   assert page.locator('.sidebar-group').count()==4,('Sidebar groups missing',w)
   assert page.locator('.dashboard-sidebar [data-tab]').count()==15,('Sidebar links missing',w)
-        assert page.locator('.dashboard-sidebar [data-tab="profile-admin"]').count()==1,('Profile editor missing',w)
+  assert page.locator('.dashboard-sidebar [data-tab="profile-admin"]').count()==1,('Profile editor missing',w)
   # Member Control: verify all seven tabs and policy controls at each panel width.
   page.evaluate('''() => {
     document.querySelectorAll('.tab-page').forEach(e=>e.classList.add('hide'));
