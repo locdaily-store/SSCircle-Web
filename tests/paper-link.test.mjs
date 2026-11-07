@@ -75,3 +75,19 @@ test('V10.45.2: explain both independent failures without exposing shared secret
  assert.match(paper,/String secret = System\.getenv\(SECRET_ENV\)/);
  assert.doesNotMatch(paper,/sender\.sendMessage\(.*signingSecret\)/);
 });
+
+test('V10.45.3: operator-only signed diagnostic and safe error presentation',()=>{
+ assert.match(manifest,/version: '10\.45\.3'/);
+ assert.match(paper,/private static final String DIAGNOSE_PATH = "\/api\/minecraft\/link\/diagnose"/);
+ assert.match(paper,/options\.add\("diagnose"\)/);
+ assert.match(paper,/private void runDiagnostic\(CommandSender sender\)/);
+ assert.match(paper,/getScheduler\(\)\.runTask\(this/);
+ assert.match(paper,/private static String safeResponseCode/);
+ assert.match(paper,/private static String safeFailureReason/);
+ assert.match(paper,/case "SIGNATURE_INVALID"/);
+ assert.match(paper,/case "CLOCK_SKEW"/);
+ assert.match(paper,/case 403 -> "Akses website ditolak/);
+ assert.match(worker,/async function minecraftLinkDiagnose\(req,env\)/);
+ assert.match(worker,/if\(path==='\/api\/minecraft\/link\/diagnose' && method==='POST'\)/);
+ assert.doesNotMatch(paper,/sendMessage\(.*\.body\(\)\)/);
+});
