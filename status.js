@@ -118,7 +118,7 @@
       'ditutup': 'Voting sedang ditutup oleh admin SSCircle. Cek kembali setelah dibuka.'
     };
     const dashboardNotices = {
-      'perlu-masuk': 'Untuk membuka My SSCircle, masuk dengan kode pendaftaran milikmu yang sudah Diterima.',
+      'perlu-masuk': 'Untuk membuka Profile, masuk dengan kode pendaftaran milikmu yang sudah Diterima.',
       menunggu: 'Pendaftaranmu masih Menunggu. Dashboard anggota tersedia setelah admin menerima pendaftaranmu.',
       ditolak: 'Pendaftaranmu Ditolak. Dashboard anggota belum dapat dibuka.'
     };
@@ -133,6 +133,7 @@
     const accepted = active && account.status === 'accepted';
     $('status-voting-entry').hidden = !accepted || settings.homeVotingEnabled!==true;
     $('status-mailbox-entry').hidden = !accepted;
+    if (accepted) void window.SSCircleMailbox?.refresh(true);
     $('status-dashboard-entry').hidden = !accepted;
     if (active && !accepted) {
       $('status-voting-notice').hidden = false;
@@ -264,9 +265,9 @@
           event.preventDefault();
           void openVoting();
         });
-        const dash = text('a','button primary','Buka My SSCircle ↗');
+        const dash = text('a','button primary','Buka Profile ↗');
         dash.href='/my-sscircle';
-        const mailbox = text('a','button secondary','Lihat Mail Box ↗');
+        const mailbox = text('a','button secondary','✉ Mail Box');
         mailbox.href='/mailbox';
         card.append(dash,mailbox,link);
         root.append(card);
