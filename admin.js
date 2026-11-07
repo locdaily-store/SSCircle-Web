@@ -99,6 +99,8 @@ function tab(id) {
     window.SSCircleEventsAdmin?.schedule();
   if (id === 'seasons-admin')
     window.SSCircleSeasonsAdmin?.schedule();
+  if (id === 'members-admin')
+    void window.SSCircleMemberCenterAdmin?.load();
   if (id === 'theme')
     window.SSCircleThemeEditor?.schedule();
   if (id === 'analytics')

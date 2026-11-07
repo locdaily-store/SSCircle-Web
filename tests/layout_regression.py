@@ -51,6 +51,11 @@ with sync_playwright() as p:
 window.fetch=async url => {
  const path=String(url);
  if(path==='/api/player/me') return new Response(JSON.stringify({authenticated:true,status:'accepted',code:'AAAABBBBCCCCDDDDEEEE',submittedAt:'2026-11-07T12:00:00Z'}),{status:200,headers:{'Content-Type':'application/json'}});
+ if(path==='/api/player/profile') return new Response(JSON.stringify({
+  profile:{displayName:'Anggota Uji',bio:'Saya builder',visibility:'private',showStats:false,eventAlerts:true},
+  policy:{allowBio:true,allowPublic:false,allowStats:true,allowEventAlerts:true},
+  accounts:[],statistics:[],achievements:[{title:'Best Builder',seasonTitle:'Season 6',description:'Kastil'}]
+ }),{status:200,headers:{'Content-Type':'application/json'}});
  if(path==='/api/form') return new Response(JSON.stringify({settings:{seasonArchiveEnabled:true}}),{status:200,headers:{'Content-Type':'application/json'}});
  return new Response('{}',{status:404,headers:{'Content-Type':'application/json'}});
 };
@@ -158,7 +163,31 @@ window.fetch=async url => {
   assert page.locator('.season-admin-rank-fields').count()>=3,('Ranking fields missing',w)
   assert page.locator('.season-admin-rank-top > .ssc-sort-handle').count()>=2,('Ranking drag handles missing',w)
   assert page.locator('.sidebar-group').count()==4,('Sidebar groups missing',w)
-  assert page.locator('.dashboard-sidebar [data-tab]').count()==13,('Sidebar links missing',w)
+  assert page.locator('.dashboard-sidebar [data-tab]').count()==14,('Sidebar links missing',w)
+  # Member Control: verify all seven tabs and policy controls at each panel width.
+  page.evaluate('''() => {
+    document.querySelectorAll('.tab-page').forEach(e=>e.classList.add('hide'));
+    document.getElementById('members-admin').classList.remove('hide');
+    window.fetch=async path => new Response(JSON.stringify({
+      items:[{id:'11111111-1111-4111-8111-111111111111',status:'accepted',
+        submittedAt:'2026-11-07T12:00:00Z',displayName:'Anggota Uji',linkedCount:0,lastSync:null}],
+      awards:[{seasonId:'s6',seasonTitle:'Season 6',title:'Best Builder',
+        player:'Test Player',memberId:'11111111-1111-4111-8111-111111111111'}],
+      policy:{allowBio:true,allowPublic:false,allowStats:true,allowEventAlerts:true},total:1,hasMore:false
+    }),{status:200,headers:{'Content-Type':'application/json'}});
+    return window.SSCircleMemberCenterAdmin.load(true);
+  }''')
+  assert page.locator('.member-admin-tab').count()==7,('Member Control subpanels missing',w)
+  layout=page.evaluate('''() => ({
+    width:document.getElementById('members-admin-root').clientWidth,
+    scroll:document.getElementById('members-admin-root').scrollWidth,
+    memberCount:document.querySelectorAll('.member-admin-member').length
+  })''')
+  assert layout['scroll']<=layout['width']+2,('Member Control overflow',w,layout)
+  assert layout['memberCount']>=1,('Member list missing',w,layout)
+  page.locator('.member-admin-tab').nth(4).click()
+  assert page.locator('.member-admin-switch').count()==4,('Member policy options missing',w)
+
   if w<=390:
     page.locator('#admin-nav-toggle').click()
     assert page.locator('#admin-nav-toggle').get_attribute('aria-expanded')=='true'
@@ -187,6 +216,9 @@ window.fetch=async url => {
   assert vals['hasUnverifiedStats']==4,('Dashboard status cards missing',w,vals)
   assert page.locator('#player-member-id').inner_text()=='SSC-••••EEEE',('Member label must not reveal login code',w)
   assert page.locator('#player-link-title').is_visible()
+  assert page.locator('#player-profile-title').inner_text()=='Anggota Uji',('Profile name failed',w)
+  assert page.locator('#player-achievements-list .player-award').count()==1,('Hall of Fame award missing',w)
+  assert page.locator('#player-settings-form input').count()>=3,('Profile controls missing',w)
   assert not errors,('Player dashboard Javascript failed',w,errors)
   print('Player Dashboard',w,vals)
   page.close()

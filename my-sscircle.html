@@ -9,10 +9,10 @@
   <title>My SSCircle | Player Dashboard</title>
   <link rel="icon" href="assets/sscircle-logo.png" type="image/png">
   <link rel="stylesheet" href="style.css?v=10.35.0">
-  <link rel="stylesheet" href="player-dashboard.css?v=10.35.0">
+  <link rel="stylesheet" href="player-dashboard.css?v=10.36.0">
   <script src="color-theme.js?v=10.35.0" defer></script>
   <script src="site-shell.js?v=10.35.0" defer></script>
-  <script src="player-dashboard.js?v=10.35.0" defer></script>
+  <script src="player-dashboard.js?v=10.36.0" defer></script>
 </head>
 <body class="home-page player-page theme-v3">
   <header class="home-header" id="top">
@@ -84,6 +84,54 @@
             <p>Keanggotaanmu sudah aktif. Di sini kamu dapat mengikuti perkembangan komunitas dan, nantinya, melihat statistik Minecraft secara otomatis.</p>
           </div>
           <span class="player-state"><span aria-hidden="true">●</span> Anggota aktif</span>
+        </section>
+
+        <section class="player-card player-preferences" aria-labelledby="player-preferences-heading">
+          <div class="player-section-head"><div>
+            <span class="player-overline">YOUR PROFILE</span>
+            <h2 id="player-preferences-heading">Pengaturan profil</h2>
+          </div><span class="player-tag">Bisa diedit</span></div>
+          <p>Sesuaikan nama tampilan, deskripsi, dan privasi. Identitas Minecraft serta statistik resmi tidak dapat diubah manual.</p>
+          <form id="player-settings-form" class="player-settings-form">
+            <label class="player-setting-field">
+              <span>Nama tampilan komunitas</span>
+              <input id="player-display-name" maxlength="32" minlength="2" placeholder="Nama yang ingin ditampilkan" autocomplete="nickname">
+              <small>Berbeda dari nama akun Minecraft. Maksimal 32 karakter.</small>
+            </label>
+            <label class="player-setting-field" id="player-bio-wrap">
+              <span>Tentang saya</span>
+              <textarea id="player-bio" maxlength="350" rows="3" placeholder="Ceritakan sedikit tentang dirimu di SSCircle..."></textarea>
+              <small>Maksimal 350 karakter. Tidak mendukung HTML.</small>
+            </label>
+            <label class="player-setting-field">
+              <span>Privasi profil</span>
+              <select id="player-visibility">
+                <option value="private">Pribadi — hanya akun saya dan admin</option>
+                <option value="members">Anggota — hanya anggota SSCircle</option>
+                <option value="public">Publik — dapat dilihat pengunjung</option>
+              </select>
+              <small>Pengaturan publik disimpan sekarang; direktori profil publik belum diaktifkan.</small>
+            </label>
+            <div class="player-setting-switches">
+              <label class="player-setting-switch"><input type="checkbox" id="player-show-stats"><span>Tampilkan statistik saat profil publik tersedia</span></label>
+              <label class="player-setting-switch"><input type="checkbox" id="player-event-alerts"><span>Pengingat event di dashboard</span></label>
+            </div>
+            <div class="player-setting-actions">
+              <button class="player-action player-action-primary" type="submit" id="player-save-profile">Simpan perubahan</button>
+              <p id="player-profile-message" role="status" aria-live="polite"></p>
+            </div>
+          </form>
+        </section>
+
+        <section class="player-card player-achievements" aria-labelledby="player-achievements-title">
+          <div class="player-section-head">
+            <div><span class="player-overline">HALL OF FAME</span><h2 id="player-achievements-title">Penghargaan saya</h2></div>
+            <span class="player-tag">Terhubung ke Season Archive</span>
+          </div>
+          <div id="player-achievements-list" class="player-achievements-list">
+            <p class="player-helper">Belum ada penghargaan yang terhubung dengan keanggotaanmu.</p>
+          </div>
+          <p class="player-helper">Penghargaan dikelola sekali saja melalui Admin Control → Season &amp; Sejarah. Data akan otomatis muncul di sini jika penerima dipilih sebagai anggota yang benar.</p>
         </section>
 
         <section class="player-card player-linking" aria-labelledby="player-link-title">

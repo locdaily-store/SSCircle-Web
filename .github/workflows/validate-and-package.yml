@@ -48,6 +48,9 @@ jobs:
       - name: Uji Season Archive dan kompatibilitas Leaderboard
         run: node --test tests/seasons.test.mjs
 
+      - name: Uji Member Center, kebijakan profil, awards dan pencabutan sesi
+        run: node --test tests/member-center.test.mjs
+
       - name: Pasang browser untuk tes responsif
         run: |
           python -m pip install 'playwright>=1.50,<2'

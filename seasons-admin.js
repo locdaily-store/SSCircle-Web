@@ -55,6 +55,28 @@ window.SSCircleSeasonsAdmin = (() => {
         const inner=el('div','season-admin-mini-body');
         for(const [field,label,type,maxLen] of fields)
           inner.append(inputField(label,item[field],v=>item[field]=v,{multiline:type==='textarea',max:maxLen||300}));
+        if(key==='archiveAwards'){
+          const target=el('label','field-group season-admin-recipient');
+          target.append(el('span','field-label','Penerima anggota SSCircle'));
+          const select=el('select');
+          const blank=el('option','', 'Belum ditautkan (penghargaan tetap ada di arsip)');
+          blank.value='';select.append(blank);
+          const profileNames=new Map((window.SSCircleMemberCenterAdmin?.getMembers?.()||[]).map(m=>[m.id,m.displayName||'']));
+          const accepted=(model?.submissions||[]).filter(s=>s.status==='accepted').slice(0,1000);
+          for(const member of accepted){
+            const nickname=profileNames.get(member.id)||'Anggota';
+            const option=el('option','',nickname+' · '+member.id.slice(0,8).toUpperCase());
+            option.value=member.id;select.append(option);
+          }
+          if(item.memberId && !accepted.some(s=>s.id===item.memberId)){
+            const existing=el('option','', 'Anggota terpilih sebelumnya · '+item.memberId.slice(0,8).toUpperCase());
+            existing.value=item.memberId;select.append(existing);
+          }
+          select.value=item.memberId||'';
+          select.onchange=()=>{item.memberId=select.value;mark();};
+          target.append(select,el('small','field-help','Pilih pendaftar Diterima. Penghargaan ini otomatis tampil di My SSCircle miliknya setelah disimpan.'));
+          inner.append(target);
+        }
         if(photoKey)mediaField(inner,'Foto',item,photoKey,repaint);
         inner.append(action('Hapus',async()=>{
           if(!await window.SSCNotice.confirm(`Hapus data ${title.toLowerCase()} ini?`,{danger:true,confirmText:'Hapus'}))return;
@@ -124,7 +146,7 @@ window.SSCircleSeasonsAdmin = (() => {
 
     const achievement=editorGroup('03 · Prestasi & pemain','Catat penghargaan dan urutan pemain untuk season ini.');
     makeSublist(achievement.content,season,'archiveAwards','Penghargaan',12,
-      ()=>({title:'Penghargaan baru',player:'',description:''}),
+      ()=>({title:'Penghargaan baru',player:'',description:'',memberId:''}),
       [['title','Kategori penghargaan','text',120],['player','Nama pemain','text',100],
        ['description','Keterangan','textarea',350]]);
     const ranking=el('details','season-admin-subsection');

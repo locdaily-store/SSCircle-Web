@@ -123,7 +123,7 @@ function readPlayerCookie(req) {
   return (req.headers.get('Cookie') || '').split(';').map(v => v.trim()).find(v => v.startsWith(PLAYER_COOKIE + '='))?.slice(PLAYER_COOKIE.length + 1) || '';
 }
 async function signPlayer(env, id) {
-  const part = b64(JSON.stringify({ id, exp: Math.floor(Date.now() / 1000) + PLAYER_SESSION_SECONDS, nonce: uid() }));
+  const part = b64(JSON.stringify({ id, exp: Math.floor(Date.now() / 1000) + PLAYER_SESSION_SECONDS, nonce: uid(), sessionVersion: await memberEpoch(env,id) }));
   return part + '.' + await hmac(env.SESSION_SECRET + '|player-session', part);
 }
 async function playerSession(req, env) {
@@ -142,6 +142,7 @@ async function playerSession(req, env) {
     const revoked = await env.DB.prepare('SELECT token_hash FROM revoked_sessions WHERE token_hash=?').bind(await digest(token)).first();
     if (revoked)
       return null;
+    if ((Number(payload.sessionVersion)||0)!==await memberEpoch(env,payload.id))return null;
     return await env.DB.prepare('SELECT id,tracking_code,submitted_at,status FROM submissions WHERE id=?').bind(payload.id).first();
   }
   catch {
@@ -810,7 +811,7 @@ function validLeaderboard(input) {
       archiveCover:img(season?.archiveCover),
       archiveMemories:memories.map(m=>({src:img(m?.src),caption:s(m?.caption,240)})).filter(m=>m.src),
       archiveBuilds:builds.map(b=>({title:s(b?.title,120),builder:s(b?.builder,100),src:img(b?.src),description:s(b?.description,350)})).filter(b=>b.title),
-      archiveAwards:awards.map(a=>({title:s(a?.title,120),player:s(a?.player,100),description:s(a?.description,350)})).filter(a=>a.title)
+      archiveAwards:awards.map(a=>({title:s(a?.title,120),player:s(a?.player,100),description:s(a?.description,350),memberId:/^[0-9a-f-]{36}$/.test(a?.memberId||'')?a.memberId:''})).filter(a=>a.title)
     };
   });
 }
@@ -1847,6 +1848,183 @@ function activePublicMedia(row) {
         active.add(b.imageId);
   return active;
 }
+
+/* SSCircle V10.36 - Member Center. No Minecraft identity is claimed without
+   a future trusted server-side verification. Schema creation is additive. */
+const memberCenterReady = new WeakSet();
+async function ensureMemberCenter(env) {
+  if (memberCenterReady.has(env.DB)) return;
+  const statements = [
+    `CREATE TABLE IF NOT EXISTS member_profiles (
+      application_id TEXT PRIMARY KEY, display_name TEXT NOT NULL DEFAULT '',
+      bio TEXT NOT NULL DEFAULT '', visibility TEXT NOT NULL DEFAULT 'private',
+      show_stats INTEGER NOT NULL DEFAULT 0, event_alerts INTEGER NOT NULL DEFAULT 1,
+      session_epoch INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL DEFAULT '',
+      FOREIGN KEY(application_id) REFERENCES submissions(id) ON DELETE CASCADE)`,
+    `CREATE TABLE IF NOT EXISTS member_policy (
+      id INTEGER PRIMARY KEY CHECK(id=1), allow_bio INTEGER NOT NULL DEFAULT 1,
+      allow_public INTEGER NOT NULL DEFAULT 0, allow_stats INTEGER NOT NULL DEFAULT 1,
+      allow_event_alerts INTEGER NOT NULL DEFAULT 1,
+      updated_at TEXT NOT NULL DEFAULT '')`,
+    `CREATE TABLE IF NOT EXISTS minecraft_accounts (
+      id TEXT PRIMARY KEY, application_id TEXT NOT NULL,
+      provider TEXT NOT NULL, provider_id TEXT NOT NULL, username TEXT NOT NULL,
+      verified_at TEXT NOT NULL,
+      UNIQUE(provider,provider_id),
+      FOREIGN KEY(application_id) REFERENCES submissions(id) ON DELETE CASCADE)`,
+    `CREATE TABLE IF NOT EXISTS player_stat_snapshots (
+      application_id TEXT NOT NULL, season_id TEXT NOT NULL DEFAULT '',
+      playtime_seconds INTEGER NOT NULL DEFAULT 0, deaths INTEGER NOT NULL DEFAULT 0,
+      mob_kills INTEGER NOT NULL DEFAULT 0, blocks_mined INTEGER NOT NULL DEFAULT 0,
+      last_synced_at TEXT NOT NULL DEFAULT '',
+      PRIMARY KEY(application_id,season_id),
+      FOREIGN KEY(application_id) REFERENCES submissions(id) ON DELETE CASCADE)`,
+    `CREATE TABLE IF NOT EXISTS minecraft_link_challenges (
+      id TEXT PRIMARY KEY, application_id TEXT NOT NULL,
+      code_hash TEXT NOT NULL UNIQUE, expires_at TEXT NOT NULL,
+      claimed_at TEXT, created_at TEXT NOT NULL,
+      FOREIGN KEY(application_id) REFERENCES submissions(id) ON DELETE CASCADE)`,
+    `INSERT OR IGNORE INTO member_policy(id) VALUES(1)`
+  ];
+  for (const sql of statements) await env.DB.prepare(sql).run();
+  memberCenterReady.add(env.DB);
+}
+async function memberEpoch(env, id) {
+  try {
+    const row = await env.DB.prepare('SELECT session_epoch FROM member_profiles WHERE application_id=?').bind(id).first();
+    return Number(row?.session_epoch || 0);
+  } catch (error) {
+    // Before the optional additive migration is initialized, old login/voting
+    // behavior stays functional. Other SQL failures must not bypass revocation.
+    if (/no such table:\s*member_profiles|Missing DB mock/i.test(String(error?.message || ''))) return 0;
+    throw error;
+  }
+}
+const memberPolicy = row => ({
+  allowBio: row?.allow_bio !== 0,
+  allowPublic: row?.allow_public === 1,
+  allowStats: row?.allow_stats !== 0,
+  allowEventAlerts: row?.allow_event_alerts !== 0
+});
+const memberProfile = row => ({
+  displayName: row?.display_name || '', bio: row?.bio || '',
+  visibility: row?.visibility || 'private',
+  showStats: row?.show_stats === 1, eventAlerts: row?.event_alerts !== 0
+});
+function memberAwards(settings,id) {
+  if (settings.seasonArchiveEnabled !== true) return [];
+  return (settings.homeLeaderboardSeasons || [])
+    .filter(season=>season.archivePublished === true)
+    .flatMap(season=>(season.archiveAwards || [])
+      .filter(a=>a.memberId === id)
+      .map(a=>({seasonId:season.id,seasonTitle:season.title,
+        title:a.title,description:a.description || ''})));
+}
+async function memberCenterAPI(req,env,path,method) {
+  if (path.startsWith('/api/admin/')) {
+    if (!await admin(req,env)) return bad('Silakan masuk ke Admin Control.',401);
+    await ensureMemberCenter(env);
+    if (path==='/api/admin/member-center' && method==='GET') {
+      const url=new URL(req.url), offset=Math.max(0,Math.min(100000,Number.parseInt(url.searchParams.get('offset')||'0',10)||0));
+      const rows=await env.DB.prepare(`SELECT s.id,s.status,s.submitted_at,
+        COALESCE(p.display_name,'') AS display_name,
+        COALESCE(p.bio,'') AS bio,COALESCE(p.visibility,'private') AS visibility,
+        COALESCE(p.session_epoch,0) AS session_epoch,
+        (SELECT COUNT(*) FROM minecraft_accounts m WHERE m.application_id=s.id) AS linked_count,
+        (SELECT MAX(last_synced_at) FROM player_stat_snapshots ps WHERE ps.application_id=s.id) AS last_sync
+        FROM submissions s LEFT JOIN member_profiles p ON p.application_id=s.id
+        ORDER BY s.submitted_at DESC LIMIT 101 OFFSET ?`).bind(offset).all();
+      const items=(rows.results||[]).slice(0,100).map(a=>({
+        id:a.id,status:a.status,submittedAt:a.submitted_at,displayName:a.display_name,
+        visibility:a.visibility,sessionEpoch:a.session_epoch,linkedCount:a.linked_count||0,
+        lastSync:a.last_sync||null
+      }));
+      const policy=await env.DB.prepare('SELECT * FROM member_policy WHERE id=1').first();
+      const form=formFrom(await readSettingsRow(env));
+      const awards=(form.settings.homeLeaderboardSeasons||[]).flatMap(season=>(season.archiveAwards||[])
+        .map(a=>({seasonId:season.id,seasonTitle:season.title,title:a.title,
+          player:a.player,memberId:a.memberId || ''})));
+      return J({items,hasMore:(rows.results||[]).length>100,policy:memberPolicy(policy),awards,
+        total: (await env.DB.prepare('SELECT COUNT(*) AS n FROM submissions').first())?.n||0});
+    }
+    if (path==='/api/admin/member-policy' && method==='PUT') {
+      const value=await body(req,1500);
+      const keys=['allowBio','allowPublic','allowStats','allowEventAlerts'];
+      if(keys.some(k=>typeof value[k]!=='boolean')) return bad('Pengaturan kebijakan tidak valid.',400);
+      await env.DB.prepare(`UPDATE member_policy SET allow_bio=?,allow_public=?,allow_stats=?,
+        allow_event_alerts=?,updated_at=? WHERE id=1`).bind(
+          Number(value.allowBio),Number(value.allowPublic),Number(value.allowStats),
+          Number(value.allowEventAlerts),new Date().toISOString()).run();
+      return J({ok:true,policy:memberPolicy({
+        allow_bio:Number(value.allowBio),allow_public:Number(value.allowPublic),
+        allow_stats:Number(value.allowStats),allow_event_alerts:Number(value.allowEventAlerts)
+      })});
+    }
+    if (path==='/api/admin/member-revoke' && method==='POST') {
+      const value=await body(req,1200);
+      if(typeof value.id!=='string'||!/^[0-9a-f-]{36}$/.test(value.id))return bad('ID anggota tidak valid.',400);
+      if(!await env.DB.prepare('SELECT id FROM submissions WHERE id=?').bind(value.id).first())
+        return bad('Anggota tidak ditemukan.',404);
+      await env.DB.prepare(`INSERT INTO member_profiles(application_id,session_epoch,updated_at)
+        VALUES(?,1,?) ON CONFLICT(application_id) DO UPDATE SET
+        session_epoch=session_epoch+1,updated_at=excluded.updated_at`)
+        .bind(value.id,new Date().toISOString()).run();
+      return J({ok:true,message:'Semua sesi anggota sebelumnya sudah dicabut.'});
+    }
+    return bad('Endpoint pengelolaan anggota tidak ditemukan.',404);
+  }
+  const application=await playerSession(req,env);
+  if(!application || application.status!=='accepted')
+    return bad('Hanya anggota SSCircle yang diterima dapat mengakses profil.',403);
+  await ensureMemberCenter(env);
+  if(path==='/api/player/profile' && method==='GET') {
+    const profileRow=await env.DB.prepare('SELECT * FROM member_profiles WHERE application_id=?').bind(application.id).first();
+    const policyRow=await env.DB.prepare('SELECT * FROM member_policy WHERE id=1').first();
+    const accounts=await env.DB.prepare(`SELECT provider,username,verified_at
+      FROM minecraft_accounts WHERE application_id=? ORDER BY verified_at DESC`).bind(application.id).all();
+    const stats=await env.DB.prepare(`SELECT season_id,playtime_seconds,deaths,mob_kills,
+      blocks_mined,last_synced_at FROM player_stat_snapshots WHERE application_id=?
+      ORDER BY season_id ASC LIMIT 25`).bind(application.id).all();
+    const form=formFrom(await readSettingsRow(env));
+    return J({profile:memberProfile(profileRow),policy:memberPolicy(policyRow),
+      accounts:(accounts.results||[]).map(a=>({provider:a.provider,username:a.username,verifiedAt:a.verified_at})),
+      statistics:(stats.results||[]).map(a=>({seasonId:a.season_id,playtimeSeconds:a.playtime_seconds,
+        deaths:a.deaths,mobKills:a.mob_kills,blocksMined:a.blocks_mined,updatedAt:a.last_synced_at})),
+      achievements:memberAwards(form.settings,application.id)});
+  }
+  if(path==='/api/player/profile' && method==='PUT') {
+    if(!await rateLimit(env,req,'member-profile-update',12,900))
+      return bad('Terlalu banyak pembaruan profil. Coba lagi nanti.',429);
+    const value=await body(req,2000);
+    if(!value||typeof value!=='object') return bad('Profil tidak valid.',400);
+    const display=typeof value.displayName==='string'?value.displayName.trim():'';
+    const bio=typeof value.bio==='string'?value.bio.trim():'';
+    if(display.length>32||bio.length>350||/[<>\x00-\x1f]/.test(display+bio))
+      return bad('Nama atau bio terlalu panjang atau mengandung karakter terlarang.',400);
+    if(display&&display.length<2) return bad('Nama tampilan minimal 2 karakter.',400);
+    if(!['public','members','private'].includes(value.visibility) ||
+      typeof value.showStats!=='boolean'||typeof value.eventAlerts!=='boolean')
+      return bad('Pilihan privasi profil tidak valid.',400);
+    const policy=memberPolicy(await env.DB.prepare('SELECT * FROM member_policy WHERE id=1').first());
+    const visibility=policy.allowPublic?value.visibility:'private';
+    const existing=await env.DB.prepare('SELECT * FROM member_profiles WHERE application_id=?').bind(application.id).first();
+    const result={
+      displayName:display,
+      bio:policy.allowBio?bio:(existing?.bio||''),
+      visibility,showStats:policy.allowStats?value.showStats:false,
+      eventAlerts:policy.allowEventAlerts?value.eventAlerts:false
+    };
+    await env.DB.prepare(`INSERT INTO member_profiles(application_id,display_name,bio,visibility,show_stats,event_alerts,updated_at)
+      VALUES(?,?,?,?,?,?,?) ON CONFLICT(application_id) DO UPDATE SET
+      display_name=excluded.display_name,bio=excluded.bio,visibility=excluded.visibility,
+      show_stats=excluded.show_stats,event_alerts=excluded.event_alerts,updated_at=excluded.updated_at`)
+      .bind(application.id,result.displayName,result.bio,result.visibility,
+        Number(result.showStats),Number(result.eventAlerts),new Date().toISOString()).run();
+    return J({ok:true,profile:result});
+  }
+  return bad('Endpoint profil tidak ditemukan.',404);
+}
+
 async function route(req, env) {
   const url = new URL(req.url), path = url.pathname, method = req.method;
   // Semua jalur pendaftaran harus melalui Rules, termasuk URL langsung.
@@ -1987,6 +2165,10 @@ async function route(req, env) {
     'DELETE'
   ].includes(method))
     return bad('Metode tidak tersedia.', 405);
+  if ((path==='/api/player/profile' || path.startsWith('/api/admin/member-')) &&
+      ((path==='/api/player/profile' && ['GET','PUT'].includes(method)) ||
+       (path.startsWith('/api/admin/member-') && ['GET','PUT','POST'].includes(method))))
+    return await memberCenterAPI(req,env,path,method);
   if (path === '/api/events' && method === 'GET') {
     const settings = formFrom(await readSettingsRow(env)).settings;
     return J(publicEvents(settings), 200, {'Cache-Control': 'public, max-age=45'});
@@ -2019,7 +2201,7 @@ async function route(req, env) {
     // Juga cegah metadata arsip bocor melalui API publik saat halaman dinonaktifkan.
     f.settings.homeLeaderboardSeasons = (f.settings.homeLeaderboardSeasons || []).map(season =>
       f.settings.seasonArchiveEnabled === true && season.archivePublished === true
-        ? season
+        ? {...season,archiveAwards:(season.archiveAwards||[]).map(({memberId,...award})=>award)}
         : {id:season.id,title:season.title,entries:season.entries,archivePublished:false});
     return J(f);
   }
