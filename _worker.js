@@ -2112,10 +2112,20 @@ async function memberSecurityAPI(req,env,path,method) {
     // Compute the expensive hash BEFORE consuming the one-use invitation.
     // A CPU timeout here will leave the code available for retry.
     const salt=b64(crypto.getRandomValues(new Uint8Array(16)));
-    const passwordHash=await memberDerivePassword(value.password,salt);
+    let passwordHash;
+    try {
+      passwordHash=await memberDerivePassword(value.password,salt);
+    } catch(error) {
+      const reference=uid().slice(0,8);
+      console.error('[SSCircle activation / hash]',reference,error);
+      return J({error:'Password belum berhasil diproses. Kode aktivasi tetap berlaku. Hubungi admin dengan kode bantuan '+reference+'.',
+        supportCode:reference,canRetry:true},503);
+    }
     const marker=stamp+'#'+uid();
     // D1 batch is transactional: either both claim and password commit or neither.
-    const results=await env.DB.batch([
+    let results;
+    try {
+      results=await env.DB.batch([
       env.DB.prepare('UPDATE member_activation_invites SET used_at=? '+
         'WHERE application_id=? AND secret_hash=? AND used_at IS NULL AND expires_at>?')
         .bind(marker,app.id,hashed,now),
@@ -2133,11 +2143,26 @@ async function memberSecurityAPI(req,env,path,method) {
         'WHERE application_id=? AND revoked_at IS NULL AND '+
         'EXISTS (SELECT 1 FROM member_activation_invites WHERE application_id=? AND used_at=?)')
         .bind(stamp,app.id,app.id,marker)
-    ]);
+      ]);
+    } catch(error) {
+      const reference=uid().slice(0,8);
+      console.error('[SSCircle activation / database]',reference,error);
+      return J({error:'Penyimpanan akun belum selesai. Kode aktivasi tidak dibatalkan. Hubungi admin dengan kode bantuan '+reference+'.',
+        supportCode:reference,canRetry:true},503);
+    }
     if(!(results?.[0]?.meta?.changes>0)||!(results?.[1]?.meta?.changes>0))
       return bad('Kode sudah digantikan atau digunakan. Salin kode terbaru dari Mail Box.',403);
-    const secure=await memberIssueSession(env,req,app);
-    return memberStrongResponse({ok:true,authenticated:true,activated:true},secure);
+    try {
+      const secure=await memberIssueSession(env,req,app);
+      return memberStrongResponse({ok:true,authenticated:true,activated:true},secure);
+    } catch(error) {
+      const reference=uid().slice(0,8);
+      console.error('[SSCircle activation / session]',reference,error);
+      // Password has been saved. Do not tell a player activation failed,
+      // and never re-issue a code just because the session cookie failed.
+      return J({ok:true,activated:true,authenticated:false,loginRequired:true,
+        message:'Password akun berhasil dibuat. Masuk kembali memakai password dashboard.'},200);
+    }
   }
   if(path==='/api/player/security/logout' && method==='POST') {
     if(active) await env.DB.prepare(`UPDATE member_secure_sessions SET revoked_at=?
