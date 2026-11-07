@@ -11,8 +11,9 @@ test('Paper Direct: class and plugin.yml target Paper 26.3, not Velocity',()=>{
  assert.match(manifest,/main: id\.sscircle\.paper\.SSCirclePaperLinkPlugin/);
  assert.match(manifest,/sscircle:/);
  assert.match(manifest,/softdepend: \[floodgate\]/);
- assert.match(paper,/extends JavaPlugin implements CommandExecutor, Listener/);
+ assert.match(paper,/extends JavaPlugin implements CommandExecutor, TabCompleter, Listener/);
  assert.match(paper,/getCommand\("sscircle"\)\.setExecutor\(this\)/);
+ assert.match(paper,/getCommand\("sscircle"\)\.setTabCompleter\(this\)/);
  assert.doesNotMatch(paper,/com\.velocitypowered/);
  assert.match(gradle,/paper-api:26\.3\.build\.\+/);
  assert.match(gradle,/JavaLanguageVersion\.of\(25\)/);
@@ -50,4 +51,27 @@ test('Paper Direct: no insecure default endpoint or secrets in shipped config',(
  assert.doesNotMatch(config,/(?:api[_-]?key|server[_-]?secret|password)\s*:\s*["'][A-Za-z0-9_-]{16,}["']/i);
  assert.doesNotMatch(paper,/getLogger\(\).*(?:code|signingSecret|signature)/);
  assert.match(paper,/getServer\(\)\.getPluginManager\(\)\.registerEvents\(this, this\)/);
+});
+
+test('V10.45.2: safe tab-completion shows matching commands and hides admin-only reload',()=>{
+ assert.match(manifest,/version: '10\.45\.2'/);
+ assert.match(paper,/implements CommandExecutor, TabCompleter, Listener/);
+ assert.match(paper,/public List<String> onTabComplete\(CommandSender sender, Command command, String alias, String\[\] args\)/);
+ assert.match(paper,/if \(args\.length != 1\) return List\.of\(\)/);
+ assert.match(paper,/List\.of\("help", "status"\)/);
+ assert.match(paper,/sender instanceof Player\) options\.add\("link"\)/);
+ assert.match(paper,/sender\.hasPermission\("sscircle\.admin"\)\) options\.add\("reload"\)/);
+ assert.match(paper,/option\.startsWith\(prefix\)/);
+ assert.doesNotMatch(paper,/options\.add\("SC-/);
+ assert.match(paper,/private void showHelp\(CommandSender sender\)/);
+ assert.match(paper,/if \(args\.length == 0 \|\| \(args\.length == 1 && args\[0\]\.equalsIgnoreCase\("help"\)\)\)/);
+});
+test('V10.45.2: explain both independent failures without exposing shared secret',()=>{
+ assert.match(paper,/Alamat website HTTPS:/);
+ assert.match(paper,/Kunci komunikasi website:/);
+ assert.match(paper,/Konfigurasi website:/);
+ assert.match(paper,/online-mode=true di server\.properties/);
+ assert.match(paper,/SSCIRCLE_LINK_SERVER_SECRET lalu restart Paper/);
+ assert.match(paper,/String secret = System\.getenv\(SECRET_ENV\)/);
+ assert.doesNotMatch(paper,/sender\.sendMessage\(.*signingSecret\)/);
 });

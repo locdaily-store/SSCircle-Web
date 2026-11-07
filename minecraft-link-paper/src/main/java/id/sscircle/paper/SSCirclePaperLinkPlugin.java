@@ -4,6 +4,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
+import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -21,6 +22,8 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Base64;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
@@ -32,7 +35,7 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * Never claim an offline UUID or a display name proves account ownership.
  */
-public final class SSCirclePaperLinkPlugin extends JavaPlugin implements CommandExecutor, Listener {
+public final class SSCirclePaperLinkPlugin extends JavaPlugin implements CommandExecutor, TabCompleter, Listener {
     private static final int REQUEST_TIMEOUT_SECONDS = 12;
     private static final long COMMAND_COOLDOWN_MS = 6000L;
     private static final String SECRET_ENV = "SSCIRCLE_LINK_SERVER_SECRET";
@@ -55,6 +58,7 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
             return;
         }
         getCommand("sscircle").setExecutor(this);
+        getCommand("sscircle").setTabCompleter(this);
         getServer().getPluginManager().registerEvents(this, this);
         readSettings();
         if (!Bukkit.getOnlineMode()) {
@@ -72,6 +76,12 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
     private void readSettings() {
         endpoint = "";
         signingSecret = "";
+        String secret = System.getenv(SECRET_ENV);
+        if (secret == null || secret.length() < 32) {
+            getLogger().warning("SSCIRCLE_LINK_SERVER_SECRET belum tersedia atau terlalu pendek pada proses Paper.");
+        } else {
+            signingSecret = secret;
+        }
         String configuredUrl = getConfig().getString("endpoint", "").trim();
         try {
             URI uri = URI.create(configuredUrl);
@@ -85,21 +95,47 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
                 getLogger().warning("Alamat website belum valid. Gunakan domain HTTPS tanpa path.");
                 return;
             }
-            String secret = System.getenv(SECRET_ENV);
-            if (secret == null || secret.length() < 32) {
-                getLogger().warning("SSCIRCLE_LINK_SERVER_SECRET belum tersedia pada proses Paper.");
-                return;
-            }
             endpoint = uri.toString().replaceAll("/+$", "");
-            signingSecret = secret;
-            getLogger().info("Koneksi website dan kunci server sudah dikonfigurasi (belum menguji internet).");
+            if (hasConnectionSettings()) {
+                getLogger().info("Alamat website dan kunci server terbaca. Koneksi HTTPS belum diuji.");
+            } else {
+                getLogger().warning("Alamat website sudah valid, tetapi secret masih belum tersedia.");
+            }
         } catch (IllegalArgumentException ex) {
             getLogger().warning("Alamat website tidak valid. Periksa plugins/SSCirclePlayerSync/config.yml.");
         }
     }
 
+    // Tab completion suggests safe subcommands, but never one-time link codes.
+    @Override
+    public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
+        if (args.length != 1) return List.of();
+        String prefix = args[0].toLowerCase(Locale.ROOT);
+        List<String> options = new ArrayList<>(List.of("help", "status"));
+        if (sender instanceof Player) options.add("link");
+        if (sender.hasPermission("sscircle.admin")) options.add("reload");
+        return options.stream().filter(option -> option.startsWith(prefix)).sorted().toList();
+    }
+
+    private void showHelp(CommandSender sender) {
+        sender.sendMessage("SSCircle Player Sync - Pilihan perintah:");
+        sender.sendMessage("/sscircle help - Menampilkan panduan");
+        sender.sendMessage("/sscircle status - Periksa koneksi dan autentikasi");
+        if (sender instanceof Player) {
+            sender.sendMessage("/sscircle link <kode> - Hubungkan akun dari Profile website");
+        }
+        if (sender.hasPermission("sscircle.admin")) {
+            sender.sendMessage("/sscircle reload - Muat ulang pengaturan website");
+        }
+        sender.sendMessage("Tekan Tab setelah /sscircle untuk memilih subperintah.");
+    }
+
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        if (args.length == 0 || (args.length == 1 && args[0].equalsIgnoreCase("help"))) {
+            showHelp(sender);
+            return true;
+        }
         if (args.length == 1 && args[0].equalsIgnoreCase("reload")) {
             if (!sender.hasPermission("sscircle.admin")) {
                 sender.sendMessage("Kamu tidak mempunyai izin untuk memuat ulang SSCircle.");
@@ -112,18 +148,25 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
         }
         if (args.length == 1 && args[0].equalsIgnoreCase("status")) {
             sender.sendMessage("SSCircle Player Sync Paper " + getDescription().getVersion());
+            sender.sendMessage("Alamat website HTTPS: " +
+                (endpoint.isBlank() ? "belum valid - periksa plugins/SSCirclePlayerSync/config.yml" : "terkonfigurasi"));
+            sender.sendMessage("Kunci komunikasi website: " +
+                (signingSecret.length() >= 32 ? "terbaca" :
+                "belum terbaca - atur environment variable SSCIRCLE_LINK_SERVER_SECRET lalu restart Paper"));
             sender.sendMessage("Konfigurasi website: " +
-                (hasConnectionSettings() ? "siap" : "belum lengkap"));
+                (hasConnectionSettings() ? "siap (belum menguji koneksi internet)" : "belum lengkap"));
             if (!Bukkit.getOnlineMode()) {
                 sender.sendMessage("Autentikasi server: offline-mode, linking ditolak.");
+                sender.sendMessage("Jika memakai Java Premium tanpa proxy: set online-mode=true di server.properties, lalu restart Paper.");
             } else if (sender instanceof Player player) {
                 Identity identity = identityFor(player);
                 sender.sendMessage("Identitas dalam game: " +
                     (identity == null ? "belum dapat diverifikasi" : identity.displayType()));
+                if (identity == null) sender.sendMessage("Periksa plugin autentikasi campuran dan Floodgate.");
             } else {
                 sender.sendMessage("Autentikasi: online-mode aktif (periksa tiap pemain dalam game).");
             }
-            sender.sendMessage("Status akun tertaut hanya tersedia di Profile website SSCircle.");
+            sender.sendMessage("Status akun tertaut tersedia di Profile website SSCircle.");
             return true;
         }
 
