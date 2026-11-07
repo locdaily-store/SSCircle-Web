@@ -78,6 +78,7 @@ public final class SSCircleLinkPlugin {
             String input = properties.getProperty("endpoint", "").trim();
             URI uri = URI.create(input);
             if (!"https".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null
+                || "example.pages.dev".equalsIgnoreCase(uri.getHost())
                 || uri.getUserInfo() != null || uri.getRawQuery() != null
                 || uri.getRawFragment() != null || (uri.getPath() != null && !uri.getPath().isEmpty()
                 && !"/".equals(uri.getPath()))) {
@@ -213,8 +214,11 @@ public final class SSCircleLinkPlugin {
                 return null;
             }
         }
-        // Only acceptable on an online-mode Velocity proxy with no mixed-auth
-        // plugin capable of overriding per-player authentication.
+        // Never infer Mojang authentication from the proxy-wide flag alone.
+        // A plugin may force this particular player into offline mode.
+        if (!player.isOnlineMode()) return null;
+        // Only acceptable with Mojang-verified per-player login and no known
+        // mixed-mode plugin that may rewrite a UUID after authentication.
         return new Identity("java_premium",
             player.getUniqueId().toString().toLowerCase(java.util.Locale.ROOT), "mojang-online");
     }
