@@ -2530,6 +2530,16 @@ async function route(req, env) {
       Location:'/mailbox','Cache-Control':'private, no-store',Vary:'Cookie'
     }});
     const response=await env.ASSETS.fetch(req);
+    if(response.status>=300 && response.status<400){
+      const redirect=response.headers.get('Location');
+      if(redirect){
+        const target=new URL(redirect,url);
+        if(target.origin===url.origin && ['/mailbox','/mailbox.html'].includes(target.pathname))
+          return new Response('Halaman Mail Box belum dapat dimuat.',{
+            status:502,headers:{'Content-Type':'text/plain; charset=utf-8','Cache-Control':'no-store'}
+          });
+      }
+    }
     const headers=new Headers(response.headers);headers.set('Cache-Control','private, no-store');
     headers.set('Vary','Cookie');headers.set('X-Robots-Tag','noindex, nofollow');
     return new Response(response.body,{status:response.status,headers});

@@ -51,6 +51,10 @@ with sync_playwright() as p:
 window.fetch=async url => {
  const path=String(url);
  if(path==='/api/player/me') return new Response(JSON.stringify({authenticated:true,status:'accepted',code:'AAAABBBBCCCCDDDDEEEE',submittedAt:'2026-11-07T12:00:00Z'}),{status:200,headers:{'Content-Type':'application/json'}});
+ if(path==='/api/player/security/state') return new Response(JSON.stringify({
+   authenticated:true,hasPassword:true,session:{id:'11111111-1111-4111-8111-111111111111',client:'Browser Test'}
+ }),{status:200,headers:{'Content-Type':'application/json'}});
+ if(path==='/api/player/security/sessions') return new Response(JSON.stringify({sessions:[]}),{status:200,headers:{'Content-Type':'application/json'}});
  if(path==='/api/player/profile') return new Response(JSON.stringify({
   profile:{displayName:'Anggota Uji',bio:'Saya builder',visibility:'private',showStats:false,eventAlerts:true},
   policy:{allowBio:true,allowPublic:false,allowStats:true,allowEventAlerts:true},
