@@ -1,4 +1,4 @@
-/* SSCircle V10.41: reusable private Mail Box dialog. Never inserts server text as HTML. */
+/* SSCircle V10.42: resilient private Mail Box dialog. Never inserts server text as HTML. */
 'use strict';
 (() => {
   if (window.SSCircleMailbox) return;
@@ -13,7 +13,8 @@
     '<section class="mailbox-request mailbox-surface"><div class="mailbox-request-copy"><h3>Kode aktivasi akun</h3>',
     '<p>Minta kode aktivasi di sini. Setelah identitas diverifikasi pengurus, kode tersedia di kotak masuk.</p>',
     '</div><button type="button" id="ssc-mailbox-request" class="mailbox-primary">Minta kode</button></section>',
-    '<p class="mailbox-message" id="ssc-mailbox-message" role="status" aria-live="polite"></p>',
+    '<div class="ssc-mailbox-feedback"><p class="mailbox-message" id="ssc-mailbox-message" role="status" aria-live="polite"></p>',
+    '<a id="ssc-mailbox-signin" href="/status.html#kode-milikku" hidden>Masuk melalui Cek Status</a></div>',
     '<div class="mailbox-grid">',
     '<section class="mailbox-surface mailbox-inbox" aria-label="Pesan pribadi">',
     '<div class="mailbox-inbox-head"><h3>Notifikasi <span id="ssc-mailbox-unread" class="mailbox-count" hidden></span></h3>',
@@ -38,7 +39,7 @@
   ].join('');
   document.body.append(dialog);
   const $=id=>dialog.querySelector('#'+id);
-  let items=[],current=null,filter='all',busy=false,lastTrigger=null;
+  let items=[],current=null,filter='all',lastTrigger=null,refreshTask=null,loaded=false,loadFailed=false,deleting=false;
   const fmt=date=>{
     const value=new Date(date);
     return Number.isFinite(value.getTime())?value.toLocaleString('id-ID',{
@@ -85,7 +86,9 @@
       (filter==='activation'&&['activation','information'].includes(item.type)));
     if(!shown.length){
       const hint=document.createElement('p');hint.className='mailbox-empty';
-      hint.textContent=items.length?'Tidak ada notifikasi pada filter ini.':'Belum ada notifikasi.';
+      hint.textContent=loadFailed?'Gagal memuat pesan. Tekan Perbarui untuk mencoba lagi.':
+        !loaded?'Memuat notifikasi...':
+        items.length?'Tidak ada notifikasi pada filter ini.':'Belum ada notifikasi.';
       root.append(hint);
     }
     for(const item of shown){
@@ -131,25 +134,37 @@
     }
   }
   async function refresh(silent=false){
-    if(busy)return;
-    busy=true;$('ssc-mailbox-refresh').disabled=true;
-    try{
-      const value=await api('/api/player/mailbox');
-      items=Array.isArray(value.items)?value.items:[];
-      if(current){
-        const next=items.find(item=>item.id===current.id);
-        if(next)await read(next);else emptyDetail();
+    if(refreshTask){await refreshTask;return;}
+    refreshTask=(async()=>{
+      $('ssc-mailbox-refresh').disabled=true;
+      $('ssc-mailbox-list').setAttribute('aria-busy','true');
+      if(!silent)notify('Memuat notifikasi...');
+      if(!loaded)draw();
+      try{
+        const value=await api('/api/player/mailbox');
+        items=Array.isArray(value.items)?value.items:[];
+        loaded=true;loadFailed=false;
+        $('ssc-mailbox-signin').hidden=true;
+        if(current){
+          const next=items.find(item=>item.id===current.id);
+          if(next)await read(next);else emptyDetail();
+        }
+        draw();
+        if(!silent)notify(value.activationRequest==='pending'?
+          'Permintaan kode menunggu verifikasi pengurus.':'Notifikasi sudah diperbarui.');
+      }catch(error){
+        // Never retain a previous account's messages after an auth or network failure.
+        items=[];emptyDetail();loaded=true;loadFailed=true;draw();
+        $('ssc-mailbox-signin').hidden=![401,403].includes(error.status);
+        if(!silent||dialog.open)notify([401,403].includes(error.status)?
+          'Masuk dengan akun berstatus Diterima melalui Cek Status untuk membuka Mail Box.':
+          'Notifikasi belum bisa dimuat. Periksa koneksi, lalu tekan Perbarui.',true);
+      }finally{
+        $('ssc-mailbox-list').removeAttribute('aria-busy');
+        $('ssc-mailbox-refresh').disabled=false;
       }
-      draw();
-      if(!silent)notify(value.activationRequest==='pending'?
-        'Permintaan kode menunggu verifikasi pengurus.':'Notifikasi sudah diperbarui.');
-    }catch(error){
-      if(!silent)notify(error.status===403?
-        'Masuk dengan akun berstatus Diterima melalui Cek Status untuk membuka Mail Box.' : error.message,true);
-      if(error.status===403){
-        items=[];emptyDetail();draw();
-      }
-    }finally{busy=false;$('ssc-mailbox-refresh').disabled=false;}
+    })();
+    try{await refreshTask}finally{refreshTask=null;}
   }
   async function open(trigger){
     lastTrigger=trigger||document.activeElement;
@@ -208,15 +223,16 @@
   });
   $('ssc-mailbox-delete').addEventListener('click',async()=>{
     if(!current||current.canReveal)return;
+    if(deleting)return;
     const id=current.id,button=$('ssc-mailbox-delete');
     if(!window.confirm('Hapus notifikasi ini dari Mail Box?'))return;
-    button.disabled=true;
+    deleting=true;button.disabled=true;
     try{
       await api('/api/player/mailbox/delete','POST',{id});
       items=items.filter(item=>item.id!==id);
       emptyDetail();draw();notify('Notifikasi berhasil dihapus.');
     }catch(error){notify(error.message,true)}
-    finally{button.disabled=false;}
+    finally{deleting=false;button.disabled=!current||current.canReveal===true;}
   });
   document.addEventListener('click',event=>{
     const trigger=event.target.closest?.('[data-open-mailbox],a[href="/mailbox"]');
