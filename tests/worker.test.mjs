@@ -57,7 +57,8 @@ test('Admin menyimpan berdasarkan revisi; revisi lama ditolak', async () => {
   assert.equal((await fetchWorker(env, '/api/admin/form', 'PUT', { settings: fresh.settings, pages: fresh.pages })).status, 428);
 });
 test('Halaman Voting hanya dapat dibuka dengan status diterima', async () => {
-  const { env, setStatus } = setup();
+  const { env, setStatus, row } = setup();
+  row.settings = JSON.stringify({homeVotingEnabled:true,homeVotingPermanent:true});
   for (const [status, expected] of [['accepted',200],['pending',302],['rejected',302]]) {
     setStatus(status);
     const response = await fetchWorker(env, '/voting', 'GET', undefined, playerCookie);
