@@ -36,6 +36,7 @@
     if (!response.ok) {
       const err = new Error(data?.error || (response.status === 401 ? 'Silakan masuk kembali.' : 'Koneksi ke server sedang bermasalah.'));
       err.status = response.status;
+      err.remainingSeconds = Number(data?.remainingSeconds || response.headers.get('Retry-After') || 0);
       throw err;
     }
     return data;
@@ -197,11 +198,28 @@
     }catch(error){label.textContent='Permintaan tidak berhasil: '+error.message}
     finally{button.disabled=false;}
   });
+  let activationCountdown=null;
+  function activationCooldown(seconds){
+    const button=$('player-activate-submit');
+    const ends=Date.now()+Math.max(1,seconds)*1000;
+    clearInterval(activationCountdown);
+    const refresh=()=>{
+      const remaining=Math.max(0,Math.ceil((ends-Date.now())/1000));
+      if(remaining===0){
+        clearInterval(activationCountdown);activationCountdown=null;
+        button.disabled=false;button.textContent='Aktifkan akun aman';return;
+      }
+      button.disabled=true;
+      button.textContent='Coba lagi dalam '+String(Math.floor(remaining/60)).padStart(2,'0')+
+        ':'+String(remaining%60).padStart(2,'0');
+    };
+    refresh();activationCountdown=setInterval(refresh,1000);
+  }
   $('player-activate-form').addEventListener('submit',async e=>{
     e.preventDefault();const button=$('player-activate-submit');if(button.disabled)return;
     const password=$('player-activate-password').value;
-    if(password.length<12||password!==$('player-activate-repeat').value){
-      securityMessage('Password minimal 12 karakter dan kedua isian harus sama.');return;
+    if(password.length<8||password!==$('player-activate-repeat').value){
+      securityMessage('Password minimal 8 karakter dan kedua isian harus sama.');return;
     }
     button.disabled=true;securityMessage('Memverifikasi undangan dan membuat akun aman...');
     try{
@@ -211,8 +229,10 @@
         })});
       $('player-activate-form').reset();
       await loadSecurityState();securityMessage('Akun aman berhasil diaktifkan. Password tidak disimpan di browser.');
-    }catch(error){securityMessage('Aktivasi gagal: '+error.message)}
-    finally{button.disabled=false;}
+    }catch(error){
+      securityMessage('Aktivasi gagal: '+error.message);
+      if(error.status===429)activationCooldown(error.remainingSeconds||300);
+    }finally{if(!activationCountdown)button.disabled=false;}
   });
   $('player-password-login-form').addEventListener('submit',async e=>{
     e.preventDefault();const button=$('player-password-login-submit');if(button.disabled)return;
