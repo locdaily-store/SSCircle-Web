@@ -11,7 +11,9 @@
     "/seasons",
     "/seasons.html",
     "/my-sscircle",
-    "/my-sscircle.html"
+    "/my-sscircle.html",
+    "/mailbox",
+    "/mailbox.html"
   ],
   "exclude": []
 }

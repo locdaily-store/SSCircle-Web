@@ -9,10 +9,10 @@
   <title>My SSCircle | Player Dashboard</title>
   <link rel="icon" href="assets/sscircle-logo.png" type="image/png">
   <link rel="stylesheet" href="style.css?v=10.35.0">
-  <link rel="stylesheet" href="player-dashboard.css?v=10.36.0">
+  <link rel="stylesheet" href="player-dashboard.css?v=10.37.0">
   <script src="color-theme.js?v=10.35.0" defer></script>
   <script src="site-shell.js?v=10.35.0" defer></script>
-  <script src="player-dashboard.js?v=10.36.0" defer></script>
+  <script src="player-dashboard.js?v=10.37.0" defer></script>
 </head>
 <body class="home-page player-page theme-v3">
   <header class="home-header" id="top">
@@ -86,12 +86,54 @@
           <span class="player-state"><span aria-hidden="true">●</span> Anggota aktif</span>
         </section>
 
+        <section class="player-card player-security" aria-labelledby="player-security-title">
+          <div class="player-section-head">
+            <div><span class="player-overline">ACCOUNT &amp; SECURITY</span>
+              <h2 id="player-security-title">Keamanan akun</h2></div>
+            <span class="player-tag" id="player-security-state">Memeriksa...</span>
+          </div>
+          <p>Kode pendaftaran tetap digunakan untuk Cek Status. Mengubah profil pribadi membutuhkan password dashboard yang diaktifkan dengan undangan admin.</p>
+          <div id="player-security-activate" hidden>
+            <p class="player-helper">Minta kode melalui Mail Box. Jika identitasmu belum terverifikasi, permintaan akan diperiksa admin terlebih dahulu. Setelah disetujui, kode dikirim otomatis ke Mail Box pribadimu.</p>
+            <div class="player-actions"><button class="player-action player-action-primary" type="button" id="player-request-activation">Minta kode aktivasi</button><a class="player-action player-action-secondary" href="/mailbox">Buka Mail Box ↗</a></div>
+            <p id="player-activation-notice" class="player-helper" role="status" aria-live="polite"></p>
+            <form id="player-activate-form" class="player-settings-form">
+              <label class="player-setting-field"><span>Kode aktivasi dari admin</span>
+                <input id="player-invite-secret" type="password" autocomplete="off" maxlength="64" placeholder="Kode sekali pakai" required></label>
+              <label class="player-setting-field"><span>Buat password dashboard</span>
+                <input id="player-activate-password" type="password" autocomplete="new-password" minlength="12" maxlength="128" placeholder="Minimal 12 karakter" required></label>
+              <label class="player-setting-field"><span>Ulangi password dashboard</span>
+                <input id="player-activate-repeat" type="password" autocomplete="new-password" minlength="12" maxlength="128" required></label>
+              <button id="player-activate-submit" class="player-action player-action-primary" type="submit">Aktifkan akun aman</button>
+            </form>
+          </div>
+          <div id="player-security-login" hidden>
+            <p class="player-helper">Akun sudah diaktifkan. Masuk dengan password untuk membuka profil dan pengaturan privat.</p>
+            <form id="player-password-login-form" class="player-settings-form">
+              <label class="player-setting-field"><span>Password dashboard</span>
+                <input id="player-dashboard-password" type="password" autocomplete="current-password" required></label>
+              <button id="player-password-login-submit" class="player-action player-action-primary" type="submit">Buka dashboard pribadi</button>
+            </form>
+          </div>
+          <div id="player-security-active" hidden>
+            <p class="player-helper">Akses pribadi terlindungi dengan sesi perangkat yang bisa dicabut kapan saja.</p>
+            <div id="player-device-list" class="player-device-list"></div>
+            <div class="player-actions">
+              <button class="player-action player-action-secondary" id="player-refresh-devices" type="button">Perbarui perangkat</button>
+              <button class="player-action player-action-secondary" id="player-signout-secure" type="button">Kunci dashboard ini</button>
+              <button class="player-action player-action-secondary" id="player-signout-all" type="button">Keluar semua perangkat</button>
+            </div>
+          </div>
+          <p id="player-security-message" class="player-helper" role="status" aria-live="polite"></p>
+        </section>
+
         <section class="player-card player-preferences" aria-labelledby="player-preferences-heading">
           <div class="player-section-head"><div>
             <span class="player-overline">YOUR PROFILE</span>
             <h2 id="player-preferences-heading">Pengaturan profil</h2>
           </div><span class="player-tag">Bisa diedit</span></div>
           <p>Sesuaikan nama tampilan, deskripsi, dan privasi. Identitas Minecraft serta statistik resmi tidak dapat diubah manual.</p>
+          <p class="player-helper" id="player-edit-requirement">Aktifkan akun aman untuk dapat mengedit profil.</p>
           <form id="player-settings-form" class="player-settings-form">
             <label class="player-setting-field">
               <span>Nama tampilan komunitas</span>
@@ -166,6 +208,7 @@
             <div><span class="player-overline">THE COMMUNITY</span><h2 id="player-explore-title">Jelajahi SSCircle</h2></div>
           </div>
           <div class="player-shortcuts">
+            <a href="/mailbox" class="player-shortcut"><span aria-hidden="true">✉</span><div><strong>Mail Box</strong><small>Lihat notifikasi dan kode aktivasi</small></div><span aria-hidden="true">↗</span></a>
             <a href="/voting" class="player-shortcut"><span aria-hidden="true">◉</span><div><strong>Voting komunitas</strong><small>Ikuti voting yang sedang berlangsung</small></div><span aria-hidden="true">↗</span></a>
             <a href="events.html" class="player-shortcut"><span aria-hidden="true">▦</span><div><strong>Event &amp; jadwal</strong><small>Lihat agenda SSCircle berikutnya</small></div><span aria-hidden="true">↗</span></a>
             <a href="seasons.html" data-season-link class="player-shortcut" hidden><span aria-hidden="true">★</span><div><strong>Season Archive</strong><small>Jelajahi sejarah dan Hall of Fame</small></div><span aria-hidden="true">↗</span></a>

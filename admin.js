@@ -1898,7 +1898,7 @@ async function removeMedia(ids) {
 }
 function setupExternalImageLibrary() {
   const listPanel = make('div', 'panel ssc-external-image-library');
-  listPanel.append(make('h3', '', 'Foto URL eksternal'), make('p', 'field-help', 'Bookmark tautan HTTPS untuk dipakai ulang di editor mana pun. Hanya URL disimpan, tanpa menyalin file ke Cloudflare.'));
+  listPanel.append(make('h3', '', 'Foto URL eksternal'), make('p', 'field-help', 'Bookmark tautan HTTPS untuk dipakai ulang di editor mana pun. Hanya tautan gambar yang disimpan, tanpa mengunggah ulang file.'));
   const list = make('div', 'ssc-external-image-list');
   const addPanel = make('div');
   listPanel.append(addPanel, list);

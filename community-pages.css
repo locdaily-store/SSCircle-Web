@@ -987,3 +987,12 @@ body.rules-page .rules-consent { width: 100%; }
   .members-admin-root .member-admin-tab{flex:1 1 145px}
 }
 @container member-control (max-width:360px){.members-admin-root .member-admin-tab{flex-basis:100%}}
+/* V10.37: protected invitation display. No horizontal overflow at 320px. */
+.member-admin-invite-result{display:grid;gap:10px;min-width:0;max-width:100%;padding:14px;border:1px solid var(--ssc-primary,#bc91f0);border-radius:12px;background:color-mix(in srgb,var(--ssc-primary,#bc91f0) 10%,transparent)}
+.member-admin-invite-result[hidden]{display:none!important}
+.member-admin-invite-result strong{font-size:13px;overflow-wrap:anywhere}
+.member-admin-invite-result p{font-size:11px;line-height:1.65;color:var(--ssc-muted,#bfadcf);overflow-wrap:anywhere}
+.member-admin-invite-secret{display:block;font-size:clamp(10px,1.7vw,15px);overflow-wrap:anywhere;word-break:break-all;padding:12px;line-height:1.7;background:var(--ssc-bg,#140c20);border-radius:9px;color:var(--ssc-text,#fff);white-space:normal}
+.member-admin-actions{display:flex;flex-wrap:wrap;gap:8px;min-width:0}
+.member-admin-actions>.button{font-size:11px;min-width:0;max-width:100%}
+@container member-control (max-width:550px){.member-admin-actions{width:100%}.member-admin-actions>.button{flex:1 1 150px}}
