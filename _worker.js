@@ -1967,7 +1967,7 @@ async function memberDerivePassword(password,salt,iterations=MEMBER_PASSWORD_ITE
   return b64(new Uint8Array(derived));
 }
 function memberPasswordValid(value) {
-  return typeof value==='string' && value.length>=12 && value.length<=128
+  return typeof value==='string' && value.length>=8 && value.length<=128
     && !/[\x00-\x1f\x7f]/.test(value);
 }
 function memberAgent(req) {
@@ -2082,31 +2082,60 @@ async function memberSecurityAPI(req,env,path,method) {
       session:active?{id:active.id,client:active.client_label,createdAt:active.created_at}:null});
   }
   if(path==='/api/player/security/activate' && method==='POST') {
-    if(!await rateLimit(env,req,'member-password-activate',5,900))
-      return bad('Terlalu banyak percobaan aktivasi. Coba lagi nanti.',429);
+    // A five-minute cooldown, with remaining duration returned to the UI.
+    if(!await rateLimit(env,req,'member-password-activate',5,300)) {
+      const key=await digest(env.SESSION_SECRET+'|member-password-activate|'+
+        (req.headers.get('CF-Connecting-IP')||'unknown'));
+      const row=await env.DB.prepare('SELECT expires_at FROM rate_limits WHERE key=?').bind(key).first();
+      const left=Math.max(1,Number(row?.expires_at||0)-Math.floor(Date.now()/1000));
+      return J({error:'Terlalu banyak percobaan aktivasi. Coba lagi dalam '+Math.ceil(left/60)+
+        ' menit.',remainingSeconds:left},429,{'Retry-After':String(left)});
+    }
     const value=await body(req,1800);
-    if(!memberPasswordValid(value?.password)||
-       typeof value?.invite!=='string'||!/^[A-Za-z0-9_-]{32}$/.test(value.invite))
-      return bad('Kode aktivasi atau password tidak valid. Password minimal 12 karakter.',400);
+    const code=typeof value?.invite==='string'?value.invite.replace(/\s+/g,''):'';
+    if(!memberPasswordValid(value?.password)||!/^[A-Za-z0-9_-]{32}$/.test(code))
+      return bad('Kode aktivasi harus sesuai Mail Box dan password minimal 8 karakter.',400);
     const now=Math.floor(Date.now()/1000),stamp=new Date().toISOString();
-    const hashed=await memberInviteHash(env,value.invite);
-    // Atomic one-use claim. A competing replay cannot change the password.
-    const claimed=await env.DB.prepare(`UPDATE member_activation_invites SET used_at=?
-      WHERE application_id=? AND secret_hash=? AND used_at IS NULL AND expires_at>?`)
-      .bind(stamp,app.id,hashed,now).run();
-    if(!(claimed.meta?.changes>0))
-      return bad('Kode aktivasi salah, sudah digunakan, atau kedaluwarsa.',403);
+    const hashed=await memberInviteHash(env,code);
+    const invite=await env.DB.prepare('SELECT secret_hash,expires_at,used_at '+
+      'FROM member_activation_invites WHERE application_id=?').bind(app.id).first();
+    if(!invite||!safeEq(hashed,invite.secret_hash))
+      return bad('Kode aktivasi tidak cocok. Salin kode terbaru dari Mail Box.',403);
+    if(invite.used_at!==null){
+      const credential=await env.DB.prepare('SELECT application_id FROM member_credentials '+
+        'WHERE application_id=?').bind(app.id).first();
+      return bad(credential?'Akun sudah aktif. Masuk dengan password dashboard.':
+        'Kode terpakai tetapi aktivasi belum selesai. Minta kode baru melalui Mail Box.',403);
+    }
+    if(Number(invite.expires_at)<=now)
+      return bad('Kode aktivasi kedaluwarsa. Minta kode baru dari Mail Box.',410);
+    // Compute the expensive hash BEFORE consuming the one-use invitation.
+    // A CPU timeout here will leave the code available for retry.
     const salt=b64(crypto.getRandomValues(new Uint8Array(16)));
     const passwordHash=await memberDerivePassword(value.password,salt);
-    await env.DB.prepare(`INSERT INTO member_credentials(application_id,password_salt,
-      password_hash,iterations,failed_attempts,locked_until,created_at,updated_at)
-      VALUES(?,?,?,?,0,0,?,?) ON CONFLICT(application_id) DO UPDATE SET
-      password_salt=excluded.password_salt,password_hash=excluded.password_hash,
-      iterations=excluded.iterations,failed_attempts=0,locked_until=0,
-      updated_at=excluded.updated_at`).bind(app.id,salt,passwordHash,
-        MEMBER_PASSWORD_ITERATIONS,stamp,stamp).run();
-    await env.DB.prepare(`UPDATE member_secure_sessions SET revoked_at=?
-      WHERE application_id=? AND revoked_at IS NULL`).bind(stamp,app.id).run();
+    const marker=stamp+'#'+uid();
+    // D1 batch is transactional: either both claim and password commit or neither.
+    const results=await env.DB.batch([
+      env.DB.prepare('UPDATE member_activation_invites SET used_at=? '+
+        'WHERE application_id=? AND secret_hash=? AND used_at IS NULL AND expires_at>?')
+        .bind(marker,app.id,hashed,now),
+      env.DB.prepare('INSERT INTO member_credentials(application_id,password_salt,'+
+        'password_hash,iterations,failed_attempts,locked_until,created_at,updated_at) '+
+        'SELECT ?,?,?,?,0,0,?,? FROM member_activation_invites '+
+        'WHERE application_id=? AND used_at=? AND secret_hash=? AND expires_at>? '+
+        'ON CONFLICT(application_id) DO UPDATE SET '+
+        'password_salt=excluded.password_salt,password_hash=excluded.password_hash,'+
+        'iterations=excluded.iterations,failed_attempts=0,locked_until=0,'+
+        'updated_at=excluded.updated_at')
+        .bind(app.id,salt,passwordHash,MEMBER_PASSWORD_ITERATIONS,stamp,stamp,
+          app.id,marker,hashed,now),
+      env.DB.prepare('UPDATE member_secure_sessions SET revoked_at=? '+
+        'WHERE application_id=? AND revoked_at IS NULL AND '+
+        'EXISTS (SELECT 1 FROM member_activation_invites WHERE application_id=? AND used_at=?)')
+        .bind(stamp,app.id,app.id,marker)
+    ]);
+    if(!(results?.[0]?.meta?.changes>0)||!(results?.[1]?.meta?.changes>0))
+      return bad('Kode sudah digantikan atau digunakan. Salin kode terbaru dari Mail Box.',403);
     const secure=await memberIssueSession(env,req,app);
     return memberStrongResponse({ok:true,authenticated:true,activated:true},secure);
   }
@@ -2384,16 +2413,19 @@ async function mailboxAPI(req,env,path,method){
       .bind(account.id).first();
     const invite=await env.DB.prepare('SELECT expires_at,used_at FROM member_activation_invites WHERE application_id=?')
       .bind(account.id).first();
+    const newest=await env.DB.prepare('SELECT id FROM member_mailbox '+
+      "WHERE application_id=? AND type='activation' ORDER BY rowid DESC LIMIT 1").bind(account.id).first();
     return J({items:(rows.results||[]).map(row=>({id:row.id,type:row.type,
       title:row.title,content:row.content,createdAt:row.created_at,
       read:!!row.read_at,expiresAt:row.expires_at?new Date(row.expires_at*1000).toISOString():null,
-      canReveal:!!row.encrypted_secret && row.expires_at>Math.floor(Date.now()/1000) &&
+      canReveal:!!row.encrypted_secret && row.id===newest?.id &&
+        row.expires_at>Math.floor(Date.now()/1000) &&
         invite?.used_at===null && invite?.expires_at===row.expires_at})),
       activationRequest:request?.status||'none'});
   }
   if(path==='/api/player/mailbox/request-activation' && method==='POST'){
-    if(!await rateLimit(env,req,'mailbox-activation',4,3600))
-      return bad('Terlalu banyak permintaan kode. Coba lagi nanti.',429);
+    if(!await rateLimit(env,req,'mailbox-activation',4,300))
+      return bad('Terlalu banyak permintaan kode. Coba lagi dalam 5 menit.',429);
     const pending=await env.DB.prepare('SELECT status FROM member_activation_requests WHERE application_id=?')
       .bind(account.id).first();
     const invite=await env.DB.prepare(`SELECT expires_at,used_at FROM member_activation_invites
@@ -2421,8 +2453,10 @@ async function mailboxAPI(req,env,path,method){
     const payload=await body(req,250);
     if(!/^[0-9a-f-]{36}$/.test(payload?.id||''))return bad('Pesan tidak tersedia.',404);
     const row=await env.DB.prepare(`SELECT encrypted_secret,secret_nonce,expires_at
-      FROM member_mailbox WHERE id=? AND application_id=? AND type='activation'`)
-      .bind(payload.id,account.id).first();
+      FROM member_mailbox WHERE id=? AND application_id=? AND type='activation'
+      AND id=(SELECT id FROM member_mailbox WHERE application_id=? AND type='activation'
+        ORDER BY rowid DESC LIMIT 1)`)
+      .bind(payload.id,account.id,account.id).first();
     const invite=await env.DB.prepare('SELECT expires_at,used_at FROM member_activation_invites WHERE application_id=?')
       .bind(account.id).first();
     if(!row?.encrypted_secret || row.expires_at<=Date.now()/1000 ||
