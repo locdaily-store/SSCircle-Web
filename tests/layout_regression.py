@@ -158,7 +158,7 @@ window.fetch=async url => {
   assert page.locator('.season-admin-rank-fields').count()>=3,('Ranking fields missing',w)
   assert page.locator('.season-admin-rank-top > .ssc-sort-handle').count()>=2,('Ranking drag handles missing',w)
   assert page.locator('.sidebar-group').count()==4,('Sidebar groups missing',w)
-  assert page.locator('.dashboard-sidebar [data-tab]').count()==13,('Sidebar links missing',w)
+  assert page.locator('.dashboard-sidebar [data-tab]').count()==14,('Sidebar links missing',w)
   if w<=390:
     page.locator('#admin-nav-toggle').click()
     assert page.locator('#admin-nav-toggle').get_attribute('aria-expanded')=='true'
