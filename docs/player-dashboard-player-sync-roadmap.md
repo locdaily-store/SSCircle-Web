@@ -43,6 +43,15 @@ Buat:
 - Bukti build/test CI belum cukup untuk menjamin server produksi: wajib uji Velocity + Floodgate + Cloudflare Pages/D1 di staging sebelum publik.
 - Secret `SSCIRCLE_LINK_SERVER_SECRET` disetel di Cloudflare dan proses Velocity. Jangan mengunggahnya sebagai file website atau menaruhnya di frontend.
 
+## Implementasi V10.45.1 (Paper langsung, tanpa Velocity)
+- Disediakan proyek dan JAR **SSCircle Player Sync Paper** untuk Paper 26.3 (Java 25) dengan perintah `/sscircle link`, `/sscircle status` dan reload konfigurasi oleh admin. Plugin menggunakan endpoint/backend V10.45 yang sama sehingga website tidak membutuhkan kode login baru.
+- Konfigurasi Paper langsung: `online-mode=true`, `proxies.velocity.enabled=false`, `settings.bungeecord=false`. Tidak memerlukan `forwarding.secret`, Velocity, atau program Java lain selain Paper.
+- Identitas Java Premium diambil dari UUID sesi online-mode Paper. Mode offline dan plugin autentikasi campuran yang belum diverifikasi **ditolak**. Bedrock dibaca dari XUID Floodgate jika API tersedia; tidak dipastikan bekerja sebelum tes staging.
+- Plugin memakai secret lingkungan `SSCIRCLE_LINK_SERVER_SECRET` bersama dengan Cloudflare, HTTPS HMAC-SHA256, timestamp dan nonce. Tidak ada secret di konfigurasi website atau plugin.
+- Pengiriman HTTPS dijalankan asinkron dan hasil ditampilkan pada main thread; tidak memasukkan kode ke log.
+- Dokumentasi instalasi Windows dan pengujian localhost terdapat pada `docs/V10.45.1-PAPER-DIRECT.md`.
+- Plugin Paper V10.45.1 **belum** mengirim statistik atau mengaktifkan Java Non-Premium. Tes manual server sesungguhnya, Cloudflare Pages, Floodgate, dan recovery tetap diperlukan.
+
 ## Rilis 4: Plugin SSCircle Player Sync
 Dua modul:
 1. **Velocity Bridge**: membaca status autentikasi terpercaya dari plugin login, mengklasifikasi Java Premium / Java Non-Premium / Bedrock. Data tidak boleh ditebak dari username atau offline UUID saja.
