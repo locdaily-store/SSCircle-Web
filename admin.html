@@ -23,13 +23,13 @@
     <script src="registration-preview.js?v=10.26.0" defer></script>
     <script src="color-theme-admin.js?v=10.31.0" defer></script>
     <script src="member-center-admin.js?v=10.37.0" defer></script>
-    <script src="profile-admin.js?v=10.41.0" defer></script>
+    <script src="profile-admin.js?v=10.43.0" defer></script>
     <script src="admin.js?v=10.33.0" defer></script>
     <script src="form-insert-rail.js?v=10.26.0" defer></script>
     <script src="spreadsheet.js?v=10.26.0" defer></script>
     <link rel="stylesheet" href="password-visibility.css?v=10.39.0">
   <script src="password-visibility.js?v=10.39.0" defer></script>
-  <link rel="stylesheet" href="profile-ui.css?v=10.41.0">
+  <link rel="stylesheet" href="profile-ui.css?v=10.43.0">
 </head>
   <body class="admin-page theme-v3">
     <div class="ambient ambient-a" aria-hidden="true"></div>
@@ -164,7 +164,7 @@
                 <div>
                   <div class="overline">SSCIRCLE / PROFILE DESIGN</div>
                   <h1>Atur Profile<span class="dot-accent">.</span></h1>
-                  <p>Ubah judul, tata letak, dan susunan kartu. Pengaturan akun dan privasi tetap di Kelola Pemain.</p>
+                  <p>Geser kartu, atur gaya, lalu lihat hasilnya di Desktop atau HP. Pengaturan akun dan privasi tetap di Kelola Pemain.</p>
                 </div>
                 <button type="button" id="save-profile-page" class="button primary">Simpan tampilan Profile ✓</button>
               </div>
@@ -173,7 +173,13 @@
                 <aside class="panel ssc-profile-admin-preview">
                   <h2>Live preview Profile</h2>
                   <p>Contoh tampilan yang tidak mengambil data pemain sebenarnya.</p>
-                  <iframe id="profile-admin-preview-frame" title="Live preview halaman Profile" src="profile-preview.html?ssc_theme_preview=1" loading="lazy"></iframe>
+                  <div id="profile-preview-devices" class="ssc-profile-preview-devices" role="group" aria-label="Ukuran pratinjau">
+                    <button type="button" class="button secondary is-current" data-profile-device="desktop" aria-pressed="true">Desktop</button>
+                    <button type="button" class="button secondary" data-profile-device="mobile" aria-pressed="false">HP</button>
+                  </div>
+                  <div class="ssc-profile-preview-stage" id="profile-preview-stage" data-device="desktop">
+                    <iframe id="profile-admin-preview-frame" title="Live preview halaman Profile" src="profile-preview.html?ssc_theme_preview=1" loading="lazy"></iframe>
+                  </div>
                   <p>Ubah warna kartu, teks, tombol, dan latar melalui Atur Warna.</p>
                   <button type="button" class="button secondary" id="profile-open-theme">Buka Atur Warna</button>
                 </aside>
