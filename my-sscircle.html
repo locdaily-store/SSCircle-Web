@@ -92,13 +92,13 @@
               <h2 id="player-security-title">Keamanan akun</h2></div>
             <span class="player-tag" id="player-security-state">Memeriksa...</span>
           </div>
-          <p>Kode pendaftaran tetap digunakan untuk Cek Status. Mengubah profil pribadi membutuhkan password dashboard yang diaktifkan dengan undangan admin.</p>
+          <p>Kode pendaftaran tetap digunakan untuk Cek Status. Mengubah profil pribadi membutuhkan password dashboard yang diaktifkan dengan kode aktivasi dari Mail Box.</p>
           <div id="player-security-activate" hidden>
             <p class="player-helper">Minta kode melalui Mail Box. Jika identitasmu belum terverifikasi, permintaan akan diperiksa admin terlebih dahulu. Setelah disetujui, kode dikirim otomatis ke Mail Box pribadimu.</p>
             <div class="player-actions"><button class="player-action player-action-primary" type="button" id="player-request-activation">Minta kode aktivasi</button><a class="player-action player-action-secondary" href="/mailbox">Buka Mail Box ↗</a></div>
             <p id="player-activation-notice" class="player-helper" role="status" aria-live="polite"></p>
             <form id="player-activate-form" class="player-settings-form">
-              <label class="player-setting-field"><span>Kode aktivasi dari admin</span>
+              <label class="player-setting-field"><span>Kode aktivasi dari Mail Box</span>
                 <input id="player-invite-secret" type="password" autocomplete="off" maxlength="64" placeholder="Kode sekali pakai" required></label>
               <label class="player-setting-field"><span>Buat password dashboard</span>
                 <input id="player-activate-password" type="password" autocomplete="new-password" minlength="12" maxlength="128" placeholder="Minimal 12 karakter" required></label>
