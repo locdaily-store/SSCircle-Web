@@ -17,6 +17,15 @@ Status: **Perencanaan dan implementasi bertahap**. Dokumen ini bukan klaim bahwa
 - Setiap perubahan D1 dibuat sebagai migration terurut, backup sebelum produksi; tidak boleh menghapus tabel pendaftaran.
 - Abaikan username sebagai bukti pemilikan akun.
 
+## Implementasi akun aman V10.44 (sebagian Rilis 2)
+- Login dashboard tetap memerlukan password yang dibuat setelah verifikasi identitas oleh admin dan kode sekali pakai di Mail Box. Kode pendaftaran **bukan** izin untuk mengganti password.
+- Pemulihan password: anggota yang sudah masuk dengan kode pendaftaran mengajukan permintaan melalui Profile; admin memverifikasi identitas melalui kanal terpisah, lalu menerbitkan kode lewat Mail Box. Kode dipakai satu kali untuk mereset password; semua sesi password lama dicabut.
+- Anggota aktif dapat mengganti password dengan **bukti password lama** yang diturunkan oleh browser; semua sesi lama dicabut dan dibuatkan sesi baru untuk perangkat ini jika memungkinkan.
+- Anggota dapat memberi nama perangkat dan melihat maksimal 40 aktivitas keamanan terbaru. Event dicatat tanpa menyimpan password, kode, token, IP, atau sidik-jari perangkat; log dibatasi 100 per anggota.
+- Tabel `member_security_events` dan indeksnya dibuat secara aditif saat sistem keamanan dipakai; tidak menghapus tabel lama. Lakukan cadangan D1 dan uji di staging sebelum deploy produksi.
+- **Belum tersedia** pemulihan mandiri via email/passkey dan sistem kepemilikan identitas berbasis email. Jangan menganggap verifikasi admin dapat diganti hanya dengan memasukkan kode pendaftaran.
+- Masih wajib pengujian produksi Cloudflare Pages + D1 dengan akun uji: sesi paralel, revoke, pemulihan, rate limit, akses silang akun, dan perangkat HP.
+
 ## Rilis 3: Minecraft Account Linking
 Buat:
 - `minecraft_accounts`: `member_id`, `provider`, `verified_external_id`, `display_name`, `linked_at`, `last_verified_at`; unique(provider, verified_external_id).
