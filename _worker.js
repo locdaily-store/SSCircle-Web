@@ -1972,7 +1972,12 @@ async function ensureMemberSecurity(env) {
       client_label TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL,
       expires_at INTEGER NOT NULL, revoked_at TEXT,
       FOREIGN KEY(application_id) REFERENCES submissions(id) ON DELETE CASCADE)`,
-    'CREATE INDEX IF NOT EXISTS idx_ssc_secure_member ON member_secure_sessions(application_id,expires_at)'
+    'CREATE INDEX IF NOT EXISTS idx_ssc_secure_member ON member_secure_sessions(application_id,expires_at)',
+    `CREATE TABLE IF NOT EXISTS member_security_events (
+      id TEXT PRIMARY KEY, application_id TEXT NOT NULL, event_type TEXT NOT NULL,
+      client_label TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL,
+      FOREIGN KEY(application_id) REFERENCES submissions(id) ON DELETE CASCADE)`,
+    'CREATE INDEX IF NOT EXISTS idx_ssc_security_events_member ON member_security_events(application_id,created_at)'
   ];
   for (const statement of statements) await env.DB.prepare(statement).run();
   memberSecurityReady.add(env.DB);
@@ -1994,6 +1999,26 @@ function memberPasswordValid(value) {
 }
 function memberAgent(req) {
   return s(req.headers.get('User-Agent')||'Perangkat tidak dikenal',105);
+}
+// Activity history intentionally contains NO IP address, password, login code,
+// one-time token, email, device fingerprint, or other secret.
+const MEMBER_EVENT_TYPES=new Set(['login_success','login_locked','password_activated',
+  'password_recovered','password_changed','device_renamed','device_revoked',
+  'session_locked','all_sessions_revoked']);
+async function memberSecurityAudit(env,req,memberId,type){
+  if(!MEMBER_EVENT_TYPES.has(type))return;
+  try{
+    await env.DB.prepare(`INSERT INTO member_security_events
+      (id,application_id,event_type,client_label,created_at) VALUES(?,?,?,?,?)`)
+      .bind(uid(),memberId,type,memberAgent(req),new Date().toISOString()).run();
+    await env.DB.prepare(`DELETE FROM member_security_events
+      WHERE application_id=? AND id NOT IN (
+        SELECT id FROM member_security_events WHERE application_id=?
+        ORDER BY created_at DESC,id DESC LIMIT 100)`).bind(memberId,memberId).run();
+  }catch{
+    // The account action must not fail after a successful credential commit.
+    console.error('[SSCircle account] Tidak dapat menyimpan log keamanan.');
+  }
 }
 async function memberStrongSession(req,env,application) {
   if (!application || application.status!=='accepted' || !env.SESSION_SECRET) return null;
@@ -2102,6 +2127,8 @@ async function memberSecurityAPI(req,env,path,method) {
       await env.DB.prepare('UPDATE member_credentials SET failed_attempts=failed_attempts+1, '+
         'locked_until=CASE WHEN failed_attempts>=5 THEN ? ELSE locked_until END '+
         'WHERE application_id=?').bind(now+900,app.id).run();
+      if(Number(credential.failed_attempts)>=5)
+        await memberSecurityAudit(env,req,app.id,'login_locked');
       return bad('Kode atau password tidak sesuai.',401);
     }
     // Migrate existing credentials on successful login, without altering
@@ -2114,6 +2141,7 @@ async function memberSecurityAPI(req,env,path,method) {
     await env.DB.prepare('UPDATE member_credentials SET failed_attempts=0,locked_until=0 '+
       'WHERE application_id=?').bind(app.id).run();
     const secure=await memberIssueSession(env,req,app);
+    await memberSecurityAudit(env,req,app.id,'login_success');
     return memberStrongResponse({ok:true,authenticated:true},secure,await signPlayer(env,app.id));
   }
   const app=await playerSession(req,env);
@@ -2156,6 +2184,8 @@ async function memberSecurityAPI(req,env,path,method) {
     }
     if(Number(invite.expires_at)<=now)
       return bad('Kode aktivasi kedaluwarsa. Minta kode baru dari Mail Box.',410);
+    const existingPassword=!!(await env.DB.prepare('SELECT application_id FROM member_credentials WHERE application_id=?')
+      .bind(app.id).first());
     // PBKDF2 cost runs on player's device; only cheap verifier on Worker.
     const salt=value.salt;
     const passwordHash='v2.'+await memberVerifier(value.proof);
@@ -2190,6 +2220,7 @@ async function memberSecurityAPI(req,env,path,method) {
     }
     if(!(results?.[0]?.meta?.changes>0)||!(results?.[1]?.meta?.changes>0))
       return bad('Kode sudah digantikan atau digunakan. Salin kode terbaru dari Mail Box.',403);
+    await memberSecurityAudit(env,req,app.id,existingPassword?'password_recovered':'password_activated');
     try {
       const secure=await memberIssueSession(env,req,app);
       return memberStrongResponse({ok:true,authenticated:true,activated:true},secure);
@@ -2203,14 +2234,77 @@ async function memberSecurityAPI(req,env,path,method) {
     }
   }
   if(path==='/api/player/security/logout' && method==='POST') {
-    if(active) await env.DB.prepare(`UPDATE member_secure_sessions SET revoked_at=?
-      WHERE id=? AND application_id=? AND revoked_at IS NULL`)
-      .bind(new Date().toISOString(),active.id,app.id).run();
+    if(active) {
+      await env.DB.prepare(`UPDATE member_secure_sessions SET revoked_at=?
+        WHERE id=? AND application_id=? AND revoked_at IS NULL`)
+        .bind(new Date().toISOString(),active.id,app.id).run();
+      await memberSecurityAudit(env,req,app.id,'session_locked');
+    }
     const response=J({ok:true});
     response.headers.append('Set-Cookie',memberSecureCookie('',0));
     return response;
   }
   if(!active)return bad('Masuk dengan password dashboard untuk melanjutkan.',403);
+  if(path==='/api/player/security/history' && method==='GET') {
+    const rows=await env.DB.prepare(`SELECT event_type,client_label,created_at
+      FROM member_security_events WHERE application_id=?
+      ORDER BY created_at DESC,id DESC LIMIT 40`).bind(app.id).all();
+    return J({events:(rows.results||[]).map(row=>({
+      type:row.event_type,client:row.client_label,at:row.created_at
+    }))});
+  }
+  if(path==='/api/player/security/device/rename' && method==='POST') {
+    const value=await body(req,600);
+    const label=typeof value?.label==='string'?value.label.trim():'';
+    if(!/^[0-9a-f-]{36}$/.test(value?.id||'')||label.length<2||label.length>40||
+       /[\x00-\x1f\x7f<>]/.test(label))
+      return bad('Nama perangkat harus 2 sampai 40 karakter tanpa simbol HTML.',400);
+    const result=await env.DB.prepare(`UPDATE member_secure_sessions SET client_label=?
+      WHERE id=? AND application_id=? AND revoked_at IS NULL AND expires_at>?`)
+      .bind(label,value.id,app.id,Math.floor(Date.now()/1000)).run();
+    if(!(result.meta?.changes>0))return bad('Perangkat tidak ditemukan.',404);
+    await memberSecurityAudit(env,req,app.id,'device_renamed');
+    return J({ok:true,label});
+  }
+  if(path==='/api/player/security/password/change' && method==='POST') {
+    if(!await rateLimit(env,req,'member-password-change',5,600))
+      return bad('Terlalu banyak percobaan mengganti password. Coba lagi nanti.',429);
+    const value=await body(req,1800);
+    if(!memberProofValid(value?.currentProof)||!memberProofValid(value?.proof)||
+       typeof value?.salt!=='string'||!/^[A-Za-z0-9_-]{22}$/.test(value.salt))
+      return bad('Verifikasi password tidak valid.',400);
+    const credential=await env.DB.prepare('SELECT password_hash FROM member_credentials WHERE application_id=?')
+      .bind(app.id).first();
+    if(!credential)return bad('Akun belum memiliki password.',403);
+    const oldHash=String(credential.password_hash||'');
+    const valid=oldHash.startsWith('v2.')
+      ?safeEq(oldHash,'v2.'+await memberVerifier(value.currentProof))
+      :safeEq(oldHash,value.currentProof);
+    if(!valid)return bad('Password lama tidak sesuai.',403);
+    const newHash='v2.'+await memberVerifier(value.proof),stamp=new Date().toISOString();
+    const result=await env.DB.batch([
+      env.DB.prepare(`UPDATE member_credentials SET password_salt=?,password_hash=?,
+        iterations=?,failed_attempts=0,locked_until=0,updated_at=?
+        WHERE application_id=? AND password_hash=?`)
+        .bind(value.salt,newHash,MEMBER_PASSWORD_ITERATIONS,stamp,app.id,oldHash),
+      env.DB.prepare(`UPDATE member_secure_sessions SET revoked_at=?
+        WHERE application_id=? AND revoked_at IS NULL AND EXISTS(
+          SELECT 1 FROM member_credentials WHERE application_id=?
+          AND password_hash=?)`).bind(stamp,app.id,app.id,newHash)
+    ]);
+    if(!(result?.[0]?.meta?.changes>0))
+      return bad('Password telah berubah. Muat ulang dan coba masuk kembali.',409);
+    await memberSecurityAudit(env,req,app.id,'password_changed');
+    try{
+      const secure=await memberIssueSession(env,req,app);
+      return memberStrongResponse({ok:true,changed:true,authenticated:true},secure);
+    }catch{
+      const response=J({ok:true,changed:true,authenticated:false,loginRequired:true,
+        message:'Password berhasil diganti. Silakan masuk lagi dengan password baru.'});
+      response.headers.append('Set-Cookie',memberSecureCookie('',0));
+      return response;
+    }
+  }
   if(path==='/api/player/security/sessions' && method==='GET') {
     const now=Math.floor(Date.now()/1000);
     const rows=await env.DB.prepare(`SELECT id,client_label,created_at,expires_at
@@ -2225,9 +2319,11 @@ async function memberSecurityAPI(req,env,path,method) {
   if(path==='/api/player/security/revoke' && method==='POST') {
     const value=await body(req,500);
     if(!/^[0-9a-f-]{36}$/.test(value?.id||''))return bad('ID sesi tidak valid.',400);
-    await env.DB.prepare(`UPDATE member_secure_sessions SET revoked_at=?
+    const result=await env.DB.prepare(`UPDATE member_secure_sessions SET revoked_at=?
       WHERE id=? AND application_id=? AND revoked_at IS NULL`)
       .bind(new Date().toISOString(),value.id,app.id).run();
+    if(!(result.meta?.changes>0))return bad('Perangkat tidak ditemukan.',404);
+    await memberSecurityAudit(env,req,app.id,'device_revoked');
     const response=J({ok:true});
     if(value.id===active.id) response.headers.append('Set-Cookie',memberSecureCookie('',0));
     return response;
@@ -2240,6 +2336,7 @@ async function memberSecurityAPI(req,env,path,method) {
       VALUES(?,1,?) ON CONFLICT(application_id) DO UPDATE SET
       session_epoch=session_epoch+1,updated_at=excluded.updated_at`)
       .bind(app.id,stamp).run();
+    await memberSecurityAudit(env,req,app.id,'all_sessions_revoked');
     const response=J({ok:true});
     response.headers.append('Set-Cookie',memberSecureCookie('',0));
     response.headers.append('Set-Cookie',playerCookie('',0));
