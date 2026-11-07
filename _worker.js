@@ -1958,14 +1958,10 @@ function readMemberSecureCookie(req) {
 const memberSecureCookie = (value,age)=>
   MEMBER_SECURE_COOKIE+'='+value+'; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age='+age;
 const memberInviteHash=(env,code)=>hmac(env.SESSION_SECRET+'|member-invite',code);
-async function memberDerivePassword(password,salt,iterations=MEMBER_PASSWORD_ITERATIONS) {
-  const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(password),
-    'PBKDF2',false,['deriveBits']);
-  const derived=await crypto.subtle.deriveBits({
-    name:'PBKDF2',hash:'SHA-256',salt:new TextEncoder().encode(salt),iterations
-  },key,256);
-  return b64(new Uint8Array(derived));
-}
+// PBKDF2 runs on the browser, NOT on Cloudflare's 10ms CPU budget.
+// Proofs are password-equivalent; never log or embed them in URLs.
+const memberProofValid=value=>typeof value==='string' && /^[A-Za-z0-9_-]{43}$/.test(value);
+const memberVerifier=proof=>digest('sscircle-member-verifier-v2|'+proof);
 function memberPasswordValid(value) {
   return typeof value==='string' && value.length>=8 && value.length<=128
     && !/[\x00-\x1f\x7f]/.test(value);
@@ -2041,12 +2037,26 @@ async function memberSecurityAPI(req,env,path,method) {
     }
     return bad('Endpoint keamanan admin tidak ditemukan.',404);
   }
+  if(path==='/api/player/security/key-info' && method==='POST') {
+    if(!await rateLimit(env,req,'member-key-info',16,300))
+      return bad('Terlalu banyak permintaan login. Coba lagi dalam 5 menit.',429);
+    const value=await body(req,500);
+    if(typeof value?.code!=='string')return bad('Kode pendaftaran diperlukan.',400);
+    await ensureMemberSecurity(env);
+    const app=await applicationByCode(env,value.code);
+    const row=app?.status==='accepted'
+      ?await env.DB.prepare('SELECT password_salt,iterations FROM member_credentials WHERE application_id=?')
+        .bind(app.id).first():null;
+    // A random fallback does not reveal whether an account was activated.
+    return J({salt:row?.password_salt||b64(crypto.getRandomValues(new Uint8Array(16))),
+      iterations:Number(row?.iterations)||MEMBER_PASSWORD_ITERATIONS});
+  }
   if(path==='/api/player/security/login' && method==='POST') {
     if(!await rateLimit(env,req,'member-password-login',8,900))
       return bad('Terlalu banyak percobaan login. Coba kembali nanti.',429);
     const value=await body(req,1800);
-    if(typeof value?.code!=='string'||typeof value.password!=='string'||
-       value.password.length>128)return bad('Kode atau password tidak sesuai.',401);
+    if(typeof value?.code!=='string'||!memberProofValid(value.proof))
+      return bad('Kode atau password tidak sesuai. Muat ulang halaman sebelum mencoba lagi.',401);
     await ensureMemberSecurity(env);
     const app=await applicationByCode(env,value.code);
     if(!app||app.status!=='accepted')return bad('Kode atau password tidak sesuai.',401);
@@ -2056,17 +2066,27 @@ async function memberSecurityAPI(req,env,path,method) {
     const now=Math.floor(Date.now()/1000);
     if(Number(credential.locked_until)>now)
       return bad('Akun terkunci sementara. Coba kembali nanti.',429);
-    const actual=await memberDerivePassword(value.password,credential.password_salt,
-      Number(credential.iterations));
-    if(!safeEq(actual,credential.password_hash)) {
-      // Increment atomically so concurrent bad attempts cannot overwrite each other.
-      await env.DB.prepare(`UPDATE member_credentials SET failed_attempts=failed_attempts+1,
-        locked_until=CASE WHEN failed_attempts>=5 THEN ? ELSE locked_until END
-        WHERE application_id=?`).bind(now+900,app.id).run();
+    // Legacy v10.39 stored PBKDF2 proof; v10.40 stores a second SHA256
+    // verifier. Both use the browser-derived proof without server PBKDF2.
+    const stored=String(credential.password_hash||'');
+    const valid=stored.startsWith('v2.')
+      ?safeEq(stored,'v2.'+await memberVerifier(value.proof))
+      :safeEq(stored,value.proof);
+    if(!valid){
+      await env.DB.prepare('UPDATE member_credentials SET failed_attempts=failed_attempts+1, '+
+        'locked_until=CASE WHEN failed_attempts>=5 THEN ? ELSE locked_until END '+
+        'WHERE application_id=?').bind(now+900,app.id).run();
       return bad('Kode atau password tidak sesuai.',401);
     }
-    await env.DB.prepare(`UPDATE member_credentials SET failed_attempts=0,locked_until=0
-      WHERE application_id=?`).bind(app.id).run();
+    // Migrate existing credentials on successful login, without altering
+    // the player's password, profile or device sessions.
+    if(!stored.startsWith('v2.')){
+      await env.DB.prepare('UPDATE member_credentials SET password_hash=?,updated_at=? '+
+        'WHERE application_id=? AND password_hash=?')
+        .bind('v2.'+await memberVerifier(value.proof),new Date().toISOString(),app.id,stored).run();
+    }
+    await env.DB.prepare('UPDATE member_credentials SET failed_attempts=0,locked_until=0 '+
+      'WHERE application_id=?').bind(app.id).run();
     const secure=await memberIssueSession(env,req,app);
     return memberStrongResponse({ok:true,authenticated:true},secure,await signPlayer(env,app.id));
   }
@@ -2093,8 +2113,9 @@ async function memberSecurityAPI(req,env,path,method) {
     }
     const value=await body(req,1800);
     const code=typeof value?.invite==='string'?value.invite.replace(/\s+/g,''):'';
-    if(!memberPasswordValid(value?.password)||!/^[A-Za-z0-9_-]{32}$/.test(code))
-      return bad('Kode aktivasi harus sesuai Mail Box dan password minimal 8 karakter.',400);
+    if(!/^[A-Za-z0-9_-]{32}$/.test(code)||!memberProofValid(value?.proof)||
+       typeof value?.salt!=='string'||!/^[A-Za-z0-9_-]{22}$/.test(value.salt))
+      return bad('Data aktivasi tidak valid. Muat ulang halaman dan gunakan kode terbaru dari Mail Box.',400);
     const now=Math.floor(Date.now()/1000),stamp=new Date().toISOString();
     const hashed=await memberInviteHash(env,code);
     const invite=await env.DB.prepare('SELECT secret_hash,expires_at,used_at '+
@@ -2109,18 +2130,9 @@ async function memberSecurityAPI(req,env,path,method) {
     }
     if(Number(invite.expires_at)<=now)
       return bad('Kode aktivasi kedaluwarsa. Minta kode baru dari Mail Box.',410);
-    // Compute the expensive hash BEFORE consuming the one-use invitation.
-    // A CPU timeout here will leave the code available for retry.
-    const salt=b64(crypto.getRandomValues(new Uint8Array(16)));
-    let passwordHash;
-    try {
-      passwordHash=await memberDerivePassword(value.password,salt);
-    } catch(error) {
-      const reference=uid().slice(0,8);
-      console.error('[SSCircle activation / hash]',reference,error);
-      return J({error:'Password belum berhasil diproses. Kode aktivasi tetap berlaku. Hubungi admin dengan kode bantuan '+reference+'.',
-        supportCode:reference,canRetry:true},503);
-    }
+    // PBKDF2 cost runs on player's device; only cheap verifier on Worker.
+    const salt=value.salt;
+    const passwordHash='v2.'+await memberVerifier(value.proof);
     const marker=stamp+'#'+uid();
     // D1 batch is transactional: either both claim and password commit or neither.
     let results;
