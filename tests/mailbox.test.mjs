@@ -195,3 +195,23 @@ test('mark-as-read checks ownership and keeps normal repeat reads idempotent',as
  assert.equal((await x.request('/api/player/mailbox/read',{method:'POST',body:{id}})).status,200);
  assert.equal((await x.request('/api/player/mailbox/read',{method:'POST',body:{id}})).status,200);
 });
+
+test('if D1 committed but response was lost, same invite remains recoverable',async()=>{
+ const x=fixture();
+ await x.request('/api/player/mailbox/request-activation',{method:'POST',body:{}});
+ const originalBatch=x.env.DB.batch;
+ x.env.DB.batch=async statements=>{
+  await originalBatch(statements);
+  throw Error('temporary transport interruption after commit');
+ };
+ const approved=await x.request('/api/admin/mailbox/approve',{method:'POST',cookie:x.admin,
+   body:{id:ID,verification:'identity-confirmed'}});
+ assert.equal(approved.status,200,JSON.stringify(approved.data));
+ assert.equal(approved.data.delivered,true);
+ const activation=(await x.request('/api/player/mailbox')).data.items.filter(x=>x.type==='activation');
+ assert.equal(activation.length,1);
+ assert.equal(activation[0].canReveal,true);
+ const repeated=await x.request('/api/player/mailbox/request-activation',{method:'POST',body:{}});
+ assert.equal(repeated.data.delivered,true);
+ assert.equal(x.db.prepare("SELECT COUNT(*) AS n FROM member_mailbox WHERE type='activation'").get().n,1);
+});
