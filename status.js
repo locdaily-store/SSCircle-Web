@@ -91,15 +91,22 @@
       throw Error(result.error || 'Tidak dapat masuk.');
     return result;
   };
-  const votingAccess = new URLSearchParams(location.search).get('akses-voting');
-  if (votingAccess) {
+  const params = new URLSearchParams(location.search);
+  const votingAccess = params.get('akses-voting');
+  const dashboardAccess = params.get('akses-dashboard');
+  if (votingAccess || dashboardAccess) {
     const notices = {
       'perlu-masuk': 'Untuk membuka voting, masuk menggunakan kode pendaftaran berstatus Diterima. Kode Menunggu dan Ditolak tidak mempunyai akses.',
       menunggu: 'Pendaftaranmu masih Menunggu. Voting hanya dapat dibuka setelah admin menerima pendaftaranmu.',
       ditolak: 'Pendaftaranmu Ditolak, jadi kamu belum dapat masuk ke voting.',
       'belum-tersedia': 'Layanan voting belum tersedia. Silakan coba lagi nanti.'
     };
-    $('status-voting-notice').textContent = notices[votingAccess] || notices['perlu-masuk'];
+    const dashboardNotices = {
+      'perlu-masuk': 'Untuk membuka My SSCircle, masuk dengan kode pendaftaran milikmu yang sudah Diterima.',
+      menunggu: 'Pendaftaranmu masih Menunggu. Dashboard anggota tersedia setelah admin menerima pendaftaranmu.',
+      ditolak: 'Pendaftaranmu Ditolak. Dashboard anggota belum dapat dibuka.'
+    };
+    $('status-voting-notice').textContent = dashboardAccess ? (dashboardNotices[dashboardAccess] || dashboardNotices['perlu-masuk']) : (notices[votingAccess] || notices['perlu-masuk']);
     $('status-voting-notice').hidden = false;
     $('kode-milikku').open = true;
   }
@@ -109,6 +116,7 @@
     $('status-my-code-login').hidden = active;
     const accepted = active && account.status === 'accepted';
     $('status-voting-entry').hidden = !accepted;
+    $('status-dashboard-entry').hidden = !accepted;
     if (active && !accepted) {
       $('status-voting-notice').hidden = false;
       $('status-voting-notice').textContent = account.status === 'rejected'
