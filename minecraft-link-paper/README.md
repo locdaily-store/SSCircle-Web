@@ -1,4 +1,4 @@
-# SSCircle Player Sync Paper · V10.45.2 (Direct, tanpa Velocity)
+# SSCircle Player Sync Paper · V10.45.3 (Direct, tanpa Velocity)
 
 ## Persyaratan
 - **Paper 26.3, Java 25+, satu server online-mode**. Server memiliki koneksi internet keluar via HTTPS menuju website SSCircle di Cloudflare Pages + D1.
@@ -11,13 +11,13 @@
 2. Gunakan Paper 26.3 dan Java 25. Jangan jalankan Velocity.
 3. Di `server.properties`: `online-mode=true`, `server-port=25565`, `server-ip=127.0.0.1` untuk lokal satu PC. Untuk akses LAN sesuaikan IP setelah uji awal.
 4. Di `config/paper-global.yml`: `proxies.velocity.enabled: false`. Di `spigot.yml`: `settings.bungeecord: false`. Jangan biarkan proxy forwarding aktif.
-5. Salin artifact `SSCircle-Player-Sync-Paper-10.45.2.jar` ke `Paper/plugins/`, lalu jalankan Paper sekali.
+5. Salin artifact `SSCircle-Player-Sync-Paper-10.45.3.jar` ke `Paper/plugins/`, lalu jalankan Paper sekali.
 6. Edit `Paper/plugins/SSCirclePlayerSync/config.yml`: ubah `endpoint` menjadi **domain HTTPS website SSCircle** tanpa path.
 7. Di Windows, tambahkan environment variable pengguna `SSCIRCLE_LINK_SERVER_SECRET` (Secret terenkripsi yang sama harus aktif di Cloudflare). Tutup semua jendela launcher/terminal lama, jalankan ulang Paper.
 8. Buka Minecraft Java Premium, Multiplayer → `127.0.0.1:25565`. Perintah `/sscircle status` harus memperlihatkan konfigurasi siap dan Java Premium.
 9. Masuk Profile website SSCircle sebagai anggota diterima **dengan password dashboard**, klik Buat kode penghubung, jalankan `/sscircle link SC-...` di Minecraft, lalu kembali ke Profile → Perbarui status → Konfirmasi identitas.
 
-## Perbaikan V10.45.2: tab completion dan diagnosis
+## Perbaikan V10.45.3: tab completion dan diagnosis
 - Ketik `/sscircle` lalu **spasi dan Tab** untuk memilih `help`, `status`, `link`; `reload` hanya muncul bagi pemain yang memiliki izin admin/OP.
 - Jalankan `/sscircle` tanpa argumen atau `/sscircle help` untuk melihat daftar dan deskripsi perintah.
 - Kode sekali pakai **tidak di-autocomplete** karena diambil secara privat dari website.
@@ -52,4 +52,18 @@
 - HTTP 404/410: kode sudah habis/keliru atau domain tidak cocok.
 - Cloudflare website belum mengeluarkan kode: cek binding D1 `DB`, `SESSION_SECRET`, login password dashboard, dan `SSCIRCLE_LINK_SERVER_SECRET` Cloudflare.
 
-Dokumentasi lengkap pemasangan: `docs/V10.45.2-PAPER-DIRECT.md`.
+Dokumentasi lengkap pemasangan: `docs/V10.45.3-PAPER-DIRECT.md`.
+
+## V10.45.3: Diagnosis koneksi website
+
+Jalankan /sscircle diagnose sebagai OP atau dari console, setelah ZIP website SSCircle V10.45.3 terpasang di Cloudflare. Plugin menguji sambungan HTTPS dan HMAC menggunakan payload kosong tanpa kode link atau identitas pemain.
+
+- Sambungan WEBSITE BERHASIL: domain dan secret telah cocok secara end-to-end.
+- HTTP 401 SIGNATURE_INVALID: secret Paper dan Cloudflare berbeda, atau environment Production / Preview salah.
+- HTTP 401 CLOCK_SKEW: jam Windows tidak sinkron (selisih > 90 detik).
+- HTTP 503 SERVER_SECRET_MISSING: secret belum diaktifkan di website.
+- HTTP 404: website belum memiliki endpoint baru. Upload ZIP website terbaru.
+- HTTP 403 tanpa kode SSCircle: cek Cloudflare Access/WAF dan Security Events. Jangan mematikan semua perlindungan.
+- HTTP 401/403 saat link: Minecraft kini menampilkan kategori aman jika disediakan website, tanpa membocorkan kode rahasia.
+
+Jika diagnosa berhasil, buat kode penghubung baru dan lakukan link dari Minecraft. Secret, kode link, HMAC dan token tidak boleh dibagikan.

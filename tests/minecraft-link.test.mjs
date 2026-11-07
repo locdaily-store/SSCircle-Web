@@ -176,3 +176,35 @@ test('Velocity only asserts Java Premium after checking per-player Mojang authen
  assert.match(java,/SSCIRCLE_LINK_SERVER_SECRET/);
  assert.doesNotMatch(java,/System\.out\.println\(.*code/);
 });
+
+test('V10.45.3: signed website probe detects secret mismatch and clock drift',async()=>{
+ const t=fixture(), path='/api/minecraft/link/diagnose';
+ async function probe({key=SERVER,timestamp=Math.floor(Date.now()/1000),raw='{}'}={}){
+  const nonce=randomUUID();
+  const signature=createHmac('sha256',key)
+   .update('POST\n'+path+'\n'+timestamp+'\n'+nonce+'\n'+raw)
+   .digest('base64url');
+  const response=await worker.fetch(new Request('https://sscircle.test'+path,{
+   method:'POST',headers:{'Content-Type':'application/json','X-SSC-Timestamp':String(timestamp),
+    'X-SSC-Nonce':nonce,'X-SSC-Signature':signature},body:raw
+  }),t.env);
+  return {status:response.status,json:await response.json()};
+ }
+ const ok=await probe();
+ assert.equal(ok.status,200,JSON.stringify(ok.json));
+ assert.equal(ok.json.code,'DIAGNOSTIC_OK');
+ assert.equal(JSON.stringify(ok.json).includes(SERVER),false);
+ const mismatch=await probe({key:'different-strong-secret-that-does-not-match'});
+ assert.equal(mismatch.status,401);
+ assert.equal(mismatch.json.code,'SIGNATURE_INVALID');
+ const skew=await probe({timestamp:Math.floor(Date.now()/1000)-240});
+ assert.equal(skew.status,401);
+ assert.equal(skew.json.code,'CLOCK_SKEW');
+ const bad=await probe({raw:'{"test":"anything"}'});
+ assert.equal(bad.status,400);
+ assert.equal(bad.json.code,'PAYLOAD_INVALID');
+ t.env.SSCIRCLE_LINK_SERVER_SECRET='';
+ const missing=await probe();
+ assert.equal(missing.status,503);
+ assert.equal(missing.json.code,'SERVER_SECRET_MISSING');
+});
