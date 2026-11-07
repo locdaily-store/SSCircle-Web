@@ -1,4 +1,4 @@
-/* SSCircle V10.41: responsive Profile design editor, mock preview and Mail Box dialog. */
+/* SSCircle V10.42: Profile, resilient Mail Box modal and clear login recovery. */
 .player-dashboard [hidden]{display:none!important}
 .player-layout.is-stacked{grid-template-columns:minmax(0,1fr)}
 .player-layout.is-stacked .player-side{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -46,3 +46,11 @@
 @media(max-width:800px){.ssc-mailbox-modal .mailbox-grid{grid-template-columns:minmax(0,1fr)}.ssc-mailbox-modal .mailbox-list{max-height:230px}.ssc-mailbox-modal .mailbox-detail{min-height:180px}}
 @media(max-width:620px){.player-layout.is-stacked .player-side{grid-template-columns:minmax(0,1fr)}.ssc-profile-admin-card{padding:9px}.ssc-mailbox-modal.mailbox-page{width:calc(100vw - 12px);max-height:95dvh;border-radius:12px}.ssc-mailbox-head{padding:12px 16px}.ssc-mailbox-content{padding:11px}.ssc-mailbox-modal .mailbox-surface{padding:13px}.ssc-mailbox-modal .mailbox-request>button{width:100%}}
 @media(prefers-reduced-motion:reduce){.ssc-mailbox-modal::backdrop{backdrop-filter:none}}
+
+.ssc-mailbox-feedback{display:flex;flex-wrap:wrap;gap:8px 15px;align-items:center;justify-content:space-between;min-width:0}
+.ssc-mailbox-feedback .mailbox-message{flex:1 1 230px;min-width:0}
+.ssc-mailbox-feedback a{font-size:12px;color:var(--ssc-primary,#c9a4f4);font-weight:700;text-underline-offset:3px}
+.ssc-mailbox-feedback a[hidden]{display:none!important}
+.ssc-mailbox-modal .mailbox-list[aria-busy="true"]{opacity:.72}
+.ssc-mailbox-modal :is(button,a):focus-visible{outline:2px solid var(--ssc-primary,#c9a4f4);outline-offset:3px}
+@media(max-width:450px){.ssc-mailbox-feedback{align-items:flex-start;flex-direction:column}}

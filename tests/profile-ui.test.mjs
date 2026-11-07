@@ -42,3 +42,13 @@ test('Legacy mail route redirects to Profile and deletion scopes owner',()=>{
   assert.match(worker,/if\(path==='\/api\/player\/mailbox\/delete'/);
   assert.match(worker,/DELETE FROM member_mailbox WHERE id=\? AND application_id=\?/);
 });
+
+test('Mail Box handles loading, recovery and duplicate deletes',()=>{
+ const widget=source('mailbox-widget.js');
+ const worker=source('_worker.js');
+ assert.match(widget,/refreshTask/);
+ assert.match(widget,/loadFailed/);
+ assert.match(widget,/ssc-mailbox-signin/);
+ assert.match(widget,/if\(deleting\)return/);
+ assert.match(worker,/await env\.DB\.batch\(\[/);
+});

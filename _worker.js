@@ -2416,26 +2416,50 @@ async function mailboxNote(env,memberId,type,title,content,extras={}){
   return id;
 }
 async function mailboxIssueInvite(env,memberId){
-  // The approval is one-use: generated codes can be retrieved in the mailbox
-  // until they expire, but repeated requests cannot bypass another approval.
+  // Generate and seal the secret before consuming approval. Publishing the
+  // invite, private message and request status must be one D1 transaction.
   const now=Math.floor(Date.now()/1000),stamp=new Date().toISOString();
+  const secret=b64(crypto.getRandomValues(new Uint8Array(24)));
+  const hashed=await memberInviteHash(env,secret),expires=now+MEMBER_INVITE_SECONDS;
+  const sealed=await mailboxSeal(env,secret),messageId=uid(),claim=stamp+'#'+messageId;
   const approval=await env.DB.prepare(`UPDATE member_mailbox_approvals SET consumed_at=?
-    WHERE application_id=? AND consumed_at IS NULL`).bind(stamp,memberId).run();
+    WHERE application_id=? AND consumed_at IS NULL`).bind(claim,memberId).run();
   if(!(approval.meta?.changes>0)) return null;
-  const secret=b64(crypto.getRandomValues(new Uint8Array(24))),
-    hashed=await memberInviteHash(env,secret),expires=now+MEMBER_INVITE_SECONDS;
-  await env.DB.prepare(`INSERT INTO member_activation_invites
-    (application_id,secret_hash,expires_at,created_at,used_at)
-    VALUES(?,?,?,?,NULL) ON CONFLICT(application_id) DO UPDATE SET
-    secret_hash=excluded.secret_hash,expires_at=excluded.expires_at,
-    created_at=excluded.created_at,used_at=NULL`)
-    .bind(memberId,hashed,expires,stamp).run();
-  const sealed=await mailboxSeal(env,secret);
-  await mailboxNote(env,memberId,'activation','Kode aktivasi akun tersedia',
-    'Kode aktivasi berlaku 24 jam dan hanya dapat dipakai satu kali. Simpan password dashboard secara pribadi.',
-    {...sealed,expires});
-  await env.DB.prepare(`UPDATE member_activation_requests SET status='sent',updated_at=?
-    WHERE application_id=?`).bind(stamp,memberId).run();
+  try {
+    await env.DB.batch([
+      env.DB.prepare(`INSERT INTO member_activation_invites
+        (application_id,secret_hash,expires_at,created_at,used_at)
+        VALUES(?,?,?,?,NULL) ON CONFLICT(application_id) DO UPDATE SET
+        secret_hash=excluded.secret_hash,expires_at=excluded.expires_at,
+        created_at=excluded.created_at,used_at=NULL`)
+        .bind(memberId,hashed,expires,stamp),
+      env.DB.prepare(`INSERT INTO member_mailbox
+        (id,application_id,type,title,content,encrypted_secret,secret_nonce,expires_at,created_at)
+        VALUES(?,?,?,?,?,?,?,?,?)`)
+        .bind(messageId,memberId,'activation','Kode aktivasi akun tersedia',
+          'Kode aktivasi berlaku 24 jam dan hanya dapat dipakai satu kali. Simpan password dashboard secara pribadi.',
+          sealed.encrypted,sealed.nonce,expires,stamp),
+      env.DB.prepare(`UPDATE member_activation_requests SET status='sent',updated_at=?
+        WHERE application_id=?`).bind(stamp,memberId)
+    ]);
+  } catch(error) {
+    // A lost response may happen *after* D1 committed. Never restore approval
+    // if our message exists, otherwise a retry could issue a second valid code.
+    let committed=null;
+    try {
+      committed=!!(await env.DB.prepare('SELECT id FROM member_mailbox WHERE id=? AND application_id=?')
+        .bind(messageId,memberId).first());
+    } catch { /* Unknown state: do not restore a potentially consumed approval. */ }
+    if(committed===false) {
+      // Restore only our own claim. A new admin approval must not be changed.
+      try {
+        await env.DB.prepare(`UPDATE member_mailbox_approvals SET consumed_at=NULL
+          WHERE application_id=? AND consumed_at=?`).bind(memberId,claim).run();
+      } catch { /* Keep original error; admin can re-approve after recovery. */ }
+      throw error;
+    }
+    if(committed===null)throw error;
+  }
   return {expiresAt:new Date(expires*1000).toISOString()};
 }
 async function mailboxAPI(req,env,path,method){
@@ -2491,8 +2515,13 @@ async function mailboxAPI(req,env,path,method){
       WHERE application_id=?`).bind(account.id).first();
     if(pending?.status==='sent' && invite?.used_at===null && invite.expires_at>Date.now()/1000)
       return J({ok:true,delivered:true,message:'Kode masih tersedia di Mail Box.'});
-    if(pending?.status==='pending')
-      return J({ok:true,delivered:false,message:'Permintaan sedang menunggu verifikasi kepemilikan akun.'});
+    if(pending?.status==='pending'){
+      // Retry an already verified, but previously interrupted delivery.
+      const retried=await mailboxIssueInvite(env,account.id);
+      return J({ok:true,delivered:!!retried,message:retried?
+        'Kode aktivasi telah dikirim ke Mail Box.':
+        'Permintaan sedang menunggu verifikasi kepemilikan akun.'});
+    }
     const stamp=new Date().toISOString();
     await env.DB.prepare(`INSERT INTO member_activation_requests(application_id,requested_at,status,updated_at)
       VALUES(? ,?,'pending',?) ON CONFLICT(application_id) DO UPDATE SET
@@ -2552,8 +2581,9 @@ async function mailboxAPI(req,env,path,method){
   if(path==='/api/player/mailbox/read' && method==='POST'){
     const payload=await body(req,250);
     if(!/^[0-9a-f-]{36}$/.test(payload?.id||''))return bad('Pesan tidak ditemukan.',404);
-    await env.DB.prepare(`UPDATE member_mailbox SET read_at=COALESCE(read_at,?)
+    const updated=await env.DB.prepare(`UPDATE member_mailbox SET read_at=COALESCE(read_at,?)
       WHERE id=? AND application_id=?`).bind(new Date().toISOString(),payload.id,account.id).run();
+    if(!(updated.meta?.changes>0))return bad('Pesan tidak ditemukan.',404);
     return J({ok:true});
   }
   return bad('Halaman Mail Box tidak tersedia.',404);
@@ -2643,20 +2673,6 @@ async function route(req, env) {
     return new Response(null,{status:302,headers:{
       Location:'/my-sscircle?mailbox=1','Cache-Control':'private, no-store',Vary:'Cookie'
     }});
-    const response=await env.ASSETS.fetch(req);
-    if(response.status>=300 && response.status<400){
-      const redirect=response.headers.get('Location');
-      if(redirect){
-        const target=new URL(redirect,url);
-        if(target.origin===url.origin && ['/mailbox','/mailbox.html'].includes(target.pathname))
-          return new Response('Halaman Mail Box belum dapat dimuat.',{
-            status:502,headers:{'Content-Type':'text/plain; charset=utf-8','Cache-Control':'no-store'}
-          });
-      }
-    }
-    const headers=new Headers(response.headers);headers.set('Cache-Control','private, no-store');
-    headers.set('Vary','Cookie');headers.set('X-Robots-Tag','noindex, nofollow');
-    return new Response(response.body,{status:response.status,headers});
   }
   // Proteksi juga dokumen HTML, bukan hanya tombol UI: URL voting langsung tidak bisa dibuka oleh kode Pending/Rejected.
   if ((path === '/voting.html' || path === '/voting') && (method === 'GET' || method === 'HEAD')) {
