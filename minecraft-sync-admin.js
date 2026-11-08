@@ -14,7 +14,10 @@ window.SSCircleMinecraftSyncAdmin=(()=>{
     const value=Date.parse(raw||'');
     return Number.isFinite(value)?new Date(value).toLocaleString(locale):'Belum tersedia';};
   const num=(v)=>new Intl.NumberFormat(locale).format(Number(v)||0);
-  const types={java_premium:'Premium',java_offline:'Java (AuthMe)',bedrock:'Minecraft Bedrock'};
+  const types={java_premium:'Minecraft Java Premium',
+    java_non_premium:'Minecraft Java Non-Premium',
+    java_unverified:'Minecraft Java (Premium belum terverifikasi)',
+    bedrock:'Minecraft Bedrock'};
   const eventText={IDLE:'Menunggu pengiriman',SYNC_OK:'Berhasil',
     QUEUE_PENDING:'Menunggu pengiriman',NETWORK_ERROR:'Gangguan jaringan',
     HTTP_ERROR:'Permintaan gagal',AUTH_ERROR:'Masalah autentikasi'};
@@ -147,7 +150,7 @@ window.SSCircleMinecraftSyncAdmin=(()=>{
       const item=el('div','ssc-sync-account');
       const info=el('div','ssc-sync-account-info');
       info.append(el('strong','',a.username),el('small','',
-        (types[a.provider]||'Minecraft')+' · '+a.memberName));
+        (types[a.edition]||'Minecraft')+' · '+a.memberName));
       const date=el('div','ssc-sync-account-date');
       date.append(el('strong','',a.lastSyncAt?'Sudah ada statistik':'Menunggu statistik'),
         el('small','',a.lastSyncAt?stamp(a.lastSyncAt):'Belum ada sinkronisasi'));
