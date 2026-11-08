@@ -2750,8 +2750,12 @@ async function minecraftStatsIngest(req,env){
   ]);
   // Old receipt rows may be purged safely: cumulative MAX prevents inflation
   // if an old event is ever retried after receipt expiry.
-  if(now%31===0)await env.DB.prepare('DELETE FROM minecraft_stat_receipts WHERE received_at<?')
-    .bind(new Date(Date.now()-30*86400000).toISOString()).run();
+  if(now%31===0){
+    // Both ledgers are bounded to avoid unbounded D1 growth on busy SMPs.
+    await env.DB.prepare('DELETE FROM minecraft_link_nonces WHERE seen_at<?').bind(now-300).run();
+    await env.DB.prepare('DELETE FROM minecraft_stat_receipts WHERE received_at<?')
+      .bind(new Date(Date.now()-30*86400000).toISOString()).run();
+  }
   return J({ok:true,code:results?.[0]?.meta?.changes>0?'STATS_SYNCED':'STATS_DUPLICATE'});
 }
 
