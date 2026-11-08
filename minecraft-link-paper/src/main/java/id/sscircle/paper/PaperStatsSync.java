@@ -59,6 +59,8 @@ final class PaperStatsSync implements Listener {
     private final LinkedHashMap<String, Snapshot> pending = new LinkedHashMap<>();
     private final Path queueFile;
     private boolean inFlight;
+    private long nextAttemptAtMs;
+    private long retryDelayMs=3000L;
     private String lastDelivery = "Belum ada data dikirim";
 
     PaperStatsSync(SSCirclePaperLinkPlugin plugin, HttpClient http,
@@ -148,7 +150,8 @@ final class PaperStatsSync implements Listener {
     }
 
     private void sendNext() {
-        if(!enabled()||inFlight||pending.isEmpty())return;
+        if(!enabled()||inFlight||pending.isEmpty()
+            ||System.currentTimeMillis()<nextAttemptAtMs)return;
         String host=endpoint.get(),token=secret.get();
         if(host==null||host.isBlank()||!SecretFileStore.isValidSecret(token))return;
         Map.Entry<String,Snapshot> entry=pending.entrySet().iterator().next();
@@ -187,6 +190,7 @@ final class PaperStatsSync implements Listener {
                                HttpResponse<String> response,Throwable failure) {
         inFlight=false;
         if(failure!=null||response==null){
+            scheduleRetry();
             lastDelivery="Jaringan tidak tersedia, antrean disimpan";
             return;
         }
@@ -197,6 +201,8 @@ final class PaperStatsSync implements Listener {
             ||code==410 && body.contains("STATS_PRELINK")
             ||code==400 && body.contains("STATS_INVALID");
         if(acknowledged||discard){
+            retryDelayMs=3000L;
+            nextAttemptAtMs=0L;
             // An in-flight older snapshot must NOT delete a newer coalesced one.
             Snapshot current=pending.get(key);
             if(current!=null&&current.eventId().equals(eventId)){
@@ -206,8 +212,14 @@ final class PaperStatsSync implements Listener {
             lastDelivery=acknowledged?"Statistik berhasil tersinkron":
                 "Akun belum tertaut atau snapshot tidak berlaku; menunggu sampel berikutnya";
         }else{
+            scheduleRetry();
             lastDelivery="HTTP "+code+"; data aman di antrean untuk dicoba lagi";
         }
+    }
+
+    private void scheduleRetry() {
+        nextAttemptAtMs=System.currentTimeMillis()+retryDelayMs;
+        retryDelayMs=Math.min(300000L,retryDelayMs*2L);
     }
 
     private static String hmac(String secret,String value) throws GeneralSecurityException {
