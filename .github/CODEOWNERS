@@ -5,3 +5,9 @@
 /scripts/d1_inspector.py @locdaily-store
 /tests/test_d1_inspector.py @locdaily-store
 /.github/CODEOWNERS @locdaily-store
+
+# Live browser inspector and staging SQL writes need explicit owner review.
+/_worker.js @locdaily-store
+/docs/database-inspector/ @locdaily-store
+/tests/github-db-inspector.test.mjs @locdaily-store
+/migrations/ @locdaily-store
