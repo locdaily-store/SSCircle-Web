@@ -2658,6 +2658,103 @@ async function minecraftLinkAPI(req,env,path,method){
 
 const minecraftLinkError=(code,message,status)=>J({error:message,code},status);
 // Signed, read-only connectivity check; no identity, code or secret is returned.
+
+/* SSCircle V10.47: private server-signed cumulative Vanilla statistics.
+   Data are accepted only for confirmed account links. Browser clients cannot
+   submit statistics, and retries/old snapshots cannot inflate counters. */
+const MC_STAT_ROUTE='/api/minecraft/stats/ingest';
+const mcStatReceiptReady=new WeakSet();
+async function ensureMinecraftStatsReceipts(env){
+  if(mcStatReceiptReady.has(env.DB))return;
+  await env.DB.prepare(\`CREATE TABLE IF NOT EXISTS minecraft_stat_receipts (
+    event_id TEXT PRIMARY KEY, application_id TEXT NOT NULL,
+    provider TEXT NOT NULL, provider_id TEXT NOT NULL, received_at TEXT NOT NULL)\`).run();
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_ssc_mc_stats_receipt_time ON minecraft_stat_receipts(received_at)').run();
+  mcStatReceiptReady.add(env.DB);
+}
+const mcStatIdentityValid=(value)=>{
+  if(!value||typeof value!=='object')return false;
+  const id=String(value.providerId||''),source=value.authSource;
+  if(value.provider==='java_premium')return source==='mojang-online'&&MC_UUID.test(id);
+  if(value.provider==='java_offline')return source==='authme-session'&&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-3[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(id);
+  if(value.provider==='bedrock')return source==='floodgate-xuid'&&/^[0-9]{10,22}$/.test(id);
+  return false;
+};
+async function minecraftStatsIngest(req,env){
+  const secret=env.SSCIRCLE_LINK_SERVER_SECRET;
+  if(typeof secret!=='string'||secret.length<32)
+    return minecraftLinkError('SERVER_SECRET_MISSING','Layanan sinkronisasi belum diaktifkan.',503);
+  if(!String(req.headers.get('Content-Type')||'').toLowerCase().startsWith('application/json'))
+    return minecraftLinkError('FORMAT_INVALID','Format permintaan tidak sesuai.',415);
+  const timestamp=Number(req.headers.get('X-SSC-Timestamp'));
+  const nonce=req.headers.get('X-SSC-Nonce')||'';
+  const signature=req.headers.get('X-SSC-Signature')||'';
+  const now=Math.floor(Date.now()/1000);
+  if(!Number.isSafeInteger(timestamp)||Math.abs(timestamp-now)>90)
+    return minecraftLinkError('CLOCK_SKEW','Jam server tidak sesuai.',401);
+  if(!/^[0-9a-f-]{36}$/.test(nonce)||!/^[A-Za-z0-9_-]{43}$/.test(signature))
+    return minecraftLinkError('HEADERS_INVALID','Header verifikasi tidak valid.',401);
+  const raw=await req.text();
+  if(raw.length>1800)return minecraftLinkError('PAYLOAD_TOO_LARGE','Data terlalu besar.',413);
+  const expected=await hmac(secret,'POST\n'+MC_STAT_ROUTE+'\n'+timestamp+'\n'+nonce+'\n'+raw);
+  if(!safeEq(expected,signature))
+    return minecraftLinkError('SIGNATURE_INVALID','Tanda tangan server tidak sesuai.',401);
+  const payload=parse(raw);
+  const metrics=payload?.stats;
+  const stamp=Date.parse(payload?.capturedAt);
+  const validMetric=(n)=>Number.isSafeInteger(n)&&n>=0&&n<=2147483647;
+  if(!payload||typeof payload!=='object'||!mcStatIdentityValid(payload)||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(payload.eventId||'')||
+    !metrics||typeof metrics!=='object'||
+    !['playtimeSeconds','deaths','mobKills','blocksMined'].every(k=>validMetric(metrics[k]))||
+    !Number.isFinite(stamp)||stamp>Date.now()+300000||stamp<Date.now()-30*86400000)
+    return minecraftLinkError('STATS_INVALID','Statistik tidak valid atau terlalu lama.',400);
+  await ensureMemberCenter(env);
+  const account=await env.DB.prepare(
+    'SELECT application_id,verified_at FROM minecraft_accounts WHERE provider=? AND provider_id=? LIMIT 1'
+  ).bind(payload.provider,payload.providerId).first();
+  if(!account)
+    return minecraftLinkError('STATS_NOT_LINKED','Akun Minecraft belum tertaut ke Profile.',404);
+  // A queued event captured before the link existed must never be attributed to
+  // someone who links that account later, especially after an unlink/transfer.
+  if(stamp<Date.parse(account.verified_at)-300000)
+    return minecraftLinkError('STATS_PRELINK','Data dari sebelum akun ditautkan tidak digunakan.',410);
+  const member=await env.DB.prepare('SELECT status FROM submissions WHERE id=?')
+    .bind(account.application_id).first();
+  if(member?.status!=='accepted')
+    return minecraftLinkError('MEMBER_NOT_ACCEPTED','Keanggotaan tidak aktif.',403);
+  const nonceResult=await env.DB.prepare(
+    'INSERT OR IGNORE INTO minecraft_link_nonces(nonce,seen_at) VALUES(?,?)'
+  ).bind(nonce,now).run();
+  if(!(nonceResult.meta?.changes>0))
+    return minecraftLinkError('STATS_REPLAY','Permintaan yang sama telah diproses.',409);
+  await ensureMinecraftStatsReceipts(env);
+  const capturedAt=new Date(stamp).toISOString(),receivedAt=new Date().toISOString();
+  // D1 batch is transactional: a receipt and its snapshot commit together.
+  const results=await env.DB.batch([
+    env.DB.prepare(\`INSERT OR IGNORE INTO minecraft_stat_receipts
+      (event_id,application_id,provider,provider_id,received_at) VALUES(?,?,?,?,?)\`)
+      .bind(payload.eventId,account.application_id,payload.provider,payload.providerId,receivedAt),
+    env.DB.prepare(\`INSERT INTO player_stat_snapshots
+      (application_id,season_id,playtime_seconds,deaths,mob_kills,blocks_mined,last_synced_at)
+      VALUES(?,'',?,?,?,?,?)
+      ON CONFLICT(application_id,season_id) DO UPDATE SET
+      playtime_seconds=MAX(player_stat_snapshots.playtime_seconds,excluded.playtime_seconds),
+      deaths=MAX(player_stat_snapshots.deaths,excluded.deaths),
+      mob_kills=MAX(player_stat_snapshots.mob_kills,excluded.mob_kills),
+      blocks_mined=MAX(player_stat_snapshots.blocks_mined,excluded.blocks_mined),
+      last_synced_at=MAX(player_stat_snapshots.last_synced_at,excluded.last_synced_at)\`)
+      .bind(account.application_id,metrics.playtimeSeconds,metrics.deaths,
+        metrics.mobKills,metrics.blocksMined,capturedAt)
+  ]);
+  // Old receipt rows may be purged safely: cumulative MAX prevents inflation
+  // if an old event is ever retried after receipt expiry.
+  if(now%31===0)await env.DB.prepare('DELETE FROM minecraft_stat_receipts WHERE received_at<?')
+    .bind(new Date(Date.now()-30*86400000).toISOString()).run();
+  return J({ok:true,code:results?.[0]?.meta?.changes>0?'STATS_SYNCED':'STATS_DUPLICATE'});
+}
+
 async function minecraftLinkDiagnose(req,env){
   const secret=env.SSCIRCLE_LINK_SERVER_SECRET;
   if(typeof secret!=='string'||secret.length<32)
@@ -2985,7 +3082,7 @@ async function mailboxAPI(req,env,path,method){
 
 // SSCircle runtime check: observe what the deployment actually receives.
 // Only public readiness categories. Never expose secret values or private data.
-const SSC_RUNTIME_RELEASE='10.46.0';
+const SSC_RUNTIME_RELEASE='10.47.0';
 const SSC_RUNTIME_ISSUES=new Set();
 function sscRuntimeBindings(env){
   return {
@@ -3195,6 +3292,8 @@ async function route(req, env) {
     return await minecraftLinkClaim(req,env);
   if(path==='/api/minecraft/link/diagnose' && method==='POST')
     return await minecraftLinkDiagnose(req,env);
+  if(path===MC_STAT_ROUTE && method==='POST')
+    return await minecraftStatsIngest(req,env);
   if (!['GET', 'HEAD'].includes(method) && !sameOrigin(req))
     return bad('Asal permintaan ditolak.', 403);
   if (![
