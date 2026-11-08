@@ -3462,8 +3462,67 @@ async function sscServiceHealth(env){
   };
 }
 
+// Read-only D1 schema inspector for approved collaborators using GitHub Pages.
+// This route never returns row values, secrets, or a SQL execution capability.
+async function sscGithubD1Inspect(req, env, url) {
+  const allowedOrigin = String(env.SSCIRCLE_GITHUB_PAGES_ORIGIN || 'https://locdaily-store.github.io').trim().replace(/\\/$/, '');
+  const origin = req.headers.get('Origin');
+  if (origin && origin !== allowedOrigin)
+    return bad('Asal permintaan tidak diizinkan.', 403);
+  const headers = origin === allowedOrigin ? {
+    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Authorization',
+    'Access-Control-Max-Age': '600',
+    'Vary': 'Origin'
+  } : {};
+  const response = (payload, status = 200) => J(payload, status, headers);
+  if (req.method === 'OPTIONS')
+    return new Response(null, { status: 204, headers: { ...headers, 'Cache-Control': 'no-store' } });
+  if (req.method !== 'GET')
+    return response({ error: 'Hanya akses baca yang diizinkan.' }, 405);
+  if (!env.DB)
+    return response({ error: 'Database tidak tersedia.' }, 503);
+  const expected = String(env.SSCIRCLE_GITHUB_INSPECTOR_TOKEN || '');
+  const supplied = /^Bearer ([A-Za-z0-9_-]{32,256})$/.exec(req.headers.get('Authorization') || '')?.[1] || '';
+  if (expected.length < 32)
+    return response({ error: 'Database Inspector belum dikonfigurasi.' }, 503);
+  if (!safeEq(supplied, expected))
+    return response({ error: 'Kunci akses Database Inspector tidak valid.' }, 401);
+  if (!await rateLimit(env, req, 'github-db-inspect', 50, 900))
+    return response({ error: 'Terlalu banyak permintaan. Coba lagi nanti.' }, 429);
+  const list = await env.DB.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' ORDER BY name LIMIT 101"
+  ).all();
+  const all = (list.results || []).map(row => String(row.name || '')).filter(Boolean);
+  const tables = all.slice(0, 100);
+  const checkedAt = new Date().toISOString();
+  const selected = url.searchParams.get('table');
+  if (selected === null)
+    return response({ ok: true, database: 'D1', source: 'live', checkedAt, tables, truncated: all.length > 100 });
+  if (selected.length > 128 || !tables.includes(selected))
+    return response({ error: 'Tabel tidak ditemukan dalam daftar yang diizinkan.' }, 404);
+  // Name originates from sqlite_master and is allowlisted above. Quote as SQL identifier.
+  const identifier = '"' + selected.replace(/"/g, '""') + '"';
+  const [columnsResult, countResult] = await Promise.all([
+    env.DB.prepare('PRAGMA table_info(' + identifier + ')').all(),
+    env.DB.prepare('SELECT COUNT(*) AS total FROM ' + identifier).first()
+  ]);
+  const columns = (columnsResult.results || []).slice(0, 200).map(column => ({
+    name: String(column.name || '').slice(0, 128),
+    type: String(column.type || '').slice(0, 64),
+    required: !!column.notnull,
+    primaryKey: !!column.pk
+  }));
+  return response({ ok: true, database: 'D1', source: 'live', checkedAt,
+    table: { name: selected, rowCount: Number(countResult?.total || 0), columns,
+      columnsTruncated: (columnsResult.results || []).length > 200 } });
+}
+
 async function route(req, env) {
   const url = new URL(req.url), path = url.pathname, method = req.method;
+  if (path === '/api/github/database/inspect')
+    return sscGithubD1Inspect(req, env, url);
   // Safe read-only diagnostic, available even if sessions or D1 are missing.
   if(path==='/api/health' && method==='GET')
     return J(await sscServiceHealth(env));
