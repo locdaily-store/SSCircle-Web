@@ -133,7 +133,7 @@ jobs:
           asset_ext = root_ext | {'.ogg','.ttf','.otf','.avif','.wasm'}
           required = {'index.html','admin.html','registration.html','status.html','voting.html','_worker.js','_routes.json'}
           extra_root = {'_headers','_redirects','_version.txt','robots.txt','favicon.ico'}
-          excluded_dirs = {'.github','docs','scripts','tests','.vscode','minecraft-link-velocity','minecraft-link-paper'}
+          excluded_dirs = {'.github','docs','scripts','tests','migrations','.vscode','minecraft-link-velocity','minecraft-link-paper'}
           excluded_root = {'.gitignore','.gitattributes','README.md','CONTRIBUTING.md','SECURITY.md','PANDUAN-GITHUB.md','rules-defaults.json'}
           site = []
           for rel in tracked:
