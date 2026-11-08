@@ -23,4 +23,23 @@ class PaperStatsSyncTest {
         String body=id+"|bedrock|12345678901234567|floodgate-xuid|2026-11-08T10:00:00Z|8|-1|1|1";
         assertNull(PaperStatsSync.Snapshot.fromStorage(body));
     }
+    @Test void freshFastLoginProofIsSentEvenWhenStatsDoNotChange() {
+        var previous=new PaperStatsSync.Snapshot(UUID.randomUUID().toString(),
+            "java_offline","76ed0ce1-5ae8-3d31-a1db-1ebce6ff1451",
+            "authme-session","2026-11-08T10:00:00Z",0,0,0,0);
+        assertTrue(PaperStatsSync.sameSnapshotAndEvidence(
+            previous,"authme-session",0,0,0,0));
+        assertFalse(PaperStatsSync.sameSnapshotAndEvidence(
+            previous,"fastlogin-premium",0,0,0,0));
+        assertFalse(PaperStatsSync.sameSnapshotAndEvidence(
+            previous,"fastlogin-cracked",0,0,0,0));
+        assertFalse(PaperStatsSync.sameSnapshotAndEvidence(
+            previous,"authme-session",1,0,0,0));
+        var premium=new PaperStatsSync.Snapshot(UUID.randomUUID().toString(),
+            previous.provider(),previous.providerId(),"fastlogin-premium",
+            "2026-11-08T10:01:00Z",0,0,0,0);
+        assertFalse(PaperStatsSync.sameSnapshotAndEvidence(
+            premium,"fastlogin-cracked",0,0,0,0));
+    }
+
 }
