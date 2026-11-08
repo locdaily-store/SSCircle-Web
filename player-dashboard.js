@@ -77,8 +77,8 @@
     $('player-event-alerts').disabled=policy.allowEventAlerts===false;
     $('player-profile-title').textContent=profile.displayName||'Anggota SSCircle';
     const labelByProvider={
-      java_premium:'Premium',
-      java_offline:'Non-Premium',
+      java_premium:'Minecraft Java Premium',
+      java_offline:'Minecraft Java (status Premium belum terverifikasi)',
       bedrock:'Minecraft Bedrock'
     };
     $('player-edition').textContent=(payload.accounts||[]).map(a=>
@@ -450,7 +450,7 @@
   // V10.45: account link stays private and must be confirmed after server attestation.
   let linkCommand='',linkExpires='',linkBusy=false;
   const mcProviderLabel=provider=>({
-    java_premium:'Premium',java_offline:'Non-Premium',bedrock:'Minecraft Bedrock'
+    java_premium:'Minecraft Java Premium',java_offline:'Minecraft Java (status Premium belum terverifikasi)',bedrock:'Minecraft Bedrock'
   })[provider]||'Minecraft';
   const linkNotice=message=>{$('player-link-notice').textContent=message;};
   function renderMinecraftLink(data){
