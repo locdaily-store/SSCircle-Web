@@ -1923,6 +1923,13 @@ async function ensureMemberCenter(env) {
       total_mobs INTEGER NOT NULL DEFAULT 0, total_blocks INTEGER NOT NULL DEFAULT 0,
       PRIMARY KEY(application_id,season_id),
       FOREIGN KEY(application_id) REFERENCES submissions(id) ON DELETE CASCADE)`,
+    `CREATE TABLE IF NOT EXISTS minecraft_identity_evidence (
+      application_id TEXT NOT NULL, provider TEXT NOT NULL,
+      provider_id TEXT NOT NULL, auth_source TEXT NOT NULL,
+      observed_at TEXT NOT NULL, PRIMARY KEY(provider,provider_id),
+      FOREIGN KEY(application_id) REFERENCES submissions(id) ON DELETE CASCADE)`,
+    `CREATE INDEX IF NOT EXISTS idx_ssc_identity_evidence_member
+      ON minecraft_identity_evidence(application_id)`,
     `CREATE TABLE IF NOT EXISTS minecraft_link_challenges (
       id TEXT PRIMARY KEY, application_id TEXT NOT NULL,
       code_hash TEXT NOT NULL UNIQUE, expires_at TEXT NOT NULL,
@@ -2443,8 +2450,11 @@ async function memberCenterAPI(req,env,path,method) {
     if(hasCredentials && !await memberStrongSession(req,env,application)) return bad('Masuk dengan password dashboard untuk melihat profil.',403);
     const profileRow=await env.DB.prepare('SELECT * FROM member_profiles WHERE application_id=?').bind(application.id).first();
     const policyRow=await env.DB.prepare('SELECT * FROM member_policy WHERE id=1').first();
-    const accounts=await env.DB.prepare(`SELECT provider,username,verified_at
-      FROM minecraft_accounts WHERE application_id=? ORDER BY verified_at DESC`).bind(application.id).all();
+    const accounts=await env.DB.prepare(`SELECT a.provider,a.username,a.verified_at,e.auth_source
+      FROM minecraft_accounts a LEFT JOIN minecraft_identity_evidence e
+      ON e.provider=a.provider AND e.provider_id=a.provider_id
+      AND e.application_id=a.application_id
+      WHERE a.application_id=? ORDER BY a.verified_at DESC`).bind(application.id).all();
     const stats=await env.DB.prepare(`SELECT season_id,playtime_seconds,deaths,mob_kills,
       blocks_mined,last_synced_at FROM player_stat_snapshots WHERE application_id=?
       ORDER BY season_id ASC LIMIT 25`).bind(application.id).all();
@@ -2455,7 +2465,9 @@ async function memberCenterAPI(req,env,path,method) {
     return J({profile:memberProfile(profileRow),policy:memberPolicy(policyRow),
       activeStatSeason:activeStatKey,
       activeStatSeasonTitle:seasonName.get(form.settings.statSeasonId)||'',
-      accounts:(accounts.results||[]).map(a=>({provider:a.provider,username:a.username,verifiedAt:a.verified_at})),
+      accounts:(accounts.results||[]).map(a=>({provider:a.provider,
+        edition:minecraftEdition(a.provider,a.auth_source),
+        username:a.username,verifiedAt:a.verified_at})),
       statistics:(stats.results||[]).map(a=>({seasonId:a.season_id,
         seasonTitle:a.season_id.startsWith('season:')
           ? (seasonName.get(a.season_id.split(':')[1])||'Season tersimpan')
@@ -2559,16 +2571,30 @@ async function mailboxNote(env,memberId,type,title,content,extras={}){
 const MINECRAFT_LINK_TTL=10*60;
 const MINECRAFT_LINK_CODE=/^SC-[A-Za-z0-9_-]{24}$/;
 const MC_UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+// Edition is calculated from authenticated server evidence, not from browser
+// labels, a publicly looked-up Minecraft name, or an offline UUID.
+const minecraftEdition=(provider,authSource)=>{
+  if(provider==='bedrock')return 'bedrock';
+  if(provider==='java_premium')return 'java_premium'; // signed Mojang online-mode
+  if(provider==='java_offline'&&authSource==='fastlogin-premium')return 'java_premium';
+  if(provider==='java_offline'&&authSource==='fastlogin-cracked')return 'java_non_premium';
+  return 'java_unverified';
+};
 const mcCodeHash=(env,code)=>hmac(env.SESSION_SECRET+'|minecraft-link-code',code);
 async function minecraftLinkAPI(req,env,path,method){
   if(path==='/api/admin/minecraft/links' && method==='GET'){
     if(!await admin(req,env))return bad('Masuk ke Admin Control.',401);
     await ensureMemberCenter(env);
     const rows=await env.DB.prepare(
-      'SELECT application_id,provider,username,verified_at FROM minecraft_accounts ORDER BY verified_at DESC LIMIT 100'
+      `SELECT a.application_id,a.provider,a.username,a.verified_at,e.auth_source
+       FROM minecraft_accounts a LEFT JOIN minecraft_identity_evidence e
+       ON e.provider=a.provider AND e.provider_id=a.provider_id
+       AND e.application_id=a.application_id
+       ORDER BY a.verified_at DESC LIMIT 100`
     ).all();
     return J({links:(rows.results||[]).map(r=>({
-      memberId:r.application_id,provider:r.provider,username:r.username,linkedAt:r.verified_at
+      memberId:r.application_id,provider:r.provider,edition:minecraftEdition(r.provider,r.auth_source),
+      username:r.username,linkedAt:r.verified_at
     }))});
   }
   const app=await playerSession(req,env);
@@ -2579,7 +2605,11 @@ async function minecraftLinkAPI(req,env,path,method){
   if(!active)return bad('Buka Profile dengan password dashboard sebelum menghubungkan akun Minecraft.',403);
   await ensureMemberCenter(env);
   const linked=await env.DB.prepare(
-    'SELECT provider,provider_id,username,verified_at FROM minecraft_accounts WHERE application_id=? ORDER BY verified_at DESC LIMIT 1'
+    `SELECT a.provider,a.provider_id,a.username,a.verified_at,e.auth_source
+       FROM minecraft_accounts a LEFT JOIN minecraft_identity_evidence e
+       ON e.provider=a.provider AND e.provider_id=a.provider_id
+       AND e.application_id=a.application_id
+       WHERE a.application_id=? ORDER BY a.verified_at DESC LIMIT 1`
   ).bind(app.id).first();
   if(path==='/api/player/minecraft/link/state' && method==='GET'){
     const challenge=await env.DB.prepare(
@@ -2592,10 +2622,12 @@ async function minecraftLinkAPI(req,env,path,method){
       ).bind(challenge.id).first();
       pending={status:claim?'needs_confirmation':'waiting_in_game',
         expiresAt:challenge.expires_at,
-        identity:claim?{provider:claim.provider,username:claim.username}:null};
+        identity:claim?{provider:claim.provider,username:claim.username,
+          edition:minecraftEdition(claim.provider,claim.auth_source)}:null};
     }
     return J({linked:linked?{
-      provider:linked.provider,username:linked.username,verifiedAt:linked.verified_at
+      provider:linked.provider,edition:minecraftEdition(linked.provider,linked.auth_source),
+      username:linked.username,verifiedAt:linked.verified_at
     }:null,pending,serverReady:typeof env.SSCIRCLE_LINK_SERVER_SECRET==='string'&&
       env.SSCIRCLE_LINK_SERVER_SECRET.length>=32});
   }
