@@ -1,0 +1,7 @@
+# SSCircle: changes that could access Cloudflare credentials require owner review.
+# Active enforcement requires branch protection/ruleset:
+# "Require a pull request" + "Require review from Code Owners".
+/.github/workflows/ @locdaily-store
+/scripts/d1_inspector.py @locdaily-store
+/tests/test_d1_inspector.py @locdaily-store
+/.github/CODEOWNERS @locdaily-store
