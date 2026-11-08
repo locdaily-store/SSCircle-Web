@@ -57,7 +57,7 @@ test('Paper Direct: no insecure default endpoint or secrets in shipped config',(
 });
 
 test('V10.45.2: safe tab-completion shows matching commands and hides admin-only reload',()=>{
- assert.match(manifest,/version: '10\.48\.2'/);
+ assert.match(manifest,/version: '10\.48\.3'/);
  assert.match(paper,/implements CommandExecutor, TabCompleter, Listener/);
  assert.match(paper,/public List<String> onTabComplete\(CommandSender sender, Command command, String alias, String\[\] args\)/);
  assert.match(paper,/if \(args\.length != 1\) return List\.of\(\)/);
@@ -82,7 +82,7 @@ test('V10.45.2: explain both independent failures without exposing shared secret
 });
 
 test('V10.45.3: operator-only signed diagnostic and safe error presentation',()=>{
- assert.match(manifest,/version: '10\.48\.2'/);
+ assert.match(manifest,/version: '10\.48\.3'/);
  assert.match(paper,/private static final String DIAGNOSE_PATH = "\/api\/minecraft\/link\/diagnose"/);
  assert.match(paper,/options\.add\("diagnose"\)/);
  assert.match(paper,/private void runDiagnostic\(CommandSender sender\)/);
@@ -198,4 +198,22 @@ test('V10.48.2: optional FastLogin adapter uses the verified per-session API, ne
   assert.match(paper,/case CRACKED -> "fastlogin-cracked"/);
   assert.match(paper,/new Identity\("java_offline", accountId, source, type\)/);
   assert.doesNotMatch(bridge,/https?:\/\/|api\.mojang/);
+});
+
+test('V10.48.3: FastLoginPlus name is detected and duplicate login adapters fail closed',()=>{
+  assert.match(paper,/hasConflictingFastLoginPlugins\(\)/);
+  assert.match(paper,/isPluginEnabled\("FastLoginPlus"\)/);
+  assert.match(paper,/getPlugin\("FastLoginPlus"\)/);
+  assert.match(paper,/if \(hasConflictingFastLoginPlugins\(\)\) return null/);
+  assert.match(paper,/getStatus\(UUID\)/);
+});
+test('V10.48.3: stats changes to authSource are not discarded as duplicate snapshots',()=>{
+  const stats=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/PaperStatsSync.java',import.meta.url),'utf8');
+  assert.match(stats,/sameSnapshotAndEvidence\(old,id\.authSource\(\),playtime,deaths,mobs,blocks\)/);
+  assert.match(stats,/old\.authSource\(\)\.equals\(authSource\)/);
+  const bridge=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/FastLoginSessionBridge.java',import.meta.url),'utf8');
+  assert.match(bridge,/interpretStatus\(result\)/);
+  assert.match(bridge,/case "PREMIUM" -> Status\.PREMIUM/);
+  assert.match(bridge,/case "CRACKED" -> Status\.CRACKED/);
+  assert.doesNotMatch(bridge,/api\.mojang|https?:\/\//);
 });

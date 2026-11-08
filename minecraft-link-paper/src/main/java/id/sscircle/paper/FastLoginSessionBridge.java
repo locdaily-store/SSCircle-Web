@@ -15,6 +15,17 @@ final class FastLoginSessionBridge {
 
     private FastLoginSessionBridge() {}
 
+    // Both upstream FastLogin and FastLoginPlus use this exact Bukkit class
+    // and publish a session-only PREMIUM/CRACKED/UNKNOWN enum.
+    static Status interpretStatus(Object result) {
+        if (!(result instanceof Enum<?> status)) return Status.UNKNOWN;
+        return switch (status.name()) {
+            case "PREMIUM" -> Status.PREMIUM;
+            case "CRACKED" -> Status.CRACKED;
+            default -> Status.UNKNOWN;
+        };
+    }
+
     static Status read(Player player, Plugin plugin) {
         if (player == null || plugin == null || !plugin.isEnabled()) return Status.UNKNOWN;
         try {
@@ -23,12 +34,7 @@ final class FastLoginSessionBridge {
             if (!type.isInstance(plugin)) return Status.UNKNOWN;
             Method method = type.getMethod("getStatus", UUID.class);
             Object result = method.invoke(plugin, player.getUniqueId());
-            if (!(result instanceof Enum<?> status)) return Status.UNKNOWN;
-            return switch (status.name()) {
-                case "PREMIUM" -> Status.PREMIUM;
-                case "CRACKED" -> Status.CRACKED;
-                default -> Status.UNKNOWN;
-            };
+            return interpretStatus(result);
         } catch (ReflectiveOperationException | LinkageError | SecurityException exception) {
             // Unknown forks fail closed. Never infer Premium from a UUID or name.
             return Status.UNKNOWN;
