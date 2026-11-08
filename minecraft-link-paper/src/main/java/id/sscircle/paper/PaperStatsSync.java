@@ -251,8 +251,9 @@ final class PaperStatsSync implements Listener {
                                  int deaths,int mobs,int blocks){
         String key=id.provider()+":"+id.verifiedId();
         Snapshot old=latestSample.get(key);
-        if(old!=null&&old.playtimeSeconds()==playtime&&old.deaths()==deaths
-            &&old.mobKills()==mobs&&old.blocksMined()==blocks)return;
+        // AuthMe may finish before FastLoginPlus publishes its verified
+        // session status. Send new evidence even if every stat is unchanged.
+        if(sameSnapshotAndEvidence(old,id.authSource(),playtime,deaths,mobs,blocks))return;
         Snapshot snapshot=new Snapshot(UUID.randomUUID().toString(),id.provider(),
             id.verifiedId(),id.authSource(),Instant.now().toString(),
             playtime,deaths,mobs,blocks);
@@ -265,6 +266,13 @@ final class PaperStatsSync implements Listener {
         pending.put(key,snapshot);
         if(lastSuccessAt==null)deliveryCode="QUEUE_PENDING";
         dirty=true;
+    }
+
+    static boolean sameSnapshotAndEvidence(Snapshot old,String authSource,
+                                           int playtime,int deaths,int mobs,int blocks){
+        return old!=null&&old.authSource().equals(authSource)
+            &&old.playtimeSeconds()==playtime&&old.deaths()==deaths
+            &&old.mobKills()==mobs&&old.blocksMined()==blocks;
     }
 
     private void sendNext(){
