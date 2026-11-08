@@ -1,5 +1,5 @@
 name: SSCirclePlayerSync
-version: '10.46.0'
+version: '10.47.0'
 main: id.sscircle.paper.SSCirclePaperLinkPlugin
 api-version: '26.3'
 author: RinxAsoy
