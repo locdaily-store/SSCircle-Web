@@ -78,6 +78,8 @@ final class PaperStatsSync implements Listener {
     private boolean dirty,inFlight;
     private int blockReadsPerTick=24;
     private long nextAttemptAtMs,retryDelayMs=3000L;
+    private long lastPeriodicCaptureMs;
+    private int normalIntervalSeconds=300;
     private String lastDelivery="Belum ada data dikirim";
 
     PaperStatsSync(SSCirclePaperLinkPlugin plugin,HttpClient http,
@@ -100,11 +102,12 @@ final class PaperStatsSync implements Listener {
             plugin.getConfig().getInt("stats-sync.block-reads-per-tick",24)));
         int interval=Math.max(60,Math.min(3600,
             plugin.getConfig().getInt("stats-sync.interval-seconds",300)));
+        normalIntervalSeconds=interval;
         int flush=Math.max(3,Math.min(60,
             plugin.getConfig().getInt("stats-sync.queue-flush-seconds",10)));
         plugin.getServer().getPluginManager().registerEvents(this,plugin);
         plugin.getServer().getScheduler().runTaskTimer(plugin,this::captureOneTick,20L,1L);
-        plugin.getServer().getScheduler().runTaskTimer(plugin,this::captureOnline,100L,20L*interval);
+        plugin.getServer().getScheduler().runTaskTimer(plugin,this::captureScheduled,100L,20L*interval);
         plugin.getServer().getScheduler().runTaskTimer(plugin,this::sendNext,140L,HTTP_PERIOD_TICKS);
         plugin.getServer().getScheduler().runTaskTimer(plugin,this::flushQueue,20L*flush,20L*flush);
         plugin.getLogger().info("Stats V10.47.2: "+blockReadsPerTick+
@@ -152,6 +155,20 @@ final class PaperStatsSync implements Listener {
         enqueuedPlayers.remove(id);
         if(activeJob!=null&&activeJob.uuid.equals(id))activeJob=null;
         captureQuickExit(event.getPlayer());
+    }
+
+    private void captureScheduled(){
+        if(!enabled())return;
+        int online=Bukkit.getOnlinePlayers().size();
+        int threshold=Math.max(10,Math.min(200,
+            plugin.getConfig().getInt("stats-sync.busy-player-threshold",30)));
+        int busyInterval=Math.max(normalIntervalSeconds,Math.min(3600,
+            plugin.getConfig().getInt("stats-sync.busy-interval-seconds",600)));
+        if(plugin.getConfig().getBoolean("stats-sync.adaptive-enabled",true)
+            &&online>=threshold
+            &&System.currentTimeMillis()-lastPeriodicCaptureMs<busyInterval*1000L)return;
+        lastPeriodicCaptureMs=System.currentTimeMillis();
+        captureOnline();
     }
 
     private void captureOnline(){
