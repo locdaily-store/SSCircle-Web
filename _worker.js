@@ -2668,7 +2668,7 @@ async function minecraftLinkAPI(req,env,path,method){
     if(!challenge||challenge.expires_at<=new Date().toISOString())
       return bad('Kode sudah kedaluwarsa. Buat kode baru.',410);
     const claim=await env.DB.prepare(
-      'SELECT provider,provider_id,username FROM minecraft_link_claims WHERE challenge_id=?'
+      'SELECT provider,provider_id,username,auth_source FROM minecraft_link_claims WHERE challenge_id=?'
     ).bind(challenge.id).first();
     if(!claim)return bad('Masukkan kode melalui Minecraft dan tunggu verifikasi server.',409);
     const timestamp=new Date().toISOString();
@@ -2678,6 +2678,16 @@ async function minecraftLinkAPI(req,env,path,method){
           'INSERT INTO minecraft_accounts(id,application_id,provider,provider_id,username,verified_at) '+
           'SELECT ?,?,?,?,?,? WHERE NOT EXISTS(SELECT 1 FROM minecraft_accounts WHERE application_id=?)'
         ).bind(uid(),app.id,claim.provider,claim.provider_id,claim.username,timestamp,app.id),
+        env.DB.prepare(`INSERT INTO minecraft_identity_evidence
+          (application_id,provider,provider_id,auth_source,observed_at)
+          SELECT ?,?,?,?,? WHERE EXISTS(SELECT 1 FROM minecraft_accounts
+            WHERE application_id=? AND provider=? AND provider_id=?)
+          ON CONFLICT(provider,provider_id) DO UPDATE SET
+          application_id=excluded.application_id,
+          auth_source=excluded.auth_source,observed_at=excluded.observed_at
+          WHERE excluded.observed_at>=minecraft_identity_evidence.observed_at`)
+          .bind(app.id,claim.provider,claim.provider_id,claim.auth_source,timestamp,
+            app.id,claim.provider,claim.provider_id),
         env.DB.prepare(
           'DELETE FROM minecraft_link_claims WHERE challenge_id IN (SELECT id FROM minecraft_link_challenges WHERE application_id=?)'
         ).bind(app.id),
@@ -2688,7 +2698,9 @@ async function minecraftLinkAPI(req,env,path,method){
     }catch{
       return bad('Identitas Minecraft sudah digunakan oleh anggota lain atau sedang diproses.',409);
     }
-    return J({ok:true,linked:{provider:claim.provider,username:claim.username,verifiedAt:timestamp}});
+    return J({ok:true,linked:{provider:claim.provider,
+      edition:minecraftEdition(claim.provider,claim.auth_source),
+      username:claim.username,verifiedAt:timestamp}});
   }
   if(path==='/api/player/minecraft/link/unlink' && method==='POST'){
     if(!await rateLimit(env,req,'minecraft-link-unlink',5,600))
@@ -2708,6 +2720,7 @@ async function minecraftLinkAPI(req,env,path,method){
         'DELETE FROM minecraft_link_claims WHERE challenge_id IN (SELECT id FROM minecraft_link_challenges WHERE application_id=?)'
       ).bind(app.id),
       env.DB.prepare('DELETE FROM minecraft_link_challenges WHERE application_id=?').bind(app.id),
+      env.DB.prepare('DELETE FROM minecraft_identity_evidence WHERE application_id=?').bind(app.id),
       env.DB.prepare('DELETE FROM minecraft_accounts WHERE application_id=?').bind(app.id)
     ]);
     return J({ok:true});
@@ -2735,7 +2748,7 @@ const mcStatIdentityValid=(value)=>{
   if(!value||typeof value!=='object')return false;
   const id=String(value.providerId||''),source=value.authSource;
   if(value.provider==='java_premium')return source==='mojang-online'&&MC_UUID.test(id);
-  if(value.provider==='java_offline')return source==='authme-session'&&
+  if(value.provider==='java_offline')return ['authme-session','fastlogin-premium','fastlogin-cracked'].includes(source)&&
     /^[0-9a-f]{8}-[0-9a-f]{4}-3[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(id);
   if(value.provider==='bedrock')return source==='floodgate-xuid'&&/^[0-9]{10,22}$/.test(id);
   return false;
@@ -2844,7 +2857,17 @@ async function minecraftStatsIngest(req,env){
       (event_id,application_id,provider,provider_id,received_at) VALUES(?,?,?,?,?)`)
       .bind(payload.eventId,account.application_id,payload.provider,payload.providerId,receivedAt),
     entry('',initial),
-    env.DB.prepare(snapshotFromProgress).bind(account.application_id,'')
+    env.DB.prepare(snapshotFromProgress).bind(account.application_id,''),
+    // Only an authenticated signed session for an already-linked account can
+    // refresh this evidence; queued older packets cannot overwrite newer proof.
+    env.DB.prepare(`INSERT INTO minecraft_identity_evidence
+      (application_id,provider,provider_id,auth_source,observed_at)
+      VALUES(?,?,?,?,?) ON CONFLICT(provider,provider_id) DO UPDATE SET
+      application_id=excluded.application_id,auth_source=excluded.auth_source,
+      observed_at=excluded.observed_at
+      WHERE excluded.observed_at>=minecraft_identity_evidence.observed_at`)
+      .bind(account.application_id,payload.provider,payload.providerId,
+        payload.authSource,capturedAt)
   ];
   if(seasonId){
     transaction.push(entry(seasonId,[0,0,0,0]));
@@ -2995,11 +3018,13 @@ async function minecraftSyncAdmin(req,env,path,method){
     // Escape SQLite LIKE wildcards. All user input remains parameter-bound.
     const needle='%'+query.replace(/[\\%_]/g,c=>'\\'+c)+'%';
     const rows=await env.DB.prepare(`SELECT a.application_id AS member_id,a.provider,a.username,a.verified_at,
-      COALESCE(p.display_name,'') AS display_name,
+      e.auth_source,COALESCE(p.display_name,'') AS display_name,
       (SELECT MAX(s.last_synced_at) FROM player_stat_snapshots s
         WHERE s.application_id=a.application_id) AS last_sync_at
       FROM minecraft_accounts a
       LEFT JOIN member_profiles p ON p.application_id=a.application_id
+      LEFT JOIN minecraft_identity_evidence e ON e.provider=a.provider
+        AND e.provider_id=a.provider_id AND e.application_id=a.application_id
       WHERE (?='' OR lower(a.username) LIKE ? ESCAPE '\\'
         OR lower(COALESCE(p.display_name,'')) LIKE ? ESCAPE '\\'
         OR lower(a.application_id) LIKE ? ESCAPE '\\')
@@ -3028,7 +3053,8 @@ async function minecraftSyncAdmin(req,env,path,method){
     }:null,summary:{linked:totals?.linked||0,noStats:totals?.no_stats||0},
       accounts:(rows.results||[]).slice(0,100).map(x=>({
         memberId:x.member_id,memberName:x.display_name||'Anggota',
-        provider:x.provider,username:x.username,linkedAt:x.verified_at,
+        provider:x.provider,edition:minecraftEdition(x.provider,x.auth_source),
+        username:x.username,linkedAt:x.verified_at,
         lastSyncAt:x.last_sync_at||null
       })),hasMore:(rows.results||[]).length>100,offset,filter,query,
       events:(events.results||[]),pendingCommand:pending?{
@@ -3106,12 +3132,13 @@ async function minecraftLinkClaim(req,env){
   const authmeId=/^[0-9a-f]{8}-[0-9a-f]{4}-3[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
   const checks={
     java_premium:{source:'mojang-online',valid:MC_UUID.test(bodyValue.providerId||'')},
-    java_offline:{source:bodyValue.authSource==='authme-session'
-        ?'authme-session':'librelogin-authenticated',
-      valid:bodyValue.authSource==='authme-session'
+    java_offline:{source:bodyValue.authSource,
+      valid:['authme-session','fastlogin-premium','fastlogin-cracked']
+          .includes(bodyValue.authSource)
         ?authmeId.test(bodyValue.providerId||'')
           && /^[A-Za-z0-9_]{3,16}$/.test(bodyValue.username)
-        :MC_UUID.test(bodyValue.providerId||'')},
+        :bodyValue.authSource==='librelogin-authenticated'
+          && MC_UUID.test(bodyValue.providerId||'')},
     bedrock:{source:'floodgate-xuid',valid:/^[0-9]{10,22}$/.test(bodyValue.providerId||'')}
   };
   const identity=checks[bodyValue.provider];
