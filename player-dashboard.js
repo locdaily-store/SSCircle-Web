@@ -76,13 +76,8 @@
     $('player-show-stats').disabled=policy.allowStats===false;
     $('player-event-alerts').disabled=policy.allowEventAlerts===false;
     $('player-profile-title').textContent=profile.displayName||'Anggota SSCircle';
-    const labelByProvider={
-      java_premium:'Minecraft Java Premium',
-      java_offline:'Minecraft Java (status Premium belum terverifikasi)',
-      bedrock:'Minecraft Bedrock'
-    };
     $('player-edition').textContent=(payload.accounts||[]).map(a=>
-      labelByProvider[a.provider]||'Minecraft').join(', ')||'Belum terhubung';
+      mcProviderLabel(a)).join(', ')||'Belum terhubung';
     drawAwards(payload.achievements);
     const list=Array.isArray(payload.statistics)?payload.statistics:[];
     const selector=$('player-season-select');
@@ -449,9 +444,17 @@
 
   // V10.45: account link stays private and must be confirmed after server attestation.
   let linkCommand='',linkExpires='',linkBusy=false;
-  const mcProviderLabel=provider=>({
-    java_premium:'Minecraft Java Premium',java_offline:'Minecraft Java (status Premium belum terverifikasi)',bedrock:'Minecraft Bedrock'
-  })[provider]||'Minecraft';
+  const mcProviderLabel=account=>{
+    const edition=account?.edition||(
+      account?.provider==='bedrock'?'bedrock':
+      account?.provider==='java_premium'?'java_premium':'java_unverified');
+    return ({
+      java_premium:'Minecraft Java Premium',
+      java_non_premium:'Minecraft Java Non-Premium',
+      java_unverified:'Minecraft Java (Premium belum terverifikasi)',
+      bedrock:'Minecraft Bedrock'
+    })[edition]||'Minecraft';
+  };
   const linkNotice=message=>{$('player-link-notice').textContent=message;};
   function renderMinecraftLink(data){
     const linked=data?.linked||null,pending=data?.pending||null;
@@ -469,15 +472,15 @@
     $('player-link-create').disabled=!ready||!!linked||!!pending||linkBusy;
     if(linked){
       linkCommand='';linkExpires='';
-      $('player-link-connected-provider').textContent=mcProviderLabel(linked.provider);
+      $('player-link-connected-provider').textContent=mcProviderLabel(linked);
       $('player-link-connected-name').textContent=linked.username;
       $('player-link-connected-date').textContent=
         'Terhubung: '+new Date(linked.verifiedAt).toLocaleString('id-ID');
-      $('player-edition').textContent=mcProviderLabel(linked.provider);
+      $('player-edition').textContent=mcProviderLabel(linked);
       linkNotice('Identitas Minecraft sudah berhasil ditautkan.');
     }else if(pending?.status==='needs_confirmation'){
       linkCommand='';linkExpires='';
-      $('player-link-review-provider').textContent=mcProviderLabel(pending.identity?.provider);
+      $('player-link-review-provider').textContent=mcProviderLabel(pending.identity);
       $('player-link-review-name').textContent=pending.identity?.username||'Akun Minecraft';
       linkNotice('Konfirmasi hanya jika nama dan edisi yang ditampilkan benar.');
     }else if(pending?.status==='waiting_in_game'){

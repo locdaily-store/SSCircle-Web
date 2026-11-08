@@ -1,11 +1,11 @@
 name: SSCirclePlayerSync
-version: '10.48.1'
+version: '10.48.2'
 main: id.sscircle.paper.SSCirclePaperLinkPlugin
 api-version: '26.3'
 author: RinxAsoy
 description: Menghubungkan akun Minecraft terverifikasi langsung dari Paper ke Profile SSCircle
 website: https://github.com/locdaily-store/SSCircle-Web
-softdepend: [floodgate, AuthMe, AuthMeReloaded, packetevents]
+softdepend: [floodgate, AuthMe, AuthMeReloaded, packetevents, FastLogin, FastLoginPlus, ProtocolLib]
 commands:
   sscircle:
     description: Hubungkan akun Minecraft dengan Profile SSCircle

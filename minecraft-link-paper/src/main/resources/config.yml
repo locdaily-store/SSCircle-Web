@@ -37,3 +37,8 @@ stats-sync:
 # singkat dari website. 120 detik = maksimal 720 laporan/hari per server.
 sync-monitor:
   interval-seconds: 120
+
+# V10.48.2: FastLogin/FastLoginPlus dan ProtocolLib dapat dipasang terpisah.
+# Status PREMIUM/CRACKED dibaca hanya dari sesi FastLogin yang sudah berhasil
+# login melalui AuthMe. Tanpa FastLogin, label Java tetap "belum terverifikasi".
+# Jangan mengubah online-mode maupun UUID/playerdata tanpa migrasi terencana.

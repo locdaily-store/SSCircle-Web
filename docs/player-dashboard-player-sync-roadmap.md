@@ -157,3 +157,22 @@ Baca petunjuk operasional di `docs/V10.47-PLAYER-STATS.md`.
 - Target lanjutan: integrasi autentikasi Premium campuran (misalnya FastLogin) yang benar-benar memverifikasi sesi Premium, dengan adapter terpercaya pada plugin SSCircle dan validasi bukti di Worker. **Jangan** mengandalkan pencocokan nickname/UUID, dan jangan menerima flag Premium dari klien.
 - Setelah adapter diverifikasi dan diuji terhadap versi Paper/AuthMe/Floodgate yang dipakai, barulah jenis **Minecraft Java Non-Premium** dapat ditampilkan untuk sesi yang secara tegas dinyatakan Non-Premium oleh alur autentikasi yang dipercaya. Migrasi tidak boleh mengubah UUID/playerdata atau tautan akun lama secara otomatis.
 - V10.48.2 ini adalah **perbaikan label aman**, bukan klaim bahwa deteksi Premium/Non-Premium otomatis pada mixed-mode telah aktif.
+
+## Penyempurnaan V10.48.2 — Klasifikasi edisi berdasar bukti sesi
+
+**Target proyek:** SSCircle menghubungkan akun website anggota dengan akun Minecraft yang terautentikasi, menampilkan statistik permainan asli dan membuat arsip Season/Leaderboard yang dapat dipercaya tanpa mengorbankan performa Paper atau privasi pemain.
+
+- Paper `online-mode=false` dengan AuthMeReloaded tetap memakai ID lokal AuthMe yang stabil (`java_offline`). FastLogin/FastLoginPlus **opsional** dibaca melalui API sesi `getStatus(UUID)`, bukan lookup nickname, UUID offline, atau HTTP Mojang per tick.
+- Jika status sesi FastLogin **PREMIUM**, website menampilkan **Minecraft Java Premium**. Jika **CRACKED**, website menampilkan **Minecraft Java Non-Premium** dalam arti mode login tanpa autentikasi Mojang. Jika **UNKNOWN** atau FastLogin belum terpasang, tampil **Minecraft Java (Premium belum terverifikasi)**. Floodgate XUID tetap menampilkan **Minecraft Bedrock**.
+- Metode autentikasi yang sah terkirim sebagai `authSource` di request Paper bertanda tangan HMAC; Worker memverifikasi sumber dan identitas. Tabel D1 **baru dan aditif** `minecraft_identity_evidence` menyimpan bukti identitas per akun tertaut. Update bukti melalui statistik bertanda tangan hanya berlaku pada akun yang benar-benar tertaut dan mengabaikan status dari snapshot yang lebih lama.
+- API Profile, modal penghubung akun, dan Admin Sync Monitoring mengirim/menggunakan `edition` yang dihitung di backend. Data lama tanpa bukti tambahan tetap tidak diklaim Non-Premium. Tidak ada migrasi playerdata, UUID, statistik, maupun penghapusan tautan.
+- **Batasan:** implementasi di kode bukan bukti sudah teruji di hosting nyata. Agar kategori otomatis berfungsi di mode campuran, admin harus memasang FastLogin/FastLoginPlus yang kompatibel beserta ProtocolLib sesuai dokumentasi vendor, selain AuthMe + PacketEvents. Backup `world/playerdata`, database AuthMe dan konfigurasi plugin sebelum uji login.
+- Hindari `/premium` hanya untuk mengubah label: mekanisme Premium harus memverifikasi pemilik sesi. FastLogin `CRACKED` menandakan metode sesi, bukan jaminan pemilik akun tidak pernah membeli Minecraft. `UNKNOWN` bukan Non-Premium.
+- Hasil uji otomatis GitHub Actions dan uji klien sungguhan harus dilihat sebelum dipasang ke server produksi. Status akun lama akan diperbarui setelah pemain masuk lagi dan statistiknya tersinkron.
+
+**Tahap berikut:**
+1. **V10.48.3** uji runtime Paper 26.3: 1 Java Premium, 1 Java Non-Premium, 1 Bedrock; AuthMe, FastLogin, PacketEvents/ProtocolLib, Geyser/Floodgate, reconnect, log dan backup, pantau TPS dan waktu sinkron.
+2. **V10.48.4** jaminan konsistensi identitas saat ganti nickname, konfigurasi Premium UUID, account recovery, login bersamaan, atau FastLogin dilepas; sediakan peringatan admin.
+3. **V10.49** Multi-Account Linking yang diverifikasi per-akun, pemutusan tautan aman, kontrol privasi pemain, dan avatar/skin sesuai platform.
+4. **V10.50** integrasi statistik Season ke Leaderboard, Hall of Fame, award dan timeline tanpa menghitung ganda akibat reset world/retry jaringan.
+5. **Peningkatan lanjutan:** metrik performa Cloudflare D1 dan Paper 20–50 pemain, indikator sinkron gagal dan audit trail yang bisa dibaca admin.

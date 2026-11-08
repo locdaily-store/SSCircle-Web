@@ -510,3 +510,64 @@ test('V10.48.1: admin search and status filter cover every page, not only first 
   const privateView=await x.call('/api/admin/minecraft/sync?filter=synced');
   assert.equal(privateView.status,401);
 });
+
+test('V10.48.2: signed FastLogin Premium/Cracked and unknown AuthMe get separate editions',async()=>{
+  const id='70a89d54-c32e-3942-a553-34f71cfde04d';
+  for(const [source,edition] of [
+    ['fastlogin-premium','java_premium'],
+    ['fastlogin-cracked','java_non_premium'],
+    ['authme-session','java_unverified']]){
+    const x=fixture(),cookie=await x.active();
+    const code=(await x.call('/api/player/minecraft/link/create',{method:'POST',cookie,data:{}})).json.code;
+    const claim={code,provider:'java_offline',providerId:id,username:'LocalSteve',authSource:source};
+    assert.equal((await x.claim({...claim,provider:'java_premium'})).status,403);
+    assert.equal((await x.claim(claim)).status,200);
+    const pending=await x.call('/api/player/minecraft/link/state',{cookie});
+    assert.equal(pending.json.pending.identity.edition,edition);
+    assert.equal((await x.call('/api/player/minecraft/link/confirm',{method:'POST',cookie,data:{}})).status,200);
+    const profile=await x.call('/api/player/profile',{cookie});
+    assert.equal(profile.json.accounts[0].edition,edition);
+    assert.equal((await x.call('/api/player/minecraft/link/state',{cookie})).json.linked.edition,edition);
+    const admin=await x.call('/api/admin/minecraft/sync',{cookie:x.admin});
+    assert.equal(admin.json.accounts[0].edition,edition);
+  }
+});
+test('V10.48.2: signed newer sessions refresh edition; stale queued snapshots cannot revert it',async()=>{
+  const x=fixture(),cookie=await x.active();
+  const id='70a89d54-c32e-3942-a553-34f71cfde04d';
+  const code=(await x.call('/api/player/minecraft/link/create',{method:'POST',cookie,data:{}})).json.code;
+  await x.claim({code,provider:'java_offline',providerId:id,
+    username:'LocalSteve',authSource:'authme-session'});
+  await x.call('/api/player/minecraft/link/confirm',{method:'POST',cookie,data:{}});
+  assert.equal((await x.call('/api/player/profile',{cookie})).json.accounts[0].edition,'java_unverified');
+  const now=Date.now()+2000;
+  const newer={...statsPayload('java_offline',id,'fastlogin-premium'),
+    capturedAt:new Date(now+1000).toISOString()};
+  assert.equal((await deliverStats(x,newer)).status,200);
+  assert.equal((await x.call('/api/player/profile',{cookie})).json.accounts[0].edition,'java_premium');
+  const stale={...statsPayload('java_offline',id,'fastlogin-cracked'),
+    capturedAt:new Date(now).toISOString()};
+  assert.equal((await deliverStats(x,stale)).status,200);
+  assert.equal((await x.call('/api/player/profile',{cookie})).json.accounts[0].edition,'java_premium');
+  const latest={...statsPayload('java_offline',id,'fastlogin-cracked'),
+    capturedAt:new Date(now+2000).toISOString()};
+  assert.equal((await deliverStats(x,latest)).status,200);
+  assert.equal((await x.call('/api/player/profile',{cookie})).json.accounts[0].edition,'java_non_premium');
+  assert.equal((await deliverStats(x,{...latest,authSource:'untrusted-nickname'})).status,400);
+  const evidence=x.db.prepare('SELECT auth_source FROM minecraft_identity_evidence WHERE provider_id=?').get(id);
+  assert.equal(evidence.auth_source,'fastlogin-cracked');
+});
+test('V10.48.2: legacy links keep UUID and are unverified until signed session evidence',async()=>{
+  const x=fixture(),cookie=await x.active();
+  await x.call('/api/player/profile',{cookie});
+  const id='70a89d54-c32e-3942-a553-34f71cfde04d';
+  x.db.prepare('INSERT INTO minecraft_accounts VALUES(?,?,?,?,?,?)').run(
+    randomUUID(),ID,'java_offline',id,'LegacySteve',new Date(Date.now()-5000).toISOString());
+  const before=(await x.call('/api/player/profile',{cookie})).json.accounts[0];
+  assert.equal(before.edition,'java_unverified');
+  const snapshot=statsPayload('java_offline',id,'fastlogin-premium');
+  assert.equal((await deliverStats(x,snapshot)).status,200);
+  const after=(await x.call('/api/player/profile',{cookie})).json.accounts[0];
+  assert.equal(after.edition,'java_premium');
+  assert.equal(x.db.prepare('SELECT provider_id FROM minecraft_accounts').get().provider_id,id);
+});
