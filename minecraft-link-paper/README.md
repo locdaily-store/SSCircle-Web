@@ -26,7 +26,7 @@ Penghubung akun Minecraft ke Profile SSCircle, tanpa Velocity. Plugin memakai HM
 
 1. **Jangan ubah server produksi langsung.** Buat salinan server beserta backup world, inventory, statistik, permission dan database D1. Migrasi online-mode dapat mengubah UUID pemain dan nama file playerdata.
 2. Pada server **staging** Paper, atur `server.properties` → `online-mode=false`. Pastikan akses jaringan/firewall dan plugin login sudah dikonfigurasi sebelum server diakses publik.
-3. Instal `AuthMeReloaded` dan `PacketEvents 2.x` pada `plugins/`. Di `plugins/AuthMe/config.yml`, nyalakan `settings.enablePremium: true`. AuthMe membutuhkan PacketEvents untuk verifikasi Premium Bypass langsung tanpa proxy. Pertahankan `Hooks.bungeecord: false` jika server tidak menggunakan proxy.
+3. Instal `AuthMeReloaded` dan `PacketEvents 2.x` pada `plugins/`. Jika memakai **FastLoginPlus**, pasang pula `ProtocolLib` yang kompatibel dan biarkan FastLoginPlus mengintegrasikan dukungan Premium dengan AuthMe menurut dokumentasi versinya; hindari dua sistem auto-premium yang saling bertabrakan. Pertahankan `Hooks.bungeecord: false` jika server tidak menggunakan proxy.
 4. Instal Geyser + Floodgate pada Paper yang sama. Atur pengaturan Bedrock/Geyser dan autentikasi Floodgate sesuai panduan resmi. **AuthMe dapat menghalangi perintah sebelum login**: pastikan akun Bedrock punya alur autentikasi kompatibel melalui integrasi yang telah diuji, jangan mematikan autentikasi Java untuk semua pemain.
 5. Edit `plugins/SSCirclePlayerSync/config.yml`:
 
@@ -38,7 +38,7 @@ Penghubung akun Minecraft ke Profile SSCircle, tanpa Velocity. Plugin memakai HM
 
    Jangan mengganti `server-secret.txt` jika sudah benar. Sisi Cloudflare harus memakai backend V10.46.0+ dan `SSCIRCLE_LINK_SERVER_SECRET` yang sama. Lakukan restart Paper, tidak cukup `/reload`.
 6. Java Non-Premium: `/register` satu kali dan `/login` di sesi berikutnya melalui AuthMe. SSCircle memeriksa API `isAuthenticated`, `isRegistered`, dan `!isUnrestricted` sebelum mengizinkan linking.
-7. Java Premium: pemain yang telah login AuthMe dapat menjalankan `/premium` lalu reconnect untuk mekanisme verifikasi Mojang milik AuthMe. SSCircle akan menautkannya sebagai **Java (AuthMe)** pada mode campuran agar tidak membuat klaim Mojang yang belum dapat dibuktikan dari API.
+7. Java Premium: gunakan verifikasi sesi asli oleh FastLoginPlus, lalu reconnect bila diperlukan. **Jangan menjadikan `/premium`, `/flp premium`, nickname atau entri database sebagai bukti bahwa koneksi saat ini sudah lolos Mojang.** SSCircle hanya memberi label Java Premium jika API sesi FastLoginPlus benar-benar mengembalikan `PREMIUM`; jika belum tersedia, statusnya tidak terverifikasi.
 8. Bedrock: masuk melalui Geyser/Floodgate, dan pastikan AuthMe tidak mengunci command `/sscircle`. Identitas website berasal dari XUID **Floodgate** yang diverifikasi, bukan username.
 9. OP jalankan `/sscircle status` dan `/sscircle diagnose`. Di Profile akun anggota Diterima yang telah login dengan password dashboard, buat kode baru, jalankan `/sscircle link <kode>`, perbarui Profile, dan **Konfirmasi**.
 
