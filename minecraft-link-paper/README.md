@@ -1,4 +1,4 @@
-# SSCircle Player Sync Paper V10.46.0
+# SSCircle Player Sync Paper V10.47.0
 
 Penghubung akun Minecraft ke Profile SSCircle, tanpa Velocity. Plugin memakai HMAC, nonce, kode sekali-pakai 10 menit, dan konfirmasi ulang pada website. Satu anggota saat ini mempunyai **satu** akun Minecraft aktif; multi-account adalah fase berikutnya.
 
@@ -66,3 +66,19 @@ Penghubung akun Minecraft ke Profile SSCircle, tanpa Velocity. Plugin memakai HM
 - `Kode sudah dipakai`: perbarui Profile dan konfirmasi; jika kedaluwarsa buat kode baru.
 - Paket plugin ini tidak mengubah data pemain lama atau otomatis memigrasi UUID, statistik maupun inventory.
 - Bukti CI/build bukan bukti sudah teruji pada servermu. Ketiga jenis akun harus diuji secara end-to-end di staging sebelum dipublikasikan.
+
+## V10.47: Statistik asli Minecraft, antrean dan retry
+
+Pada rilis ini, SSCircle mengirim empat statistik vanilla Paper untuk identitas **yang sudah terverifikasi dan ditautkan di website**: waktu bermain, kematian, mob dikalahkan, dan blok ditambang. Data diambil saat bergabung (setelah autentikasi), tiap lima menit, saat keluar, dan ketika plugin berhenti.
+
+- `/sscircle sync` (OP): ambil statistik pemain yang online sekarang dan mulai pengiriman.
+- `/sscircle status` (OP): periksa jumlah identitas dalam antrean dan status pengiriman terakhir.
+- `stats-sync.enabled: true` dan `stats-sync.interval-seconds: 300` di `plugins/SSCirclePlayerSync/config.yml`.
+- Jika koneksi HTTPS/Cloudflare mati, snapshot terbaru disimpan secara lokal di `stats-queue.properties`, dikirim kembali dengan backoff hingga lima menit.
+- Jika pemain belum tertaut ke website, data **tidak** diterapkan kepada anggota lain. Setelah link berhasil, ambil snapshot baru menggunakan `/sscircle sync`.
+- D1 `minecraft_stat_receipts` menyimpan bukti event pernah diproses, sementara `player_stat_snapshots` menyimpan total kumulatif. Retry tak boleh menggandakan angka atau menurunkannya.
+- Semua request menggunakan signature HMAC, timestamp dan nonce; jangan simpan secret di GitHub atau stream.
+
+**Instalasi:** upload ZIP Cloudflare V10.47.0 lebih dahulu, lalu ganti JAR SSCircle dengan V10.47.0. Jangan hapus `config.yml` atau `server-secret.txt`. Panduan lengkap: `docs/V10.47-PLAYER-STATS.md`.
+
+**Batasan:** angka dari dunia yang direset belum punya epoch season. Total di D1 tidak dikurangi walaupun file statistik vanilla di-reset; target berikutnya adalah season baseline dan uji runtime di server staging.
