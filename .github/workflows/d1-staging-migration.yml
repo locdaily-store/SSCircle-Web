@@ -1,0 +1,73 @@
+# Apply an explicitly reviewed migration to the staging D1 database only.
+# Production D1 is intentionally not writable from this workflow.
+name: SSCircle D1 - Terapkan Migrasi Staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      migration:
+        description: "Nama file migrations/*.sql (contoh: v10_51_add_table.sql)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sscircle-d1-staging-migration
+  cancel-in-progress: false
+
+jobs:
+  apply-staging:
+    name: Terapkan migrasi D1 Staging
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    environment: database-staging
+    steps:
+      - name: Ambil perubahan yang sudah masuk main
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Pasang Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Periksa nama file migrasi dan database tujuan
+        shell: bash
+        env:
+          MIGRATION_NAME: ${{ inputs.migration }}
+          D1_DATABASE_NAME: ${{ vars.D1_STAGING_DATABASE }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$MIGRATION_NAME" =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,90}\.sql$ ]]; then
+            echo "::error::Masukkan nama file SQL biasa dari folder migrations, bukan path atau SQL langsung."
+            exit 1
+          fi
+          if [[ ! "$D1_DATABASE_NAME" =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,100}$ ]]; then
+            echo "::error::Atur environment variable D1_STAGING_DATABASE di environment database-staging."
+            exit 1
+          fi
+          test -f "migrations/$MIGRATION_NAME" || {
+            echo "::error::File migrasi tidak ditemukan di branch main."
+            exit 1
+          }
+          echo "Target: staging. File migrasi: $MIGRATION_NAME"
+
+      - name: Terapkan SQL ke database staging saja
+        shell: bash
+        env:
+          MIGRATION_NAME: ${{ inputs.migration }}
+          D1_DATABASE_NAME: ${{ vars.D1_STAGING_DATABASE }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_ACCOUNT_ID" && test -n "$CLOUDFLARE_API_TOKEN" || {
+            echo "::error::Environment secrets Cloudflare belum dipasang."
+            exit 1
+          }
+          npx --yes wrangler@4 d1 execute "$D1_DATABASE_NAME" --remote --file="migrations/$MIGRATION_NAME" --yes
+          echo "Migrasi staging selesai. Tidak ada perubahan otomatis ke Production."
