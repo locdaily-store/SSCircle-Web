@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src https:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Database Inspector | SSCircle</title>
+  <style>
+    :root{font:15px/1.55 system-ui,-apple-system,Segoe UI,sans-serif;color-scheme:dark;background:#0d1322;color:#edf2ff}
+    *{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 80% -20%,#244b69 0%,transparent 47%),#0d1322;min-height:100vh}
+    main{max-width:1120px;padding:36px 18px 70px;margin:auto}
+    .top{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:24px}
+    .brand{letter-spacing:.16em;font-weight:800;font-size:.75rem;color:#98cce8}h1{font-size:clamp(1.75rem,4vw,2.6rem);line-height:1.15;letter-spacing:-.04em;margin:9px 0}
+    p{color:#aabbd2;margin:6px 0 16px}.notice{font-size:.9rem}
+    .panel{background:#131e31;border:1px solid #2c3b54;border-radius:17px;padding:22px;margin-bottom:16px;box-shadow:0 14px 35px #0002}
+    .fields{display:grid;grid-template-columns:2fr 2fr auto;gap:12px;align-items:end}
+    label{display:block;font-size:.82rem;color:#b8c7d9;margin-bottom:6px}
+    input{width:100%;padding:12px;border-radius:10px;border:1px solid #46566f;background:#091320;color:#f4f7ff;font:inherit}
+    input:focus-visible,button:focus-visible{outline:2px solid #81d3fb;outline-offset:2px}
+    button{font:inherit;cursor:pointer;border:1px solid #39617a;border-radius:10px;background:#246387;color:white;padding:12px 15px;font-weight:650}
+    button:hover{filter:brightness(1.13)}button.secondary{background:#17283c}button:disabled{opacity:.45;cursor:not-allowed}
+    .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:13px}
+    .status{margin-top:14px;font-size:.88rem;color:#bed3e5;min-height:22px}
+    .status.error{color:#ffb5b5}.status.ok{color:#96e6c2}
+    .workspace{display:grid;grid-template-columns:minmax(240px,1fr) minmax(0,2.1fr);gap:16px}
+    h2{font-size:1.12rem;margin:0 0 14px}.muted{color:#9eb2c8;font-size:.86rem}
+    #tables{list-style:none;padding:0;margin:0;max-height:510px;overflow:auto}
+    #tables li{margin:3px 0}#tables button{width:100%;text-align:left;background:transparent;border-color:transparent;color:#d9e9f5;overflow-wrap:anywhere;padding:10px}
+    #tables button:hover,#tables button.active{background:#24425b;border-color:#3e6c8a}
+    .summary{display:flex;gap:9px;flex-wrap:wrap;margin-bottom:14px}
+    .chip{border:1px solid #35516a;background:#1d3147;border-radius:8px;padding:6px 10px;font-size:.8rem;color:#c3e0ee}
+    table{width:100%;border-collapse:collapse;font-size:.86rem}th,td{padding:9px;border-bottom:1px solid #2f4057;text-align:left;overflow-wrap:anywhere}
+    th{color:#aac7dc;font-weight:650}td:nth-child(2){color:#9db4c9}
+    .scroll{overflow:auto}footer{font-size:.81rem;color:#93a9be;margin-top:18px}
+    code{color:#c3eaff}a{color:#9fdbff}#detailMessage{min-height:160px}
+    @media(max-width:760px){.fields{grid-template-columns:1fr}.workspace{grid-template-columns:1fr}.panel{padding:16px}main{padding-top:22px}}
+  </style>
+</head>
+<body>
+<main>
+  <div class="top">
+    <div class="brand">SSCircle / COLLABORATOR TOOLS</div>
+    <span class="muted">GitHub Pages • Data sumber: Cloudflare D1</span>
+  </div>
+  <h1>Database Inspector</h1>
+  <p>Periksa struktur dan jumlah baris database D1 secara langsung. Tidak menampilkan isi pendaftaran, password, token, maupun data pribadi pemain.</p>
+  <section class="panel" aria-labelledby="connectionTitle">
+    <h2 id="connectionTitle">Hubungkan ke website SSCircle</h2>
+    <div class="fields">
+      <div><label for="site">Alamat website Cloudflare SSCircle</label>
+        <input id="site" inputmode="url" type="url" autocomplete="url" spellcheck="false" placeholder="https://project-anda.pages.dev" required></div>
+      <div><label for="key">Kunci khusus Database Inspector</label>
+        <input id="key" type="password" autocomplete="off" spellcheck="false" placeholder="Masukkan kunci collaborator" required></div>
+      <button id="connect" type="button">Hubungkan</button>
+    </div>
+    <div class="actions">
+      <button id="refresh" class="secondary" type="button" disabled>Muat ulang</button>
+      <button id="disconnect" class="secondary" type="button" disabled>Putuskan</button>
+    </div>
+    <div id="status" class="status" role="status" aria-live="polite">Belum terhubung.</div>
+    <p class="notice">Gunakan alamat Cloudflare SSCircle yang benar. Kunci tidak disimpan di GitHub, URL, atau penyimpanan browser. Hanya admin yang dapat membuat atau menggantinya.</p>
+  </section>
+  <div class="workspace">
+    <section class="panel" aria-labelledby="tablesTitle">
+      <h2 id="tablesTitle">Tabel database <span id="tableCount" class="muted"></span></h2>
+      <ul id="tables"><li class="muted">Hubungkan untuk membaca daftar tabel.</li></ul>
+    </section>
+    <section class="panel" aria-labelledby="detailTitle">
+      <h2 id="detailTitle">Detail tabel</h2>
+      <div id="detailMessage" class="muted">Pilih tabel untuk melihat nama kolom, tipe, dan jumlah baris saat ini.</div>
+      <div id="detail" hidden>
+        <div class="summary"><span id="rowCount" class="chip"></span><span id="columnCount" class="chip"></span><span id="checkedAt" class="chip"></span></div>
+        <div class="scroll"><table><thead><tr><th>Kolom</th><th>Tipe</th><th>Wajib</th><th>Primary key</th></tr></thead><tbody id="columns"></tbody></table></div>
+      </div>
+    </section>
+  </div>
+  <footer>Perubahan di Cloudflare akan terlihat saat dimuat ulang (dan diperiksa otomatis setiap 60 detik selama halaman terbuka). Ini bukan backup atau sinkronisasi dua arah. Perubahan SQL tetap memerlukan GitHub Actions dan persetujuan.</footer>
+</main>
+<script>
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  let apiOrigin = '', token = '', selected = '', timer = null, busy = false;
+  const showStatus = (message, type = '') => { $('status').textContent = message; $('status').className = 'status ' + type; };
+  const makeText = (tag, value) => { const node = document.createElement(tag); node.textContent = String(value); return node; };
+  const formatDate = value => { const date = new Date(value); return Number.isNaN(+date) ? '-' : date.toLocaleString('id-ID'); };
+  function cleanUrl(value) {
+    const url = new URL(value.trim());
+    if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash || !['','/'].includes(url.pathname))
+      throw Error('Masukkan alamat HTTPS website Cloudflare tanpa path, parameter atau password.');
+    return url.origin;
+  }
+  async function request(table) {
+    const url = new URL('/api/github/database/inspect', apiOrigin);
+    if (table) url.searchParams.set('table', table);
+    const response = await fetch(url, { method:'GET', headers:{Authorization:'Bearer ' + token}, mode:'cors', cache:'no-store', credentials:'omit', referrerPolicy:'no-referrer' });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw Error(data.error || 'Koneksi ditolak (' + response.status + ').');
+    return data;
+  }
+  function drawTables(data) {
+    $('tableCount').textContent = '(' + data.tables.length + (data.truncated ? '+' : '') + ')';
+    $('tables').replaceChildren();
+    for (const name of data.tables) {
+      const li = document.createElement('li'), b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = name;
+      b.className = selected === name ? 'active' : '';
+      b.addEventListener('click', () => { selected = name; loadDetail(); });
+      li.append(b); $('tables').append(li);
+    }
+    if (!data.tables.length) $('tables').append(makeText('li', 'Belum ada tabel.'));
+  }
+  async function loadDetail() {
+    if (!selected || !token) return;
+    try {
+      const data = await request(selected);
+      $('detail').hidden = false; $('detailMessage').hidden = true;
+      $('detailTitle').textContent = 'Detail: ' + data.table.name;
+      $('rowCount').textContent = data.table.rowCount.toLocaleString('id-ID') + ' baris';
+      $('columnCount').textContent = data.table.columns.length + ' kolom';
+      $('checkedAt').textContent = formatDate(data.checkedAt);
+      $('columns').replaceChildren();
+      for (const col of data.table.columns) {
+        const tr = document.createElement('tr');
+        for (const item of [col.name, col.type || '-', col.required ? 'Ya' : 'Tidak', col.primaryKey ? 'Ya' : '-'])
+          tr.append(makeText('td', item));
+        $('columns').append(tr);
+      }
+      for (const b of $('tables').querySelectorAll('button')) b.classList.toggle('active', b.textContent === selected);
+    } catch (error) { showStatus(error.message, 'error'); }
+  }
+  async function refresh() {
+    if (!token || busy) return;
+    busy = true; $('refresh').disabled = true;
+    try {
+      const data = await request('');
+      drawTables(data);
+      if (selected && !data.tables.includes(selected)) {
+        selected = ''; $('detail').hidden = true; $('detailMessage').hidden = false;
+        $('detailTitle').textContent = 'Detail tabel';
+      }
+      if (selected) await loadDetail();
+      showStatus('Terhubung ke D1 • Diperiksa ' + formatDate(data.checkedAt), 'ok');
+    } catch (error) { showStatus(error.message, 'error'); }
+    finally { busy = false; $('refresh').disabled = !token; }
+  }
+  function disconnect() {
+    token = ''; apiOrigin = ''; selected = '';
+    if (timer) clearInterval(timer); timer = null;
+    $('connect').disabled = false; $('refresh').disabled = true; $('disconnect').disabled = true;
+    $('key').value = ''; $('tables').replaceChildren(makeText('li','Koneksi terputus.'));
+    $('detail').hidden = true; $('detailMessage').hidden = false; $('detailTitle').textContent = 'Detail tabel';
+    showStatus('Koneksi diputus.');
+  }
+  $('connect').addEventListener('click', async () => {
+    try {
+      apiOrigin = cleanUrl($('site').value);
+      token = $('key').value.trim();
+      if (!/^[A-Za-z0-9_-]{32,256}$/.test(token)) throw Error('Kunci akses harus minimal 32 karakter.');
+      $('key').value = '';
+      $('connect').disabled = true; $('disconnect').disabled = false; $('refresh').disabled = false;
+      await refresh();
+      if (!timer) timer = setInterval(refresh, 60000);
+    } catch (error) { showStatus(error.message, 'error'); disconnect(); showStatus(error.message, 'error'); }
+  });
+  $('refresh').addEventListener('click', refresh);
+  $('disconnect').addEventListener('click', disconnect);
+  window.addEventListener('pagehide', disconnect);
+})();
+</script>
+</body></html>

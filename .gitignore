@@ -22,6 +22,8 @@ secrets.json
 *.sqlite
 *.sqlite3
 *.sql
+# SQL migration yang ditinjau disimpan di Git; semua backup tetap diabaikan.
+!migrations/*.sql
 *.dump
 *.bak
 *.backup
