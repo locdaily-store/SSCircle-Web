@@ -2718,7 +2718,7 @@ async function minecraftStatsIngest(req,env){
     return minecraftLinkError('STATS_NOT_LINKED','Akun Minecraft belum tertaut ke Profile.',404);
   // A queued event captured before the link existed must never be attributed to
   // someone who links that account later, especially after an unlink/transfer.
-  if(stamp<Date.parse(account.verified_at)-300000)
+  if(stamp<Date.parse(account.verified_at))
     return minecraftLinkError('STATS_PRELINK','Data dari sebelum akun ditautkan tidak digunakan.',410);
   const member=await env.DB.prepare('SELECT status FROM submissions WHERE id=?')
     .bind(account.application_id).first();
