@@ -2703,9 +2703,17 @@ async function minecraftLinkClaim(req,env){
     typeof bodyValue.username!=='string'||bodyValue.username.length<1||
     bodyValue.username.length>32||/[\x00-\x1f<>]/.test(bodyValue.username))
     return bad('Kode atau identitas tidak valid.',400);
+  // AuthMe proves a local account session, NOT Mojang Premium ownership.
+  // Preserve legacy LibreLogin compatibility for already trusted signed adapters.
+  const authmeId=/^[0-9a-f]{8}-[0-9a-f]{4}-3[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
   const checks={
     java_premium:{source:'mojang-online',valid:MC_UUID.test(bodyValue.providerId||'')},
-    java_offline:{source:'librelogin-authenticated',valid:MC_UUID.test(bodyValue.providerId||'')},
+    java_offline:{source:bodyValue.authSource==='authme-session'
+        ?'authme-session':'librelogin-authenticated',
+      valid:bodyValue.authSource==='authme-session'
+        ?authmeId.test(bodyValue.providerId||'')
+          && /^[A-Za-z0-9_]{3,16}$/.test(bodyValue.username)
+        :MC_UUID.test(bodyValue.providerId||'')},
     bedrock:{source:'floodgate-xuid',valid:/^[0-9]{10,22}$/.test(bodyValue.providerId||'')}
   };
   const identity=checks[bodyValue.provider];
@@ -2977,7 +2985,7 @@ async function mailboxAPI(req,env,path,method){
 
 // SSCircle runtime check: observe what the deployment actually receives.
 // Only public readiness categories. Never expose secret values or private data.
-const SSC_RUNTIME_RELEASE='10.45.5';
+const SSC_RUNTIME_RELEASE='10.46.0';
 const SSC_RUNTIME_ISSUES=new Set();
 function sscRuntimeBindings(env){
   return {

@@ -77,7 +77,7 @@
     $('player-event-alerts').disabled=policy.allowEventAlerts===false;
     $('player-profile-title').textContent=profile.displayName||'Anggota SSCircle';
     $('player-edition').textContent=(payload.accounts||[]).map(a=>
-      a.provider==='java_premium'?'Java Premium':a.provider==='java_offline'?'Java Non-Premium':
+      a.provider==='java_premium'?'Java Premium':a.provider==='java_offline'?'Java (akun server)':
         a.provider==='bedrock'?'Bedrock':'Minecraft').join(', ')||'Belum terhubung';
     drawAwards(payload.achievements);
     const stats=(payload.statistics||[]).find(a=>!a.seasonId);
@@ -415,7 +415,7 @@
   // V10.45: account link stays private and must be confirmed after server attestation.
   let linkCommand='',linkExpires='',linkBusy=false;
   const mcProviderLabel=provider=>({
-    java_premium:'Java Premium',java_offline:'Java Non-Premium',bedrock:'Bedrock'
+    java_premium:'Java Premium',java_offline:'Java (AuthMe / Server)',bedrock:'Bedrock'
   })[provider]||'Minecraft';
   const linkNotice=message=>{$('player-link-notice').textContent=message;};
   function renderMinecraftLink(data){

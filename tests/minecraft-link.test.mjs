@@ -208,3 +208,29 @@ test('V10.45.3: signed website probe detects secret mismatch and clock drift',as
  assert.equal(missing.status,503);
  assert.equal(missing.json.code,'SERVER_SECRET_MISSING');
 });
+
+test('V10.46: signed AuthMe claim binds local Java account without Premium spoofing',async()=>{
+ const x=fixture(),cookie=await x.active();
+ const code=(await x.call('/api/player/minecraft/link/create',{method:'POST',cookie,data:{}})).json.code;
+ const account='70a89d54-c32e-3942-a553-34f71cfde04d';
+ const authme={code,provider:'java_offline',providerId:account,
+   username:'LocalSteve',authSource:'authme-session'};
+ assert.equal((await x.claim({...authme,authSource:'minecraft-name'})).status,403);
+ assert.equal((await x.claim({...authme,provider:'java_premium'})).status,403);
+ assert.equal((await x.claim({...authme,providerId:UUID})).status,403);
+ assert.equal((await x.claim({...authme,username:'Name With Space'})).status,403);
+ const accepted=await x.claim(authme);
+ assert.equal(accepted.status,200,JSON.stringify(accepted.json));
+ const confirmed=await x.call('/api/player/minecraft/link/confirm',{method:'POST',cookie,data:{}});
+ assert.equal(confirmed.status,200,JSON.stringify(confirmed.json));
+ assert.equal((await x.call('/api/player/minecraft/link/state',{cookie})).json.linked.provider,'java_offline');
+});
+test('V10.46: Bedrock verified Floodgate XUID still works independently from AuthMe',async()=>{
+ const x=fixture(),cookie=await x.active();
+ const code=(await x.call('/api/player/minecraft/link/create',{method:'POST',cookie,data:{}})).json.code;
+ const data={code,provider:'bedrock',providerId:'12345678901234567',username:'.BedrockPlayer',
+   authSource:'floodgate-xuid'};
+ const accepted=await x.claim(data);
+ assert.equal(accepted.status,200,JSON.stringify(accepted.json));
+ assert.equal((await x.call('/api/player/minecraft/link/confirm',{method:'POST',cookie,data:{}})).status,200);
+});

@@ -92,3 +92,22 @@ Ketentuan operasional:
 
 ## Kenapa urutan ini?
 Dashboard pertama memberi nilai langsung tanpa migrasi berisiko. Akun yang terverifikasi adalah pondasi semua statistik. Mengirim data Minecraft sebelum identitas aman justru berpotensi menempelkan statistik ke orang yang salah.
+
+
+## Implementasi V10.46.0 — Akun campuran tanpa Velocity (beta, perlu uji server)
+
+Penyelesaian kode (bukan klaim validasi produk pada hosting):
+- **Java Premium online-mode:** jalur Mojang yang sudah ada dipertahankan. `java_premium` hanya boleh berasal dari koneksi Paper yang memang `online-mode=true`.
+- **Bedrock:** Floodgate XUID diverifikasi sebelum pemeriksaan Java agar `online-mode=false` tidak otomatis menolak Bedrock. Tetap memerlukan Geyser + Floodgate dan tes command AuthMe pada klien Bedrock.
+- **Java AuthMe (termasuk Non-Premium):** mode opt-in `authme-mixed-mode.enabled`, membutuhkan AuthMeReloaded + PacketEvents 2.x. SSCircle memverifikasi `AuthMeApi.isAuthenticated`, `isRegistered`, dan penolakan `isUnrestricted`; ID lokal diturunkan deterministik dari nama akun AuthMe yang dinormalisasi. ID tersebut **tidak** dianggap sebagai bukti Mojang Premium.
+- **Pengguna Premium saat mixed mode:** AuthMe Premium Bypass dapat memverifikasi Mojang pada proses login, tetapi API publik AuthMe tidak memberikan bukti eksplisit per-sesi kepada SSCircle. Karena itu, pada mode campuran SSCircle menautkan kedua jenis Java sebagai `java_offline` dengan label **Java (AuthMe / Server)**. Keaslian identitas Premium terpisah tetap menjadi target adapter yang bisa dibuktikan secara kriptografis, bukan sekadar cek UUID/nickname.
+- **Website:** backend menerima klaim `authme-session` yang ditandatangani HMAC, format UUID v3, dan nama Java tervalidasi. Klaim `java_premium` palsu dengan sumber AuthMe ditolak. Alur kode sekali-pakai, nonce anti-replay, dan konfirmasi ulang tetap berlaku.
+- **Pengujian otomatis:** tes ID Java, kontrak AuthMe/Floodgate/Paper, klaim nonpremium, pemalsuan Premium, dan regresi Bedrock; verifikasi JAR dan ZIP menggunakan CI.
+- **Belum selesai:** uji end-to-end ketiga jenis klien di Paper 26.3, perilaku AuthMe+Floodgate, proses migrasi UUID/playerdata dari online ke mixed mode, dan deploy Cloudflare produksi yang benar. Jangan menyebut fitur siap produksi sebelum tes-tes tersebut lolos.
+
+### Tahap selanjutnya setelah V10.46.0
+1. **Pengujian integrasi runtime:** Paper 26.3 + AuthMe + PacketEvents + Geyser + Floodgate; login, logout, reconnect, tab completion, kode penghubung, dan konfirmasi di website. Rekam hasil serta versi masing-masing plugin.
+2. **Pencegahan pengambilalihan dan migrasi:** uji spoof nama Java, bypass sebelum login, sesi AuthMe kadaluarsa, klaim XUID palsu, perubahan nickname, konflik UUID, serta perencanaan migrasi inventory/permissions/playerdata saat ganti online-mode.
+3. **Verified Premium adapter:** tambahkan bukti autentikasi Mojang per-sesi yang benar-benar dapat dikonsumsi SSCircle pada mixed mode, dengan fallback ditolak jika bukti tidak ada.
+4. **V10.47 Player Stats Sync:** playtime, deaths, mob kills, transaksi sinkronisasi yang ditandatangani, antrean ulang saat offline dan idempotensi; statistik tidak boleh dibuat-buat.
+5. **V10.48–V10.49:** monitoring/admin hubungan akun, keamanan pemutusan tautan, Multi-Account Linking per anggota, skin/avatar dan informasi profil, serta integrasi Season/Hall of Fame.

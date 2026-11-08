@@ -7,3 +7,11 @@ endpoint: "https://example.pages.dev"
 # di atas environment proses Paper. Jika tidak ada keduanya, token acak dibuat
 # dan HARUS disamakan secara privat dengan Cloudflare.
 # Jangan pernah simpan secret dalam config.yml, GitHub, atau ZIP website.
+
+# Mode campuran Java + Bedrock (tanpa Velocity).
+# Default mati agar Paper online-mode saat ini tetap aman dan tidak berubah.
+# Hanya aktifkan setelah AuthMeReloaded + PacketEvents 2.x terpasang
+# dan server staging menggunakan online-mode=false.
+# Status login Java HARUS diverifikasi melalui API resmi AuthMe.
+authme-mixed-mode:
+  enabled: false

@@ -10,7 +10,7 @@ test('Paper Direct: class and plugin.yml target Paper 26.3, not Velocity',()=>{
  assert.match(manifest,/api-version: '26\.3'/);
  assert.match(manifest,/main: id\.sscircle\.paper\.SSCirclePaperLinkPlugin/);
  assert.match(manifest,/sscircle:/);
- assert.match(manifest,/softdepend: \[floodgate\]/);
+ assert.match(manifest,/softdepend: \[floodgate, AuthMe, AuthMeReloaded, packetevents\]/);
  assert.match(paper,/extends JavaPlugin implements CommandExecutor, TabCompleter, Listener/);
  assert.match(paper,/getCommand\("sscircle"\)\.setExecutor\(this\)/);
  assert.match(paper,/getCommand\("sscircle"\)\.setTabCompleter\(this\)/);
@@ -18,8 +18,10 @@ test('Paper Direct: class and plugin.yml target Paper 26.3, not Velocity',()=>{
  assert.match(gradle,/paper-api:26\.3\.build\.\+/);
  assert.match(gradle,/JavaLanguageVersion\.of\(25\)/);
 });
-test('Paper Direct: fail closed for offline/mixed login, validate Bedrock by Floodgate XUID',()=>{
- assert.match(paper,/if \(!Bukkit\.getOnlineMode\(\) \|\| hasUntrustedLoginPlugin\(\)\)/);
+test('Paper Direct: mixed login only with authenticated AuthMe and Floodgate XUID',()=>{
+ assert.match(paper,/if \(hasUntrustedLoginPlugin\(\)\) return null/);
+ assert.match(paper,/mixedModeReady\(\)/);
+ assert.match(paper,/AuthMeSessionBridge\.isAuthenticated\(player, authMe\)/);
  assert.match(paper,/isPluginEnabled\(name\)/);
  assert.match(paper,/isFloodgatePlayer/);
  assert.match(paper,/getPlayer", UUID\.class/);
@@ -27,7 +29,8 @@ test('Paper Direct: fail closed for offline/mixed login, validate Bedrock by Flo
  assert.match(paper,/if \(!xuid\.matches\(/);
  assert.match(paper,/return null; \/\/ Do not silently misclassify Bedrock as Java Premium\./);
  assert.match(paper,/player\.getUniqueId\(\)\.toString\(\)/);
- assert.doesNotMatch(paper,/java_offline",/);
+ assert.match(paper,/new Identity\("java_offline", accountId,/);
+ assert.match(paper,/"authme-session"/);
  assert.doesNotMatch(paper,/offline-uuid/);
 });
 test('Paper Direct: same signed claim contract as V10.45 website',()=>{
@@ -54,7 +57,7 @@ test('Paper Direct: no insecure default endpoint or secrets in shipped config',(
 });
 
 test('V10.45.2: safe tab-completion shows matching commands and hides admin-only reload',()=>{
- assert.match(manifest,/version: '10\.45\.4'/);
+ assert.match(manifest,/version: '10\.46\.0'/);
  assert.match(paper,/implements CommandExecutor, TabCompleter, Listener/);
  assert.match(paper,/public List<String> onTabComplete\(CommandSender sender, Command command, String alias, String\[\] args\)/);
  assert.match(paper,/if \(args\.length != 1\) return List\.of\(\)/);
@@ -71,7 +74,7 @@ test('V10.45.2: explain both independent failures without exposing shared secret
  assert.match(paper,/Alamat website HTTPS:/);
  assert.match(paper,/Kunci komunikasi website:/);
  assert.match(paper,/Konfigurasi website:/);
- assert.match(paper,/online-mode=true di server\.properties/);
+ assert.match(paper,/authme-mixed-mode\.enabled=true/);
  assert.match(paper,/server-secret\.txt/);
  assert.match(paper,/SecretFileStore\.resolve\(/);
  assert.match(paper,/System\.getenv\(SECRET_ENV\)/);
@@ -79,7 +82,7 @@ test('V10.45.2: explain both independent failures without exposing shared secret
 });
 
 test('V10.45.3: operator-only signed diagnostic and safe error presentation',()=>{
- assert.match(manifest,/version: '10\.45\.4'/);
+ assert.match(manifest,/version: '10\.46\.0'/);
  assert.match(paper,/private static final String DIAGNOSE_PATH = "\/api\/minecraft\/link\/diagnose"/);
  assert.match(paper,/options\.add\("diagnose"\)/);
  assert.match(paper,/private void runDiagnostic\(CommandSender sender\)/);
@@ -103,4 +106,25 @@ test('V10.45.4: private file overrides stale environment without leaking secret'
  assert.match(paper,/SecretFileStore\.resolve\(/);
  assert.match(paper,/Sumber kunci aktif:/);
  assert.doesNotMatch(paper,/sender\.sendMessage\([^\n]*signingSecret\)/);
+});
+
+test('V10.46.0: explicit AuthMe mode prevents spoofed premium/offline identity',()=>{
+ const bridge=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/AuthMeSessionBridge.java',import.meta.url),'utf8');
+ const ids=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/AuthMeAccountId.java',import.meta.url),'utf8');
+ assert.match(config,/authme-mixed-mode:\s*\n\s*enabled: false/);
+ assert.match(paper,/getConfig\(\)\.getBoolean\("authme-mixed-mode.enabled", false\)/);
+ assert.match(paper,/isPluginEnabled\("packetevents"\)/);
+ assert.match(paper,/AuthMeSessionBridge\.isAuthenticated\(player, authMe\)/);
+ assert.match(paper,/if \(!Bukkit\.getOnlineMode\(\)\) \{/);
+ assert.match(paper,/new Identity\("java_offline", accountId,/);
+ assert.match(paper,/new Identity\("java_premium", uuid, "mojang-online"/);
+ assert.match(paper,/return new Identity\("bedrock", xuid, "floodgate-xuid"/);
+ assert.match(bridge,/AuthMeApi/);
+ assert.match(bridge,/isAuthenticated/);
+ assert.match(bridge,/isRegistered/);
+ assert.match(bridge,/isUnrestricted/);
+ assert.doesNotMatch(bridge,/forceLogin\(/);
+ assert.match(ids,/UUID\.nameUUIDFromBytes/);
+ assert.match(worker,/authme-session/);
+ assert.match(worker,/authmeId\.test/);
 });
