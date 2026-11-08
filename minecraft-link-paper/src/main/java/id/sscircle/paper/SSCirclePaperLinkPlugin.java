@@ -48,6 +48,7 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
     private String endpoint = "";
     private String signingSecret = "";
     private String secretSource = "tidak tersedia";
+    private PaperStatsSync statsSync;
 
     @Override
     public void onEnable() {
@@ -64,6 +65,8 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
         getCommand("sscircle").setTabCompleter(this);
         getServer().getPluginManager().registerEvents(this, this);
         readSettings();
+        statsSync = new PaperStatsSync(this,http,this::identityFor,()->endpoint,()->signingSecret);
+        statsSync.start();
         if (!Bukkit.getOnlineMode()) {
             if (mixedModeReady()) {
                 getLogger().warning("Mode campuran AuthMe + PacketEvents aktif. Java memakai identitas akun AuthMe; Bedrock memakai Floodgate XUID.");
@@ -76,6 +79,7 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
 
     @Override
     public void onDisable() {
+        if (statsSync != null) statsSync.stop();
         lastRequestAt.clear();
     }
 
@@ -200,6 +204,14 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
                 Identity identity = identityFor(player);
                 sender.sendMessage("Identitas dalam game: " +
                     (identity == null ? "belum terverifikasi; login AuthMe/Floodgate terlebih dahulu" : identity.displayType()));
+            }
+            if (statsSync != null) {
+                sender.sendMessage("Statistik SSCircle: "
+                    + (getConfig().getBoolean("stats-sync.enabled",true) ? "aktif" : "nonaktif"));
+                if (sender.hasPermission("sscircle.admin")) {
+                    sender.sendMessage("Antrean statistik: " + statsSync.pendingCount() + " identitas.");
+                    sender.sendMessage("Pengiriman terakhir: " + statsSync.deliveryStatus());
+                }
             }
             sender.sendMessage("Status akun tertaut tersedia di Profile website SSCircle.");
             return true;
@@ -482,5 +494,5 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
         lastRequestAt.remove(event.getPlayer().getUniqueId());
     }
 
-    private record Identity(String provider, String verifiedId, String authSource, String displayType) {}
+    record Identity(String provider, String verifiedId, String authSource, String displayType) {}
 }
