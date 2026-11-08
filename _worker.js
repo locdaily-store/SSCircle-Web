@@ -2666,9 +2666,9 @@ const MC_STAT_ROUTE='/api/minecraft/stats/ingest';
 const mcStatReceiptReady=new WeakSet();
 async function ensureMinecraftStatsReceipts(env){
   if(mcStatReceiptReady.has(env.DB))return;
-  await env.DB.prepare(\`CREATE TABLE IF NOT EXISTS minecraft_stat_receipts (
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS minecraft_stat_receipts (
     event_id TEXT PRIMARY KEY, application_id TEXT NOT NULL,
-    provider TEXT NOT NULL, provider_id TEXT NOT NULL, received_at TEXT NOT NULL)\`).run();
+    provider TEXT NOT NULL, provider_id TEXT NOT NULL, received_at TEXT NOT NULL)`).run();
   await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_ssc_mc_stats_receipt_time ON minecraft_stat_receipts(received_at)').run();
   mcStatReceiptReady.add(env.DB);
 }
@@ -2733,10 +2733,10 @@ async function minecraftStatsIngest(req,env){
   const capturedAt=new Date(stamp).toISOString(),receivedAt=new Date().toISOString();
   // D1 batch is transactional: a receipt and its snapshot commit together.
   const results=await env.DB.batch([
-    env.DB.prepare(\`INSERT OR IGNORE INTO minecraft_stat_receipts
-      (event_id,application_id,provider,provider_id,received_at) VALUES(?,?,?,?,?)\`)
+    env.DB.prepare(`INSERT OR IGNORE INTO minecraft_stat_receipts
+      (event_id,application_id,provider,provider_id,received_at) VALUES(?,?,?,?,?)`)
       .bind(payload.eventId,account.application_id,payload.provider,payload.providerId,receivedAt),
-    env.DB.prepare(\`INSERT INTO player_stat_snapshots
+    env.DB.prepare(`INSERT INTO player_stat_snapshots
       (application_id,season_id,playtime_seconds,deaths,mob_kills,blocks_mined,last_synced_at)
       VALUES(?,'',?,?,?,?,?)
       ON CONFLICT(application_id,season_id) DO UPDATE SET
@@ -2744,7 +2744,7 @@ async function minecraftStatsIngest(req,env){
       deaths=MAX(player_stat_snapshots.deaths,excluded.deaths),
       mob_kills=MAX(player_stat_snapshots.mob_kills,excluded.mob_kills),
       blocks_mined=MAX(player_stat_snapshots.blocks_mined,excluded.blocks_mined),
-      last_synced_at=MAX(player_stat_snapshots.last_synced_at,excluded.last_synced_at)\`)
+      last_synced_at=MAX(player_stat_snapshots.last_synced_at,excluded.last_synced_at)`)
       .bind(account.application_id,metrics.playtimeSeconds,metrics.deaths,
         metrics.mobKills,metrics.blocksMined,capturedAt)
   ]);
