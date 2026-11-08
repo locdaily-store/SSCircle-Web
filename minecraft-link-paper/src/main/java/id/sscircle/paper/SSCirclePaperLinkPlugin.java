@@ -32,10 +32,8 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Direct Paper linking. The code is only a one-use challenge; the real Java
- * identity must come from the online-mode authenticated server session.
- *
- * Never claim an offline UUID or a display name proves account ownership.
+ * Direct Paper linking: verified Mojang sessions, Floodgate XUIDs, or
+ * authenticated AuthMe local accounts. Offline UUIDs never prove Premium.
  */
 public final class SSCirclePaperLinkPlugin extends JavaPlugin implements CommandExecutor, TabCompleter, Listener {
     private static final int REQUEST_TIMEOUT_SECONDS = 12;
@@ -67,8 +65,11 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
         getServer().getPluginManager().registerEvents(this, this);
         readSettings();
         if (!Bukkit.getOnlineMode()) {
-            getLogger().warning("Server Paper berada dalam offline-mode. Linking diblokir demi keamanan akun.");
-            getLogger().warning("Untuk tes Java Premium tanpa proxy, ubah server.properties online-mode=true.");
+            if (mixedModeReady()) {
+                getLogger().warning("Mode campuran AuthMe + PacketEvents aktif. Java memakai identitas akun AuthMe; Bedrock memakai Floodgate XUID.");
+            } else {
+                getLogger().warning("Paper offline-mode tanpa adapter AuthMe terverifikasi. Java linking tetap ditolak.");
+            }
         }
         getLogger().info("SSCircle Player Sync Paper siap. Gunakan /sscircle status untuk memeriksa konfigurasi.");
     }
@@ -187,15 +188,18 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
             sender.sendMessage("Konfigurasi website: " +
                 (hasConnectionSettings() ? "siap (belum menguji koneksi internet)" : "belum lengkap"));
             if (!Bukkit.getOnlineMode()) {
-                sender.sendMessage("Autentikasi server: offline-mode, linking ditolak.");
-                sender.sendMessage("Jika memakai Java Premium tanpa proxy: set online-mode=true di server.properties, lalu restart Paper.");
-            } else if (sender instanceof Player player) {
+                sender.sendMessage("Autentikasi: offline-mode / AuthMe "
+                    + (mixedModeReady() ? "siap untuk Java" : "belum siap untuk Java"));
+                if (!mixedModeReady()) {
+                    sender.sendMessage("Butuh authme-mixed-mode.enabled=true, AuthMe dan PacketEvents aktif.");
+                }
+            } else {
+                sender.sendMessage("Autentikasi: online-mode (Mojang Java Premium).");
+            }
+            if (sender instanceof Player player) {
                 Identity identity = identityFor(player);
                 sender.sendMessage("Identitas dalam game: " +
-                    (identity == null ? "belum dapat diverifikasi" : identity.displayType()));
-                if (identity == null) sender.sendMessage("Periksa plugin autentikasi campuran dan Floodgate.");
-            } else {
-                sender.sendMessage("Autentikasi: online-mode aktif (periksa tiap pemain dalam game).");
+                    (identity == null ? "belum terverifikasi; login AuthMe/Floodgate terlebih dahulu" : identity.displayType()));
             }
             sender.sendMessage("Status akun tertaut tersedia di Profile website SSCircle.");
             return true;
@@ -218,7 +222,7 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
         // Identitas hanya diperoleh dari akun yang benar-benar terautentikasi.
         Identity identity = identityFor(player);
         if (identity == null) {
-            player.sendMessage("Akun Minecraft tidak bisa diverifikasi. Gunakan Java Premium online-mode atau Floodgate terpercaya.");
+            player.sendMessage("Identitas belum diverifikasi. Java: masuk AuthMe; Bedrock: pastikan Floodgate aktif. Jalankan /sscircle status.");
             return true;
         }
 
@@ -382,13 +386,12 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
     }
 
     private Identity identityFor(Player player) {
-        if (!Bukkit.getOnlineMode() || hasUntrustedLoginPlugin()) {
-            return null;
-        }
+        if (hasUntrustedLoginPlugin()) return null;
+        // Floodgate identity is independently authenticated via its XUID API.
+        // Inspect FIRST even on an offline-mode server; never mistake Bedrock for Java.
         Plugin floodgate = getServer().getPluginManager().getPlugin("floodgate");
         if (floodgate != null && floodgate.isEnabled()) {
             try {
-                // Reflection is deliberate: no hard dependency on Floodgate JAR.
                 Class<?> apiType = floodgate.getClass().getClassLoader()
                     .loadClass("org.geysermc.floodgate.api.FloodgateApi");
                 Object api = apiType.getMethod("getInstance").invoke(null);
@@ -404,20 +407,49 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
                     return new Identity("bedrock", xuid, "floodgate-xuid", "Bedrock (Floodgate)");
                 }
             } catch (ReflectiveOperationException | LinkageError | SecurityException ex) {
-                getLogger().warning("Floodgate tersedia tetapi bukti XUID tidak terbaca. Linking diblokir.");
+                getLogger().warning("Floodgate aktif tetapi XUID tidak bisa diverifikasi. Linking ditolak.");
                 return null; // Do not silently misclassify Bedrock as Java Premium.
             }
         }
-        // In a direct online-mode Paper server, Paper authenticates Java
-        // usernames/UUIDs through Mojang before a Player enters the world.
+        Plugin authMe = authMePlugin();
+        if (!Bukkit.getOnlineMode()) {
+            // Offline UUID and nickname NEVER certify Mojang Premium identity.
+            // AuthMe API must report a real authenticated (non-unrestricted) account.
+            if (!mixedModeReady() || authMe == null
+                || !AuthMeSessionBridge.isAuthenticated(player, authMe)) return null;
+            String accountId = AuthMeAccountId.fromPlayerName(player.getName());
+            if (accountId == null) return null;
+            return new Identity("java_offline", accountId,
+                "authme-session", "Java (akun AuthMe terautentikasi)");
+        }
+        // For ordinary direct online-mode servers, Paper/Mojang verify the UUID.
+        // If AuthMe is installed, it must also confirm the player's login.
+        if (authMe != null && !AuthMeSessionBridge.isAuthenticated(player, authMe)) return null;
         String uuid = player.getUniqueId().toString().toLowerCase(Locale.ROOT);
-        return new Identity("java_premium", uuid, "mojang-online", "Java Premium");
+        return new Identity("java_premium", uuid, "mojang-online", "Java Premium (Mojang)");
+    }
+
+    private Plugin authMePlugin() {
+        Plugin plugin = getServer().getPluginManager().getPlugin("AuthMe");
+        if (plugin == null || !plugin.isEnabled())
+            plugin = getServer().getPluginManager().getPlugin("AuthMeReloaded");
+        return plugin != null && plugin.isEnabled() ? plugin : null;
+    }
+
+    private boolean mixedModeReady() {
+        if (Bukkit.getOnlineMode()
+            || !getConfig().getBoolean("authme-mixed-mode.enabled", false)
+            || authMePlugin() == null
+            || hasUntrustedLoginPlugin()) return false;
+        return getServer().getPluginManager().isPluginEnabled("packetevents")
+            || getServer().getPluginManager().isPluginEnabled("PacketEvents");
     }
 
     private boolean hasUntrustedLoginPlugin() {
-        // No proof that these mixed/offline login plugins authenticated THIS player.
-        String[] loginPlugins = {"LibreLogin", "AuthMe", "AuthMeReloaded", "nLogin",
-            "FastLogin", "JPremium", "EasyAuth", "OpeNLogin"};
+        // Only AuthMe is supported in this release; unknown auth providers block
+        // account claims instead of silently accepting an unverified UUID.
+        String[] loginPlugins = {"LibreLogin", "nLogin", "FastLogin", "JPremium",
+            "EasyAuth", "OpeNLogin"};
         for (String name : loginPlugins) {
             if (getServer().getPluginManager().isPluginEnabled(name)) return true;
         }
