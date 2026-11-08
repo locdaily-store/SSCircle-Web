@@ -35,26 +35,14 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Periksa nama file migrasi dan database tujuan
-        shell: bash
+      - name: Uji pengaman staging tanpa Cloudflare
+        run: python3 -m unittest discover -s tests -p test_staging_migration_guard.py
+
+      - name: Validasi nama database staging dan file SQL
         env:
           MIGRATION_NAME: ${{ inputs.migration }}
           D1_DATABASE_NAME: ${{ vars.D1_STAGING_DATABASE }}
-        run: |
-          set -euo pipefail
-          if [[ ! "$MIGRATION_NAME" =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,90}\.sql$ ]]; then
-            echo "::error::Masukkan nama file SQL biasa dari folder migrations, bukan path atau SQL langsung."
-            exit 1
-          fi
-          if [[ ! "$D1_DATABASE_NAME" =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,100}$ ]]; then
-            echo "::error::Atur environment variable D1_STAGING_DATABASE di environment database-staging-write."
-            exit 1
-          fi
-          test -f "migrations/$MIGRATION_NAME" || {
-            echo "::error::File migrasi tidak ditemukan di branch main."
-            exit 1
-          }
-          echo "Target: staging. File migrasi: $MIGRATION_NAME"
+        run: python3 scripts/validate_staging_migration.py
 
       - name: Terapkan SQL ke database staging saja
         shell: bash
