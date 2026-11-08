@@ -474,12 +474,12 @@ test('V10.48: monitor account listing only reflects verified Minecraft links',as
 
 test('V10.48.1: admin search and status filter cover every page, not only first 100 records',async()=>{
   const x=fixture();
+  await x.call('/api/admin/minecraft/sync',{cookie:x.admin}); // Create additive member tables.
   const start=Date.now()-200000;
   // Use real connected records and member profiles; no synthetic browser data.
   const insertMember=x.db.prepare('INSERT INTO submissions(id,status,tracking_code,submitted_at) VALUES(?,?,?,?)');
   const insertLink=x.db.prepare('INSERT INTO minecraft_accounts(id,application_id,provider,provider_id,username,verified_at) VALUES(?,?,?,?,?,?)');
   const insertProfile=x.db.prepare('INSERT INTO member_profiles(application_id,display_name) VALUES(?,?)');
-  await x.call('/api/admin/minecraft/sync',{cookie:x.admin});
   for(let i=0;i<125;i++){
     const member='f'+String(i).padStart(7,'0')+'-1111-4111-8111-111111111111';
     const minecraft='c'+String(i).padStart(7,'0')+'-2222-4222-8222-222222222222';
