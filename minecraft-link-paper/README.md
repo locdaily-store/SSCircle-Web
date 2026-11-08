@@ -1,4 +1,4 @@
-# SSCircle Player Sync Paper V10.48.0
+# SSCircle Player Sync Paper V10.48.3 (Web V10.48.2+)
 
 Penghubung akun Minecraft ke Profile SSCircle, tanpa Velocity. Plugin memakai HMAC, nonce, kode sekali-pakai 10 menit, dan konfirmasi ulang pada website. Satu anggota saat ini mempunyai **satu** akun Minecraft aktif; multi-account adalah fase berikutnya.
 
@@ -22,7 +22,7 @@ Penghubung akun Minecraft ke Profile SSCircle, tanpa Velocity. Plugin memakai HM
 
 ## Jalur B: Java Premium + Java Non-Premium + Bedrock di satu Paper (uji staging terlebih dahulu)
 
-**Kebutuhan:** Paper 26.3 / Java 25, **AuthMeReloaded terbaru yang kompatibel**, **PacketEvents 2.x**, Geyser dan Floodgate. Jangan memasang plugin login lain (FastLogin, LibreLogin, nLogin, JPremium, EasyAuth, OpeNLogin) bersamaan. Cek kompatibilitas AuthMe dengan Geyser/Floodgate secara langsung.
+**Kebutuhan:** Paper 26.3 / Java 25, **AuthMeReloaded terbaru yang kompatibel**, **PacketEvents 2.x**, Geyser dan Floodgate. Jangan memasang **FastLogin dan FastLoginPlus bersamaan**. Jika memakai FastLoginPlus sebagai adapter Premium, AuthMe tetap harus menjadi autentikator lokal. Jangan memasang LibreLogin, nLogin, JPremium, EasyAuth, atau OpeNLogin bersamaan. Cek kompatibilitas AuthMe dengan Geyser/Floodgate secara langsung.
 
 1. **Jangan ubah server produksi langsung.** Buat salinan server beserta backup world, inventory, statistik, permission dan database D1. Migrasi online-mode dapat mengubah UUID pemain dan nama file playerdata.
 2. Pada server **staging** Paper, atur `server.properties` → `online-mode=false`. Pastikan akses jaringan/firewall dan plugin login sudah dikonfigurasi sebelum server diakses publik.
@@ -96,3 +96,28 @@ Pembacaan kategori blok dibagi ke beberapa tick (24 pembacaan/tick default, untu
 - Website akan menampilkan **laporan terlambat/status belum diketahui**, tidak otomatis menebak server offline. Tidak ada password/secret mentah maupun isi chat dalam riwayat.
 - Deploy ZIP Cloudflare V10.48.0 dan JAR Paper V10.48.0 bersama. Konfigurasi yang sudah berhasil, world, playerdata, serta database D1 tetap dipertahankan.
 - Jika heartbeat tidak muncul, cek `/sscircle status` OP lalu periksa secret, HTTPS endpoint, dan log Paper privat. Lihat `docs/V10.48-SYNC-MONITORING.md`.
+
+## V10.48.3: FastLoginPlus terverifikasi dan sinkron dengan Web V10.48.2
+
+Rilis plugin ini mempertahankan kontrak HMAC, nonce, `authSource` dan API Web SSCircle V10.48.2. **Tidak ada migrasi database, perubahan UUID, pergantian akun tertaut, ataupun perubahan website yang wajib khusus untuk V10.48.3.**
+
+### Untuk Paper offline-mode + Java Premium/Non-Premium (tanpa Velocity)
+
+1. **Backup sebelum upgrade:** seluruh `world/playerdata`, folder `plugins/SSCirclePlayerSync/` (termasuk `server-secret.txt` dan `stats-queue.properties`), konfigurasi/DB AuthMe, dan D1 Cloudflare. Jangan membagikan kunci.
+2. Gunakan Paper **26.3** dengan Java **25**, `online-mode=false`, `AuthMeReloaded` yang kompatibel, `PacketEvents 2.x`, `ProtocolLib` yang kompatibel, dan **FastLoginPlus**. Untuk Bedrock tambahkan Geyser + Floodgate. FastLoginPlus merupakan pengganti FastLogin, **bukan plugin yang dipasang bersamaan**.
+3. Pada `plugins/SSCirclePlayerSync/config.yml`, pastikan `endpoint` mengarah ke deployment Cloudflare SSCircle terbaru dan `authme-mixed-mode.enabled: true`. Pertahankan secret yang sama dengan `SSCIRCLE_LINK_SERVER_SECRET` di Cloudflare. Jangan mengganti file secret saat upgrade.
+4. Hentikan Paper sepenuhnya, gantikan JAR SSCircle lama dengan `SSCircle-Player-Sync-Paper-10.48.3.jar` dari artifact GitHub Actions, lalu mulai Paper lagi. Pastikan tidak ada dua JAR SSCircle lama dan baru di folder `plugins/`.
+5. Saat pemain Java masuk, AuthMe harus memastikan autentikasi selesai. FastLoginPlus melaporkan status per sesi `PREMIUM`, `CRACKED`, atau `UNKNOWN`; SSCircle tidak menyimpulkan Premium dari nickname, API Mojang publik, ataupun offline UUID.
+6. OP/pemain jalankan `/sscircle status`. Ini menampilkan nama adapter terdeteksi dan edisi sesi aktif. OP jalankan `/sscircle diagnose` untuk memeriksa HMAC/HTTPS, lalu `/sscircle sync` bila ingin mempercepat pengambilan statistik pemain online.
+7. Pastikan akun pemain **sudah terhubung dan dikonfirmasi** di Profile website. Setelah snapshot berhasil terkirim, menu `Jenis Minecraft` dan **Admin Control → Minecraft Sync** akan menggunakan bukti autentikasi terbaru dari backend.
+
+### Perubahan dari V10.48.2
+
+- Fix: snapshot baru dibuat ketika `authSource` berubah (`authme-session` → `fastlogin-premium` atau `fastlogin-cracked`), **meskipun playtime/deaths/kills/blocks tidak berubah**. Ini menghindari label Premium lama/UNKNOWN yang bertahan akibat deduplikasi statistik.
+- Kompatibilitas dengan API sesi resmi `FastLoginBukkit.getStatus(UUID)` dari FastLogin dan fork FastLoginPlus tetap dipertahankan; pembacaan tidak membuat HTTP Mojang per tick.
+- Jika FastLogin **dan** FastLoginPlus sama-sama aktif, SSCircle tidak memilih salah satu secara acak dan tidak mengklaim sesi Premium terverifikasi. Singkirkan salah satu plugin lalu restart Paper.
+- Pengujian Java/JUnit memverifikasi perpindahan bukti Premium/Cracked dan status UNKNOWN; pengujian CI juga memeriksa konfigurasi dan kontrak website.
+
+**Batasan penting:** status `UNKNOWN` tetap tampil sebagai belum terverifikasi jika adapter belum memperoleh hasil atau status sesi belum ada. Bukti CI/build bukan pengganti tes nyata 1 akun Premium + 1 akun Non-Premium + 1 akun Bedrock dan TPS pada hosting. Pada mode campuran, identitas SSCircle untuk Java tetap berbasis ID AuthMe stabil, **bukan** otomatis berpindah ke UUID Mojang. Mengubah `premiumUuid` FastLoginPlus dapat memengaruhi inventory/plugin lain; jangan lakukan tanpa rencana migrasi.
+
+Referensi upstream: https://github.com/Hayston1001/FastLoginPlus
