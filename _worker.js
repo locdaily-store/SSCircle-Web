@@ -2830,6 +2830,184 @@ async function minecraftStatsIngest(req,env){
   return J({ok:true,code:results?.[0]?.meta?.changes>0?'STATS_SYNCED':'STATS_DUPLICATE'});
 }
 
+
+/* V10.48: only a trusted Paper server may report health or receive commands.
+   Browser admin sessions can view status and request a short-lived sync command,
+   but they can never impersonate a Minecraft telemetry sender. */
+const MC_SYNC_PATH='/api/minecraft/sync/heartbeat';
+const mcSyncReady=new WeakSet();
+async function ensureMinecraftSyncMonitor(env){
+  if(mcSyncReady.has(env.DB))return;
+  for(const sql of [
+    `CREATE TABLE IF NOT EXISTS minecraft_sync_status (
+      id INTEGER PRIMARY KEY CHECK(id=1),seen_at TEXT NOT NULL,
+      plugin_version TEXT NOT NULL,online_count INTEGER NOT NULL,
+      pending_count INTEGER NOT NULL,capture_backlog INTEGER NOT NULL,
+      delivery_code TEXT NOT NULL,last_success_at TEXT,
+      tps_1m REAL)`,
+    `CREATE TABLE IF NOT EXISTS minecraft_sync_events (
+      id TEXT PRIMARY KEY,at TEXT NOT NULL,code TEXT NOT NULL,
+      details TEXT NOT NULL)`,
+    `CREATE INDEX IF NOT EXISTS idx_mc_sync_events_at ON minecraft_sync_events(at)`,
+    `CREATE TABLE IF NOT EXISTS minecraft_sync_commands (
+      id TEXT PRIMARY KEY,type TEXT NOT NULL,created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,completed_at TEXT)`,
+    `CREATE INDEX IF NOT EXISTS idx_mc_sync_commands_pending ON minecraft_sync_commands(expires_at,completed_at)`
+  ])await env.DB.prepare(sql).run();
+  mcSyncReady.add(env.DB);
+}
+const MC_DELIVERY_CODES=new Set([
+  'IDLE','SYNC_OK','QUEUE_PENDING','NETWORK_ERROR','HTTP_ERROR','AUTH_ERROR'
+]);
+async function minecraftSyncHeartbeat(req,env){
+  const secret=env.SSCIRCLE_LINK_SERVER_SECRET;
+  if(typeof secret!=='string'||secret.length<32)
+    return minecraftLinkError('SERVER_SECRET_MISSING','Pemantauan server belum diaktifkan.',503);
+  if(!String(req.headers.get('Content-Type')||'').toLowerCase().startsWith('application/json'))
+    return minecraftLinkError('FORMAT_INVALID','Format JSON diperlukan.',415);
+  const timestamp=Number(req.headers.get('X-SSC-Timestamp'));
+  const nonce=req.headers.get('X-SSC-Nonce')||'';
+  const signature=req.headers.get('X-SSC-Signature')||'';
+  const now=Math.floor(Date.now()/1000);
+  if(!Number.isSafeInteger(timestamp)||Math.abs(timestamp-now)>90)
+    return minecraftLinkError('CLOCK_SKEW','Jam server tidak sesuai.',401);
+  if(!/^[0-9a-f-]{36}$/.test(nonce)||!/^[A-Za-z0-9_-]{43}$/.test(signature))
+    return minecraftLinkError('HEADERS_INVALID','Header autentikasi tidak valid.',401);
+  const raw=await req.text();
+  if(raw.length>1500)
+    return minecraftLinkError('PAYLOAD_TOO_LARGE','Data pemantauan terlalu besar.',413);
+  const expected=await hmac(secret,'POST\n'+MC_SYNC_PATH+'\n'+timestamp+'\n'+nonce+'\n'+raw);
+  if(!safeEq(expected,signature))
+    return minecraftLinkError('SIGNATURE_INVALID','Autentikasi server gagal.',401);
+  const input=parse(raw);
+  const count=v=>Number.isSafeInteger(v)&&v>=0&&v<=100000;
+  const code=input?.deliveryCode;
+  if(!input||!count(input.onlineCount)||input.onlineCount>1000||
+    !count(input.pendingCount)||input.pendingCount>1024||
+    !count(input.captureBacklog)||input.captureBacklog>1000||
+    !MC_DELIVERY_CODES.has(code)||
+    typeof input.pluginVersion!=='string'||!/^10\.[0-9]{1,3}\.[0-9]{1,3}$/.test(input.pluginVersion)||
+    (input.tps1m!==null&&
+      (!Number.isFinite(input.tps1m)||input.tps1m<0||input.tps1m>20.1))||
+    (input.lastSuccessAt!==null&&
+      (!Number.isFinite(Date.parse(input.lastSuccessAt))||
+      Date.parse(input.lastSuccessAt)>Date.now()+90000||
+      Date.parse(input.lastSuccessAt)<Date.now()-90*86400000))||
+    (input.completedCommandId!==null&&
+      !/^[0-9a-f-]{36}$/.test(input.completedCommandId||'')))
+    return minecraftLinkError('TELEMETRY_INVALID','Data pemantauan tidak valid.',400);
+  await ensureMemberCenter(env);
+  await ensureMinecraftSyncMonitor(env);
+  const inserted=await env.DB.prepare('INSERT OR IGNORE INTO minecraft_link_nonces(nonce,seen_at) VALUES(?,?)')
+    .bind(nonce,now).run();
+  if(!(inserted.meta?.changes>0))
+    return minecraftLinkError('TELEMETRY_REPLAY','Laporan yang sama sudah diterima.',409);
+  const old=await env.DB.prepare('SELECT seen_at,delivery_code FROM minecraft_sync_status WHERE id=1').first();
+  const at=new Date().toISOString();
+  await env.DB.prepare(`INSERT INTO minecraft_sync_status
+    (id,seen_at,plugin_version,online_count,pending_count,capture_backlog,
+      delivery_code,last_success_at,tps_1m)
+    VALUES(1,?,?,?,?,?,?,?,?)
+    ON CONFLICT(id) DO UPDATE SET
+      seen_at=excluded.seen_at,plugin_version=excluded.plugin_version,
+      online_count=excluded.online_count,pending_count=excluded.pending_count,
+      capture_backlog=excluded.capture_backlog,delivery_code=excluded.delivery_code,
+      last_success_at=excluded.last_success_at,tps_1m=excluded.tps_1m
+    WHERE excluded.seen_at>=minecraft_sync_status.seen_at`)
+    .bind(at,input.pluginVersion,input.onlineCount,input.pendingCount,
+      input.captureBacklog,code,input.lastSuccessAt,
+      input.tps1m===null?null:Math.round(input.tps1m*100)/100).run();
+  if(old?.delivery_code!==code){
+    const detail=({
+      IDLE:'Menunggu pengiriman statistik pertama.',
+      SYNC_OK:'Statistik berhasil dikirim.',
+      QUEUE_PENDING:'Pengiriman statistik masih tertunda.',
+      NETWORK_ERROR:'Koneksi ke website sempat gagal.',
+      HTTP_ERROR:'Permintaan statistik ditolak atau gagal.',
+      AUTH_ERROR:'Periksa kunci atau autentikasi pengiriman.'
+    })[code];
+    await env.DB.prepare('INSERT INTO minecraft_sync_events(id,at,code,details) VALUES(?,?,?,?)')
+      .bind(uid(),at,code,detail).run();
+  }
+  if(input.completedCommandId){
+    await env.DB.prepare(`UPDATE minecraft_sync_commands SET completed_at=?
+      WHERE id=? AND type='sync_now' AND completed_at IS NULL AND expires_at>?`)
+      .bind(at,input.completedCommandId,at).run();
+  }
+  const next=await env.DB.prepare(`SELECT id,type,expires_at FROM minecraft_sync_commands
+    WHERE completed_at IS NULL AND expires_at>?
+    ORDER BY created_at ASC LIMIT 1`).bind(at).first();
+  if(now%17===0){
+    await env.DB.prepare('DELETE FROM minecraft_link_nonces WHERE seen_at<?').bind(now-300).run();
+    await env.DB.prepare('DELETE FROM minecraft_sync_events WHERE at<?')
+      .bind(new Date(Date.now()-14*86400000).toISOString()).run();
+    await env.DB.prepare('DELETE FROM minecraft_sync_commands WHERE expires_at<?')
+      .bind(new Date(Date.now()-86400000).toISOString()).run();
+  }
+  return J({ok:true,command:next?{id:next.id,type:next.type,expiresAt:next.expires_at}:null});
+}
+async function minecraftSyncAdmin(req,env,path,method){
+  if(!await admin(req,env))return bad('Masuk ke Admin Control terlebih dahulu.',401);
+  await ensureMemberCenter(env);
+  await ensureMinecraftSyncMonitor(env);
+  if(path==='/api/admin/minecraft/sync'&&method==='GET'){
+    const url=new URL(req.url);
+    const offset=Math.max(0,Math.min(10000,Number.parseInt(url.searchParams.get('offset')||'0',10)||0));
+    const status=await env.DB.prepare('SELECT * FROM minecraft_sync_status WHERE id=1').first();
+    const elapsed=status?Date.now()-Date.parse(status.seen_at):Infinity;
+    const connection=!status?'no_data':elapsed<=360000?'recent':elapsed<=1200000?'delayed':'unknown';
+    const rows=await env.DB.prepare(`SELECT a.application_id AS member_id,a.provider,a.username,a.verified_at,
+      COALESCE((SELECT p.display_name FROM member_profiles p WHERE p.application_id=a.application_id),'') AS display_name,
+      (SELECT MAX(s.last_synced_at) FROM player_stat_snapshots s
+        WHERE s.application_id=a.application_id) AS last_sync_at
+      FROM minecraft_accounts a ORDER BY a.verified_at DESC LIMIT 101 OFFSET ?`).bind(offset).all();
+    const totals=await env.DB.prepare(`SELECT
+      COUNT(*) AS linked,
+      SUM(CASE WHEN NOT EXISTS(
+        SELECT 1 FROM player_stat_snapshots s WHERE s.application_id=a.application_id
+      ) THEN 1 ELSE 0 END) AS no_stats
+      FROM minecraft_accounts a`).first();
+    const events=await env.DB.prepare(`SELECT at,code,details FROM minecraft_sync_events
+      ORDER BY at DESC LIMIT 30`).all();
+    const pending=await env.DB.prepare(`SELECT id,created_at,expires_at FROM minecraft_sync_commands
+      WHERE completed_at IS NULL AND expires_at>? ORDER BY created_at DESC LIMIT 1`)
+      .bind(new Date().toISOString()).first();
+    return J({connection,telemetry:status?{
+      lastSeenAt:status.seen_at,pluginVersion:status.plugin_version,
+      onlinePlayers:status.online_count,pendingSnapshots:status.pending_count,
+      captureBacklog:status.capture_backlog,deliveryCode:status.delivery_code,
+      lastSuccessAt:status.last_success_at,tps1m:status.tps_1m
+    }:null,summary:{linked:totals?.linked||0,noStats:totals?.no_stats||0},
+      accounts:(rows.results||[]).slice(0,100).map(x=>({
+        memberId:x.member_id,memberName:x.display_name||'Anggota',
+        provider:x.provider,username:x.username,linkedAt:x.verified_at,
+        lastSyncAt:x.last_sync_at||null
+      })),hasMore:(rows.results||[]).length>100,offset,
+      events:(events.results||[]),pendingCommand:pending?{
+        id:pending.id,createdAt:pending.created_at,expiresAt:pending.expires_at
+      }:null,serverTime:new Date().toISOString()});
+  }
+  if(path==='/api/admin/minecraft/sync/request'&&method==='POST'){
+    if(!await rateLimit(env,req,'admin-minecraft-sync',8,3600))
+      return bad('Terlalu banyak permintaan sinkronisasi.',429);
+    await body(req,100); // Enforce a bounded same-origin JSON request.
+    const now=new Date().toISOString();
+    const existing=await env.DB.prepare(`SELECT id FROM minecraft_sync_commands
+      WHERE expires_at>? AND completed_at IS NULL LIMIT 1`).bind(now).first();
+    if(existing)return J({ok:true,alreadyPending:true,id:existing.id});
+    const last=await env.DB.prepare(`SELECT created_at FROM minecraft_sync_commands
+      ORDER BY created_at DESC LIMIT 1`).first();
+    if(last&&Date.now()-Date.parse(last.created_at)<120000)
+      return bad('Tunggu dua menit sebelum meminta sinkronisasi lagi.',429);
+    const id=uid(),expiresAt=new Date(Date.now()+10*60000).toISOString();
+    await env.DB.prepare(`INSERT INTO minecraft_sync_commands
+      (id,type,created_at,expires_at) VALUES(?,'sync_now',?,?)`)
+      .bind(id,now,expiresAt).run();
+    return J({ok:true,requested:true,id,expiresAt});
+  }
+  return bad('Fitur pemantauan Minecraft tidak ditemukan.',404);
+}
+
 async function minecraftLinkDiagnose(req,env){
   const secret=env.SSCIRCLE_LINK_SERVER_SECRET;
   if(typeof secret!=='string'||secret.length<32)
@@ -3157,7 +3335,7 @@ async function mailboxAPI(req,env,path,method){
 
 // SSCircle runtime check: observe what the deployment actually receives.
 // Only public readiness categories. Never expose secret values or private data.
-const SSC_RUNTIME_RELEASE='10.47.2';
+const SSC_RUNTIME_RELEASE='10.48.0';
 const SSC_RUNTIME_ISSUES=new Set();
 function sscRuntimeBindings(env){
   return {
@@ -3369,6 +3547,8 @@ async function route(req, env) {
     return await minecraftLinkDiagnose(req,env);
   if(path===MC_STAT_ROUTE && method==='POST')
     return await minecraftStatsIngest(req,env);
+  if(path===MC_SYNC_PATH && method==='POST')
+    return await minecraftSyncHeartbeat(req,env);
   if (!['GET', 'HEAD'].includes(method) && !sameOrigin(req))
     return bad('Asal permintaan ditolak.', 403);
   if (![
@@ -3380,6 +3560,9 @@ async function route(req, env) {
     'DELETE'
   ].includes(method))
     return bad('Metode tidak tersedia.', 405);
+  if ((path.startsWith('/api/admin/minecraft/sync')) &&
+      ['GET','POST'].includes(method))
+    return await minecraftSyncAdmin(req,env,path,method);
   if ((path.startsWith('/api/player/minecraft/link/') || path==='/api/admin/minecraft/links') &&
       ['GET','POST'].includes(method))
     return await minecraftLinkAPI(req,env,path,method);
