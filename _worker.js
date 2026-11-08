@@ -423,6 +423,8 @@ const HOME_DEFAULTS = {
   homeLeaderboardEnabled: false,
   homeLeaderboardTitle: 'Leaderboard Komunitas',
   homeLeaderboardText: 'Riwayat pemain terbaik dari setiap season SSCircle.',
+  statSeasonId: '',
+  statSeasonActivatedAt: '',
   homeLeaderboardSeasons: [
     { id: 'season-1', title: 'Leaderboard S1', entries: [{ name: '', score: '' }, { name: '', score: '' }, { name: '', score: '' }] },
     { id: 'season-2', title: 'Leaderboard S2', entries: [{ name: '', score: '' }, { name: '', score: '' }, { name: '', score: '' }] }
@@ -1316,6 +1318,12 @@ function settingsValid(input) {
   out.homeVotingRequireCode = true;
   out.homeVotingVotes = validVotingVotes(input.homeVotingVotes === undefined ? HOME_DEFAULTS.homeVotingVotes : input.homeVotingVotes, out.homeVotingQuestions);
   out.homeLeaderboardSeasons = validLeaderboard(input.homeLeaderboardSeasons === undefined ? HOME_DEFAULTS.homeLeaderboardSeasons : input.homeLeaderboardSeasons);
+  const selectedStatSeason=s(input.statSeasonId||'',64);
+  if(selectedStatSeason && !out.homeLeaderboardSeasons.some(season=>season.id===selectedStatSeason))
+    throw Error('Pilih Season statistik yang tersedia di Season Archive.');
+  out.statSeasonId=selectedStatSeason;
+  // Activation timestamp is controlled by the server at save time.
+  out.statSeasonActivatedAt='';
   // Homepage Builder: bagian asli dan kartu tambahan, diproses sepenuhnya di server.
   const defaultLayout = HOME_DEFAULTS.homeLayout;
   const sourceLayout = input.homeLayout === undefined ? defaultLayout : input.homeLayout;
@@ -1905,6 +1913,16 @@ async function ensureMemberCenter(env) {
       last_synced_at TEXT NOT NULL DEFAULT '',
       PRIMARY KEY(application_id,season_id),
       FOREIGN KEY(application_id) REFERENCES submissions(id) ON DELETE CASCADE)`,
+    `CREATE TABLE IF NOT EXISTS minecraft_stat_progress (
+      application_id TEXT NOT NULL, season_id TEXT NOT NULL,
+      provider TEXT NOT NULL, provider_id TEXT NOT NULL,
+      last_captured_at TEXT NOT NULL,
+      last_playtime INTEGER NOT NULL DEFAULT 0, last_deaths INTEGER NOT NULL DEFAULT 0,
+      last_mobs INTEGER NOT NULL DEFAULT 0, last_blocks INTEGER NOT NULL DEFAULT 0,
+      total_playtime INTEGER NOT NULL DEFAULT 0, total_deaths INTEGER NOT NULL DEFAULT 0,
+      total_mobs INTEGER NOT NULL DEFAULT 0, total_blocks INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY(application_id,season_id),
+      FOREIGN KEY(application_id) REFERENCES submissions(id) ON DELETE CASCADE)`,
     `CREATE TABLE IF NOT EXISTS minecraft_link_challenges (
       id TEXT PRIMARY KEY, application_id TEXT NOT NULL,
       code_hash TEXT NOT NULL UNIQUE, expires_at TEXT NOT NULL,
@@ -2431,9 +2449,17 @@ async function memberCenterAPI(req,env,path,method) {
       blocks_mined,last_synced_at FROM player_stat_snapshots WHERE application_id=?
       ORDER BY season_id ASC LIMIT 25`).bind(application.id).all();
     const form=formFrom(await readSettingsRow(env));
+    const seasonName=new Map((form.settings.homeLeaderboardSeasons||[]).map(x=>[x.id,x.title||x.id]));
+    const activeStatKey=form.settings.statSeasonId&&form.settings.statSeasonActivatedAt
+      ? 'season:'+form.settings.statSeasonId+':'+form.settings.statSeasonActivatedAt : '';
     return J({profile:memberProfile(profileRow),policy:memberPolicy(policyRow),
+      activeStatSeason:activeStatKey,
       accounts:(accounts.results||[]).map(a=>({provider:a.provider,username:a.username,verifiedAt:a.verified_at})),
-      statistics:(stats.results||[]).map(a=>({seasonId:a.season_id,playtimeSeconds:a.playtime_seconds,
+      statistics:(stats.results||[]).map(a=>({seasonId:a.season_id,
+        seasonTitle:a.season_id.startsWith('season:')
+          ? (seasonName.get(a.season_id.split(':')[1])||'Season tersimpan')
+          : 'Sepanjang masa',
+        playtimeSeconds:a.playtime_seconds,
         deaths:a.deaths,mobKills:a.mob_kills,blocksMined:a.blocks_mined,updatedAt:a.last_synced_at})),
       achievements:memberAwards(form.settings,application.id)});
   }
@@ -3086,7 +3112,7 @@ async function mailboxAPI(req,env,path,method){
 
 // SSCircle runtime check: observe what the deployment actually receives.
 // Only public readiness categories. Never expose secret values or private data.
-const SSC_RUNTIME_RELEASE='10.47.0';
+const SSC_RUNTIME_RELEASE='10.47.2';
 const SSC_RUNTIME_ISSUES=new Set();
 function sscRuntimeBindings(env){
   return {
@@ -3580,6 +3606,11 @@ async function route(req, env) {
         return bad('Pengaturan sudah diperbarui oleh admin lain. Muat ulang halaman sebelum menyimpan.', 409);
       const settings = settingsValid(input.settings), pages = pagesValid(input.pages);
       const persistedVoting = parse(current.settings) || {};
+      settings.statSeasonActivatedAt=settings.statSeasonId
+        ? settings.statSeasonId===persistedVoting.statSeasonId &&
+          Number.isFinite(Date.parse(persistedVoting.statSeasonActivatedAt))
+          ? persistedVoting.statSeasonActivatedAt : new Date().toISOString()
+        : '';
       const oldQuestions=votingQuestions(persistedVoting),newQuestions=settings.homeVotingQuestions;
       const previouslyUsed=(persistedVoting.homeVotingVotes||[]).map(v=>({questionId:v.questionId||'question-1',optionId:v.optionId}));
       const requestedOptions=new Set(newQuestions.flatMap(q=>q.options.map(o=>q.id+'|'+o.id)));
