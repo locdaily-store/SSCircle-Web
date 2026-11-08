@@ -218,7 +218,7 @@ window.fetch=async url => {
   assert vals['docWidth']<=w+2,('Player Dashboard overflow',w,vals)
   assert vals['cardWidth']>200,('Profile card too narrow',w,vals)
   assert vals['hiddenError'],('Dashboard error visible',w,vals)
-  assert vals['hasUnverifiedStats']==4,('Dashboard status cards missing',w,vals)
+  assert vals['hasUnverifiedStats']==5,('Dashboard status cards missing',w,vals)
   assert page.locator('#player-member-id').inner_text()=='SSC-••••EEEE',('Member label must not reveal login code',w)
   assert page.locator('#player-link-title').is_visible()
   assert page.locator('#player-profile-title').inner_text()=='Anggota Uji',('Profile name failed',w)

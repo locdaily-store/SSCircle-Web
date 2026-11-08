@@ -17,7 +17,7 @@
   <script src="member-password-client.js?v=10.40.0" defer></script>
   <script src="profile-page-layout.js?v=10.43.0" defer></script>
   <script src="mailbox-widget.js?v=10.43.0" defer></script>
-  <script src="player-dashboard.js?v=10.46.0" defer></script>
+  <script src="player-dashboard.js?v=10.47.0" defer></script>
   <link rel="stylesheet" href="password-visibility.css?v=10.39.0">
   <script src="password-visibility.js?v=10.39.0" defer></script>
 </head>
@@ -263,21 +263,22 @@
             </div>
           </div>
           <p id="player-link-notice" class="player-helper" role="status" aria-live="polite"></p>
-          <p class="player-helper">Dukungan autentikasi Minecraft mengikuti konfigurasi server Paper atau proxy. Java Non-Premium belum dapat ditautkan hingga autentikasi yang tepercaya tersedia.</p>
+          <p class="player-helper">Java Premium, Java Non-Premium (AuthMe), dan Minecraft Bedrock (Floodgate) dapat ditautkan jika server sudah mengaktifkan autentikasi yang sesuai.</p>
         </section>
 
         <section data-profile-section="stats" class="player-card player-stats" aria-labelledby="player-stats-title">
           <div class="player-section-head">
             <div><span class="player-overline">YOUR JOURNEY</span><h2 id="player-stats-title">Statistik permainan</h2></div>
-            <span class="player-tag">Menunggu sinkronisasi</span>
+            <span class="player-tag" id="player-stats-tag">Menunggu sinkronisasi</span>
           </div>
           <div class="player-stat-grid">
-            <div class="player-stat"><span>Waktu bermain</span><strong>Belum tersedia</strong></div>
-            <div class="player-stat"><span>Kematian</span><strong>Belum tersedia</strong></div>
-            <div class="player-stat"><span>Mob dikalahkan</span><strong>Belum tersedia</strong></div>
+            <div class="player-stat"><span>Waktu bermain</span><strong id="player-stat-playtime">Belum tersedia</strong></div>
+            <div class="player-stat"><span>Kematian</span><strong id="player-stat-deaths">Belum tersedia</strong></div>
+            <div class="player-stat"><span>Mob dikalahkan</span><strong id="player-stat-mobkills">Belum tersedia</strong></div>
+            <div class="player-stat"><span>Blok ditambang</span><strong id="player-stat-blocks">Belum tersedia</strong></div>
             <div class="player-stat"><span>Season diikuti</span><strong>Belum tersedia</strong></div>
           </div>
-          <p class="player-helper">Angka tidak ditampilkan sebelum data benar-benar dikirim dari Minecraft. Jadi tidak ada statistik palsu atau angka nol yang menyesatkan.</p>
+          <p class="player-helper" id="player-stats-sync-status" role="status">Belum ada data resmi dari server. Statistik akan muncul setelah sinkronisasi pertama berhasil.</p>
         </section>
 
         <section data-profile-section="explore" class="player-card player-explore" aria-labelledby="player-explore-title">

@@ -76,20 +76,36 @@
     $('player-show-stats').disabled=policy.allowStats===false;
     $('player-event-alerts').disabled=policy.allowEventAlerts===false;
     $('player-profile-title').textContent=profile.displayName||'Anggota SSCircle';
+    const labelByProvider={
+      java_premium:'Premium',
+      java_offline:'Non-Premium',
+      bedrock:'Minecraft Bedrock'
+    };
     $('player-edition').textContent=(payload.accounts||[]).map(a=>
-      a.provider==='java_premium'?'Java Premium':a.provider==='java_offline'?'Java (akun server)':
-        a.provider==='bedrock'?'Bedrock':'Minecraft').join(', ')||'Belum terhubung';
+      labelByProvider[a.provider]||'Minecraft').join(', ')||'Belum terhubung';
     drawAwards(payload.achievements);
     const stats=(payload.statistics||[]).find(a=>!a.seasonId);
-    if(stats) {
-      const cells=document.querySelectorAll('.player-stat strong');
-      const format=new Intl.NumberFormat('id-ID');
-      if(cells.length>=4){
-        cells[0].textContent=format.format(Math.floor((stats.playtimeSeconds||0)/3600))+' jam';
-        cells[1].textContent=format.format(stats.deaths||0);
-        cells[2].textContent=format.format(stats.mobKills||0);
-        cells[3].textContent=String((payload.statistics||[]).filter(x=>x.seasonId).length);
-      }
+    const statIds=['player-stat-playtime','player-stat-deaths',
+      'player-stat-mobkills','player-stat-blocks'];
+    if(stats){
+      const number=new Intl.NumberFormat('id-ID');
+      const seconds=Math.max(0,Math.floor(Number(stats.playtimeSeconds)||0));
+      const hours=Math.floor(seconds/3600),minutes=Math.floor((seconds%3600)/60);
+      const duration=hours>0?number.format(hours)+' jam '+minutes+' menit':
+        minutes>0?number.format(minutes)+' menit':'Kurang dari 1 menit';
+      const values=[duration,number.format(stats.deaths||0),
+        number.format(stats.mobKills||0),number.format(stats.blocksMined||0)];
+      statIds.forEach((id,index)=>{$(id).textContent=values[index];});
+      const stamp=Date.parse(stats.updatedAt||'');
+      $('player-stats-sync-status').textContent=Number.isFinite(stamp)
+        ?'Sinkron terakhir: '+new Date(stamp).toLocaleString('id-ID')
+        :'Data berasal dari server Minecraft SSCircle';
+      $('player-stats-tag').textContent='Tersinkron';
+    }else{
+      statIds.forEach(id=>{$(id).textContent='Belum tersedia';});
+      $('player-stats-sync-status').textContent=
+        'Belum ada data resmi dari server. Statistik akan muncul setelah sinkronisasi pertama berhasil.';
+      $('player-stats-tag').textContent='Menunggu sinkronisasi';
     }
   }
   async function loadProfile() {
@@ -415,7 +431,7 @@
   // V10.45: account link stays private and must be confirmed after server attestation.
   let linkCommand='',linkExpires='',linkBusy=false;
   const mcProviderLabel=provider=>({
-    java_premium:'Java Premium',java_offline:'Java (AuthMe / Server)',bedrock:'Bedrock'
+    java_premium:'Premium',java_offline:'Non-Premium',bedrock:'Minecraft Bedrock'
   })[provider]||'Minecraft';
   const linkNotice=message=>{$('player-link-notice').textContent=message;};
   function renderMinecraftLink(data){

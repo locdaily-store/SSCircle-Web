@@ -1,5 +1,5 @@
 name: SSCirclePlayerSync
-version: '10.46.0'
+version: '10.47.0'
 main: id.sscircle.paper.SSCirclePaperLinkPlugin
 api-version: '26.3'
 author: RinxAsoy
@@ -9,7 +9,7 @@ softdepend: [floodgate, AuthMe, AuthMeReloaded, packetevents]
 commands:
   sscircle:
     description: Hubungkan akun Minecraft dengan Profile SSCircle
-    usage: /sscircle [help|status|link <kode>|diagnose|reload]
+    usage: /sscircle [help|status|link <kode>|diagnose|sync|reload]
 permissions:
   sscircle.admin:
     description: Memuat ulang konfigurasi SSCircle Player Sync

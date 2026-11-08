@@ -234,3 +234,85 @@ test('V10.46: Bedrock verified Floodgate XUID still works independently from Aut
  assert.equal(accepted.status,200,JSON.stringify(accepted.json));
  assert.equal((await x.call('/api/player/minecraft/link/confirm',{method:'POST',cookie,data:{}})).status,200);
 });
+
+async function deliverStats(x,payload,{key=SERVER,nonce=randomUUID(),timestamp=Math.floor(Date.now()/1000)}={}){
+ const raw=JSON.stringify(payload);
+ const signature=createHmac('sha256',key)
+   .update('POST\n/api/minecraft/stats/ingest\n'+timestamp+'\n'+nonce+'\n'+raw)
+   .digest('base64url');
+ const res=await worker.fetch(new Request('https://sscircle.test/api/minecraft/stats/ingest',{
+   method:'POST',headers:{'Content-Type':'application/json','X-SSC-Timestamp':String(timestamp),
+     'X-SSC-Nonce':nonce,'X-SSC-Signature':signature},body:raw
+ }),x.env);
+ return {status:res.status,json:await res.json()};
+}
+function statsPayload(provider='java_premium',providerId=UUID,authSource='mojang-online'){
+ return {eventId:randomUUID(),provider,providerId,authSource,
+   capturedAt:new Date().toISOString(),
+   stats:{playtimeSeconds:7200,deaths:3,mobKills:41,blocksMined:501}};
+}
+test('V10.47: signed Vanilla stats are accepted only after member confirms link',async()=>{
+ const x=fixture(),cookie=await x.active();
+ const pre=await deliverStats(x,statsPayload());
+ assert.equal(pre.status,404);
+ assert.equal(pre.json.code,'STATS_NOT_LINKED');
+ const created=await x.call('/api/player/minecraft/link/create',{method:'POST',cookie,data:{}});
+ assert.equal((await x.claim(payload(created.json.code))).status,200);
+ assert.equal((await x.call('/api/player/minecraft/link/confirm',{method:'POST',cookie,data:{}})).status,200);
+ const first=statsPayload();
+ assert.equal((await deliverStats(x,first,{key:'bad-signature'})).status,401);
+ assert.equal((await deliverStats(x,{...first,authSource:'minecraft-name'})).status,400);
+ const result=await deliverStats(x,first);
+ assert.equal(result.status,200,JSON.stringify(result.json));
+ assert.equal(result.json.code,'STATS_SYNCED');
+ const profile=await x.call('/api/player/profile',{cookie});
+ assert.deepEqual(profile.json.statistics[0]&&[
+   profile.json.statistics[0].playtimeSeconds,
+   profile.json.statistics[0].deaths,
+   profile.json.statistics[0].mobKills,
+   profile.json.statistics[0].blocksMined],[7200,3,41,501]);
+ assert.notEqual(profile.json.statistics[0].updatedAt,'');
+});
+test('V10.47: retries deduplicate and out-of-order counters never decrease',async()=>{
+ const x=fixture(),cookie=await x.active();
+ const created=await x.call('/api/player/minecraft/link/create',{method:'POST',cookie,data:{}});
+ await x.claim(payload(created.json.code));
+ await x.call('/api/player/minecraft/link/confirm',{method:'POST',cookie,data:{}});
+ const newer=statsPayload();
+ const idempotent=await deliverStats(x,newer);
+ assert.equal(idempotent.status,200);
+ assert.equal((await deliverStats(x,newer)).json.code,'STATS_DUPLICATE');
+ const replayNonce=randomUUID();
+ assert.equal((await deliverStats(x,{...newer,eventId:randomUUID()},{nonce:replayNonce})).status,200);
+ assert.equal((await deliverStats(x,{...newer,eventId:randomUUID()},{nonce:replayNonce})).status,409);
+ const old={...newer,eventId:randomUUID(),
+   capturedAt:new Date(Date.now()-60_000).toISOString(),
+   stats:{playtimeSeconds:1000,deaths:1,mobKills:5,blocksMined:10}};
+ const late=await deliverStats(x,old);
+ // The old snapshot is from before linking: it cannot be reassigned later.
+ assert.equal(late.status,410);
+ const earlier={...newer,eventId:randomUUID(),
+   stats:{playtimeSeconds:1000,deaths:1,mobKills:5,blocksMined:10}};
+ assert.equal((await deliverStats(x,earlier)).status,200);
+ const profile=(await x.call('/api/player/profile',{cookie})).json.statistics[0];
+ assert.equal(profile.playtimeSeconds,7200);
+ assert.equal(profile.mobKills,41);
+ assert.equal(profile.blocksMined,501);
+ const receiptCount=x.db.prepare('SELECT COUNT(*) AS n FROM minecraft_stat_receipts').get().n;
+ assert.equal(receiptCount,3);
+});
+test('V10.47: AuthMe Non-Premium and Bedrock require matching signed identities',async()=>{
+ for(const [provider,providerId,authSource,username] of [
+   ['java_offline','70a89d54-c32e-3942-a553-34f71cfde04d','authme-session','LocalSteve'],
+   ['bedrock','12345678901234567','floodgate-xuid','.BedrockUser']]){
+   const x=fixture(),cookie=await x.active();
+   const code=(await x.call('/api/player/minecraft/link/create',{method:'POST',cookie,data:{}})).json.code;
+   assert.equal((await x.claim({code,provider,providerId,authSource,username})).status,200);
+   assert.equal((await x.call('/api/player/minecraft/link/confirm',{method:'POST',cookie,data:{}})).status,200);
+   const data=statsPayload(provider,providerId,authSource);
+   assert.equal((await deliverStats(x,{...data,authSource:'minecraft-name'})).status,400);
+   assert.equal((await deliverStats(x,data)).status,200);
+   const profile=(await x.call('/api/player/profile',{cookie})).json;
+   assert.equal(profile.statistics[0].deaths,3);
+ }
+});
