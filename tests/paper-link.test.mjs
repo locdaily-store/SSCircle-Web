@@ -152,6 +152,9 @@ test('V10.47: vanilla statistics are only sampled for verified identities',()=>{
 test('V10.47.2: statistic collection is tick-budgeted, disk I/O asynchronous and season-aware',()=>{
  const stats=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/PaperStatsSync.java',import.meta.url),'utf8');
  assert.match(stats,/runTaskTimer\(plugin,this::captureOneTick,20L,1L\)/);
+ assert.match(stats,/this::captureScheduled/);
+ assert.match(stats,/stats-sync.busy-player-threshold/);
+ assert.match(config,/adaptive-enabled:\s*true/);
  assert.match(stats,/blockReadsPerTick=Math\.max/);
  assert.match(stats,/while\(budget-->0&&activeJob\.index<blockMaterials\.size\(\)\)/);
  assert.match(stats,/Executors\.newSingleThreadExecutor/);
