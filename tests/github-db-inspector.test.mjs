@@ -105,3 +105,10 @@ test('GitHub Pages inspector does not embed access tokens or expose raw record p
   assert.doesNotMatch(html,/localStorage|sessionStorage/);
   assert.doesNotMatch(html,/SELECT\s+\*/i);
 });
+
+test('Browser inspector does not keep a false connected state on invalid key', () => {
+  const html=readFileSync(new URL('../docs/database-inspector/index.html',import.meta.url),'utf8');
+  assert.match(html,/await refresh\(\{ failOnError: true \}\)/);
+  assert.match(html,/if \(failOnError\) throw error;/);
+  assert.match(html,/if \(selected && !await loadDetail\(\)\) return false;/);
+});
