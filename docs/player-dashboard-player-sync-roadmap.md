@@ -111,3 +111,24 @@ Penyelesaian kode (bukan klaim validasi produk pada hosting):
 3. **Verified Premium adapter:** tambahkan bukti autentikasi Mojang per-sesi yang benar-benar dapat dikonsumsi SSCircle pada mixed mode, dengan fallback ditolak jika bukti tidak ada.
 4. **V10.47 Player Stats Sync:** playtime, deaths, mob kills, transaksi sinkronisasi yang ditandatangani, antrean ulang saat offline dan idempotensi; statistik tidak boleh dibuat-buat.
 5. **V10.48–V10.49:** monitoring/admin hubungan akun, keamanan pemutusan tautan, Multi-Account Linking per anggota, skin/avatar dan informasi profil, serta integrasi Season/Hall of Fame.
+
+
+## Implementasi V10.47.0 — Sinkronisasi statistik asli server Paper
+
+Source dan tes:
+- `minecraft-link-paper/src/main/java/id/sscircle/paper/PaperStatsSync.java`: pembacaan statistik asli Paper untuk pemain yang identitasnya berhasil diverifikasi; snapshot periodik 300 detik, join/quit, dan perintah OP `/sscircle sync`.
+- Antrean `stats-queue.properties` menyimpan satu snapshot terbaru per identitas, maksimum 1024; retry HTTP dengan exponential backoff maksimum lima menit. Berkas ini khusus server Paper dan tidak ikut ZIP website.
+- `POST /api/minecraft/stats/ingest` di `_worker.js`: HMAC, timestamp, nonce anti-replay, provider/authSource, UUID/XUID, dan validasi empat statistik non-negatif. Hanya akun yang **sudah ditautkan dan dikonfirmasi** serta anggota Diterima dapat menerima statistik.
+- D1 memakai `player_stat_snapshots` yang sudah ada dan menambah tabel `minecraft_stat_receipts` secara aditif. Upsert kumulatif MAX menghalangi inflasi retry dan pengurangan oleh snapshot terlambat; tidak ada reset statistik saat world/season direset dalam fase ini.
+- Profile `Jenis Minecraft` menampilkan **Premium**, **Non-Premium**, atau **Minecraft Bedrock** menurut provider tersimpan. Player statistics menampilkan waktu bermain, deaths, mob kills, blocks mined, dan tanggal sinkron terakhir. Season count tetap menunggu data season, bukan angka 0 palsu.
+- UI tetap melindungi profil privat dan tidak menyediakan edit angka secara manual.
+- **Status:** implementasi source; hanya dinyatakan berhasil build/tes otomatis jika GitHub Actions lulus. **Belum** uji pengguna nyata, D1 Production, performa 20–50 pemain dan kegagalan jaringan secara aktual.
+
+Lanjut:
+1. **V10.47.1** tes nyata Premium / AuthMe / Bedrock dan reconnect + Cloudflare offline.
+2. **V10.47.2** penanganan world reset, epoch/season dan pengukuran kinerja + kontrol antrean.
+3. **V10.48** Owner/Admin Sync Monitoring dan health.
+4. **V10.49** multi-account linking dan verified Premium mode campuran.
+5. **V10.50** Leaderboard Season/Hall of Fame dengan statistik tervalidasi.
+
+Baca petunjuk operasional di `docs/V10.47-PLAYER-STATS.md`.
