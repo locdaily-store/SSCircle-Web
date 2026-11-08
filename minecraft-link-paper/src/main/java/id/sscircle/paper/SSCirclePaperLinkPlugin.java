@@ -73,7 +73,12 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
         if (!Bukkit.getOnlineMode()) {
             if (mixedModeReady()) {
                 getLogger().warning("Mode campuran AuthMe siap. Status Premium hanya ditentukan dari bukti sesi FastLogin; Bedrock melalui Floodgate.");
-                if (fastLoginPlugin() != null) getLogger().info("FastLogin ditemukan: SSCircle menggunakan API status sesi aktif tanpa permintaan Mojang per-tick.");
+                if (hasConflictingFastLoginPlugins()) {
+                    getLogger().warning("FastLogin dan FastLoginPlus aktif bersamaan. Nonaktifkan salah satu; klasifikasi Premium SSCircle ditahan.");
+                } else if (fastLoginPlugin() != null) {
+                    getLogger().info("Adapter "+fastLoginPlugin().getName()
+                        +" siap; bukti Premium diperiksa per sesi melalui getStatus(UUID), tanpa polling Mojang.");
+                }
             } else {
                 getLogger().warning("Paper offline-mode tanpa adapter AuthMe terverifikasi. Java linking tetap ditolak.");
             }
@@ -218,9 +223,12 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
                     sender.sendMessage("Butuh authme-mixed-mode.enabled=true, AuthMe dan PacketEvents aktif.");
                 }
                 if (sender.hasPermission("sscircle.admin")) {
-                    sender.sendMessage("Deteksi Premium: " + (fastLoginPlugin() == null
-                        ? "FastLogin belum aktif (status Java AuthMe tidak diketahui)"
-                        : "Adapter FastLogin aktif (status ditentukan per sesi login)"));
+                    sender.sendMessage("Deteksi Premium: " +
+                        (hasConflictingFastLoginPlugins()
+                            ? "KONFLIK FastLogin dan FastLoginPlus; nonaktifkan salah satu."
+                            : fastLoginPlugin() == null
+                                ? "FastLogin/FastLoginPlus belum aktif; Java AuthMe belum terklasifikasi."
+                                : "Adapter "+fastLoginPlugin().getName()+" aktif (getStatus(UUID) per sesi)."));
                 }
             } else {
                 sender.sendMessage("Autentikasi: online-mode (Mojang Java Premium).");
@@ -489,7 +497,16 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
         return plugin != null && plugin.isEnabled() ? plugin : null;
     }
 
+    private boolean hasConflictingFastLoginPlugins() {
+        return getServer().getPluginManager().isPluginEnabled("FastLogin")
+            && getServer().getPluginManager().isPluginEnabled("FastLoginPlus");
+    }
+
     private Plugin fastLoginPlugin() {
+        // Never choose an arbitrary adapter when both incompatible login
+        // providers are installed. AuthMe sessions remain valid, but edition
+        // detection must fail closed to UNKNOWN instead of guessing.
+        if (hasConflictingFastLoginPlugins()) return null;
         Plugin plugin = getServer().getPluginManager().getPlugin("FastLogin");
         if (plugin == null || !plugin.isEnabled())
             plugin = getServer().getPluginManager().getPlugin("FastLoginPlus");
