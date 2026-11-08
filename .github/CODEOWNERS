@@ -11,3 +11,8 @@
 /docs/database-inspector/ @locdaily-store
 /tests/github-db-inspector.test.mjs @locdaily-store
 /migrations/ @locdaily-store
+
+# Guard the staging migration validator and its documentation.
+/scripts/validate_staging_migration.py @locdaily-store
+/tests/test_staging_migration_guard.py @locdaily-store
+/docs/GITHUB-D1-INSPECTOR.md @locdaily-store

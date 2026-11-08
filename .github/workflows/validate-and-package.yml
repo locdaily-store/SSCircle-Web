@@ -60,6 +60,9 @@ jobs:
       - name: Uji Database Inspector GitHub (offline, tanpa Cloudflare)
         run: python3 -m unittest discover -s tests -p test_d1_inspector.py
 
+      - name: Uji pengamanan migrasi D1 Staging
+        run: python3 -m unittest discover -s tests -p test_staging_migration_guard.py
+
       - name: Uji live inspector GitHub Pages dan CORS tanpa Cloudflare
         run: node --test tests/github-db-inspector.test.mjs
 

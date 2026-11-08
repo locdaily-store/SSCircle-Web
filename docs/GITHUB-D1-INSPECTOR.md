@@ -71,7 +71,7 @@ secara manual. Mereka tidak menerima salinan token.
   melalui Cloudflare. Log sengaja tidak menampilkan respons mentah dari D1.
 - Perubahan skema database sebaiknya dibuat sebagai file migrasi dan PR
   terpisah, diuji staging, lalu diterapkan produksi dengan persetujuan pemilik.
-  Sistem migrasi otomatis tersebut **belum** termasuk dalam fitur inspector ini.
+  Workflow **manual untuk migrasi SQL staging** sudah tersedia, tetapi tidak menyalin data production dan tidak pernah menjalankan migrasi production secara otomatis.
 - Workflow hanya dapat membaca branch `main`, tidak berjalan otomatis pada
   Pull Request dan tidak menggunakan data kepercayaan dari PR.
 
@@ -79,6 +79,16 @@ GitHub bukan database viewer interaktif untuk isi pribadi. Jika nantinya
 collaborator benar-benar perlu mengedit record atau melihat data sensitif,
 buat dashboard admin SSCircle dengan login dan role khusus, atau undang ke
 Cloudflare D1 secara terkontrol; jangan menampilkan data produksi di Actions.
+
+## Cara developer dan collaborator bekerja bersama
+
+**Developer (menulis kode):** buat branch dari `main`, ubah kode atau tulis file SQL baru di `migrations/*.sql`, lalu buka Pull Request. Jangan memasukkan dump, file `.env`, token atau data pendaftar ke commit. File SQL kosong atau nama file yang tidak valid akan ditolak.
+
+**Owner (mereview):** review SQL dan dampaknya pada versi website lama, pastikan environment `database-staging-write` memiliki secret khusus staging. Setelah PR di-merge, jalankan `SSCircle D1 - Terapkan Migrasi Staging` pada `main` dengan nama file SQL. Lihat hasilnya di Inspector Overview dan Table. Pengujian staging bukan izin otomatis untuk mengubah production.
+
+**Collaborator (hanya perlu melihat):** gunakan workflow read-only `SSCircle · Lihat Database D1` dari menu Actions, atau GitHub Pages viewer dengan kunci terpisah yang dibagikan secara aman oleh owner. Tampilan hanya menyajikan metadata, jumlah baris, dan skema. Tidak menampilkan record pendaftaran atau statistik mentah. Mode Actions membaca D1 **staging**; mode Pages membaca database yang terhubung ke website Cloudflare yang dimasukkan.
+
+**Perhatian:** jika alamat Cloudflare Pages yang dimasukkan adalah website production, Live Viewer akan membaca **struktur database production** melalui Worker (bukan database staging). Untuk pengembangan aman, pakai deployment staging yang memiliki binding D1 staging dan secret viewer berbeda. Jangan bagikan token production kepada collaborator.
 
 ## Live viewer langsung di GitHub Pages (opsional, terpisah dari Actions)
 
@@ -89,7 +99,7 @@ Fitur tambahan ini membaca D1 secara langsung lewat Cloudflare Worker yang sudah
 3. Jika GitHub Pages menggunakan custom domain, atur variable `SSCIRCLE_GITHUB_PAGES_ORIGIN` dengan origin domain itu (contoh `https://domain-anda.tld`, tanpa path). Jika memakai GitHub Pages standar, default sudah `https://locdaily-store.github.io`.
 4. Buka [Settings → Pages](https://github.com/locdaily-store/SSCircle-Web/settings/pages). **Konfigurasi saat ini memublikasikan branch `main` dari folder root (`/`); tidak perlu mengubah sumber Pages yang sudah aktif.** Untuk menghindari gangguan pada halaman GitHub Pages lain, pertahankan pengaturan tersebut.
 5. Buka `https://locdaily-store.github.io/SSCircle-Web/docs/database-inspector/` dari GitHub Pages **main / (root)**. Masukkan URL origin Cloudflare SSCircle dan kunci viewer (jangan taruh dalam URL atau kode GitHub). Jika kelak sumber Pages diubah ke **main /docs**, URL viewer berubah menjadi `https://locdaily-store.github.io/SSCircle-Web/database-inspector/`.
-6. Pilih tabel untuk melihat **nama kolom, tipe, primary key, dan jumlah baris**. Klik **Muat ulang** atau biarkan halaman terbuka untuk pembaruan setiap 60 detik.
+6. Pilih tabel untuk melihat **nama kolom, tipe, primary key, dan jumlah baris**. Jika gagal autentikasi, koneksi viewer akan diputus dan kunci bisa dimasukkan ulang. Jangan masukkan Global API Key Cloudflare. Klik **Muat ulang** atau biarkan halaman terbuka untuk pembaruan setiap 60 detik.
 
 **Penting:** GitHub Pages biasanya dapat dilihat publik. Inspector tetap mewajibkan kunci rahasia. Namun jangan gunakan fitur ini untuk menampilkan isi tabel, password, identitas anggota, kode aktivasi atau token. Kunci disimpan di memori tab saja dan harus dimasukkan kembali saat halaman dimuat ulang.
 
@@ -97,4 +107,4 @@ Fitur tambahan ini membaca D1 secara langsung lewat Cloudflare Worker yang sudah
 
 Workflow tambahan **SSCircle D1 - Terapkan Migrasi Staging** hanya bisa dijalankan manual untuk file SQL dalam `migrations/` yang sudah direview/merge ke `main`. Buat environment **database-staging-write** terpisah, dengan secrets `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` (D1 Edit) dan environment variable `D1_STAGING_DATABASE`. Gunakan **akun Cloudflare staging yang berbeda dari production** agar token tidak memiliki akses menulis production.
 
-Jangan mengubah token D1 Read pada environment `database-staging` milik inspector Actions menjadi D1 Edit hanya demi menjalankan migrasi. GitHub Pages viewer tidak punya izin tulis; SQL Production tidak diterapkan otomatis.
+Workflow menolak nama database tanpa segmen `staging` atau yang mengandung `prod`/`production`/`live`, serta berkas SQL kosong/tidak ada. Ini hanya penjaga awal: kredensial tetap wajib dibatasi pada akun staging yang terpisah. Jangan mengubah token D1 Read pada environment `database-staging` milik inspector Actions menjadi D1 Edit hanya demi menjalankan migrasi. GitHub Pages viewer tidak punya izin tulis; SQL Production tidak diterapkan otomatis. File placeholder `migrations/database-migration.yml` yang kosong telah diganti panduan `migrations/README.md`.
