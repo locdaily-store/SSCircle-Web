@@ -22,3 +22,7 @@ authme-mixed-mode:
 stats-sync:
   enabled: true
   interval-seconds: 300
+  # Limit 24 pembacaan kategori blok tiap tick (bukan semua pemain sekaligus).
+  block-reads-per-tick: 24
+  # Penulisan file antrean dilakukan asynchronous setiap 10 detik.
+  queue-flush-seconds: 10
