@@ -10,7 +10,7 @@ test('Paper Direct: class and plugin.yml target Paper 26.3, not Velocity',()=>{
  assert.match(manifest,/api-version: '26\.3'/);
  assert.match(manifest,/main: id\.sscircle\.paper\.SSCirclePaperLinkPlugin/);
  assert.match(manifest,/sscircle:/);
- assert.match(manifest,/softdepend: \[floodgate, AuthMe, AuthMeReloaded, packetevents\]/);
+ assert.match(manifest,/softdepend: \[floodgate, AuthMe, AuthMeReloaded, packetevents, FastLogin, FastLoginPlus, ProtocolLib\]/);
  assert.match(paper,/extends JavaPlugin implements CommandExecutor, TabCompleter, Listener/);
  assert.match(paper,/getCommand\("sscircle"\)\.setExecutor\(this\)/);
  assert.match(paper,/getCommand\("sscircle"\)\.setTabCompleter\(this\)/);
@@ -57,7 +57,7 @@ test('Paper Direct: no insecure default endpoint or secrets in shipped config',(
 });
 
 test('V10.45.2: safe tab-completion shows matching commands and hides admin-only reload',()=>{
- assert.match(manifest,/version: '10\.48\.1'/);
+ assert.match(manifest,/version: '10\.48\.2'/);
  assert.match(paper,/implements CommandExecutor, TabCompleter, Listener/);
  assert.match(paper,/public List<String> onTabComplete\(CommandSender sender, Command command, String alias, String\[\] args\)/);
  assert.match(paper,/if \(args\.length != 1\) return List\.of\(\)/);
@@ -82,7 +82,7 @@ test('V10.45.2: explain both independent failures without exposing shared secret
 });
 
 test('V10.45.3: operator-only signed diagnostic and safe error presentation',()=>{
- assert.match(manifest,/version: '10\.48\.1'/);
+ assert.match(manifest,/version: '10\.48\.2'/);
  assert.match(paper,/private static final String DIAGNOSE_PATH = "\/api\/minecraft\/link\/diagnose"/);
  assert.match(paper,/options\.add\("diagnose"\)/);
  assert.match(paper,/private void runDiagnostic\(CommandSender sender\)/);
@@ -185,4 +185,17 @@ test('V10.48: health heartbeat is lightweight, asynchronous and cannot execute a
  assert.match(worker,/minecraftSyncHeartbeat\(req,env\)/);
  assert.match(worker,/minecraftSyncAdmin\(req,env,path,method\)/);
  assert.match(worker,/minecraft_sync_commands/);
+});
+
+test('V10.48.2: optional FastLogin adapter uses the verified per-session API, never nickname',()=>{
+  const bridge=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/FastLoginSessionBridge.java',import.meta.url),'utf8');
+  assert.match(bridge,/getStatus", UUID\.class/);
+  assert.match(bridge,/case "PREMIUM" -> Status\.PREMIUM/);
+  assert.match(bridge,/case "CRACKED" -> Status\.CRACKED/);
+  assert.match(bridge,/default -> Status\.UNKNOWN/);
+  assert.match(paper,/FastLoginSessionBridge\.read\(player, fastLoginPlugin\(\)\)/);
+  assert.match(paper,/case PREMIUM -> "fastlogin-premium"/);
+  assert.match(paper,/case CRACKED -> "fastlogin-cracked"/);
+  assert.match(paper,/new Identity\("java_offline", accountId, source, type\)/);
+  assert.doesNotMatch(bridge,/https?:\/\/|api\.mojang/);
 });
