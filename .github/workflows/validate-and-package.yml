@@ -54,6 +54,9 @@ jobs:
       - name: Uji keamanan akun, derivasi password dan Mail Box
         run: node --test tests/security.test.mjs tests/mailbox.test.mjs tests/password-client.test.mjs
 
+      - name: Verifikasi kesiapan binding runtime tanpa mengekspos secret
+        run: node --test tests/runtime-health.test.mjs
+
       - name: Uji penghubung akun Minecraft dan verifikasi server
         run: node --test tests/minecraft-link.test.mjs
 

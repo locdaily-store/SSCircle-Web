@@ -2975,8 +2975,65 @@ async function mailboxAPI(req,env,path,method){
   return bad('Halaman Mail Box tidak tersedia.',404);
 }
 
+// SSCircle runtime check: observe what the deployment actually receives.
+// Only public readiness categories. Never expose secret values or private data.
+const SSC_RUNTIME_RELEASE='10.45.5';
+const SSC_RUNTIME_ISSUES=new Set();
+function sscRuntimeBindings(env){
+  return {
+    data: !!env?.DB && typeof env.DB.prepare==='function',
+    session: typeof env?.SESSION_SECRET==='string' && env.SESSION_SECRET.length>0,
+    admin: typeof env?.ADMIN_PASSWORD==='string' && env.ADMIN_PASSWORD.length>0,
+    minecraft: typeof env?.SSCIRCLE_LINK_SERVER_SECRET==='string' && env.SSCIRCLE_LINK_SERVER_SECRET.length>=32
+  };
+}
+function sscRuntimeLog(scope,flags){
+  const id=scope+':'+Object.entries(flags).map(([k,v])=>k+'='+Number(v)).join(',');
+  if(SSC_RUNTIME_ISSUES.has(id))return;
+  SSC_RUNTIME_ISSUES.add(id);
+  // Private runtime logs contain only booleans, never credentials.
+  console.warn('[SSCircle runtime]',scope,{data:flags.data,session:flags.session,admin:flags.admin,minecraft:flags.minecraft});
+}
+function sscMaintenancePage(){
+  const html='<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Profile sementara tidak tersedia • SSCircle</title>'
++'<style>*,*:before,*:after{box-sizing:border-box}body{margin:0;min-height:100svh;display:grid;place-items:center;background:#101722;color:#f0f5fa;font:16px/1.6 system-ui,-apple-system,Segoe UI,sans-serif;padding:24px}main{width:min(480px,100%);padding:32px;border:1px solid #344354;border-radius:18px;background:#192435}h1{font-size:24px;line-height:1.3;margin:0 0 14px}p{margin:0 0 20px;color:#c3cedc}a{color:#e8f0ff;text-decoration:none;border:1px solid #617387;border-radius:9px;padding:10px 15px;display:inline-block;margin-right:8px;margin-bottom:8px}a:hover{background:#2b3c54}small{display:block;color:#9eacc0;margin-top:14px}</style></head>'
++'<body><main><h1>Profile sementara tidak tersedia</h1><p>Layanan akun SSCircle belum bisa terhubung. Data pendaftaran dan akunmu tidak dihapus. Silakan coba lagi setelah pengurus memeriksa koneksi layanan.</p><a href="/my-sscircle">Coba lagi</a><a href="/">Kembali ke beranda</a><small>Kode bantuan: SSC-P503</small></main></body></html>';
+  return new Response(html,{status:503,headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'private, no-store','X-Robots-Tag':'noindex, nofollow','X-Content-Type-Options':'nosniff'}});
+}
+async function sscServiceHealth(env){
+  const flags=sscRuntimeBindings(env);
+  let storage=flags.data?'ready':'binding-missing';
+  if(flags.data){
+    try{
+      const table=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='submissions' LIMIT 1").first();
+      if(!table || table.name!=='submissions')storage='schema-missing';
+    }catch{storage='query-failed';}
+  }
+  const ready=storage==='ready';
+  const checks={
+    data:storage,
+    playerSession:flags.session?'ready':'unavailable',
+    adminLogin:flags.admin?'ready':'unavailable',
+    minecraftLink:flags.minecraft?'ready':'unavailable'
+  };
+  return {
+    release:SSC_RUNTIME_RELEASE,
+    status:ready&&flags.session&&flags.admin?'ready':'attention',
+    services:{
+      profile:ready&&flags.session?'ready':'maintenance',
+      admin:ready&&flags.session&&flags.admin?'ready':'maintenance',
+      minecraft:ready&&flags.minecraft?'ready':'maintenance'
+    },
+    checks,
+    supportCode:!ready?'SSC-D01':!flags.session?'SSC-S01':!flags.admin?'SSC-A01':!flags.minecraft?'SSC-M01':'SSC-OK'
+  };
+}
+
 async function route(req, env) {
   const url = new URL(req.url), path = url.pathname, method = req.method;
+  // Safe read-only diagnostic, available even if sessions or D1 are missing.
+  if(path==='/api/health' && method==='GET')
+    return J(await sscServiceHealth(env));
   // Semua jalur pendaftaran harus melalui Rules, termasuk URL langsung.
   if (['/registration', '/registration.html'].includes(path) && ['GET', 'HEAD'].includes(method)) {
     const preview = url.searchParams.has('ssc_registration_preview') || url.searchParams.has('ssc_theme_preview');
@@ -3015,8 +3072,10 @@ async function route(req, env) {
   // My SSCircle only renders for a signed-in, accepted applicant.
   // Static assets alone cannot bypass this guard: both route variants are checked.
   if ((path === '/my-sscircle' || path === '/my-sscircle.html') && (method === 'GET' || method === 'HEAD')) {
-    if (!env.DB || !env.SESSION_SECRET)
-      return new Response('Dashboard pemain belum tersedia.', {status:503,headers:{'Content-Type':'text/plain; charset=utf-8','Cache-Control':'no-store'}});
+    if (!env.DB || !env.SESSION_SECRET) {
+      sscRuntimeLog('profile',sscRuntimeBindings(env));
+      return sscMaintenancePage();
+    }
     const member = await playerSession(req, env);
     if (!member || member.status !== 'accepted') {
       const access = member?.status === 'pending' ? 'menunggu' : member?.status === 'rejected' ? 'ditolak' : 'perlu-masuk';
