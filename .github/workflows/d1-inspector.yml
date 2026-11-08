@@ -1,0 +1,55 @@
+# SSCircle: collaborator can inspect the D1 STAGING schema from the GitHub web UI.
+# This workflow NEVER accepts arbitrary SQL or database names as user input.
+# Run manually from the protected main branch. Require owner review for changes.
+name: SSCircle · Lihat Database D1
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Apa yang ingin diperiksa?
+        required: true
+        type: choice
+        default: overview
+        options:
+          - overview
+          - table
+      table_name:
+        description: Nama tabel untuk mode table (kosongkan pada overview)
+        type: string
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sscircle-d1-inspector-staging
+  cancel-in-progress: false
+
+jobs:
+  inspect:
+    name: Lihat struktur D1 Staging (tanpa data pribadi)
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: database-staging
+    steps:
+      - name: Ambil kode inspector SSCircle
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Siapkan Node.js untuk Wrangler
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validasi skrip inspector tanpa mengakses Cloudflare
+        run: python3 -m unittest discover -s tests -p test_d1_inspector.py
+      - name: Buat laporan metadata D1 Staging yang aman
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          SSCIRCLE_D1_STAGING_NAME: ${{ vars.SSCIRCLE_D1_STAGING_NAME || 'sscircle-staging' }}
+          INSPECT_MODE: ${{ inputs.mode }}
+          INSPECT_TABLE: ${{ inputs.table_name }}
+        run: python3 scripts/d1_inspector.py
