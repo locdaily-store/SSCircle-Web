@@ -57,7 +57,7 @@ test('Paper Direct: no insecure default endpoint or secrets in shipped config',(
 });
 
 test('V10.45.2: safe tab-completion shows matching commands and hides admin-only reload',()=>{
- assert.match(manifest,/version: '10\.46\.0'/);
+ assert.match(manifest,/version: '10\.47\.0'/);
  assert.match(paper,/implements CommandExecutor, TabCompleter, Listener/);
  assert.match(paper,/public List<String> onTabComplete\(CommandSender sender, Command command, String alias, String\[\] args\)/);
  assert.match(paper,/if \(args\.length != 1\) return List\.of\(\)/);
@@ -82,7 +82,7 @@ test('V10.45.2: explain both independent failures without exposing shared secret
 });
 
 test('V10.45.3: operator-only signed diagnostic and safe error presentation',()=>{
- assert.match(manifest,/version: '10\.46\.0'/);
+ assert.match(manifest,/version: '10\.47\.0'/);
  assert.match(paper,/private static final String DIAGNOSE_PATH = "\/api\/minecraft\/link\/diagnose"/);
  assert.match(paper,/options\.add\("diagnose"\)/);
  assert.match(paper,/private void runDiagnostic\(CommandSender sender\)/);
@@ -127,4 +127,24 @@ test('V10.46.0: explicit AuthMe mode prevents spoofed premium/offline identity',
  assert.match(ids,/UUID\.nameUUIDFromBytes/);
  assert.match(worker,/authme-session/);
  assert.match(worker,/authmeId\.test/);
+});
+
+test('V10.47: vanilla statistics are only sampled for verified identities',()=>{
+ const stats=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/PaperStatsSync.java',import.meta.url),'utf8');
+ assert.match(stats,/resolveIdentity\.apply\(player\)/);
+ assert.match(stats,/if\(id==null\)return/);
+ assert.match(stats,/Statistic\.PLAY_ONE_MINUTE/);
+ assert.match(stats,/Statistic\.DEATHS/);
+ assert.match(stats,/Statistic\.MOB_KILLS/);
+ assert.match(stats,/Statistic\.MINE_BLOCK/);
+ assert.match(stats,/stats-queue\.properties/);
+ assert.match(stats,/sendAsync\(request,HttpResponse\.BodyHandlers\.ofString/);
+ assert.match(stats,/eventId\(\)\.equals\(eventId\)/);
+ assert.match(stats,/scheduleRetry\(\)/);
+ assert.match(stats,/StandardCopyOption\.ATOMIC_MOVE/);
+ assert.match(paper,/statsSync\.start\(\)/);
+ assert.match(paper,/statsSync\.stop\(\)/);
+ assert.match(worker,/async function minecraftStatsIngest\(req,env\)/);
+ assert.match(worker,/STATS_NOT_LINKED/);
+ assert.match(worker,/minecraft_stat_receipts/);
 });
