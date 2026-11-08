@@ -66,6 +66,32 @@
 .player-stat {display:grid;gap:14px;min-width:0;padding:15px;border:1px solid var(--player-border);border-radius:11px;background:color-mix(in srgb,var(--ssc-bg,#150e23) 50%,transparent)}
 .player-stat span {font-size:11px;color:var(--player-quiet)}
 .player-stat strong {font-size:clamp(12px,1.6vw,14px);font-weight:700;color:var(--ssc-text,#fff);overflow-wrap:anywhere}
+/* V10.47.2: lightweight vector icons, compact season filter and flexible cards. */
+.player-season-chooser{display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-width:0}
+.player-season-chooser label{font-size:11px;color:var(--player-quiet);font-weight:700}
+.player-season-chooser select{min-width:165px;max-width:100%;flex:1 1 190px;padding:10px 35px 10px 12px;border:1px solid var(--player-border);border-radius:11px;
+  color:var(--ssc-text,#fff);background:color-mix(in srgb,var(--player-paper) 88%,var(--ssc-primary,#ab86d9) 12%);font:inherit;font-size:12px}
+.player-season-chooser select:disabled{opacity:.55}
+.player-stat{--stat-ink:var(--ssc-primary,#b69ae8);position:relative;gap:11px;overflow:hidden;
+  background:linear-gradient(150deg,color-mix(in srgb,var(--stat-ink) 9%,var(--player-paper)) 0%,var(--player-paper) 90%);
+  transition:border-color .16s ease,background .16s ease}
+.player-stat[data-stat-kind="playtime"]{--stat-ink:#9fbafe}
+.player-stat[data-stat-kind="deaths"]{--stat-ink:#e99fb5}
+.player-stat[data-stat-kind="mobs"]{--stat-ink:#dfb18c}
+.player-stat[data-stat-kind="blocks"]{--stat-ink:#8fd3bf}
+.player-stat[data-stat-kind="seasons"]{--stat-ink:#c2a6ef}
+.player-stat-heading{display:flex;align-items:center;gap:10px;min-width:0}
+.player-stat-heading>span:last-child{font-size:11px;line-height:1.4;color:var(--player-quiet);font-weight:650}
+.player-stat-icon{display:grid;place-items:center;flex:0 0 37px;width:37px;height:37px;border-radius:11px;
+  border:1px solid color-mix(in srgb,var(--stat-ink) 20%,transparent);
+  background:color-mix(in srgb,var(--stat-ink) 13%,transparent);color:var(--stat-ink)}
+.player-stat-icon svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round;stroke-width:1.8}
+.player-stat strong{font-size:clamp(14px,2vw,20px);line-height:1.2;letter-spacing:-.02em;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.player-stat small{font-size:10px;color:var(--player-quiet);line-height:1.45}
+@media(max-width:620px){.player-stat-heading{gap:8px}.player-stat-icon{width:32px;height:32px;flex-basis:32px;border-radius:9px}.player-stat-icon svg{width:17px;height:17px}
+  .player-stat strong{font-size:clamp(12px,3.5vw,17px)}.player-season-chooser select{min-width:0}}
+@media(prefers-reduced-motion:reduce){.player-stat{transition:none}}
+
 .player-shortcuts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px;min-width:0}
 .player-shortcut {display:flex;align-items:center;gap:11px;padding:15px 13px;min-width:0;text-decoration:none;border:1px solid var(--player-border);border-radius:11px;background:var(--player-tint);color:var(--ssc-text,#fff);transition:background .2s,border-color .2s}
 .player-shortcut:hover,.player-shortcut:focus-visible{border-color:var(--ssc-primary,#c6a4f7);background:color-mix(in srgb,var(--ssc-primary,#c6a4f7) 14%,transparent)}
