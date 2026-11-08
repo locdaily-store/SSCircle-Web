@@ -72,7 +72,8 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
         syncTelemetry.start();
         if (!Bukkit.getOnlineMode()) {
             if (mixedModeReady()) {
-                getLogger().warning("Mode campuran AuthMe + PacketEvents aktif. Java memakai identitas akun AuthMe; Bedrock memakai Floodgate XUID.");
+                getLogger().warning("Mode campuran AuthMe siap. Status Premium hanya ditentukan dari bukti sesi FastLogin; Bedrock melalui Floodgate.");
+                if (fastLoginPlugin() != null) getLogger().info("FastLogin ditemukan: SSCircle menggunakan API status sesi aktif tanpa permintaan Mojang per-tick.");
             } else {
                 getLogger().warning("Paper offline-mode tanpa adapter AuthMe terverifikasi. Java linking tetap ditolak.");
             }
@@ -215,6 +216,11 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
                     + (mixedModeReady() ? "siap untuk Java" : "belum siap untuk Java"));
                 if (!mixedModeReady()) {
                     sender.sendMessage("Butuh authme-mixed-mode.enabled=true, AuthMe dan PacketEvents aktif.");
+                }
+                if (sender.hasPermission("sscircle.admin")) {
+                    sender.sendMessage("Deteksi Premium: " + (fastLoginPlugin() == null
+                        ? "FastLogin belum aktif (status Java AuthMe tidak diketahui)"
+                        : "Adapter FastLogin aktif (status ditentukan per sesi login)"));
                 }
             } else {
                 sender.sendMessage("Autentikasi: online-mode (Mojang Java Premium).");
@@ -452,8 +458,22 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
                 || !AuthMeSessionBridge.isAuthenticated(player, authMe)) return null;
             String accountId = AuthMeAccountId.fromPlayerName(player.getName());
             if (accountId == null) return null;
-            return new Identity("java_offline", accountId,
-                "authme-session", "Java (akun AuthMe terautentikasi)");
+            // Trust only the per-session status returned by the optional FastLogin
+            // adapter, not the username/Mojang name availability. Keep the AuthMe
+            // identity stable across upgrades, inventory and existing statistics.
+            FastLoginSessionBridge.Status loginStatus =
+                FastLoginSessionBridge.read(player, fastLoginPlugin());
+            String source = switch (loginStatus) {
+                case PREMIUM -> "fastlogin-premium";
+                case CRACKED -> "fastlogin-cracked";
+                default -> "authme-session";
+            };
+            String type = switch (loginStatus) {
+                case PREMIUM -> "Minecraft Java Premium (terverifikasi FastLogin)";
+                case CRACKED -> "Minecraft Java Non-Premium (mode login offline)";
+                default -> "Minecraft Java (status Premium belum terverifikasi)";
+            };
+            return new Identity("java_offline", accountId, source, type);
         }
         // For ordinary direct online-mode servers, Paper/Mojang verify the UUID.
         // If AuthMe is installed, it must also confirm the player's login.
@@ -469,6 +489,13 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
         return plugin != null && plugin.isEnabled() ? plugin : null;
     }
 
+    private Plugin fastLoginPlugin() {
+        Plugin plugin = getServer().getPluginManager().getPlugin("FastLogin");
+        if (plugin == null || !plugin.isEnabled())
+            plugin = getServer().getPluginManager().getPlugin("FastLoginPlus");
+        return plugin != null && plugin.isEnabled() ? plugin : null;
+    }
+
     private boolean mixedModeReady() {
         if (Bukkit.getOnlineMode()
             || !getConfig().getBoolean("authme-mixed-mode.enabled", false)
@@ -479,9 +506,9 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
     }
 
     private boolean hasUntrustedLoginPlugin() {
-        // Only AuthMe is supported in this release; unknown auth providers block
-        // account claims instead of silently accepting an unverified UUID.
-        String[] loginPlugins = {"LibreLogin", "nLogin", "FastLogin", "JPremium",
+        // AuthMe remains the trusted login authority; FastLogin is only an optional,
+        // read-only session adapter. Other login replacements fail closed.
+        String[] loginPlugins = {"LibreLogin", "nLogin", "JPremium",
             "EasyAuth", "OpeNLogin"};
         for (String name : loginPlugins) {
             if (getServer().getPluginManager().isPluginEnabled(name)) return true;
