@@ -112,3 +112,16 @@ test('V10.44 credential and device management use only private authenticated API
  assert.match(script,/textContent=labels\[event\.type\]/);
  assert.doesNotMatch(worker,/member_security_events.*client_ip/);
 });
+
+test('V10.47.2: stats use accessible inline SVG icons and a season filter without image dependencies',()=>{
+ const html=readFileSync(new URL('../my-sscircle.html',import.meta.url),'utf8');
+ const dashboard=readFileSync(new URL('../player-dashboard.js',import.meta.url),'utf8');
+ const css=readFileSync(new URL('../player-dashboard.css',import.meta.url),'utf8');
+ assert.equal((html.match(/data-stat-kind="/g)||[]).length,5);
+ assert.equal((html.match(/class="player-stat-icon"/g)||[]).length,5);
+ assert.match(html,/id="player-season-select"/);
+ assert.match(dashboard,/activeStatSeason/);
+ assert.match(dashboard,/player-stat-seasons/);
+ assert.match(css,/\.player-stat-icon svg/);
+ assert.match(css,/@media\(max-width:620px\)/);
+});
