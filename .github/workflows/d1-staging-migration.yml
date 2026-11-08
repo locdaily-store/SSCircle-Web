@@ -23,7 +23,7 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 12
-    environment: database-staging
+    environment: database-staging-write
     steps:
       - name: Ambil perubahan yang sudah masuk main
         uses: actions/checkout@v4
@@ -47,7 +47,7 @@ jobs:
             exit 1
           fi
           if [[ ! "$D1_DATABASE_NAME" =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,100}$ ]]; then
-            echo "::error::Atur environment variable D1_STAGING_DATABASE di environment database-staging."
+            echo "::error::Atur environment variable D1_STAGING_DATABASE di environment database-staging-write."
             exit 1
           fi
           test -f "migrations/$MIGRATION_NAME" || {
