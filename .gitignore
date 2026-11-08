@@ -22,6 +22,8 @@ secrets.json
 *.sqlite
 *.sqlite3
 *.sql
+# SQL migrations are reviewed code; backups/data dumps remain ignored.
+!migrations/*.sql
 *.dump
 *.bak
 *.backup
