@@ -130,9 +130,10 @@
         $('columns').append(tr);
       }
       for (const b of $('tables').querySelectorAll('button')) b.classList.toggle('active', b.textContent === selected);
-    } catch (error) { showStatus(error.message, 'error'); }
+    } catch (error) { showStatus(error.message, 'error'); return false; }
+    return true;
   }
-  async function refresh() {
+  async function refresh({ failOnError = false } = {}) {
     if (!token || busy) return;
     busy = true; $('refresh').disabled = true;
     try {
@@ -142,10 +143,14 @@
         selected = ''; $('detail').hidden = true; $('detailMessage').hidden = false;
         $('detailTitle').textContent = 'Detail tabel';
       }
-      if (selected) await loadDetail();
+      if (selected && !await loadDetail()) return false;
       showStatus('Terhubung ke D1 • Diperiksa ' + formatDate(data.checkedAt), 'ok');
-    } catch (error) { showStatus(error.message, 'error'); }
-    finally { busy = false; $('refresh').disabled = !token; }
+      return true;
+    } catch (error) {
+      showStatus(error.message, 'error');
+      if (failOnError) throw error;
+      return false;
+    } finally { busy = false; $('refresh').disabled = !token; }
   }
   function disconnect() {
     token = ''; apiOrigin = ''; selected = '';
@@ -162,7 +167,7 @@
       if (!/^[A-Za-z0-9_-]{32,256}$/.test(token)) throw Error('Kunci akses harus minimal 32 karakter.');
       $('key').value = '';
       $('connect').disabled = true; $('disconnect').disabled = false; $('refresh').disabled = false;
-      await refresh();
+      await refresh({ failOnError: true });
       if (!timer) timer = setInterval(refresh, 60000);
     } catch (error) { showStatus(error.message, 'error'); disconnect(); showStatus(error.message, 'error'); }
   });
