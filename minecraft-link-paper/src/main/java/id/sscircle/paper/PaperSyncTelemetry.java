@@ -65,12 +65,13 @@ final class PaperSyncTelemetry {
         }
         final long stamp=System.currentTimeMillis()/1000;
         final String nonce=UUID.randomUUID().toString();
-        double tps;
+        Double tps=null;
         try {
-            // Paper 26.3 reports 1-minute TPS; this is a sampled estimate,
-            // not a spark profile and not proof that the host is healthy.
-            tps=Math.max(0,Math.min(20.0,Bukkit.getTPS()[0]));
-        }catch(Exception ignored){tps=20.0;}
+            // Paper's sampled 1-minute TPS is an estimate, not a spark profile.
+            double sampled=Bukkit.getTPS()[0];
+            if(Double.isFinite(sampled))
+                tps=Math.max(0,Math.min(20.0,sampled));
+        }catch(Exception ignored){ /* Unknown is safer than inventing 20 TPS. */ }
         String lastSuccess=stats.lastSuccessAt();
         String body="{\"pluginVersion\":\""+plugin.getDescription().getVersion()
             +"\",\"onlineCount\":"+Bukkit.getOnlinePlayers().size()
@@ -78,7 +79,7 @@ final class PaperSyncTelemetry {
             +",\"captureBacklog\":"+stats.captureBacklogCount()
             +",\"deliveryCode\":\""+stats.deliveryCode()+"\""
             +",\"lastSuccessAt\":"+(lastSuccess==null?"null":"\""+lastSuccess+"\"")
-            +",\"tps1m\":"+Math.round(tps*100.0)/100.0
+            +",\"tps1m\":"+(tps==null?"null":Double.toString(Math.round(tps*100.0)/100.0))
             +",\"completedCommandId\":"+(lastExecutedId==null?"null":"\""+lastExecutedId+"\"")+"}";
         try {
             String signature=sign(token,"POST\n"+ROUTE+"\n"+stamp+"\n"+nonce+"\n"+body);
