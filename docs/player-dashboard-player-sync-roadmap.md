@@ -176,3 +176,13 @@ Baca petunjuk operasional di `docs/V10.47-PLAYER-STATS.md`.
 3. **V10.49** Multi-Account Linking yang diverifikasi per-akun, pemutusan tautan aman, kontrol privasi pemain, dan avatar/skin sesuai platform.
 4. **V10.50** integrasi statistik Season ke Leaderboard, Hall of Fame, award dan timeline tanpa menghitung ganda akibat reset world/retry jaringan.
 5. **Peningkatan lanjutan:** metrik performa Cloudflare D1 dan Paper 20–50 pemain, indikator sinkron gagal dan audit trail yang bisa dibaca admin.
+
+
+## SSCircle Player Sync V10.48.3 — pembuktian FastLoginPlus dan konsistensi bukti
+
+- Web SSCircle tetap pada kontrak API V10.48.2 yang menerima `authSource=fastlogin-premium`, `fastlogin-cracked`, atau `authme-session`, dilindungi HMAC dan nonce. Tidak ada skema D1 baru dan tidak perlu menghapus akun tertaut.
+- Bug perbaikan plugin Paper: ketika hasil sesi FastLoginPlus berubah tetapi semua statistik Vanilla tetap sama, deduplikasi tidak boleh membuang snapshot yang membawa bukti terbaru. Perubahan bukti akan dikirim melalui antrean yang sudah ada dan label backend dapat diperbarui.
+- Identitas `java_offline` tetap didasarkan pada akun AuthMe yang terautentikasi. FastLoginPlus hanya menentukan edisi sesi. `UNKNOWN` tidak diberi label Non-Premium secara paksa.
+- FastLogin dan FastLoginPlus terpasang bersamaan akan dilaporkan sebagai konflik; SSCircle tidak boleh sembarang mengklaim Premium.
+- Plugin Paper versi 10.48.3 dibangun dari CI di `minecraft-link-paper`; folder Paper, statistik, secret, dan D1 produksi tidak diubah ketika source diperbarui.
+- **Pekerjaan yang masih wajib:** tes runtime Paper 26.3 + AuthMe + PacketEvents + ProtocolLib + FastLoginPlus (dan Geyser/Floodgate untuk Bedrock), termasuk pembaruan bukti ketika playtime tidak berubah, reconnect, restart, recovery, dan pemantauan TPS. Rilis berikutnya tetap fokus pada ketahanan identitas dan multi-account linking.
