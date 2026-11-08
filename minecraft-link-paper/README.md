@@ -1,4 +1,4 @@
-# SSCircle Player Sync Paper V10.47.0
+# SSCircle Player Sync Paper V10.47.2
 
 Penghubung akun Minecraft ke Profile SSCircle, tanpa Velocity. Plugin memakai HMAC, nonce, kode sekali-pakai 10 menit, dan konfirmasi ulang pada website. Satu anggota saat ini mempunyai **satu** akun Minecraft aktif; multi-account adalah fase berikutnya.
 
@@ -82,3 +82,7 @@ Pada rilis ini, SSCircle mengirim empat statistik vanilla Paper untuk identitas 
 **Instalasi:** upload ZIP Cloudflare V10.47.0 lebih dahulu, lalu ganti JAR SSCircle dengan V10.47.0. Jangan hapus `config.yml` atau `server-secret.txt`. Panduan lengkap: `docs/V10.47-PLAYER-STATS.md`.
 
 **Batasan:** angka dari dunia yang direset belum punya epoch season. Total di D1 tidak dikurangi walaupun file statistik vanilla di-reset; target berikutnya adalah season baseline dan uji runtime di server staging.
+
+## V10.47.2: Low-TPS + Season stats
+
+Pembacaan kategori blok dibagi ke beberapa tick (24 pembacaan/tick default, untuk seluruh plugin), file antrean ditulis di background tiap 10 detik, dan sinkron HTTP tetap asynchronous. Admin mengatur Season aktif di halaman **Season Archive & Hall of Fame**; snapshot pertama menjadi baseline, reset world tidak menghapus statistik lama. Lima kartu statistik kini mempunyai ikon dan pilihan Season di Profile. Konfigurasi tambahan: `stats-sync.block-reads-per-tick: 24` dan `stats-sync.queue-flush-seconds: 10`. Lihat `docs/V10.47.2-SEASON-PERFORMANCE.md` untuk pengujian, backup, dan batasan.
