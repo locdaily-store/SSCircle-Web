@@ -2956,11 +2956,27 @@ async function minecraftSyncAdmin(req,env,path,method){
     const status=await env.DB.prepare('SELECT * FROM minecraft_sync_status WHERE id=1').first();
     const elapsed=status?Date.now()-Date.parse(status.seen_at):Infinity;
     const connection=!status?'no_data':elapsed<=360000?'recent':elapsed<=1200000?'delayed':'unknown';
+    // Server-side search/filter: do not misleadingly search only the current page.
+    const query=String(url.searchParams.get('q')||'').trim().slice(0,64).toLowerCase();
+    const filter=['all','synced','missing'].includes(url.searchParams.get('filter'))
+      ?url.searchParams.get('filter'):'all';
+    // Escape SQLite LIKE wildcards. All user input remains parameter-bound.
+    const needle='%'+query.replace(/[\\%_]/g,c=>'\\'+c)+'%';
     const rows=await env.DB.prepare(`SELECT a.application_id AS member_id,a.provider,a.username,a.verified_at,
-      COALESCE((SELECT p.display_name FROM member_profiles p WHERE p.application_id=a.application_id),'') AS display_name,
+      COALESCE(p.display_name,'') AS display_name,
       (SELECT MAX(s.last_synced_at) FROM player_stat_snapshots s
         WHERE s.application_id=a.application_id) AS last_sync_at
-      FROM minecraft_accounts a ORDER BY a.verified_at DESC LIMIT 101 OFFSET ?`).bind(offset).all();
+      FROM minecraft_accounts a
+      LEFT JOIN member_profiles p ON p.application_id=a.application_id
+      WHERE (?='' OR lower(a.username) LIKE ? ESCAPE '\\'
+        OR lower(COALESCE(p.display_name,'')) LIKE ? ESCAPE '\\'
+        OR lower(a.application_id) LIKE ? ESCAPE '\\')
+        AND (?='all' OR (?='synced' AND EXISTS(
+          SELECT 1 FROM player_stat_snapshots s WHERE s.application_id=a.application_id))
+          OR (?='missing' AND NOT EXISTS(
+          SELECT 1 FROM player_stat_snapshots s WHERE s.application_id=a.application_id)))
+      ORDER BY a.verified_at DESC LIMIT 101 OFFSET ?`)
+      .bind(query,needle,needle,needle,filter,filter,filter,offset).all();
     const totals=await env.DB.prepare(`SELECT
       COUNT(*) AS linked,
       SUM(CASE WHEN NOT EXISTS(
@@ -2982,7 +2998,7 @@ async function minecraftSyncAdmin(req,env,path,method){
         memberId:x.member_id,memberName:x.display_name||'Anggota',
         provider:x.provider,username:x.username,linkedAt:x.verified_at,
         lastSyncAt:x.last_sync_at||null
-      })),hasMore:(rows.results||[]).length>100,offset,
+      })),hasMore:(rows.results||[]).length>100,offset,filter,query,
       events:(events.results||[]),pendingCommand:pending?{
         id:pending.id,createdAt:pending.created_at,expiresAt:pending.expires_at
       }:null,serverTime:new Date().toISOString()});
@@ -3335,7 +3351,7 @@ async function mailboxAPI(req,env,path,method){
 
 // SSCircle runtime check: observe what the deployment actually receives.
 // Only public readiness categories. Never expose secret values or private data.
-const SSC_RUNTIME_RELEASE='10.48.0';
+const SSC_RUNTIME_RELEASE='10.48.1';
 const SSC_RUNTIME_ISSUES=new Set();
 function sscRuntimeBindings(env){
   return {

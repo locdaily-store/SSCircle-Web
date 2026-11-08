@@ -18,7 +18,7 @@ window.SSCircleMinecraftSyncAdmin=(()=>{
   const eventText={IDLE:'Menunggu pengiriman',SYNC_OK:'Berhasil',
     QUEUE_PENDING:'Menunggu pengiriman',NETWORK_ERROR:'Gangguan jaringan',
     HTTP_ERROR:'Permintaan gagal',AUTH_ERROR:'Masalah autentikasi'};
-  let state=null,loading=false,offset=0,term='',filter='all';
+  let state=null,loading=false,offset=0,term='',filter='all',searchTimer=null;
   async function api(path,options={}){
     const res=await fetch(path,{credentials:'same-origin',cache:'no-store',
       headers:{Accept:'application/json',...(options.body?{'Content-Type':'application/json'}:{})},...options});
@@ -95,17 +95,21 @@ window.SSCircleMinecraftSyncAdmin=(()=>{
     const accounts=el('section','panel ssc-sync-accounts');
     accounts.append(el('h2','','Akun & status statistik'));
     accounts.append(el('p','ssc-sync-subtitle',
-      'Daftar identitas yang sudah tertaut. Pemain offline tidak otomatis dianggap gagal hanya karena datanya lama.'));
+      'Pencarian dan filter berlaku untuk seluruh akun tertaut. Pemain offline tidak dianggap gagal hanya karena statistiknya lama.'));
     const filters=el('div','ssc-sync-filters');
     const search=el('input');search.type='search';search.value=term;search.placeholder='Cari nama akun atau anggota';
     search.setAttribute('aria-label','Cari akun Minecraft');
-    search.oninput=()=>{term=search.value;paintAccounts(table);};
+    search.oninput=()=>{
+      term=search.value;offset=0;
+      clearTimeout(searchTimer);
+      searchTimer=setTimeout(()=>void load({focusSearch:true}),400);
+    };
     const selection=el('select');
     selection.setAttribute('aria-label','Filter status statistik');
     for(const [value,label] of [['all','Semua akun'],['synced','Ada statistik'],['missing','Belum ada statistik']]){
       const o=el('option','',label);o.value=value;selection.append(o);
     }
-    selection.value=filter;selection.onchange=()=>{filter=selection.value;paintAccounts(table);};
+    selection.value=filter;selection.onchange=()=>{filter=selection.value;offset=0;void load();};
     filters.append(search,selection);accounts.append(filters);
     const table=el('div','ssc-sync-account-list');accounts.append(table);
     const pagination=el('div','ssc-sync-pagination');
@@ -134,13 +138,10 @@ window.SSCircleMinecraftSyncAdmin=(()=>{
   function paintAccounts(container){
     container.replaceChildren();
     let accounts=state.accounts||[];
-    const query=term.trim().toLowerCase();
-    accounts=accounts.filter(item=>(filter==='all'||
-      (filter==='synced'&&item.lastSyncAt)||(filter==='missing'&&!item.lastSyncAt))&&
-      (!query||[item.username,item.memberName,item.memberId].some(x=>String(x||'').toLowerCase().includes(query))));
+    // Backend applies filters across all linked accounts, not just this page.
     if(!accounts.length){
       container.append(el('p','ssc-sync-empty',
-        'Belum ada akun yang cocok pada halaman ini.'));return;
+        'Belum ada akun yang cocok dengan pencarian atau filter.'));return;
     }
     for(const a of accounts){
       const item=el('div','ssc-sync-account');
@@ -153,12 +154,18 @@ window.SSCircleMinecraftSyncAdmin=(()=>{
       item.append(info,date);container.append(item);
     }
   }
-  async function load(){
+  async function load({focusSearch=false}={}){
     if(loading||!root)return;
     loading=true;
     try {
-      state=await api('/api/admin/minecraft/sync?offset='+offset);
+      const params=new URLSearchParams({offset:String(offset),filter,q:term.trim().slice(0,64)});
+      state=await api('/api/admin/minecraft/sync?'+params.toString());
       render();
+      if(focusSearch){
+        const input=root.querySelector('input[type=search]');
+        input?.focus({preventScroll:true});
+        input?.setSelectionRange(input.value.length,input.value.length);
+      }
     }catch(error){
       if(!state){
         root.replaceChildren(el('div','panel ssc-sync-empty',

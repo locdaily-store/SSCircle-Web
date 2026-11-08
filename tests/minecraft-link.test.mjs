@@ -471,3 +471,42 @@ test('V10.48: monitor account listing only reflects verified Minecraft links',as
   assert.equal(adminView.json.accounts[0].username,'TestSteve');
   assert.equal(adminView.json.accounts[0].lastSyncAt,null);
 });
+
+test('V10.48.1: admin search and status filter cover every page, not only first 100 records',async()=>{
+  const x=fixture();
+  await x.call('/api/admin/minecraft/sync',{cookie:x.admin}); // Create additive member tables.
+  const start=Date.now()-200000;
+  // Use real connected records and member profiles; no synthetic browser data.
+  const insertMember=x.db.prepare('INSERT INTO submissions(id,status,tracking_code,submitted_at) VALUES(?,?,?,?)');
+  const insertLink=x.db.prepare('INSERT INTO minecraft_accounts(id,application_id,provider,provider_id,username,verified_at) VALUES(?,?,?,?,?,?)');
+  const insertProfile=x.db.prepare('INSERT INTO member_profiles(application_id,display_name) VALUES(?,?)');
+  for(let i=0;i<125;i++){
+    const member='f'+String(i).padStart(7,'0')+'-1111-4111-8111-111111111111';
+    const minecraft='c'+String(i).padStart(7,'0')+'-2222-4222-8222-222222222222';
+    const timestamp=new Date(start+i*1000).toISOString();
+    insertMember.run(member,'accepted','T'+String(i).padStart(19,'0'),timestamp);
+    insertLink.run(minecraft,member,'java_premium',minecraft,
+      i===0?'RareTarget':'Player_'+i,timestamp);
+    if(i===0)insertProfile.run(member,'Hidden Finder');
+    if(i===5)x.db.prepare("INSERT INTO player_stat_snapshots (application_id,season_id,playtime_seconds,deaths,mob_kills,blocks_mined,last_synced_at) VALUES(?,'',10,1,0,2,?)").run(member,timestamp);
+  }
+  const page=await x.call('/api/admin/minecraft/sync?offset=100',{cookie:x.admin});
+  assert.equal(page.status,200,JSON.stringify(page.json));
+  assert.equal(page.json.accounts.length,25);
+  const found=await x.call('/api/admin/minecraft/sync?q=raretaRGET',{cookie:x.admin});
+  assert.equal(found.status,200,JSON.stringify(found.json));
+  assert.equal(found.json.accounts.length,1);
+  assert.equal(found.json.accounts[0].username,'RareTarget');
+  const byDisplay=await x.call('/api/admin/minecraft/sync?q=HIDDEN%20FINDER',{cookie:x.admin});
+  assert.equal(byDisplay.json.accounts.length,1);
+  const missing=await x.call('/api/admin/minecraft/sync?filter=missing',{cookie:x.admin});
+  assert.equal(missing.json.accounts.length,100);
+  assert.equal(missing.json.hasMore,true);
+  const synced=await x.call('/api/admin/minecraft/sync?filter=synced',{cookie:x.admin});
+  assert.equal(synced.json.accounts.length,1);
+  assert.equal(synced.json.accounts[0].username,'Player_5');
+  const wildcard=await x.call('/api/admin/minecraft/sync?q=%25',{cookie:x.admin});
+  assert.equal(wildcard.json.accounts.length,0,'LIKE wildcards must not be treated as arbitrary search');
+  const privateView=await x.call('/api/admin/minecraft/sync?filter=synced');
+  assert.equal(privateView.status,401);
+});
