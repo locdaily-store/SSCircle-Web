@@ -3072,8 +3072,9 @@ async function route(req, env) {
   // My SSCircle only renders for a signed-in, accepted applicant.
   // Static assets alone cannot bypass this guard: both route variants are checked.
   if ((path === '/my-sscircle' || path === '/my-sscircle.html') && (method === 'GET' || method === 'HEAD')) {
-    if (!env.DB || !env.SESSION_SECRET) {
-      sscRuntimeLog('profile',sscRuntimeBindings(env));
+    const runtime=sscRuntimeBindings(env);
+    if (!runtime.data || !runtime.session) {
+      sscRuntimeLog('profile',runtime);
       return sscMaintenancePage();
     }
     const member = await playerSession(req, env);
