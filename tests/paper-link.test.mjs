@@ -199,3 +199,21 @@ test('V10.48.2: optional FastLogin adapter uses the verified per-session API, ne
   assert.match(paper,/new Identity\("java_offline", accountId, source, type\)/);
   assert.doesNotMatch(bridge,/https?:\/\/|api\.mojang/);
 });
+
+test('V10.48.3: FastLoginPlus name is detected and duplicate login adapters fail closed',()=>{
+  assert.match(paper,/hasConflictingFastLoginPlugins\(\)/);
+  assert.match(paper,/isPluginEnabled\("FastLoginPlus"\)/);
+  assert.match(paper,/getPlugin\("FastLoginPlus"\)/);
+  assert.match(paper,/if \(hasConflictingFastLoginPlugins\(\)\) return null/);
+  assert.match(paper,/getStatus\(UUID\)/);
+});
+test('V10.48.3: stats changes to authSource are not discarded as duplicate snapshots',()=>{
+  const stats=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/PaperStatsSync.java',import.meta.url),'utf8');
+  assert.match(stats,/sameSnapshotAndEvidence\(old,id\.authSource\(\),playtime,deaths,mobs,blocks\)/);
+  assert.match(stats,/old\.authSource\(\)\.equals\(authSource\)/);
+  const bridge=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/FastLoginSessionBridge.java',import.meta.url),'utf8');
+  assert.match(bridge,/interpretStatus\(result\)/);
+  assert.match(bridge,/case "PREMIUM" -> Status\.PREMIUM/);
+  assert.match(bridge,/case "CRACKED" -> Status\.CRACKED/);
+  assert.doesNotMatch(bridge,/api\.mojang|https?:\/\//);
+});
