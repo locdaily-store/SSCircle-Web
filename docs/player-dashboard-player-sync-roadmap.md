@@ -147,3 +147,13 @@ Baca petunjuk operasional di `docs/V10.47-PLAYER-STATS.md`.
 - Permintaan sinkronisasi admin dapat diambil lewat respons heartbeat 1 arah; tidak membuka port/konsol Minecraft. Jeda dua menit, satu aktif, expiry 10 menit.
 - UI Admin Control responsif dan terpisah dari editor Season/Profile.
 - Kelanjutan: V10.48.1 runtime monitoring hosting + metrik waktu akurat, V10.49 multi akun dan Premium proof, V10.50 leaderboard otomatis.
+
+
+### V10.48.2 — Klasifikasi jenis Minecraft yang aman
+
+- `java_premium` hanya boleh ditampilkan sebagai **Minecraft Java Premium** bila berasal dari bukti autentikasi Mojang (`mojang-online`) pada server `online-mode=true`.
+- `bedrock` hanya boleh ditampilkan sebagai **Minecraft Bedrock** bila identitas Floodgate XUID telah diverifikasi.
+- `java_offline` pada server `online-mode=false` + AuthMeReloaded **tidak membuktikan Non-Premium**. Akun Premium yang masuk melalui AuthMe dapat memiliki identitas yang sama. UI harus menampilkan **Minecraft Java (status Premium belum terverifikasi)**, bukan memvonis Non-Premium.
+- Target lanjutan: integrasi autentikasi Premium campuran (misalnya FastLogin) yang benar-benar memverifikasi sesi Premium, dengan adapter terpercaya pada plugin SSCircle dan validasi bukti di Worker. **Jangan** mengandalkan pencocokan nickname/UUID, dan jangan menerima flag Premium dari klien.
+- Setelah adapter diverifikasi dan diuji terhadap versi Paper/AuthMe/Floodgate yang dipakai, barulah jenis **Minecraft Java Non-Premium** dapat ditampilkan untuk sesi yang secara tegas dinyatakan Non-Premium oleh alur autentikasi yang dipercaya. Migrasi tidak boleh mengubah UUID/playerdata atau tautan akun lama secara otomatis.
+- V10.48.2 ini adalah **perbaikan label aman**, bukan klaim bahwa deteksi Premium/Non-Premium otomatis pada mixed-mode telah aktif.
