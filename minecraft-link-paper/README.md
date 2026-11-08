@@ -86,3 +86,13 @@ Pada rilis ini, SSCircle mengirim empat statistik vanilla Paper untuk identitas 
 ## V10.47.2: Low-TPS + Season stats
 
 Pembacaan kategori blok dibagi ke beberapa tick (24 pembacaan/tick default, untuk seluruh plugin), file antrean ditulis di background tiap 10 detik, dan sinkron HTTP tetap asynchronous. Admin mengatur Season aktif di halaman **Season Archive & Hall of Fame**; snapshot pertama menjadi baseline, reset world tidak menghapus statistik lama. Lima kartu statistik kini mempunyai ikon dan pilihan Season di Profile. Konfigurasi tambahan: `stats-sync.block-reads-per-tick: 24`, `stats-sync.queue-flush-seconds: 10`, dan mode adaptif (>=30 pemain online = sampling berkala setiap 10 menit, dapat dimatikan). Lihat `docs/V10.47.2-SEASON-PERFORMANCE.md` untuk pengujian, backup, dan batasan.
+
+## V10.48.0 — Monitoring via Admin Control
+
+- Tab **Minecraft Sync** pada website menampilkan heartbeat terakhir, estimasi TPS satu menit (bukan hasil profil TPS), online players yang *terlapor terakhir*, snapshot tertunda, jumlah akun tertaut, daftar akun tanpa statistik, serta histori status pengiriman. Tab privat hanya dapat dibuka oleh admin login.
+- Plugin mengirim heartbeat HMAC lewat HTTPS keluar setiap 120 detik; tidak perlu membuka port Paper atau mengaktifkan Velocity. `sync-monitor.interval-seconds: 120` dalam `plugins/SSCirclePlayerSync/config.yml` dapat diatur 60–600 detik.
+- Tombol **Minta sinkronisasi** membuat permintaan `sync_now` sekali pakai yang berlaku 10 menit. Plugin mengambil permintaan dalam respons heartbeat, melakukan `stats.triggerNow()` di thread server, dan melaporkan selesai pada heartbeat berikutnya. Perintah tersebut tetap bisa dijalankan langsung dari server dengan `/sscircle sync` (OP).
+- Permintaan dibatasi dua menit antar-permintaan, maksimal satu aktif, dengan pemeriksaan autentikasi admin dan anti-replay HMAC bagi plugin. Tidak ada endpoint untuk menjalankan perintah Minecraft bebas.
+- Website akan menampilkan **laporan terlambat/status belum diketahui**, tidak otomatis menebak server offline. Tidak ada password/secret mentah maupun isi chat dalam riwayat.
+- Deploy ZIP Cloudflare V10.48.0 dan JAR Paper V10.48.0 bersama. Konfigurasi yang sudah berhasil, world, playerdata, serta database D1 tetap dipertahankan.
+- Jika heartbeat tidak muncul, cek `/sscircle status` OP lalu periksa secret, HTTPS endpoint, dan log Paper privat. Lihat `docs/V10.48-SYNC-MONITORING.md`.
