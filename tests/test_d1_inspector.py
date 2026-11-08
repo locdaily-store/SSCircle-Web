@@ -58,7 +58,7 @@ class InspectorTests(unittest.TestCase):
                     inspect.report(name, "overview", "", self.fake_reader)
 
     def test_escape_metadata_for_github_markdown(self):
-        value = inspect.safe_markdown("<script>alert('x')</script>|secret")
+        value = inspect.clean("<script>alert('x')</script>|secret")
         self.assertNotIn("<script>", value)
         self.assertIn(r"\|", value)
 
