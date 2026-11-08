@@ -57,7 +57,7 @@ test('Paper Direct: no insecure default endpoint or secrets in shipped config',(
 });
 
 test('V10.45.2: safe tab-completion shows matching commands and hides admin-only reload',()=>{
- assert.match(manifest,/version: '10\.47\.0'/);
+ assert.match(manifest,/version: '10\.47\.2'/);
  assert.match(paper,/implements CommandExecutor, TabCompleter, Listener/);
  assert.match(paper,/public List<String> onTabComplete\(CommandSender sender, Command command, String alias, String\[\] args\)/);
  assert.match(paper,/if \(args\.length != 1\) return List\.of\(\)/);
@@ -82,7 +82,7 @@ test('V10.45.2: explain both independent failures without exposing shared secret
 });
 
 test('V10.45.3: operator-only signed diagnostic and safe error presentation',()=>{
- assert.match(manifest,/version: '10\.47\.0'/);
+ assert.match(manifest,/version: '10\.47\.2'/);
  assert.match(paper,/private static final String DIAGNOSE_PATH = "\/api\/minecraft\/link\/diagnose"/);
  assert.match(paper,/options\.add\("diagnose"\)/);
  assert.match(paper,/private void runDiagnostic\(CommandSender sender\)/);
@@ -147,4 +147,20 @@ test('V10.47: vanilla statistics are only sampled for verified identities',()=>{
  assert.match(worker,/async function minecraftStatsIngest\(req,env\)/);
  assert.match(worker,/STATS_NOT_LINKED/);
  assert.match(worker,/minecraft_stat_receipts/);
+});
+
+test('V10.47.2: statistic collection is tick-budgeted, disk I/O asynchronous and season-aware',()=>{
+ const stats=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/PaperStatsSync.java',import.meta.url),'utf8');
+ assert.match(stats,/runTaskTimer\(plugin,this::captureOneTick,20L,1L\)/);
+ assert.match(stats,/blockReadsPerTick=Math\.max/);
+ assert.match(stats,/while\(budget-->0&&activeJob\.index<blockMaterials\.size\(\)\)/);
+ assert.match(stats,/Executors\.newSingleThreadExecutor/);
+ assert.match(stats,/diskWriter\.submit\(\(\)->writeQueue\(copy\)\)/);
+ assert.match(stats,/Math\.min\(300000L,retryDelayMs\*2L\)/);
+ assert.match(stats,/lastDelivery=/);
+ assert.match(config,/block-reads-per-tick:\s*24/);
+ assert.match(config,/queue-flush-seconds:\s*10/);
+ assert.match(worker,/minecraft_stat_progress/);
+ assert.match(worker,/statSeasonActivatedAt/);
+ assert.match(worker,/total_playtime/);
 });
