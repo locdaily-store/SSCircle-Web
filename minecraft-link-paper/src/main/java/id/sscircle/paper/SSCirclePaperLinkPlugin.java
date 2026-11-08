@@ -134,6 +134,7 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
         if (sender instanceof Player) options.add("link");
         if (sender.hasPermission("sscircle.admin")) {
             options.add("diagnose");
+            options.add("sync");
             options.add("reload");
         }
         return options.stream().filter(option -> option.startsWith(prefix)).sorted().toList();
@@ -148,6 +149,7 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
         }
         if (sender.hasPermission("sscircle.admin")) {
             sender.sendMessage("/sscircle diagnose - Periksa koneksi HTTPS dan kecocokan secret tanpa kode");
+            sender.sendMessage("/sscircle sync - Kirim statistik pemain online sekarang (OP)");
             sender.sendMessage("/sscircle reload - Muat ulang pengaturan website");
         }
         sender.sendMessage("Tekan Tab setelah /sscircle untuk memilih subperintah.");
@@ -165,6 +167,20 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
                 return true;
             }
             runDiagnostic(sender);
+            return true;
+        }
+        if (args.length == 1 && args[0].equalsIgnoreCase("sync")) {
+            if (!sender.hasPermission("sscircle.admin")) {
+                sender.sendMessage("Hanya pengurus yang dapat memicu sinkronisasi.");
+                return true;
+            }
+            if (statsSync == null || !getConfig().getBoolean("stats-sync.enabled",true)) {
+                sender.sendMessage("Sinkronisasi statistik belum aktif.");
+            } else {
+                statsSync.triggerNow();
+                sender.sendMessage("Statistik pemain online dimasukkan ke antrean.");
+                sender.sendMessage("Cek /sscircle status untuk status pengiriman.");
+            }
             return true;
         }
         if (args.length == 1 && args[0].equalsIgnoreCase("reload")) {
