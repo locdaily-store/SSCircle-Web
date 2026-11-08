@@ -90,6 +90,11 @@ final class PaperStatsSync implements Listener {
         persistQueue();
     }
 
+    void triggerNow() {
+        captureOnline();
+        sendNext();
+    }
+
     int pendingCount() { return pending.size(); }
     String deliveryStatus() { return lastDelivery; }
 
