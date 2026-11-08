@@ -2768,33 +2768,33 @@ async function minecraftStatsIngest(req,env){
     && /^[A-Za-z0-9_-]{1,64}$/.test(activeSeason)
     && stamp>=Date.parse(seasonStart)
       ? 'season:'+activeSeason+':'+seasonStart : '';
-  const oldLifetime=await env.DB.prepare(\`SELECT playtime_seconds,deaths,mob_kills,blocks_mined
-    FROM player_stat_snapshots WHERE application_id=? AND season_id=''\`)
+  const oldLifetime=await env.DB.prepare(`SELECT playtime_seconds,deaths,mob_kills,blocks_mined
+    FROM player_stat_snapshots WHERE application_id=? AND season_id=''`)
     .bind(account.application_id).first();
   const names=['playtime','deaths','mobs','blocks'];
   const cols=['playtimeSeconds','deaths','mobKills','blocksMined'];
   const initial=cols.map((k,i)=>Math.max(metrics[k],Number(oldLifetime?.[
     ['playtime_seconds','deaths','mob_kills','blocks_mined'][i]
   ]||0)));
-  const upsertProgress=\`INSERT INTO minecraft_stat_progress (
+  const upsertProgress=`INSERT INTO minecraft_stat_progress (
     application_id,season_id,provider,provider_id,last_captured_at,
     last_playtime,last_deaths,last_mobs,last_blocks,
     total_playtime,total_deaths,total_mobs,total_blocks
   ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
   ON CONFLICT(application_id,season_id) DO UPDATE SET
-  \${names.map(name=>\`total_\${name}=
-    MIN(2147483647,minecraft_stat_progress.total_\${name}+
+  ${names.map(name=>`total_${name}=
+    MIN(2147483647,minecraft_stat_progress.total_${name}+
       CASE WHEN minecraft_stat_progress.provider=excluded.provider
         AND minecraft_stat_progress.provider_id=excluded.provider_id
-      THEN CASE WHEN excluded.last_\${name}>=minecraft_stat_progress.last_\${name}
-        THEN excluded.last_\${name}-minecraft_stat_progress.last_\${name}
-        ELSE excluded.last_\${name} END
-      ELSE 0 END)\`).join(',\n  ')},
-  \${names.map(name=>\`last_\${name}=excluded.last_\${name}\`).join(',\n  ')},
+      THEN CASE WHEN excluded.last_${name}>=minecraft_stat_progress.last_${name}
+        THEN excluded.last_${name}-minecraft_stat_progress.last_${name}
+        ELSE excluded.last_${name} END
+      ELSE 0 END)`).join(',\n  ')},
+  ${names.map(name=>`last_${name}=excluded.last_${name}`).join(',\n  ')},
   provider=excluded.provider,provider_id=excluded.provider_id,
   last_captured_at=excluded.last_captured_at
-  WHERE excluded.last_captured_at>minecraft_stat_progress.last_captured_at\`;
-  const snapshotFromProgress=\`INSERT INTO player_stat_snapshots
+  WHERE excluded.last_captured_at>minecraft_stat_progress.last_captured_at`;
+  const snapshotFromProgress=`INSERT INTO player_stat_snapshots
     (application_id,season_id,playtime_seconds,deaths,mob_kills,blocks_mined,last_synced_at)
     SELECT application_id,season_id,total_playtime,total_deaths,total_mobs,total_blocks,last_captured_at
     FROM minecraft_stat_progress WHERE application_id=? AND season_id=?
@@ -2802,13 +2802,13 @@ async function minecraftStatsIngest(req,env){
     playtime_seconds=excluded.playtime_seconds,deaths=excluded.deaths,
     mob_kills=excluded.mob_kills,blocks_mined=excluded.blocks_mined,
     last_synced_at=excluded.last_synced_at
-    WHERE excluded.last_synced_at>player_stat_snapshots.last_synced_at\`;
+    WHERE excluded.last_synced_at>player_stat_snapshots.last_synced_at`;
   const entry=(key,totals)=>env.DB.prepare(upsertProgress).bind(
     account.application_id,key,payload.provider,payload.providerId,capturedAt,
     metrics.playtimeSeconds,metrics.deaths,metrics.mobKills,metrics.blocksMined,...totals);
   const transaction=[
-    env.DB.prepare(\`INSERT OR IGNORE INTO minecraft_stat_receipts
-      (event_id,application_id,provider,provider_id,received_at) VALUES(?,?,?,?,?)\`)
+    env.DB.prepare(`INSERT OR IGNORE INTO minecraft_stat_receipts
+      (event_id,application_id,provider,provider_id,received_at) VALUES(?,?,?,?,?)`)
       .bind(payload.eventId,account.application_id,payload.provider,payload.providerId,receivedAt),
     entry('',initial),
     env.DB.prepare(snapshotFromProgress).bind(account.application_id,'')
