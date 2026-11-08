@@ -85,6 +85,7 @@
 .player-stat-icon{display:grid;place-items:center;flex:0 0 37px;width:37px;height:37px;border-radius:11px;
   border:1px solid color-mix(in srgb,var(--stat-ink) 20%,transparent);
   background:color-mix(in srgb,var(--stat-ink) 13%,transparent);color:var(--stat-ink)}
+.player-stat .player-stat-icon{color:var(--stat-ink)}
 .player-stat-icon svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round;stroke-width:1.8}
 .player-stat strong{font-size:clamp(14px,2vw,20px);line-height:1.2;letter-spacing:-.02em;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 .player-stat small{font-size:10px;color:var(--player-quiet);line-height:1.45}
