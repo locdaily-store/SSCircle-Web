@@ -2454,6 +2454,7 @@ async function memberCenterAPI(req,env,path,method) {
       ? 'season:'+form.settings.statSeasonId+':'+form.settings.statSeasonActivatedAt : '';
     return J({profile:memberProfile(profileRow),policy:memberPolicy(policyRow),
       activeStatSeason:activeStatKey,
+      activeStatSeasonTitle:seasonName.get(form.settings.statSeasonId)||'',
       accounts:(accounts.results||[]).map(a=>({provider:a.provider,username:a.username,verifiedAt:a.verified_at})),
       statistics:(stats.results||[]).map(a=>({seasonId:a.season_id,
         seasonTitle:a.season_id.startsWith('season:')
