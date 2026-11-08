@@ -3465,7 +3465,7 @@ async function sscServiceHealth(env){
 // Read-only D1 schema inspector for approved collaborators using GitHub Pages.
 // This route never returns row values, secrets, or a SQL execution capability.
 async function sscGithubD1Inspect(req, env, url) {
-  const allowedOrigin = String(env.SSCIRCLE_GITHUB_PAGES_ORIGIN || 'https://locdaily-store.github.io').trim().replace(/\\/$/, '');
+  const allowedOrigin = String(env.SSCIRCLE_GITHUB_PAGES_ORIGIN || 'https://locdaily-store.github.io').trim().replace(/\/$/, '');
   const origin = req.headers.get('Origin');
   if (origin && origin !== allowedOrigin)
     return bad('Asal permintaan tidak diizinkan.', 403);
