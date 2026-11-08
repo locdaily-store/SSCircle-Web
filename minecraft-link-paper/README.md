@@ -1,75 +1,68 @@
-# SSCircle Player Sync Paper · V10.45.4 (Direct, tanpa Velocity)
+# SSCircle Player Sync Paper V10.46.0
 
-## Persyaratan
-- **Paper 26.3, Java 25+, satu server online-mode**. Server memiliki koneksi internet keluar via HTTPS menuju website SSCircle di Cloudflare Pages + D1.
-- SSCircle website backend minimal V10.45 (endpoint `/api/minecraft/link/claim` dan Profile dengan password dashboard).
-- Secret server `SSCIRCLE_LINK_SERVER_SECRET` acak (minimum 32 karakter) disetel **sama** pada proses Paper dan Cloudflare Pages.
-- Gunakan akun Minecraft Java Premium autentik untuk tes pertama; Bedrock opsional setelah Geyser + Floodgate terpasang dan lolos uji.
+Penghubung akun Minecraft ke Profile SSCircle, tanpa Velocity. Plugin memakai HMAC, nonce, kode sekali-pakai 10 menit, dan konfirmasi ulang pada website. Satu anggota saat ini mempunyai **satu** akun Minecraft aktif; multi-account adalah fase berikutnya.
 
-## Instalasi Windows paling sederhana
-1. **Backup** world, konfigurasi server, dan D1 testing. Matikan Paper/Velocity yang lama.
-2. Gunakan Paper 26.3 dan Java 25. Jangan jalankan Velocity.
-3. Di `server.properties`: `online-mode=true`, `server-port=25565`, `server-ip=127.0.0.1` untuk lokal satu PC. Untuk akses LAN sesuaikan IP setelah uji awal.
-4. Di `config/paper-global.yml`: `proxies.velocity.enabled: false`. Di `spigot.yml`: `settings.bungeecord: false`. Jangan biarkan proxy forwarding aktif.
-5. Salin artifact `SSCircle-Player-Sync-Paper-10.45.4.jar` ke `Paper/plugins/`, lalu jalankan Paper sekali.
-6. Edit `Paper/plugins/SSCirclePlayerSync/config.yml`: ubah `endpoint` menjadi **domain HTTPS website SSCircle** tanpa path.
-7. Buat file privat `plugins/SSCirclePlayerSync/server-secret.txt` berisi secret satu baris yang **sama persis** dengan `SSCIRCLE_LINK_SERVER_SECRET` di Cloudflare Pages (Production/Preview sesuai domain). File ini mengalahkan environment variable Windows yang lama. Jalankan `/sscircle reload` sebagai OP, lalu `/sscircle status` dan `/sscircle diagnose`. Jika file tidak ada, plugin menggunakan environment yang valid; jika keduanya tidak ada, plugin membuat kunci lokal baru yang tetap harus disamakan dengan Cloudflare.
-8. Buka Minecraft Java Premium, Multiplayer → `127.0.0.1:25565`. Perintah `/sscircle status` harus memperlihatkan konfigurasi siap dan Java Premium.
-9. Masuk Profile website SSCircle sebagai anggota diterima **dengan password dashboard**, klik Buat kode penghubung, jalankan `/sscircle link SC-...` di Minecraft, lalu kembali ke Profile → Perbarui status → Konfirmasi identitas.
+## Dukungan autentikasi
 
-## Perbaikan V10.45.4: tab completion dan diagnosis
-- Ketik `/sscircle` lalu **spasi dan Tab** untuk memilih `help`, `status`, `link`; `reload` hanya muncul bagi pemain yang memiliki izin admin/OP.
-- Jalankan `/sscircle` tanpa argumen atau `/sscircle help` untuk melihat daftar dan deskripsi perintah.
-- Kode sekali pakai **tidak di-autocomplete** karena diambil secara privat dari website.
-- `/sscircle status` membedakan **domain HTTPS tidak valid** dari **secret belum terbaca** tanpa menampilkan nilainya.
-- Jika server masih offline-mode, buka `server.properties`, set `online-mode=true` untuk Java Premium tanpa proxy, hentikan seluruh proses Paper dan jalankan kembali. `/reload` Minecraft **bukan** pengganti restart Paper.
-- Jika website belum lengkap, edit `plugins/SSCirclePlayerSync/config.yml` → `endpoint: "https://domain-kamu.pages.dev"` dan set **`SSCIRCLE_LINK_SERVER_SECRET`** pada environment Windows dan Cloudflare; restart Paper.
-- Jika menjalankan Paper melalui panel/hosting, secret harus disetel pada **environment proses Paper** yang dijalankan oleh panel, bukan sekadar di terminal lain.
-- Website SSCircle Cloudflare harus sudah dideploy dengan endpoint V10.45+, D1 binding `DB`, dan secret yang sama.
+| Konfigurasi | Java Premium | Java dengan AuthMe (termasuk Non-Premium) | Bedrock |
+| --- | --- | --- | --- |
+| Paper `online-mode=true` | UUID Mojang terverifikasi | Tidak menerima login Non-Premium | XUID Floodgate |
+| Paper `online-mode=false` + AuthMe + PacketEvents + SSCircle mixed mode | Dapat masuk via AuthMe Premium Bypass (ditautkan sebagai **Java (AuthMe)**, bukan klaim Mojang Premium) | Login AuthMe wajib | XUID Floodgate |
 
-## Kontrol
-- `/sscircle help`: tampilkan daftar pilihan perintah.
-- `/sscircle status`: status konfigurasi dan jenis identitas yang terbaca, **bukan** bukti akun sudah linked.
-- `/sscircle link <kode>`: klaim kode sekali pakai 10 menit; tautan **belum selesai** sampai dikonfirmasi di website.
-- `/sscircle reload`: untuk OP; membaca ulang alamat website dan file secret privat tanpa restart. Perubahan environment variable memerlukan restart Paper.
-- Untuk mengganti akun, Profile website → Putuskan tautan (memerlukan verifikasi password).
+**Batasan kejujuran identitas:** API publik AuthMe v3 menyatakan apakah pemain terautentikasi, tetapi tidak membuktikan apakah login tertentu memakai password atau handshake Mojang. Karena itu, pada *mixed mode*, SSCircle menyimpan kedua jenis Java sebagai provider `java_offline` dengan label **Java (AuthMe / Server)**. Pemain Premium tetap bisa bermain/link, tetapi SSCircle tidak mengklaim UUID Mojang terverifikasi secara terpisah. Provider `java_premium` hanya dikeluarkan Paper `online-mode=true`. Jangan ubah klasifikasi ini berdasarkan nickname atau UUID v4 pada server offline.
 
-## Keamanan & batasan
-- **Java Non-Premium dan offline-mode selalu ditolak**. UUID offline serta nickname bukan bukti identitas.
-- Plugin login campuran seperti LibreLogin, AuthMe, nLogin, FastLogin, JPremium dan EasyAuth memblokir linking sampai tersedia adapter autentikasi yang terpercaya pada rilis selanjutnya.
-- Untuk Bedrock, pasang **Geyser-Spigot** dan **Floodgate-Spigot** pada Paper. Atur auth-type Floodgate pada Geyser. Plugin akan meminta bukti XUID melalui Floodgate; jika API Floodgate tidak ada/bermasalah, seluruh klaim ditolak, bukan dianggap Premium.
-- JAR V10.45 untuk Velocity **tidak perlu dipakai** dalam mode ini. Jangan menginstal plugin Velocity di Paper.
-- Tidak mengirim playtime, deaths, atau statistik otomatis; itu tahap terpisah.
-- Secret hanya boleh disimpan di file privat plugin atau environment proses, **bukan** `config.yml`, folder website/ZIP, chat, atau log. Perintah linking berisi kode sekali pakai; jangan gunakan pada livestream saat menampilkan chat/console secara publik.
-- Build CI membuktikan kompilasi; tes langsung pada Paper+Floodgate+Cloudflare staging tetap wajib sebelum server publik.
+## Jalur A: hanya Java Premium + Bedrock (paling aman untuk produksi saat ini)
 
-## Jika gagal
-- Tidak bisa masuk server: port 25565 sedang dipakai, server online-mode belum valid, atau server-ip tidak sesuai.
-- Pesan 'requires Velocity': Paper masih punya forwarding enabled, bukan plugin SSCircle.
-- '/sscircle' tidak dikenal: cek plugin terpasang benar di Paper dan `logs/latest.log`.
-- 'belum dikonfigurasi': cek `plugins/SSCirclePlayerSync/config.yml`, secret pada proses Paper, lalu restart.
-- HTTP 401/403: cek secret/identitas auth dan waktu sistem.
-- HTTP 404/410: kode sudah habis/keliru atau domain tidak cocok.
-- Cloudflare website belum mengeluarkan kode: cek binding D1 `DB`, `SESSION_SECRET`, login password dashboard, dan `SSCIRCLE_LINK_SERVER_SECRET` Cloudflare.
+1. Backup `world/`, playerdata, `plugins/`, dan D1 Cloudflare.
+2. Tetap `online-mode=true` pada `server.properties`, tanpa Velocity/proxy forwarding.
+3. Instal **Geyser-Spigot** dan **Floodgate-Spigot** dari situs resmi. Konfigurasikan Geyser dengan `auth-type: floodgate`, lalu restart Paper.
+4. Biarkan `authme-mixed-mode.enabled: false` pada konfigurasi SSCircle.
+5. Verifikasi Java Premium dan Bedrock dengan `/sscircle status`; OP `/sscircle diagnose`.
+6. Buat kode lewat Profile SSCircle (akun diterima + password dashboard aktif), jalankan `/sscircle link SC-...`, konfirmasi nama/edisi dari website.
 
-Dokumentasi lengkap pemasangan: `docs/V10.45.4-PAPER-DIRECT.md`.
+## Jalur B: Java Premium + Java Non-Premium + Bedrock di satu Paper (uji staging terlebih dahulu)
 
-## V10.45.4: Diagnosis koneksi website
+**Kebutuhan:** Paper 26.3 / Java 25, **AuthMeReloaded terbaru yang kompatibel**, **PacketEvents 2.x**, Geyser dan Floodgate. Jangan memasang plugin login lain (FastLogin, LibreLogin, nLogin, JPremium, EasyAuth, OpeNLogin) bersamaan. Cek kompatibilitas AuthMe dengan Geyser/Floodgate secara langsung.
 
-Jalankan /sscircle diagnose sebagai OP atau dari console, setelah ZIP website SSCircle V10.45.4 terpasang di Cloudflare. Plugin menguji sambungan HTTPS dan HMAC menggunakan payload kosong tanpa kode link atau identitas pemain.
+1. **Jangan ubah server produksi langsung.** Buat salinan server beserta backup world, inventory, statistik, permission dan database D1. Migrasi online-mode dapat mengubah UUID pemain dan nama file playerdata.
+2. Pada server **staging** Paper, atur `server.properties` → `online-mode=false`. Pastikan akses jaringan/firewall dan plugin login sudah dikonfigurasi sebelum server diakses publik.
+3. Instal `AuthMeReloaded` dan `PacketEvents 2.x` pada `plugins/`. Di `plugins/AuthMe/config.yml`, nyalakan `settings.enablePremium: true`. AuthMe membutuhkan PacketEvents untuk verifikasi Premium Bypass langsung tanpa proxy. Pertahankan `Hooks.bungeecord: false` jika server tidak menggunakan proxy.
+4. Instal Geyser + Floodgate pada Paper yang sama. Atur pengaturan Bedrock/Geyser dan autentikasi Floodgate sesuai panduan resmi. **AuthMe dapat menghalangi perintah sebelum login**: pastikan akun Bedrock punya alur autentikasi kompatibel melalui integrasi yang telah diuji, jangan mematikan autentikasi Java untuk semua pemain.
+5. Edit `plugins/SSCirclePlayerSync/config.yml`:
 
-- Sambungan WEBSITE BERHASIL: domain dan secret telah cocok secara end-to-end.
-- HTTP 401 SIGNATURE_INVALID: secret Paper dan Cloudflare berbeda, atau environment Production / Preview salah.
-- HTTP 401 CLOCK_SKEW: jam Windows tidak sinkron (selisih > 90 detik).
-- HTTP 503 SERVER_SECRET_MISSING: secret belum diaktifkan di website.
-- HTTP 404: website belum memiliki endpoint baru. Upload ZIP website terbaru.
-- HTTP 403 tanpa kode SSCircle: cek Cloudflare Access/WAF dan Security Events. Jangan mematikan semua perlindungan.
-- HTTP 401/403 saat link: Minecraft kini menampilkan kategori aman jika disediakan website, tanpa membocorkan kode rahasia.
+   ```yaml
+   endpoint: "https://sscircle.pages.dev"
+   authme-mixed-mode:
+     enabled: true
+   ```
 
-Jika diagnosa berhasil, buat kode penghubung baru dan lakukan link dari Minecraft. Secret, kode link, HMAC dan token tidak boleh dibagikan.
+   Jangan mengganti `server-secret.txt` jika sudah benar. Sisi Cloudflare harus memakai backend V10.46.0+ dan `SSCIRCLE_LINK_SERVER_SECRET` yang sama. Lakukan restart Paper, tidak cukup `/reload`.
+6. Java Non-Premium: `/register` satu kali dan `/login` di sesi berikutnya melalui AuthMe. SSCircle memeriksa API `isAuthenticated`, `isRegistered`, dan `!isUnrestricted` sebelum mengizinkan linking.
+7. Java Premium: pemain yang telah login AuthMe dapat menjalankan `/premium` lalu reconnect untuk mekanisme verifikasi Mojang milik AuthMe. SSCircle akan menautkannya sebagai **Java (AuthMe)** pada mode campuran agar tidak membuat klaim Mojang yang belum dapat dibuktikan dari API.
+8. Bedrock: masuk melalui Geyser/Floodgate, dan pastikan AuthMe tidak mengunci command `/sscircle`. Identitas website berasal dari XUID **Floodgate** yang diverifikasi, bukan username.
+9. OP jalankan `/sscircle status` dan `/sscircle diagnose`. Di Profile akun anggota Diterima yang telah login dengan password dashboard, buat kode baru, jalankan `/sscircle link <kode>`, perbarui Profile, dan **Konfirmasi**.
 
-## V10.45.4: Perbaikan autentikasi 401 SIGNATURE_INVALID
+## Pengaturan website dan secret
 
-Saat kunci di Windows tidak konsisten dengan Cloudflare, salin **satu kunci yang identik** ke dua tempat: file privat server `plugins/SSCirclePlayerSync/server-secret.txt` (satu baris ASCII tanpa tanda kutip, 32–256 karakter) dan Cloudflare Pages → Settings → Variables and Secrets → `SSCIRCLE_LINK_SERVER_SECRET` pada environment Production/Preview yang dipakai domain. Lakukan deployment ulang Cloudflare bila perubahan secret belum aktif. File lokal diprioritaskan atas environment lama. Jalankan `/sscircle reload`, `/sscircle status` (OP bisa melihat *sumber* kunci tanpa melihat nilainya) lalu `/sscircle diagnose` sampai koneksi dinyatakan berhasil. Setelah itu buat kode link baru di Profile.
+- Website menggunakan Cloudflare Pages + D1, `DB`, `SESSION_SECRET`, `ADMIN_PASSWORD`, dan `SSCIRCLE_LINK_SERVER_SECRET`. URL website dapat diuji di `/api/health`.
+- `plugins/SSCirclePlayerSync/server-secret.txt` (satu baris ASCII 32–256 karakter) memiliki prioritas atas environment Windows. Nilainya harus sama dengan secret Cloudflare **Production**. Jangan commit, log, screenshot atau live-stream nilainya.
+- Kunci HMAC tidak menggantikan autentikasi AuthMe/Floodgate. Tidak ada bypass login untuk Java yang belum terautentikasi.
+- Status akun dan kode tersimpan privat di website; kode linking tidak di-autocomplete.
 
-Jika file dan environment sama-sama kosong, plugin membuat file token acak sekali saja. **Token ini tidak otomatis tersalin ke Cloudflare** sehingga kedua sisi harus tetap dipasangkan secara privat. Jangan mengunggahnya ke GitHub, folder situs, pesan chat, atau tangkapan layar. Jangan menonaktifkan HMAC, online-mode, atau proteksi Cloudflare untuk mengatasi masalah.
+## Perintah
+
+- `/sscircle help` menampilkan bantuan dan autocomplete.
+- `/sscircle status` menampilkan mode server dan jenis bukti identitas pemain.
+- `/sscircle diagnose` (OP) menguji HTTPS, HMAC, dan konfigurasi Cloudflare.
+- `/sscircle link SC-...` mengirim klaim kode sekali-pakai setelah autentikasi.
+- `/sscircle reload` (OP) memuat ulang konfigurasi/file kunci. Mengubah plugin AuthMe/PacketEvents memerlukan restart.
+
+## Jika tidak berhasil
+
+- Java di offline-mode tetap ditolak: cek `authme-mixed-mode.enabled=true`, `AuthMe`, `packetevents` dan autentikasi login pengguna. Aktifkan **di staging saja**.
+- Bedrock tidak terdeteksi: cek Floodgate, Geyser, XUID dan urutan plugin; AuthMe mungkin membatasi command sebelum login.
+- HTTP 401: periksa kesamaan secret + jam server.
+- HTTP 503: jalankan `/api/health` dan lihat apakah binding Minecraft sudah `ready`.
+- `Kode sudah dipakai`: perbarui Profile dan konfirmasi; jika kedaluwarsa buat kode baru.
+- Paket plugin ini tidak mengubah data pemain lama atau otomatis memigrasi UUID, statistik maupun inventory.
+- Bukti CI/build bukan bukti sudah teruji pada servermu. Ketiga jenis akun harus diuji secara end-to-end di staging sebelum dipublikasikan.
