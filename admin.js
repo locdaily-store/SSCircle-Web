@@ -101,6 +101,8 @@ function tab(id) {
     window.SSCircleSeasonsAdmin?.schedule();
   if (id === 'members-admin')
     void window.SSCircleMemberCenterAdmin?.load();
+  if (id === 'minecraft-sync-admin')
+    void window.SSCircleMinecraftSyncAdmin?.load();
   if (id === 'profile-admin')
     window.SSCircleProfileAdmin?.schedule();
   if (id === 'theme')
