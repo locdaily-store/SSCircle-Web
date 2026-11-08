@@ -29,43 +29,62 @@ import java.nio.file.StandardCopyOption;
 import java.security.GeneralSecurityException;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
- * V10.47: server-authoritative Vanilla statistics, cumulative snapshots,
- * bounded persistent coalescing queue, and signed retry-safe HTTP delivery.
- *
- * All Bukkit reads and mutable queue operations occur on the main server
- * thread. The HTTP worker only schedules completion on the server thread.
+ * V10.47.2: Bukkit stats are read on the server thread in bounded slices.
+ * No blocking HTTP or disk writes run on that tick. The newest snapshot for
+ * each identity is coalesced in a durable, bounded, async-flushed queue.
  */
 final class PaperStatsSync implements Listener {
-    private static final String ROUTE = "/api/minecraft/stats/ingest";
-    private static final int MAX_PENDING = 1024;
-    private static final long MAX_FILE_BYTES = 2_000_000;
-    private static final long HTTP_PERIOD_TICKS = 60L;
+    private static final String ROUTE="/api/minecraft/stats/ingest";
+    private static final int MAX_PENDING=1024;
+    private static final long MAX_FILE_BYTES=2_000_000;
+    private static final long HTTP_PERIOD_TICKS=60L;
     private final SSCirclePaperLinkPlugin plugin;
     private final HttpClient http;
     private final Function<Player, SSCirclePaperLinkPlugin.Identity> resolveIdentity;
     private final Supplier<String> endpoint;
     private final Supplier<String> secret;
-    private final LinkedHashMap<String, Snapshot> pending = new LinkedHashMap<>();
+    private final LinkedHashMap<String,Snapshot> pending=new LinkedHashMap<>();
+    private final Map<String,Snapshot> latestSample=new HashMap<>();
+    private final ArrayDeque<UUID> playersToSample=new ArrayDeque<>();
+    private final Set<UUID> enqueuedPlayers=new HashSet<>();
+    private final List<Material> blockMaterials=new ArrayList<>();
     private final Path queueFile;
-    private boolean inFlight;
-    private long nextAttemptAtMs;
-    private long retryDelayMs=3000L;
-    private String lastDelivery = "Belum ada data dikirim";
+    private final ExecutorService diskWriter=Executors.newSingleThreadExecutor(task->{
+        Thread thread=new Thread(task,"SSCircle-Stats-Queue-IO");
+        thread.setDaemon(true);
+        return thread;
+    });
+    private final AtomicBoolean diskError=new AtomicBoolean(false);
+    private CaptureJob activeJob;
+    private boolean dirty,inFlight;
+    private int blockReadsPerTick=24;
+    private long nextAttemptAtMs,retryDelayMs=3000L;
+    private long lastPeriodicCaptureMs;
+    private int normalIntervalSeconds=300;
+    private String lastDelivery="Belum ada data dikirim";
 
-    PaperStatsSync(SSCirclePaperLinkPlugin plugin, HttpClient http,
-                   Function<Player, SSCirclePaperLinkPlugin.Identity> resolveIdentity,
-                   Supplier<String> endpoint, Supplier<String> secret) {
+    PaperStatsSync(SSCirclePaperLinkPlugin plugin,HttpClient http,
+                   Function<Player,SSCirclePaperLinkPlugin.Identity> resolveIdentity,
+                   Supplier<String> endpoint,Supplier<String> secret){
         this.plugin=plugin;
         this.http=http;
         this.resolveIdentity=resolveIdentity;
@@ -74,89 +93,177 @@ final class PaperStatsSync implements Listener {
         this.queueFile=plugin.getDataFolder().toPath().resolve("stats-queue.properties");
     }
 
-    void start() {
+    void start(){
         loadQueue();
-        plugin.getServer().getPluginManager().registerEvents(this,plugin);
+        for(Material material:Material.values()){
+            if(material.isBlock())blockMaterials.add(material);
+        }
+        blockReadsPerTick=Math.max(4,Math.min(96,
+            plugin.getConfig().getInt("stats-sync.block-reads-per-tick",24)));
         int interval=Math.max(60,Math.min(3600,
             plugin.getConfig().getInt("stats-sync.interval-seconds",300)));
-        plugin.getServer().getScheduler().runTaskTimer(plugin,this::captureOnline,100L,20L*interval);
+        normalIntervalSeconds=interval;
+        int flush=Math.max(3,Math.min(60,
+            plugin.getConfig().getInt("stats-sync.queue-flush-seconds",10)));
+        plugin.getServer().getPluginManager().registerEvents(this,plugin);
+        plugin.getServer().getScheduler().runTaskTimer(plugin,this::captureOneTick,20L,1L);
+        plugin.getServer().getScheduler().runTaskTimer(plugin,this::captureScheduled,100L,20L*interval);
         plugin.getServer().getScheduler().runTaskTimer(plugin,this::sendNext,140L,HTTP_PERIOD_TICKS);
-        plugin.getLogger().info("Player stats V10.47 siap; interval "+interval+
-            " detik, antrean tersimpan: "+pending.size());
+        plugin.getServer().getScheduler().runTaskTimer(plugin,this::flushQueue,20L*flush,20L*flush);
+        plugin.getLogger().info("Stats V10.47.2: "+blockReadsPerTick+
+            " block reads/tick, interval "+interval+"s, antrean "+pending.size());
     }
 
-    void stop() {
-        if (enabled()) captureOnline();
-        persistQueue();
+    void stop(){
+        // Short synchronous reads only; do not scan all materials on shutdown.
+        if(enabled())for(Player player:Bukkit.getOnlinePlayers())captureQuickExit(player);
+        flushQueue();
+        diskWriter.shutdown();
+        try {
+            if(!diskWriter.awaitTermination(3,TimeUnit.SECONDS))
+                plugin.getLogger().warning("Disk queue belum selesai ditulis; pastikan shutdown selesai bersih.");
+        }catch(InterruptedException ex){
+            Thread.currentThread().interrupt();
+            plugin.getLogger().warning("Shutdown queue statistik terinterupsi.");
+        }
     }
 
-    void triggerNow() {
+    void triggerNow(){
         captureOnline();
         sendNext();
     }
 
-    int pendingCount() { return pending.size(); }
-    String deliveryStatus() { return lastDelivery; }
-
-    private boolean enabled() {
-        return plugin.getConfig().getBoolean("stats-sync.enabled",true);
-    }
+    int pendingCount(){return pending.size();}
+    String deliveryStatus(){return lastDelivery;}
+    private boolean enabled(){return plugin.getConfig().getBoolean("stats-sync.enabled",true);}
 
     @EventHandler(priority=EventPriority.MONITOR)
-    public void onJoin(PlayerJoinEvent event) {
+    public void onJoin(PlayerJoinEvent event){
         if(!enabled())return;
-        // Delay until authentication has had an opportunity to finish.
+        UUID id=event.getPlayer().getUniqueId();
         plugin.getServer().getScheduler().runTaskLater(plugin,()->{
-            if(event.getPlayer().isOnline()) capture(event.getPlayer());
+            Player player=Bukkit.getPlayer(id);
+            if(player!=null&&player.isOnline())enqueue(player);
         },20L*60);
     }
 
     @EventHandler(priority=EventPriority.LOWEST)
-    public void onQuit(PlayerQuitEvent event) {
-        if(enabled())capture(event.getPlayer());
+    public void onQuit(PlayerQuitEvent event){
+        if(!enabled())return;
+        UUID id=event.getPlayer().getUniqueId();
+        playersToSample.remove(id);
+        enqueuedPlayers.remove(id);
+        if(activeJob!=null&&activeJob.uuid.equals(id))activeJob=null;
+        captureQuickExit(event.getPlayer());
     }
 
-    private void captureOnline() {
+    private void captureScheduled(){
         if(!enabled())return;
-        for(Player player:Bukkit.getOnlinePlayers())capture(player);
+        int online=Bukkit.getOnlinePlayers().size();
+        int threshold=Math.max(10,Math.min(200,
+            plugin.getConfig().getInt("stats-sync.busy-player-threshold",30)));
+        int busyInterval=Math.max(normalIntervalSeconds,Math.min(3600,
+            plugin.getConfig().getInt("stats-sync.busy-interval-seconds",600)));
+        if(plugin.getConfig().getBoolean("stats-sync.adaptive-enabled",true)
+            &&online>=threshold
+            &&System.currentTimeMillis()-lastPeriodicCaptureMs<busyInterval*1000L)return;
+        lastPeriodicCaptureMs=System.currentTimeMillis();
+        captureOnline();
     }
 
-    private void capture(Player player) {
+    private void captureOnline(){
         if(!enabled())return;
-        SSCirclePaperLinkPlugin.Identity id=resolveIdentity.apply(player);
-        if(id==null)return; // Never capture pre-login/untrusted identities.
-        int ticks=Math.max(0,player.getStatistic(Statistic.PLAY_ONE_MINUTE));
-        int playtime=ticks/20; // This Bukkit stat is ticks, despite its historic name.
-        int deaths=Math.max(0,player.getStatistic(Statistic.DEATHS));
-        int mobs=Math.max(0,player.getStatistic(Statistic.MOB_KILLS));
-        long blocks=0;
-        // Vanilla stores mined blocks per material. Aggregate without resetting.
-        for(Material material:Material.values()){
-            if(!material.isBlock())continue;
-            try{
-                blocks+=Math.max(0,player.getStatistic(Statistic.MINE_BLOCK,material));
-            }catch(IllegalArgumentException ignored){
-                // Some block materials cannot be used by this statistic.
+        // Enqueue only. Expensive per-block statistics never run in this loop.
+        for(Player player:Bukkit.getOnlinePlayers())enqueue(player);
+    }
+
+    private void enqueue(Player player){
+        if(!player.isOnline()||enqueuedPlayers.contains(player.getUniqueId()))return;
+        enqueuedPlayers.add(player.getUniqueId());
+        playersToSample.addLast(player.getUniqueId());
+    }
+
+    private void captureOneTick(){
+        if(!enabled())return;
+        if(activeJob==null){
+            while(!playersToSample.isEmpty()){
+                UUID uuid=playersToSample.removeFirst();
+                enqueuedPlayers.remove(uuid);
+                Player player=Bukkit.getPlayer(uuid);
+                if(player==null||!player.isOnline())continue;
+                SSCirclePaperLinkPlugin.Identity identity=resolveIdentity.apply(player);
+                if(identity==null)continue; // Never read stats for an unauthenticated player.
+                activeJob=new CaptureJob(uuid,identity,
+                    Math.max(0,player.getStatistic(Statistic.PLAY_ONE_MINUTE))/20,
+                    Math.max(0,player.getStatistic(Statistic.DEATHS)),
+                    Math.max(0,player.getStatistic(Statistic.MOB_KILLS)));
+                break;
             }
-            if(blocks>=Integer.MAX_VALUE){blocks=Integer.MAX_VALUE;break;}
         }
-        Snapshot snap=new Snapshot(UUID.randomUUID().toString(),id.provider(),
-            id.verifiedId(),id.authSource(),Instant.now().toString(),playtime,
-            deaths,mobs,(int)blocks);
-        String key=snap.provider()+":"+snap.providerId();
-        pending.remove(key); // Coalesce older unacknowledged snapshots per identity.
-        if(pending.size()>=MAX_PENDING){
-            String oldest=pending.keySet().iterator().next();
-            pending.remove(oldest);
-            plugin.getLogger().warning("Antrean statistik penuh, snapshot paling lama diganti.");
+        if(activeJob==null)return;
+        Player player=Bukkit.getPlayer(activeJob.uuid);
+        if(player==null||!player.isOnline()){
+            activeJob=null;
+            return;
         }
-        pending.put(key,snap);
-        persistQueue();
+        int budget=blockReadsPerTick;
+        while(budget-->0&&activeJob.index<blockMaterials.size()){
+            Material material=blockMaterials.get(activeJob.index++);
+            try{
+                activeJob.blocks+=Math.max(0,player.getStatistic(Statistic.MINE_BLOCK,material));
+            }catch(IllegalArgumentException ignored){
+                // Material not accepted by this Vanilla statistic.
+            }
+            if(activeJob.blocks>=Integer.MAX_VALUE){
+                activeJob.blocks=Integer.MAX_VALUE;
+                activeJob.index=blockMaterials.size();
+                break;
+            }
+        }
+        if(activeJob.index>=blockMaterials.size()){
+            SSCirclePaperLinkPlugin.Identity id=activeJob.identity;
+            captureFinished(id,activeJob.playtime,activeJob.deaths,activeJob.mobs,
+                (int)activeJob.blocks);
+            activeJob=null;
+        }
     }
 
-    private void sendNext() {
-        if(!enabled()||inFlight||pending.isEmpty()
-            ||System.currentTimeMillis()<nextAttemptAtMs)return;
+    private void captureQuickExit(Player player){
+        SSCirclePaperLinkPlugin.Identity id=resolveIdentity.apply(player);
+        if(id==null)return;
+        String key=id.provider()+":"+id.verifiedId();
+        Snapshot previous=latestSample.get(key);
+        // Without a full material scan, block totals are unknown. Avoid
+        // misleading zeros or a reset caused by an incomplete snapshot.
+        if(previous==null)return;
+        captureFinished(id,Math.max(0,player.getStatistic(Statistic.PLAY_ONE_MINUTE))/20,
+            Math.max(0,player.getStatistic(Statistic.DEATHS)),
+            Math.max(0,player.getStatistic(Statistic.MOB_KILLS)),
+            previous.blocksMined());
+    }
+
+    private void captureFinished(SSCirclePaperLinkPlugin.Identity id,int playtime,
+                                 int deaths,int mobs,int blocks){
+        String key=id.provider()+":"+id.verifiedId();
+        Snapshot old=latestSample.get(key);
+        if(old!=null&&old.playtimeSeconds()==playtime&&old.deaths()==deaths
+            &&old.mobKills()==mobs&&old.blocksMined()==blocks)return;
+        Snapshot snapshot=new Snapshot(UUID.randomUUID().toString(),id.provider(),
+            id.verifiedId(),id.authSource(),Instant.now().toString(),
+            playtime,deaths,mobs,blocks);
+        latestSample.put(key,snapshot);
+        pending.remove(key); // Coalesce older unacknowledged snapshots.
+        if(pending.size()>=MAX_PENDING){
+            pending.remove(pending.keySet().iterator().next());
+            plugin.getLogger().warning("Antrean stats penuh; snapshot tertua diganti.");
+        }
+        pending.put(key,snapshot);
+        dirty=true;
+    }
+
+    private void sendNext(){
+        if(!enabled()||inFlight||pending.isEmpty()||
+            System.currentTimeMillis()<nextAttemptAtMs)return;
         String host=endpoint.get(),token=secret.get();
         if(host==null||host.isBlank()||!SecretFileStore.isValidSecret(token))return;
         Map.Entry<String,Snapshot> entry=pending.entrySet().iterator().next();
@@ -166,8 +273,7 @@ final class PaperStatsSync implements Listener {
         long timestamp=System.currentTimeMillis()/1000;
         String nonce=UUID.randomUUID().toString();
         try {
-            String signed="POST\n"+ROUTE+"\n"+timestamp+"\n"+nonce+"\n"+json;
-            String signature=hmac(token,signed);
+            String signature=hmac(token,"POST\n"+ROUTE+"\n"+timestamp+"\n"+nonce+"\n"+json);
             HttpRequest request=HttpRequest.newBuilder()
                 .uri(URI.create(host+ROUTE))
                 .timeout(Duration.ofSeconds(12))
@@ -181,102 +287,133 @@ final class PaperStatsSync implements Listener {
             http.sendAsync(request,HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
                 .whenComplete((response,error)->{
                     if(!plugin.isEnabled())return;
-                    try {
+                    try{
                         plugin.getServer().getScheduler().runTask(plugin,
                             ()->finishRequest(key,snapshot.eventId(),response,error));
                     }catch(IllegalPluginAccessException ignored){}
                 });
-        } catch(Exception error){
-            lastDelivery="Pengiriman tertunda; periksa domain atau kunci";
+        }catch(Exception ex){
+            inFlight=false;
+            scheduleRetry();
+            lastDelivery="Pengiriman tertunda; periksa domain atau kunci.";
         }
     }
 
     private void finishRequest(String key,String eventId,
-                               HttpResponse<String> response,Throwable failure) {
+                               HttpResponse<String> response,Throwable failure){
         inFlight=false;
         if(failure!=null||response==null){
             scheduleRetry();
-            lastDelivery="Jaringan tidak tersedia, antrean disimpan";
+            lastDelivery="Jaringan terputus; antrean aman di disk.";
             return;
         }
         int code=response.statusCode();
         String body=response.body()==null?"":response.body();
-        boolean acknowledged=code==200 && body.contains("\"ok\":true");
-        boolean discard=code==404 && body.contains("STATS_NOT_LINKED")
-            ||code==410 && body.contains("STATS_PRELINK")
-            ||code==400 && body.contains("STATS_INVALID");
+        boolean acknowledged=code==200&&body.contains("\"ok\":true");
+        boolean discard=(code==404&&body.contains("STATS_NOT_LINKED"))
+            ||(code==410&&body.contains("STATS_PRELINK"))
+            ||(code==400&&body.contains("STATS_INVALID"));
         if(acknowledged||discard){
             retryDelayMs=3000L;
             nextAttemptAtMs=0L;
-            // An in-flight older snapshot must NOT delete a newer coalesced one.
             Snapshot current=pending.get(key);
+            // A response to an old in-flight event cannot delete newer samples.
             if(current!=null&&current.eventId().equals(eventId)){
                 pending.remove(key);
-                persistQueue();
+                dirty=true;
             }
             lastDelivery=acknowledged?"Statistik berhasil tersinkron":
-                "Akun belum tertaut atau snapshot tidak berlaku; menunggu sampel berikutnya";
+                "Akun belum tertaut; menunggu statistik berikutnya.";
         }else{
             scheduleRetry();
-            lastDelivery="HTTP "+code+"; data aman di antrean untuk dicoba lagi";
+            lastDelivery="HTTP "+code+"; statistik disimpan dan akan dicoba ulang.";
         }
     }
 
-    private void scheduleRetry() {
+    private void scheduleRetry(){
         nextAttemptAtMs=System.currentTimeMillis()+retryDelayMs;
         retryDelayMs=Math.min(300000L,retryDelayMs*2L);
     }
 
-    private static String hmac(String secret,String value) throws GeneralSecurityException {
+    private static String hmac(String secret,String value)throws GeneralSecurityException{
         Mac mac=Mac.getInstance("HmacSHA256");
         mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8),"HmacSHA256"));
         return Base64.getUrlEncoder().withoutPadding().encodeToString(
             mac.doFinal(value.getBytes(StandardCharsets.UTF_8)));
     }
 
-    private void loadQueue() {
+    private void loadQueue(){
         if(!Files.exists(queueFile,LinkOption.NOFOLLOW_LINKS))return;
-        try {
+        try{
             if(!Files.isRegularFile(queueFile,LinkOption.NOFOLLOW_LINKS)
-                ||Files.size(queueFile)>MAX_FILE_BYTES)throw new IOException("Queue file invalid");
+                ||Files.size(queueFile)>MAX_FILE_BYTES)throw new IOException("Invalid queue file");
             Properties props=new Properties();
             try(InputStream in=Files.newInputStream(queueFile)){props.load(in);}
             int count=Math.min(MAX_PENDING,Integer.parseInt(props.getProperty("count","0")));
             for(int i=0;i<count;i++){
-                Snapshot s=Snapshot.fromStorage(props.getProperty("item."+i,""));
-                if(s!=null)pending.put(s.provider()+":"+s.providerId(),s);
+                Snapshot snap=Snapshot.fromStorage(props.getProperty("item."+i,""));
+                if(snap!=null)pending.put(snap.provider()+":"+snap.providerId(),snap);
             }
         }catch(Exception ex){
-            plugin.getLogger().warning("Antrean statistik tidak bisa dibaca; tidak mengirim data yang rusak.");
+            plugin.getLogger().warning("Antrean statistik tidak bisa dibaca; data tidak valid tidak dikirim.");
             pending.clear();
         }
     }
 
-    private void persistQueue() {
-        Path temp=null;
-        try {
+    private void flushQueue(){
+        if(diskError.getAndSet(false))dirty=true;
+        if(!dirty)return;
+        dirty=false;
+        List<Snapshot> copy=new ArrayList<>(pending.values());
+        try{
+            diskWriter.submit(()->writeQueue(copy));
+        }catch(RuntimeException ignored){
+            plugin.getLogger().warning("Antrean statistik belum bisa disimpan.");
+            dirty=true;
+        }
+    }
+
+    private void writeQueue(List<Snapshot> copy){
+        Path temporary=null;
+        try{
             Files.createDirectories(queueFile.getParent());
-            if(Files.isSymbolicLink(queueFile))throw new IOException("Queue cannot be symlink");
-            Properties p=new Properties();
-            p.setProperty("count",Integer.toString(pending.size()));
-            int i=0;
-            for(Snapshot s:pending.values())p.setProperty("item."+(i++),s.toStorage());
-            temp=Files.createTempFile(queueFile.getParent(),"stats-queue-",".tmp");
-            try(OutputStream out=Files.newOutputStream(temp)){p.store(out,"SSCircle private stats queue");}
-            try{
-                Files.move(temp,queueFile,StandardCopyOption.REPLACE_EXISTING,StandardCopyOption.ATOMIC_MOVE);
-            }catch(AtomicMoveNotSupportedException unsupported){
-                Files.move(temp,queueFile,StandardCopyOption.REPLACE_EXISTING);
+            if(Files.isSymbolicLink(queueFile))throw new IOException("Queue symlink forbidden");
+            Properties props=new Properties();
+            props.setProperty("count",Integer.toString(copy.size()));
+            int index=0;
+            for(Snapshot s:copy)props.setProperty("item."+(index++),s.toStorage());
+            temporary=Files.createTempFile(queueFile.getParent(),"stats-queue-",".tmp");
+            try(OutputStream out=Files.newOutputStream(temporary)){
+                props.store(out,"SSCircle private stats queue");
             }
-        }catch(IOException error){
-            plugin.getLogger().warning("Gagal menyimpan antrean statistik; cek izin folder server.");
+            try{
+                Files.move(temporary,queueFile,
+                    StandardCopyOption.REPLACE_EXISTING,StandardCopyOption.ATOMIC_MOVE);
+            }catch(AtomicMoveNotSupportedException unsupported){
+                Files.move(temporary,queueFile,StandardCopyOption.REPLACE_EXISTING);
+            }
+        }catch(IOException ex){
+            diskError.set(true);
+            plugin.getLogger().warning("Antrean statistik gagal ditulis; periksa penyimpanan host.");
         }finally{
-            if(temp!=null)try{Files.deleteIfExists(temp);}catch(IOException ignored){}
+            if(temporary!=null)try{Files.deleteIfExists(temporary);}catch(IOException ignored){}
+        }
+    }
+
+    private static final class CaptureJob{
+        final UUID uuid;
+        final SSCirclePaperLinkPlugin.Identity identity;
+        final int playtime,deaths,mobs;
+        int index;
+        long blocks;
+        CaptureJob(UUID uuid,SSCirclePaperLinkPlugin.Identity identity,int playtime,int deaths,int mobs){
+            this.uuid=uuid;this.identity=identity;
+            this.playtime=playtime;this.deaths=deaths;this.mobs=mobs;
         }
     }
 
     record Snapshot(String eventId,String provider,String providerId,String authSource,
-                    String capturedAt,int playtimeSeconds,int deaths,int mobKills,int blocksMined) {
+                    String capturedAt,int playtimeSeconds,int deaths,int mobKills,int blocksMined){
         String toJson(){
             return "{\"eventId\":\""+eventId+"\",\"provider\":\""+provider
                 +"\",\"providerId\":\""+providerId+"\",\"authSource\":\""+authSource
@@ -289,7 +426,7 @@ final class PaperStatsSync implements Listener {
                 Integer.toString(playtimeSeconds),Integer.toString(deaths),
                 Integer.toString(mobKills),Integer.toString(blocksMined));
         }
-        static Snapshot fromStorage(String text) {
+        static Snapshot fromStorage(String text){
             try{
                 String[] p=text.split("\\|",-1);
                 if(p.length!=9||p[2].length()>64||p[3].length()>32)return null;

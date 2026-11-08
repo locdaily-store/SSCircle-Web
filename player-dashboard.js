@@ -84,29 +84,48 @@
     $('player-edition').textContent=(payload.accounts||[]).map(a=>
       labelByProvider[a.provider]||'Minecraft').join(', ')||'Belum terhubung';
     drawAwards(payload.achievements);
-    const stats=(payload.statistics||[]).find(a=>!a.seasonId);
-    const statIds=['player-stat-playtime','player-stat-deaths',
-      'player-stat-mobkills','player-stat-blocks'];
-    if(stats){
+    const list=Array.isArray(payload.statistics)?payload.statistics:[];
+    const selector=$('player-season-select');
+    const previous=selector.value;
+    const active=payload.activeStatSeason||'';
+    const names=new Map(list.filter(a=>a.seasonId).map(a=>[a.seasonId,a.seasonTitle||'Season']));
+    if(active&&!names.has(active))names.set(active,payload.activeStatSeasonTitle||'Season aktif');
+    selector.replaceChildren();
+    const all=document.createElement('option');all.value='';all.textContent='Sepanjang masa';selector.append(all);
+    for(const [id,name] of names){
+      const option=document.createElement('option');option.value=id;option.textContent=name;selector.append(option);
+    }
+    selector.disabled=names.size===0;
+    selector.value=previous && names.has(previous)?previous:active && names.has(active)?active:'';
+    function showCurrentStats(){
+      const stats=list.find(a=>a.seasonId===selector.value);
+      const ids=['player-stat-playtime','player-stat-deaths','player-stat-mobkills','player-stat-blocks'];
       const number=new Intl.NumberFormat('id-ID');
+      const archived=list.filter(a=>a.seasonId).length;
+      $('player-stat-seasons').textContent=list.length?number.format(archived):'Belum tersedia';
+      if(!stats){
+        ids.forEach(id=>{$(id).textContent='Belum tersedia';});
+        $('player-stats-sync-status').textContent=
+          selector.value?'Belum ada statistik yang direkam untuk Season ini.':
+          'Belum ada data resmi dari server. Statistik akan muncul setelah sinkronisasi pertama berhasil.';
+        $('player-stats-tag').textContent='Menunggu sinkronisasi';
+        return;
+      }
       const seconds=Math.max(0,Math.floor(Number(stats.playtimeSeconds)||0));
       const hours=Math.floor(seconds/3600),minutes=Math.floor((seconds%3600)/60);
       const duration=hours>0?number.format(hours)+' jam '+minutes+' menit':
         minutes>0?number.format(minutes)+' menit':'Kurang dari 1 menit';
       const values=[duration,number.format(stats.deaths||0),
         number.format(stats.mobKills||0),number.format(stats.blocksMined||0)];
-      statIds.forEach((id,index)=>{$(id).textContent=values[index];});
-      const stamp=Date.parse(stats.updatedAt||'');
-      $('player-stats-sync-status').textContent=Number.isFinite(stamp)
-        ?'Sinkron terakhir: '+new Date(stamp).toLocaleString('id-ID')
+      ids.forEach((id,index)=>{$(id).textContent=values[index];});
+      const timestamp=Date.parse(stats.updatedAt||'');
+      $('player-stats-sync-status').textContent=Number.isFinite(timestamp)
+        ?'Sinkron terakhir: '+new Date(timestamp).toLocaleString('id-ID')
         :'Data berasal dari server Minecraft SSCircle';
       $('player-stats-tag').textContent='Tersinkron';
-    }else{
-      statIds.forEach(id=>{$(id).textContent='Belum tersedia';});
-      $('player-stats-sync-status').textContent=
-        'Belum ada data resmi dari server. Statistik akan muncul setelah sinkronisasi pertama berhasil.';
-      $('player-stats-tag').textContent='Menunggu sinkronisasi';
     }
+    selector.onchange=showCurrentStats;
+    showCurrentStats();
   }
   async function loadProfile() {
     try {

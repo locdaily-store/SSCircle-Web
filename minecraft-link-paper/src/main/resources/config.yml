@@ -22,3 +22,12 @@ authme-mixed-mode:
 stats-sync:
   enabled: true
   interval-seconds: 300
+  # Saat >=30 pemain online, sinkronisasi berkala menjadi tiap 600 detik.
+  # Join/quit dan /sscircle sync tetap dapat memicu pembacaan sendiri.
+  adaptive-enabled: true
+  busy-player-threshold: 30
+  busy-interval-seconds: 600
+  # Limit 24 pembacaan kategori blok tiap tick (bukan semua pemain sekaligus).
+  block-reads-per-tick: 24
+  # Penulisan file antrean dilakukan asynchronous setiap 10 detik.
+  queue-flush-seconds: 10

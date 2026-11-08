@@ -423,6 +423,8 @@ const HOME_DEFAULTS = {
   homeLeaderboardEnabled: false,
   homeLeaderboardTitle: 'Leaderboard Komunitas',
   homeLeaderboardText: 'Riwayat pemain terbaik dari setiap season SSCircle.',
+  statSeasonId: '',
+  statSeasonActivatedAt: '',
   homeLeaderboardSeasons: [
     { id: 'season-1', title: 'Leaderboard S1', entries: [{ name: '', score: '' }, { name: '', score: '' }, { name: '', score: '' }] },
     { id: 'season-2', title: 'Leaderboard S2', entries: [{ name: '', score: '' }, { name: '', score: '' }, { name: '', score: '' }] }
@@ -1316,6 +1318,12 @@ function settingsValid(input) {
   out.homeVotingRequireCode = true;
   out.homeVotingVotes = validVotingVotes(input.homeVotingVotes === undefined ? HOME_DEFAULTS.homeVotingVotes : input.homeVotingVotes, out.homeVotingQuestions);
   out.homeLeaderboardSeasons = validLeaderboard(input.homeLeaderboardSeasons === undefined ? HOME_DEFAULTS.homeLeaderboardSeasons : input.homeLeaderboardSeasons);
+  const selectedStatSeason=s(input.statSeasonId||'',64);
+  if(selectedStatSeason && !out.homeLeaderboardSeasons.some(season=>season.id===selectedStatSeason))
+    throw Error('Pilih Season statistik yang tersedia di Season Archive.');
+  out.statSeasonId=selectedStatSeason;
+  // Activation timestamp is controlled by the server at save time.
+  out.statSeasonActivatedAt='';
   // Homepage Builder: bagian asli dan kartu tambahan, diproses sepenuhnya di server.
   const defaultLayout = HOME_DEFAULTS.homeLayout;
   const sourceLayout = input.homeLayout === undefined ? defaultLayout : input.homeLayout;
@@ -1905,6 +1913,16 @@ async function ensureMemberCenter(env) {
       last_synced_at TEXT NOT NULL DEFAULT '',
       PRIMARY KEY(application_id,season_id),
       FOREIGN KEY(application_id) REFERENCES submissions(id) ON DELETE CASCADE)`,
+    `CREATE TABLE IF NOT EXISTS minecraft_stat_progress (
+      application_id TEXT NOT NULL, season_id TEXT NOT NULL,
+      provider TEXT NOT NULL, provider_id TEXT NOT NULL,
+      last_captured_at TEXT NOT NULL,
+      last_playtime INTEGER NOT NULL DEFAULT 0, last_deaths INTEGER NOT NULL DEFAULT 0,
+      last_mobs INTEGER NOT NULL DEFAULT 0, last_blocks INTEGER NOT NULL DEFAULT 0,
+      total_playtime INTEGER NOT NULL DEFAULT 0, total_deaths INTEGER NOT NULL DEFAULT 0,
+      total_mobs INTEGER NOT NULL DEFAULT 0, total_blocks INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY(application_id,season_id),
+      FOREIGN KEY(application_id) REFERENCES submissions(id) ON DELETE CASCADE)`,
     `CREATE TABLE IF NOT EXISTS minecraft_link_challenges (
       id TEXT PRIMARY KEY, application_id TEXT NOT NULL,
       code_hash TEXT NOT NULL UNIQUE, expires_at TEXT NOT NULL,
@@ -2431,9 +2449,18 @@ async function memberCenterAPI(req,env,path,method) {
       blocks_mined,last_synced_at FROM player_stat_snapshots WHERE application_id=?
       ORDER BY season_id ASC LIMIT 25`).bind(application.id).all();
     const form=formFrom(await readSettingsRow(env));
+    const seasonName=new Map((form.settings.homeLeaderboardSeasons||[]).map(x=>[x.id,x.title||x.id]));
+    const activeStatKey=form.settings.statSeasonId&&form.settings.statSeasonActivatedAt
+      ? 'season:'+form.settings.statSeasonId+':'+form.settings.statSeasonActivatedAt : '';
     return J({profile:memberProfile(profileRow),policy:memberPolicy(policyRow),
+      activeStatSeason:activeStatKey,
+      activeStatSeasonTitle:seasonName.get(form.settings.statSeasonId)||'',
       accounts:(accounts.results||[]).map(a=>({provider:a.provider,username:a.username,verifiedAt:a.verified_at})),
-      statistics:(stats.results||[]).map(a=>({seasonId:a.season_id,playtimeSeconds:a.playtime_seconds,
+      statistics:(stats.results||[]).map(a=>({seasonId:a.season_id,
+        seasonTitle:a.season_id.startsWith('season:')
+          ? (seasonName.get(a.season_id.split(':')[1])||'Season tersimpan')
+          : 'Sepanjang masa',
+        playtimeSeconds:a.playtime_seconds,
         deaths:a.deaths,mobKills:a.mob_kills,blocksMined:a.blocks_mined,updatedAt:a.last_synced_at})),
       achievements:memberAwards(form.settings,application.id)});
   }
@@ -2731,23 +2758,67 @@ async function minecraftStatsIngest(req,env){
     return minecraftLinkError('STATS_REPLAY','Permintaan yang sama telah diproses.',409);
   await ensureMinecraftStatsReceipts(env);
   const capturedAt=new Date(stamp).toISOString(),receivedAt=new Date().toISOString();
-  // D1 batch is transactional: a receipt and its snapshot commit together.
-  const results=await env.DB.batch([
+  // Baseline each new season at the first sample. A recorded counter decrease
+  // indicates a world/stat reset: add the new raw counter as the first segment,
+  // without losing totals from previous segments or seasons.
+  const row=await readSettingsRow(env);
+  const seasonSettings=parse(row?.settings)||{};
+  const activeSeason=seasonSettings.statSeasonId||'';
+  const seasonStart=seasonSettings.statSeasonActivatedAt||'';
+  const seasonId=activeSeason && Number.isFinite(Date.parse(seasonStart))
+    && /^[A-Za-z0-9_-]{1,64}$/.test(activeSeason)
+    && stamp>=Date.parse(seasonStart)
+      ? 'season:'+activeSeason+':'+seasonStart : '';
+  const oldLifetime=await env.DB.prepare(`SELECT playtime_seconds,deaths,mob_kills,blocks_mined
+    FROM player_stat_snapshots WHERE application_id=? AND season_id=''`)
+    .bind(account.application_id).first();
+  const names=['playtime','deaths','mobs','blocks'];
+  const cols=['playtimeSeconds','deaths','mobKills','blocksMined'];
+  const initial=cols.map((k,i)=>Math.max(metrics[k],Number(oldLifetime?.[
+    ['playtime_seconds','deaths','mob_kills','blocks_mined'][i]
+  ]||0)));
+  const upsertProgress=`INSERT INTO minecraft_stat_progress (
+    application_id,season_id,provider,provider_id,last_captured_at,
+    last_playtime,last_deaths,last_mobs,last_blocks,
+    total_playtime,total_deaths,total_mobs,total_blocks
+  ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+  ON CONFLICT(application_id,season_id) DO UPDATE SET
+  ${names.map(name=>`total_${name}=
+    MIN(2147483647,minecraft_stat_progress.total_${name}+
+      CASE WHEN minecraft_stat_progress.provider=excluded.provider
+        AND minecraft_stat_progress.provider_id=excluded.provider_id
+      THEN CASE WHEN excluded.last_${name}>=minecraft_stat_progress.last_${name}
+        THEN excluded.last_${name}-minecraft_stat_progress.last_${name}
+        ELSE excluded.last_${name} END
+      ELSE 0 END)`).join(',\n  ')},
+  ${names.map(name=>`last_${name}=excluded.last_${name}`).join(',\n  ')},
+  provider=excluded.provider,provider_id=excluded.provider_id,
+  last_captured_at=excluded.last_captured_at
+  WHERE excluded.last_captured_at>minecraft_stat_progress.last_captured_at`;
+  const snapshotFromProgress=`INSERT INTO player_stat_snapshots
+    (application_id,season_id,playtime_seconds,deaths,mob_kills,blocks_mined,last_synced_at)
+    SELECT application_id,season_id,total_playtime,total_deaths,total_mobs,total_blocks,last_captured_at
+    FROM minecraft_stat_progress WHERE application_id=? AND season_id=?
+    ON CONFLICT(application_id,season_id) DO UPDATE SET
+    playtime_seconds=excluded.playtime_seconds,deaths=excluded.deaths,
+    mob_kills=excluded.mob_kills,blocks_mined=excluded.blocks_mined,
+    last_synced_at=excluded.last_synced_at
+    WHERE excluded.last_synced_at>player_stat_snapshots.last_synced_at`;
+  const entry=(key,totals)=>env.DB.prepare(upsertProgress).bind(
+    account.application_id,key,payload.provider,payload.providerId,capturedAt,
+    metrics.playtimeSeconds,metrics.deaths,metrics.mobKills,metrics.blocksMined,...totals);
+  const transaction=[
     env.DB.prepare(`INSERT OR IGNORE INTO minecraft_stat_receipts
       (event_id,application_id,provider,provider_id,received_at) VALUES(?,?,?,?,?)`)
       .bind(payload.eventId,account.application_id,payload.provider,payload.providerId,receivedAt),
-    env.DB.prepare(`INSERT INTO player_stat_snapshots
-      (application_id,season_id,playtime_seconds,deaths,mob_kills,blocks_mined,last_synced_at)
-      VALUES(?,'',?,?,?,?,?)
-      ON CONFLICT(application_id,season_id) DO UPDATE SET
-      playtime_seconds=MAX(player_stat_snapshots.playtime_seconds,excluded.playtime_seconds),
-      deaths=MAX(player_stat_snapshots.deaths,excluded.deaths),
-      mob_kills=MAX(player_stat_snapshots.mob_kills,excluded.mob_kills),
-      blocks_mined=MAX(player_stat_snapshots.blocks_mined,excluded.blocks_mined),
-      last_synced_at=MAX(player_stat_snapshots.last_synced_at,excluded.last_synced_at)`)
-      .bind(account.application_id,metrics.playtimeSeconds,metrics.deaths,
-        metrics.mobKills,metrics.blocksMined,capturedAt)
-  ]);
+    entry('',initial),
+    env.DB.prepare(snapshotFromProgress).bind(account.application_id,'')
+  ];
+  if(seasonId){
+    transaction.push(entry(seasonId,[0,0,0,0]));
+    transaction.push(env.DB.prepare(snapshotFromProgress).bind(account.application_id,seasonId));
+  }
+  const results=await env.DB.batch(transaction);
   // Old receipt rows may be purged safely: cumulative MAX prevents inflation
   // if an old event is ever retried after receipt expiry.
   if(now%31===0){
@@ -3086,7 +3157,7 @@ async function mailboxAPI(req,env,path,method){
 
 // SSCircle runtime check: observe what the deployment actually receives.
 // Only public readiness categories. Never expose secret values or private data.
-const SSC_RUNTIME_RELEASE='10.47.0';
+const SSC_RUNTIME_RELEASE='10.47.2';
 const SSC_RUNTIME_ISSUES=new Set();
 function sscRuntimeBindings(env){
   return {
@@ -3578,8 +3649,16 @@ async function route(req, env) {
       const current = await env.DB.prepare('SELECT settings, updated_at FROM form_config WHERE id=1').first();
       if (!current || (current.updated_at || '') !== input.revision)
         return bad('Pengaturan sudah diperbarui oleh admin lain. Muat ulang halaman sebelum menyimpan.', 409);
+      if(input.settings?.statSeasonId && (!Array.isArray(input.settings.homeLeaderboardSeasons) ||
+        !input.settings.homeLeaderboardSeasons.some(season=>season?.id===input.settings.statSeasonId)))
+        return bad('Season statistik yang dipilih tidak ditemukan. Pilih Season yang tersedia.',400);
       const settings = settingsValid(input.settings), pages = pagesValid(input.pages);
       const persistedVoting = parse(current.settings) || {};
+      settings.statSeasonActivatedAt=settings.statSeasonId
+        ? settings.statSeasonId===persistedVoting.statSeasonId &&
+          Number.isFinite(Date.parse(persistedVoting.statSeasonActivatedAt))
+          ? persistedVoting.statSeasonActivatedAt : new Date().toISOString()
+        : '';
       const oldQuestions=votingQuestions(persistedVoting),newQuestions=settings.homeVotingQuestions;
       const previouslyUsed=(persistedVoting.homeVotingVotes||[]).map(v=>({questionId:v.questionId||'question-1',optionId:v.optionId}));
       const requestedOptions=new Set(newQuestions.flatMap(q=>q.options.map(o=>q.id+'|'+o.id)));

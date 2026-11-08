@@ -316,3 +316,70 @@ test('V10.47: AuthMe Non-Premium and Bedrock require matching signed identities'
    assert.equal(profile.statistics[0].deaths,3);
  }
 });
+
+test('V10.47.2: season starts at a fresh baseline and world resets never erase archived totals',async()=>{
+ const x=fixture(),cookie=await x.active();
+ const code=(await x.call('/api/player/minecraft/link/create',{method:'POST',cookie,data:{}})).json.code;
+ assert.equal((await x.claim(payload(code))).status,200);
+ assert.equal((await x.call('/api/player/minecraft/link/confirm',{method:'POST',cookie,data:{}})).status,200);
+ const base=Date.now()+5000;
+ const setSeason=(id,start)=>x.db.prepare('UPDATE form_config SET settings=? WHERE id=1')
+   .run(JSON.stringify({statSeasonId:id,statSeasonActivatedAt:start,
+     homeLeaderboardSeasons:[{id:'season-1',title:'Season Pertama'},{id:'season-2',title:'Season Kedua'}]}));
+ const seasonStart=new Date(Date.now()-3000).toISOString();
+ setSeason('season-1',seasonStart);
+ function stat(at,play,deaths,mobs,blocks){
+   return {...statsPayload(),capturedAt:new Date(base+at*1000).toISOString(),
+     stats:{playtimeSeconds:play,deaths,mobKills:mobs,blocksMined:blocks}};
+ }
+ assert.equal((await deliverStats(x,stat(0,1000,8,40,300))).status,200);
+ let profile=(await x.call('/api/player/profile',{cookie})).json;
+ assert.equal(profile.activeStatSeason,'season:season-1:'+seasonStart);
+ assert.equal(profile.statistics.find(s=>s.seasonId==='').playtimeSeconds,1000);
+ assert.equal(profile.statistics.find(s=>s.seasonId===profile.activeStatSeason).playtimeSeconds,0);
+ assert.equal((await deliverStats(x,stat(1,1100,9,43,310))).status,200);
+ profile=(await x.call('/api/player/profile',{cookie})).json;
+ assert.equal(profile.statistics.find(s=>s.seasonId===profile.activeStatSeason).playtimeSeconds,100);
+ assert.equal(profile.statistics.find(s=>s.seasonId===profile.activeStatSeason).deaths,1);
+ // Reset vanilla world stats. The new segment increments by the new raw value.
+ assert.equal((await deliverStats(x,stat(2,10,1,2,3))).status,200);
+ profile=(await x.call('/api/player/profile',{cookie})).json;
+ assert.equal(profile.statistics.find(s=>s.seasonId==='').playtimeSeconds,1110);
+ assert.equal(profile.statistics.find(s=>s.seasonId===profile.activeStatSeason).playtimeSeconds,110);
+ assert.equal(profile.statistics.find(s=>s.seasonId===profile.activeStatSeason).deaths,2);
+ const oldKey=profile.activeStatSeason;
+ // Changing season creates a distinct epoch, with no deletion of old rows.
+ const nextStart=new Date(base+2500).toISOString();
+ setSeason('season-2',nextStart);
+ assert.equal((await deliverStats(x,stat(3,70,2,5,13))).status,200);
+ profile=(await x.call('/api/player/profile',{cookie})).json;
+ assert.equal(profile.activeStatSeason,'season:season-2:'+nextStart);
+ assert.equal(profile.statistics.find(s=>s.seasonId===oldKey).playtimeSeconds,110);
+ assert.equal(profile.statistics.find(s=>s.seasonId===profile.activeStatSeason).playtimeSeconds,0);
+ assert.equal(profile.statistics.find(s=>s.seasonId==='').playtimeSeconds,1170);
+ assert.equal(profile.statistics.find(s=>s.seasonId===oldKey).seasonTitle,'Season Pertama');
+ assert.equal(profile.statistics.find(s=>s.seasonId===profile.activeStatSeason).seasonTitle,'Season Kedua');
+});
+test('V10.47.2: out-of-order season snapshots are ignored rather than decreasing totals',async()=>{
+ const x=fixture(),cookie=await x.active();
+ const code=(await x.call('/api/player/minecraft/link/create',{method:'POST',cookie,data:{}})).json.code;
+ await x.claim(payload(code));
+ await x.call('/api/player/minecraft/link/confirm',{method:'POST',cookie,data:{}});
+ const start=new Date(Date.now()-1000).toISOString();
+ x.db.prepare('UPDATE form_config SET settings=? WHERE id=1')
+  .run(JSON.stringify({statSeasonId:'season-1',statSeasonActivatedAt:start,
+    homeLeaderboardSeasons:[{id:'season-1',title:'S1'}]}));
+ const mk=(time,seconds)=>({...statsPayload(),eventId:randomUUID(),
+   capturedAt:new Date(Date.now()+time).toISOString(),
+   stats:{playtimeSeconds:seconds,deaths:1,mobKills:2,blocksMined:4}});
+ const first=mk(11000,1000);
+ assert.equal((await deliverStats(x,first)).status,200);
+ const later=mk(13000,1050);
+ assert.equal((await deliverStats(x,later)).status,200);
+ const late=mk(12000,1010);
+ assert.equal((await deliverStats(x,late)).status,200);
+ const profile=(await x.call('/api/player/profile',{cookie})).json;
+ assert.equal(profile.statistics.find(s=>s.seasonId==='').playtimeSeconds,1050);
+ assert.equal(profile.statistics.find(s=>s.seasonId).playtimeSeconds,50);
+ assert.equal((await deliverStats(x,later)).json.code,'STATS_DUPLICATE');
+});

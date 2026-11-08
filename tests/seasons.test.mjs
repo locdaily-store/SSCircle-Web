@@ -109,3 +109,30 @@ test('foto arsip yang masih digunakan dilindungi dari penghapusan',async()=>{
   assert.match(source,/for\(const season of settings\.homeLeaderboardSeasons \|\| \[\]\)/);
   assert.match(source,/\.\.\.settings\.homeLeaderboardSeasons\.flatMap\(season=>/);
 });
+
+test('V10.47.2: Admin selects a valid stats season; activation time is server-controlled',async()=>{
+ const t=fixture();
+ const rejected=await save(t,s=>{s.statSeasonId='season-does-not-exist';});
+ assert.equal(rejected.status,400,JSON.stringify(rejected.data));
+ const valid=await save(t,s=>{
+   s.statSeasonId='season-1';
+   s.statSeasonActivatedAt='2001-01-01T00:00:00Z'; // Browser cannot backdate the epoch.
+ });
+ assert.equal(valid.status,200,JSON.stringify(valid.data));
+ const first=JSON.parse(t.db.prepare('SELECT settings FROM form_config WHERE id=1').get().settings);
+ const activated=Date.parse(first.statSeasonActivatedAt);
+ assert.ok(Number.isFinite(activated));
+ assert.ok(Math.abs(activated-Date.now())<10_000);
+ const again=await save(t,s=>{
+   s.homeSeasonHighlightsEnabled=true;
+   s.statSeasonActivatedAt='2001-01-01T00:00:00Z';
+ });
+ assert.equal(again.status,200,JSON.stringify(again.data));
+ const second=JSON.parse(t.db.prepare('SELECT settings FROM form_config WHERE id=1').get().settings);
+ assert.equal(second.statSeasonActivatedAt,first.statSeasonActivatedAt);
+ const disabled=await save(t,s=>{s.statSeasonId='';});
+ assert.equal(disabled.status,200,JSON.stringify(disabled.data));
+ const after=JSON.parse(t.db.prepare('SELECT settings FROM form_config WHERE id=1').get().settings);
+ assert.equal(after.statSeasonId,'');
+ assert.equal(after.statSeasonActivatedAt,'');
+});

@@ -197,6 +197,29 @@ window.SSCircleSeasonsAdmin = (() => {
     intro.append(el('p','','Atur halaman Season Archive yang dilihat pengunjung.'));
     main.append(intro);
     main.append(toggle('Tampilkan Season Archive',s.seasonArchiveEnabled,v=>s.seasonArchiveEnabled=v,'Halaman arsip dapat dikunjungi ketika pengaturan ini aktif.'));
+    const statsPane=editorGroup('Statistik Minecraft per Season',
+      'Pilih Season yang sedang dimainkan. Setelah disimpan, statistik Season baru dimulai dari baseline awal tanpa menghapus data Season sebelumnya.');
+    const seasonField=el('label','field-group');
+    seasonField.append(el('span','field-label','Season statistik aktif'));
+    const seasonChoice=el('select');
+    const noSeason=el('option','', 'Tidak aktif (hanya statistik sepanjang masa)');
+    noSeason.value='';seasonChoice.append(noSeason);
+    for(const season of s.homeLeaderboardSeasons){
+      const option=el('option','',season.title||season.id);
+      option.value=season.id;seasonChoice.append(option);
+    }
+    seasonChoice.value=s.statSeasonId||'';
+    seasonChoice.addEventListener('change',()=>{
+      s.statSeasonId=seasonChoice.value;
+      mark();
+    });
+    seasonField.append(seasonChoice,el('small','field-help',
+      'Pengaturan berlaku setelah perubahan Admin Control disimpan. Memilih Season lain membuat periode statistik baru. Data lama tidak dihapus.'));
+    statsPane.content.append(seasonField);
+    statsPane.content.append(el('p','field-help',
+      'Waktu mulai dicatat otomatis oleh server saat disimpan. Season baru akan menampilkan 0 sampai statistik pemain yang pertama kali tersinkron dipakai sebagai baseline.'));
+    main.append(statsPane.section);
+
     const mainFields=el('div','season-admin-page-fields');
     mainFields.append(inputField('Judul halaman',s.seasonArchiveTitle,v=>s.seasonArchiveTitle=v,{max:160}));
     mainFields.append(inputField('Deskripsi pembuka',s.seasonArchiveDescription,v=>s.seasonArchiveDescription=v,{multiline:true,max:900}));

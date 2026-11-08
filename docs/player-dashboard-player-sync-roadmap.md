@@ -132,3 +132,11 @@ Lanjut:
 5. **V10.50** Leaderboard Season/Hall of Fame dengan statistik tervalidasi.
 
 Baca petunjuk operasional di `docs/V10.47-PLAYER-STATS.md`.
+
+## V10.47.2 — Optimasi statistik dan Season (implementasi source)
+- Per-pemain sampling tidak lagi memindai semua material dalam satu tick. Satu anggaran `block-reads-per-tick` untuk seluruh server; file antrean ditulis melalui thread disk khusus dengan penggabungan.
+- Hanya identitas yang lolos autentikasi Paper/AuthMe/Floodgate diambil; pengambilan blok yang tidak selesai diabaikan saat pemain keluar agar tidak menciptakan angka reset palsu.
+- Pengaturan Season aktif tersedia dari Season Admin. Backend menyimpan waktu aktivasi, snapshot awal sebagai baseline, akumulasi delta, dan saat raw counter turun karena reset world memulai segmen baru tanpa menghapus riwayat.
+- Profile menampilkan kartu dengan ikon SVG, filter Season/All-Time, dan waktu sinkron.
+- Uji CI wajib; bukti produksi masih butuh simulasi Cloudflare offline serta pengukuran TPS untuk 20–50 pemain.
+- Berikutnya: V10.47.3 runtime/profiling, V10.48 monitoring admin, V10.49 multi akun, V10.50 leaderboard Season.
