@@ -186,6 +186,18 @@ $('#login-form').onsubmit = async (e) => {
   }
   catch (error) {
     $('#login-error').textContent = error.message;
+    // If the backend is misconfigured, show a safe support code instead of
+    // endlessly requesting the password. The response has no private values.
+    try {
+      const healthResponse = await fetch('/api/health', { cache: 'no-store' });
+      const health = await healthResponse.json();
+      const setup = $('#admin-setup');
+      if (setup && health?.services?.admin === 'maintenance') {
+        setup.classList.remove('hide');
+        setup.textContent = 'Admin Control sementara belum tersambung. Kode pemeriksaan: '
+          + (health.supportCode || 'SSC-A00') + '. Pengurus perlu memeriksa status layanan.';
+      } else if (setup) setup.classList.add('hide');
+    } catch { /* Old deployment: keep original login error. */ }
   }
   finally {
     submit.disabled = false;
