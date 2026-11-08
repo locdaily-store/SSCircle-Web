@@ -3649,6 +3649,9 @@ async function route(req, env) {
       const current = await env.DB.prepare('SELECT settings, updated_at FROM form_config WHERE id=1').first();
       if (!current || (current.updated_at || '') !== input.revision)
         return bad('Pengaturan sudah diperbarui oleh admin lain. Muat ulang halaman sebelum menyimpan.', 409);
+      if(input.settings?.statSeasonId && (!Array.isArray(input.settings.homeLeaderboardSeasons) ||
+        !input.settings.homeLeaderboardSeasons.some(season=>season?.id===input.settings.statSeasonId)))
+        return bad('Season statistik yang dipilih tidak ditemukan. Pilih Season yang tersedia.',400);
       const settings = settingsValid(input.settings), pages = pagesValid(input.pages);
       const persistedVoting = parse(current.settings) || {};
       settings.statSeasonActivatedAt=settings.statSeasonId
