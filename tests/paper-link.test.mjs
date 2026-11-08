@@ -57,7 +57,7 @@ test('Paper Direct: no insecure default endpoint or secrets in shipped config',(
 });
 
 test('V10.45.2: safe tab-completion shows matching commands and hides admin-only reload',()=>{
- assert.match(manifest,/version: '10\.47\.2'/);
+ assert.match(manifest,/version: '10\.48\.0'/);
  assert.match(paper,/implements CommandExecutor, TabCompleter, Listener/);
  assert.match(paper,/public List<String> onTabComplete\(CommandSender sender, Command command, String alias, String\[\] args\)/);
  assert.match(paper,/if \(args\.length != 1\) return List\.of\(\)/);
@@ -82,7 +82,7 @@ test('V10.45.2: explain both independent failures without exposing shared secret
 });
 
 test('V10.45.3: operator-only signed diagnostic and safe error presentation',()=>{
- assert.match(manifest,/version: '10\.47\.2'/);
+ assert.match(manifest,/version: '10\.48\.0'/);
  assert.match(paper,/private static final String DIAGNOSE_PATH = "\/api\/minecraft\/link\/diagnose"/);
  assert.match(paper,/options\.add\("diagnose"\)/);
  assert.match(paper,/private void runDiagnostic\(CommandSender sender\)/);
@@ -166,4 +166,23 @@ test('V10.47.2: statistic collection is tick-budgeted, disk I/O asynchronous and
  assert.match(worker,/minecraft_stat_progress/);
  assert.match(worker,/statSeasonActivatedAt/);
  assert.match(worker,/total_playtime/);
+});
+
+test('V10.48: health heartbeat is lightweight, asynchronous and cannot execute arbitrary commands',()=>{
+ const telemetry=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/PaperSyncTelemetry.java',import.meta.url),'utf8');
+ const stats=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/PaperStatsSync.java',import.meta.url),'utf8');
+ assert.match(telemetry,/\/api\/minecraft\/sync\/heartbeat/);
+ assert.match(telemetry,/sendAsync\(request,HttpResponse\.BodyHandlers\.ofString/);
+ assert.match(telemetry,/sync_now/);
+ assert.match(telemetry,/stats\.triggerNow\(\)/);
+ assert.match(telemetry,/id\.equals\(lastExecutedId\)/);
+ assert.match(telemetry,/completedCommandId/);
+ assert.match(telemetry,/Bukkit\.getTPS\(\)\[0\]/);
+ assert.match(stats,/String deliveryCode\(\)/);
+ assert.match(stats,/int captureBacklogCount\(\)/);
+ assert.match(paper,/syncTelemetry\.start\(\)/);
+ assert.match(config,/sync-monitor:/);
+ assert.match(worker,/minecraftSyncHeartbeat\(req,env\)/);
+ assert.match(worker,/minecraftSyncAdmin\(req,env,path,method\)/);
+ assert.match(worker,/minecraft_sync_commands/);
 });

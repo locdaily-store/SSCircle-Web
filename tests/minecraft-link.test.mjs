@@ -383,3 +383,91 @@ test('V10.47.2: out-of-order season snapshots are ignored rather than decreasing
  assert.equal(profile.statistics.find(s=>s.seasonId).playtimeSeconds,50);
  assert.equal((await deliverStats(x,later)).json.code,'STATS_DUPLICATE');
 });
+
+async function monitorBeat(x,body,{key=SERVER,nonce=randomUUID(),
+  timestamp=Math.floor(Date.now()/1000)}={}){
+  const raw=JSON.stringify(body);
+  const signature=createHmac('sha256',key)
+    .update('POST\n/api/minecraft/sync/heartbeat\n'+timestamp+'\n'+nonce+'\n'+raw)
+    .digest('base64url');
+  const response=await worker.fetch(
+    new Request('https://sscircle.test/api/minecraft/sync/heartbeat',{
+      method:'POST',headers:{
+        'Content-Type':'application/json','X-SSC-Timestamp':String(timestamp),
+        'X-SSC-Nonce':nonce,'X-SSC-Signature':signature
+      },body:raw}),x.env);
+  return {status:response.status,json:await response.json()};
+}
+function telemetryBody(override={}){
+  return {pluginVersion:'10.48.0',onlineCount:19,pendingCount:3,
+    captureBacklog:2,deliveryCode:'QUEUE_PENDING',lastSuccessAt:null,
+    tps1m:19.78,completedCommandId:null,...override};
+}
+test('V10.48: only a signed Paper heartbeat can populate private health monitoring',async()=>{
+  const x=fixture();
+  const noAccess=await x.call('/api/admin/minecraft/sync');
+  assert.equal(noAccess.status,401);
+  const before=await x.call('/api/admin/minecraft/sync',{cookie:x.admin});
+  assert.equal(before.status,200);
+  assert.equal(before.json.connection,'no_data');
+  assert.equal(before.json.telemetry,null);
+  assert.equal((await monitorBeat(x,telemetryBody(),{key:'invalid-key'})).status,401);
+  assert.equal((await monitorBeat(x,telemetryBody({deliveryCode:'server-password'}))).status,400);
+  assert.equal((await monitorBeat(x,telemetryBody({tps1m:30}))).status,400);
+  const nonce=randomUUID();
+  const accepted=await monitorBeat(x,telemetryBody(),{nonce});
+  assert.equal(accepted.status,200,JSON.stringify(accepted.json));
+  assert.equal(accepted.json.command,null);
+  assert.equal((await monitorBeat(x,telemetryBody(),{nonce})).status,409);
+  const status=await x.call('/api/admin/minecraft/sync',{cookie:x.admin});
+  assert.equal(status.status,200,JSON.stringify(status.json));
+  assert.equal(status.json.connection,'recent');
+  assert.equal(status.json.telemetry.onlinePlayers,19);
+  assert.equal(status.json.telemetry.pendingSnapshots,3);
+  assert.equal(status.json.telemetry.tps1m,19.78);
+  assert.equal(status.json.events[0].code,'QUEUE_PENDING');
+  assert.equal(status.json.summary.linked,0);
+  assert.equal(status.json.accounts.length,0);
+  assert.equal(JSON.stringify(status.json).includes(SERVER),false);
+});
+test('V10.48: admin remote sync request is polled safely, acknowledged and rate-limited',async()=>{
+  const x=fixture();
+  assert.equal((await x.call('/api/admin/minecraft/sync/request',{method:'POST',data:{}})).status,401);
+  const requested=await x.call('/api/admin/minecraft/sync/request',
+    {method:'POST',cookie:x.admin,data:{}});
+  assert.equal(requested.status,200,JSON.stringify(requested.json));
+  assert.equal(requested.json.requested,true);
+  const second=await x.call('/api/admin/minecraft/sync/request',
+    {method:'POST',cookie:x.admin,data:{}});
+  assert.equal(second.json.alreadyPending,true);
+  assert.equal(second.json.id,requested.json.id);
+  const polled=await monitorBeat(x,telemetryBody());
+  assert.equal(polled.status,200);
+  assert.deepEqual({id:polled.json.command.id,type:polled.json.command.type},
+    {id:requested.json.id,type:'sync_now'});
+  const done=await monitorBeat(x,telemetryBody({completedCommandId:requested.json.id,
+    deliveryCode:'SYNC_OK',lastSuccessAt:new Date().toISOString()}));
+  assert.equal(done.status,200,JSON.stringify(done.json));
+  assert.equal(done.json.command,null);
+  const status=await x.call('/api/admin/minecraft/sync',{cookie:x.admin});
+  assert.equal(status.json.pendingCommand,null);
+  assert.equal(status.json.telemetry.deliveryCode,'SYNC_OK');
+  assert.equal(status.json.events.length,2);
+  assert.equal((await x.call('/api/admin/minecraft/sync/request',
+    {method:'POST',cookie:x.admin,data:{}})).status,429);
+});
+test('V10.48: monitor account listing only reflects verified Minecraft links',async()=>{
+  const x=fixture(),cookie=await x.active();
+  const code=(await x.call('/api/player/minecraft/link/create',
+    {method:'POST',cookie,data:{}})).json.code;
+  await x.claim(payload(code));
+  let adminView=await x.call('/api/admin/minecraft/sync',{cookie:x.admin});
+  assert.equal(adminView.json.summary.linked,0);
+  await x.call('/api/player/minecraft/link/confirm',{method:'POST',cookie,data:{}});
+  adminView=await x.call('/api/admin/minecraft/sync',{cookie:x.admin});
+  assert.equal(adminView.json.summary.linked,1);
+  assert.equal(adminView.json.summary.noStats,1);
+  assert.equal(adminView.json.accounts[0].provider,'java_premium');
+  assert.equal(adminView.json.accounts[0].username,'TestSteve');
+  assert.equal(adminView.json.accounts[0].lastSyncAt,null);
+});

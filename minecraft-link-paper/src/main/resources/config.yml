@@ -31,3 +31,9 @@ stats-sync:
   block-reads-per-tick: 24
   # Penulisan file antrean dilakukan asynchronous setiap 10 detik.
   queue-flush-seconds: 10
+
+# V10.48: laporan ringkas untuk Admin Control; tidak membuka port ke Paper.
+# Plugin mengirim heartbeat keluar lewat HTTPS dan menerima permintaan sync
+# singkat dari website. 120 detik = maksimal 720 laporan/hari per server.
+sync-monitor:
+  interval-seconds: 120

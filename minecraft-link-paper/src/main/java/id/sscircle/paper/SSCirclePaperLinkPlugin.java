@@ -49,6 +49,7 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
     private String signingSecret = "";
     private String secretSource = "tidak tersedia";
     private PaperStatsSync statsSync;
+    private PaperSyncTelemetry syncTelemetry;
 
     @Override
     public void onEnable() {
@@ -67,6 +68,8 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
         readSettings();
         statsSync = new PaperStatsSync(this,http,this::identityFor,()->endpoint,()->signingSecret);
         statsSync.start();
+        syncTelemetry=new PaperSyncTelemetry(this,statsSync,http,()->endpoint,()->signingSecret);
+        syncTelemetry.start();
         if (!Bukkit.getOnlineMode()) {
             if (mixedModeReady()) {
                 getLogger().warning("Mode campuran AuthMe + PacketEvents aktif. Java memakai identitas akun AuthMe; Bedrock memakai Floodgate XUID.");
@@ -227,6 +230,8 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
                 if (sender.hasPermission("sscircle.admin")) {
                     sender.sendMessage("Antrean statistik: " + statsSync.pendingCount() + " identitas.");
                     sender.sendMessage("Pengiriman terakhir: " + statsSync.deliveryStatus());
+                if(syncTelemetry!=null)
+                    sender.sendMessage("Monitoring website: "+syncTelemetry.status());
                 }
             }
             sender.sendMessage("Status akun tertaut tersedia di Profile website SSCircle.");

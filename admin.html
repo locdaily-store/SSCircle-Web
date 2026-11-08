@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#160a28">
     <link rel="stylesheet" href="style.css?v=10.31.0">
+    <link rel="stylesheet" href="minecraft-sync-admin.css?v=10.48.0">
     <link rel="stylesheet" href="community-pages.css?v=10.37.0">
     <title>Admin Control · SSCircle Server</title>
     <link rel="icon" type="image/png" href="assets/sscircle-logo.png">
@@ -23,6 +24,7 @@
     <script src="registration-preview.js?v=10.26.0" defer></script>
     <script src="color-theme-admin.js?v=10.31.0" defer></script>
     <script src="member-center-admin.js?v=10.37.0" defer></script>
+    <script src="minecraft-sync-admin.js?v=10.48.0" defer></script>
     <script src="profile-admin.js?v=10.43.0" defer></script>
     <script src="admin.js?v=10.45.5" defer></script>
     <script src="form-insert-rail.js?v=10.26.0" defer></script>
@@ -96,6 +98,7 @@
                 <button type="button" class="side-link" data-tab="form"><span class="side-icon" aria-hidden="true">▤</span><span>Formulir</span></button>
                 <button type="button" class="side-link" data-tab="answers"><span class="side-icon" aria-hidden="true">☷</span><span>Jawaban pendaftar</span> <span id="nav-count" class="nav-count">0</span></button>
                 <button type="button" class="side-link" data-tab="members-admin"><span class="side-icon" aria-hidden="true">♙</span><span>Kelola Pemain</span></button>
+                <button type="button" class="side-link" data-tab="minecraft-sync-admin"><span class="side-icon" aria-hidden="true">↻</span><span>Minecraft Sync</span></button>
                 <button type="button" class="side-link" data-tab="analytics"><span class="side-icon" aria-hidden="true">◉</span><span>Analitik jawaban</span></button>
                 <button type="button" class="side-link" data-tab="spreadsheet"><span class="side-icon" aria-hidden="true">▦</span><span>Spreadsheet</span></button>
               </section>
@@ -156,6 +159,20 @@
               </div>
               <div id="members-admin-root" class="members-admin-root" aria-live="polite">
                 <p class="field-help">Buka menu untuk memuat data anggota.</p>
+              </div>
+            </section>
+            <!-- V10.48: private read-only telemetry plus explicit owner-triggered sync. -->
+            <section id="minecraft-sync-admin" class="tab-page hide">
+              <div class="dashboard-heading">
+                <div>
+                  <div class="overline">SSCIRCLE / MINECRAFT OPERATIONS</div>
+                  <h1>Minecraft Sync<span class="dot-accent">.</span></h1>
+                  <p>Pantau laporan plugin, antrean statistik, riwayat gangguan, dan akun tertaut tanpa membuka log Minecraft satu per satu.</p>
+                </div>
+                <span class="season-tag">PLAYER SYNC CONTROL</span>
+              </div>
+              <div id="minecraft-sync-root" class="ssc-sync-admin-root" aria-live="polite">
+                <p class="field-help">Buka menu untuk mengambil laporan terakhir.</p>
               </div>
             </section>
             <!-- Profile layout settings; player security policies stay in Kelola Pemain. -->

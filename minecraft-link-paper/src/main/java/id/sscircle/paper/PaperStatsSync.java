@@ -81,6 +81,8 @@ final class PaperStatsSync implements Listener {
     private long lastPeriodicCaptureMs;
     private int normalIntervalSeconds=300;
     private String lastDelivery="Belum ada data dikirim";
+    private String deliveryCode="IDLE";
+    private Instant lastSuccessAt;
 
     PaperStatsSync(SSCirclePaperLinkPlugin plugin,HttpClient http,
                    Function<Player,SSCirclePaperLinkPlugin.Identity> resolveIdentity,
@@ -134,6 +136,9 @@ final class PaperStatsSync implements Listener {
     }
 
     int pendingCount(){return pending.size();}
+    int captureBacklogCount(){return playersToSample.size()+(activeJob==null?0:1);}
+    String deliveryCode(){return deliveryCode;}
+    String lastSuccessAt(){return lastSuccessAt==null?null:lastSuccessAt.toString();}
     String deliveryStatus(){return lastDelivery;}
     private boolean enabled(){return plugin.getConfig().getBoolean("stats-sync.enabled",true);}
 
@@ -258,6 +263,7 @@ final class PaperStatsSync implements Listener {
             plugin.getLogger().warning("Antrean stats penuh; snapshot tertua diganti.");
         }
         pending.put(key,snapshot);
+        if(lastSuccessAt==null)deliveryCode="QUEUE_PENDING";
         dirty=true;
     }
 
@@ -294,6 +300,7 @@ final class PaperStatsSync implements Listener {
                 });
         }catch(Exception ex){
             inFlight=false;
+            deliveryCode="NETWORK_ERROR";
             scheduleRetry();
             lastDelivery="Pengiriman tertunda; periksa domain atau kunci.";
         }
@@ -303,6 +310,7 @@ final class PaperStatsSync implements Listener {
                                HttpResponse<String> response,Throwable failure){
         inFlight=false;
         if(failure!=null||response==null){
+            deliveryCode="NETWORK_ERROR";
             scheduleRetry();
             lastDelivery="Jaringan terputus; antrean aman di disk.";
             return;
@@ -314,6 +322,12 @@ final class PaperStatsSync implements Listener {
             ||(code==410&&body.contains("STATS_PRELINK"))
             ||(code==400&&body.contains("STATS_INVALID"));
         if(acknowledged||discard){
+            if(acknowledged){
+                deliveryCode="SYNC_OK";
+                lastSuccessAt=Instant.now();
+            }else{
+                deliveryCode="HTTP_ERROR";
+            }
             retryDelayMs=3000L;
             nextAttemptAtMs=0L;
             Snapshot current=pending.get(key);
@@ -325,6 +339,7 @@ final class PaperStatsSync implements Listener {
             lastDelivery=acknowledged?"Statistik berhasil tersinkron":
                 "Akun belum tertaut; menunggu statistik berikutnya.";
         }else{
+            deliveryCode=(code==401||code==403)?"AUTH_ERROR":"HTTP_ERROR";
             scheduleRetry();
             lastDelivery="HTTP "+code+"; statistik disimpan dan akan dicoba ulang.";
         }

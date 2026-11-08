@@ -140,3 +140,10 @@ Baca petunjuk operasional di `docs/V10.47-PLAYER-STATS.md`.
 - Profile menampilkan kartu dengan ikon SVG, filter Season/All-Time, dan waktu sinkron.
 - Uji CI wajib; bukti produksi masih butuh simulasi Cloudflare offline serta pengukuran TPS untuk 20–50 pemain.
 - Berikutnya: V10.47.3 runtime/profiling, V10.48 monitoring admin, V10.49 multi akun, V10.50 leaderboard Season.
+
+## V10.48.0 — Minecraft Sync Monitoring (implementasi source)
+- Monitoring admin-only: status laporan terakhir, antrean, backlog pengambilan, statistik akun yang tertaut, perubahan status dan status pengiriman.
+- Heartbeat HMAC/timestamp/nonce setiap 120 detik, pemeriksaan telemetri ketat, event log hanya saat perubahan status dan retensi 14 hari. Tidak mengasumsikan offline bila heartbeat hilang.
+- Permintaan sinkronisasi admin dapat diambil lewat respons heartbeat 1 arah; tidak membuka port/konsol Minecraft. Jeda dua menit, satu aktif, expiry 10 menit.
+- UI Admin Control responsif dan terpisah dari editor Season/Profile.
+- Kelanjutan: V10.48.1 runtime monitoring hosting + metrik waktu akurat, V10.49 multi akun dan Premium proof, V10.50 leaderboard otomatis.
