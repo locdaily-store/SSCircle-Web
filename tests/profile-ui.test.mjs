@@ -125,3 +125,23 @@ test('V10.47.2: stats use accessible inline SVG icons and a season filter withou
  assert.match(css,/\.player-stat-icon svg/);
  assert.match(css,/@media\(max-width:620px\)/);
 });
+
+test('V10.48: monitoring is integrated into private Admin Control and is responsive',()=>{
+ const html=source('admin.html');
+ const admin=source('admin.js');
+ const widget=source('minecraft-sync-admin.js');
+ const css=source('minecraft-sync-admin.css');
+ const worker=source('_worker.js');
+ assert.match(html,/data-tab="minecraft-sync-admin"/);
+ assert.match(html,/id="minecraft-sync-root"/);
+ assert.match(html,/minecraft-sync-admin\.js/);
+ assert.match(html,/minecraft-sync-admin\.css/);
+ assert.match(admin,/SSCircleMinecraftSyncAdmin\?\.load\(\)/);
+ assert.match(widget,/api\/admin\/minecraft\/sync/);
+ assert.match(widget,/pendingCommand/);
+ assert.match(widget,/\.textContent=String\(text\)/);
+ assert.doesNotMatch(widget,/\.innerHTML\s*=/);
+ assert.match(css,/@media\(max-width:640px\)/);
+ assert.match(worker,/if\(!await admin\(req,env\)\)/);
+ assert.doesNotMatch(widget,/server-secret\.txt|SSCIRCLE_LINK_SERVER_SECRET/);
+});
