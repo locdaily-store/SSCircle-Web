@@ -276,6 +276,7 @@ final class PaperStatsSync implements Listener {
                     }catch(IllegalPluginAccessException ignored){}
                 });
         }catch(Exception ex){
+            inFlight=false;
             scheduleRetry();
             lastDelivery="Pengiriman tertunda; periksa domain atau kunci.";
         }
