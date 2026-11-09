@@ -118,23 +118,27 @@ final class PaperIdentitySync implements Listener {
         for(Player player:Bukkit.getOnlinePlayers()){
             if(active>=MAX_ACTIVE||sent>=MAX_PER_ROUND)break;
             State state=sessions.computeIfAbsent(player.getUniqueId(),ignored->new State());
-            long retryWindow=state.lastSuccessMs>0?MIN_RETRY_MS:RETRY_MS;
-            if(state.inflight||(state.lastAttemptMs>0
-                && now-state.lastAttemptMs<retryWindow))continue;
+            if(state.inflight)continue;
             SSCirclePaperLinkPlugin.Identity identity=identityFor.apply(player);
             if(identity==null)continue; // AuthMe/Floodgate did not verify session.
             String source=identity.authSource();
-            if(state.acceptedSource.equals(source)
-                &&now-state.lastSuccessMs<SUCCESS_REFRESH_MS)continue;
-            if(!state.acceptedSource.equals(source)
-                ||now-state.lastAttemptMs>=RETRY_MS){
-                state.inflight=true;
-                state.lastAttemptMs=now;
-                active++;
-                sent++;
-                send(player.getUniqueId(),state,identity,host,token);
-            }
+            if(!shouldSend(now,state.lastAttemptMs,state.lastSuccessMs,
+                state.acceptedSource,source))continue;
+            state.inflight=true;
+            state.lastAttemptMs=now;
+            active++;
+            sent++;
+            send(player.getUniqueId(),state,identity,host,token);
         }
+    }
+
+    // Pure scheduler decision; tested without Paper or any Cloudflare API.
+    static boolean shouldSend(long now,long lastAttempt,long lastSuccess,
+                              String acceptedSource,String currentSource){
+        long retryWindow=lastSuccess>0?MIN_RETRY_MS:RETRY_MS;
+        if(lastAttempt>0&&now-lastAttempt<retryWindow)return false;
+        return !acceptedSource.equals(currentSource)
+            ||now-lastSuccess>=SUCCESS_REFRESH_MS;
     }
 
     private void send(UUID sessionId,State state,SSCirclePaperLinkPlugin.Identity id,
