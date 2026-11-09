@@ -22,6 +22,7 @@ import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -51,6 +52,7 @@ final class PaperIdentitySync implements Listener {
     private static final class State {
         boolean inflight;
         long lastAttemptMs,lastSuccessMs;
+        long retryNotBeforeMs,retryDelayMs=RETRY_MS;
         String acceptedSource="";
         String lastStatus="Belum dikirim";
     }
@@ -118,7 +120,7 @@ final class PaperIdentitySync implements Listener {
         for(Player player:Bukkit.getOnlinePlayers()){
             if(active>=MAX_ACTIVE||sent>=MAX_PER_ROUND)break;
             State state=sessions.computeIfAbsent(player.getUniqueId(),ignored->new State());
-            if(state.inflight)continue;
+            if(state.inflight||now<state.retryNotBeforeMs)continue;
             SSCirclePaperLinkPlugin.Identity identity=identityFor.apply(player);
             if(identity==null)continue; // AuthMe/Floodgate did not verify session.
             String source=identity.authSource();
@@ -182,6 +184,7 @@ final class PaperIdentitySync implements Listener {
             lastCode="NETWORK_ERROR";
             state.lastStatus="Jaringan belum terhubung";
             lastDelivery="Bukti sesi akan dikirim ulang";
+            postpone(state,-1,null);
             return;
         }
         int status=response.statusCode();
@@ -189,6 +192,8 @@ final class PaperIdentitySync implements Listener {
             &&response.body().contains("\"ok\":true")){
             state.acceptedSource=source;
             state.lastSuccessMs=System.currentTimeMillis();
+            state.retryDelayMs=RETRY_MS;
+            state.retryNotBeforeMs=0L;
             lastCode="IDENTITY_SYNC_OK";
             state.lastStatus="Bukti "+source+" diterima website";
             lastDelivery="Bukti sesi terbaru diterima";
@@ -223,6 +228,20 @@ final class PaperIdentitySync implements Listener {
             state.lastStatus="Pembaruan tertunda (HTTP "+status+")";
             lastDelivery="Periksa status deployment Cloudflare";
         }
+        if(!(status==200&&response.body()!=null
+            &&response.body().contains("\\"ok\\":true"))){
+            postpone(state,status,response.headers().firstValue("Retry-After").orElse(null));
+        }
+    }
+
+    // Never busy-loop on Cloudflare rate limiting or temporary outages.
+    // This state stays with the validated Paper session, not its nickname.
+    private void postpone(State state,int httpStatus,String retryAfter){
+        long now=System.currentTimeMillis();
+        long jitter=ThreadLocalRandom.current().nextLong(2_001L);
+        state.retryNotBeforeMs=now+SyncRetryPolicy.delayMs(
+            state.retryDelayMs,httpStatus,retryAfter,now,jitter);
+        state.retryDelayMs=SyncRetryPolicy.nextBaseDelayMs(state.retryDelayMs);
     }
 
     private static String hmac(String secret,String value)throws Exception{
