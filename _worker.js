@@ -3024,7 +3024,7 @@ async function minecraftSyncHeartbeat(req,env){
     !count(input.pendingCount)||input.pendingCount>1024||
     !count(input.captureBacklog)||input.captureBacklog>1000||
     !MC_DELIVERY_CODES.has(code)||
-    typeof input.pluginVersion!=='string'||!/^10\.[0-9]{1,3}\.[0-9]{1,3}$/.test(input.pluginVersion)||
+    typeof input.pluginVersion!=='string'||!/^10\.[0-9]{1,3}\.[0-9]{1,3}(?:\.[0-9]{1,3})?$/.test(input.pluginVersion)||
     (input.tps1m!==null&&
       (!Number.isFinite(input.tps1m)||input.tps1m<0||input.tps1m>20.1))||
     (input.lastSuccessAt!==null&&
@@ -3499,7 +3499,7 @@ async function mailboxAPI(req,env,path,method){
 
 // SSCircle runtime check: observe what the deployment actually receives.
 // Only public readiness categories. Never expose secret values or private data.
-const SSC_RUNTIME_RELEASE='10.48.4.2';
+const SSC_RUNTIME_RELEASE='10.48.4.3';
 const SSC_RUNTIME_ISSUES=new Set();
 function sscRuntimeBindings(env){
   return {
