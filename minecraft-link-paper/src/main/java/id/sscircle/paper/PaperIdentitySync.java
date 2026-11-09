@@ -188,8 +188,9 @@ final class PaperIdentitySync implements Listener {
             return;
         }
         int status=response.statusCode();
-        if(status==200&&response.body()!=null
-            &&response.body().contains("\"ok\":true")){
+        boolean accepted=status==200&&response.body()!=null
+            &&response.body().contains("\"ok\":true");
+        if(accepted){
             state.acceptedSource=source;
             state.lastSuccessMs=System.currentTimeMillis();
             state.retryDelayMs=RETRY_MS;
@@ -228,8 +229,7 @@ final class PaperIdentitySync implements Listener {
             state.lastStatus="Pembaruan tertunda (HTTP "+status+")";
             lastDelivery="Periksa status deployment Cloudflare";
         }
-        if(!(status==200&&response.body()!=null
-            &&response.body().contains("\\"ok\\":true"))){
+        if(!accepted){
             postpone(state,status,response.headers().firstValue("Retry-After").orElse(null));
         }
     }
