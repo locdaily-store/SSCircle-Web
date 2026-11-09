@@ -57,7 +57,7 @@ test('Paper Direct: no insecure default endpoint or secrets in shipped config',(
 });
 
 test('V10.45.2: safe tab-completion shows matching commands and hides admin-only reload',()=>{
- assert.match(manifest,/version: '10\.48\.4\.1'/);
+ assert.match(manifest,/version: '10\.48\.4\.2'/);
  assert.match(paper,/implements CommandExecutor, TabCompleter, Listener/);
  assert.match(paper,/public List<String> onTabComplete\(CommandSender sender, Command command, String alias, String\[\] args\)/);
  assert.match(paper,/if \(args\.length != 1\) return List\.of\(\)/);
@@ -82,7 +82,7 @@ test('V10.45.2: explain both independent failures without exposing shared secret
 });
 
 test('V10.45.3: operator-only signed diagnostic and safe error presentation',()=>{
- assert.match(manifest,/version: '10\.48\.4\.1'/);
+ assert.match(manifest,/version: '10\.48\.4\.2'/);
  assert.match(paper,/private static final String DIAGNOSE_PATH = "\/api\/minecraft\/link\/diagnose"/);
  assert.match(paper,/options\.add\("diagnose"\)/);
  assert.match(paper,/private void runDiagnostic\(CommandSender sender\)/);
@@ -218,7 +218,7 @@ test('V10.48.3: stats changes to authSource are not discarded as duplicate snaps
   assert.doesNotMatch(bridge,/api\.mojang|https?:\/\//);
 });
 
-test('V10.48.4.1: account safety cannot be bypassed by changed Java session or duplicate login',()=>{
+test('V10.48.4.2: account safety cannot be bypassed by changed Java session or duplicate login',()=>{
  const guard=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/IdentitySessionGuard.java',import.meta.url),'utf8');
  assert.match(guard,/enum State \{ OK, NO_SESSION, INVALID_NAME, ACCOUNT_CHANGED, DUPLICATE_SESSION \}/);
  assert.match(guard,/owners\.size\(\) != 1/);
@@ -229,7 +229,7 @@ test('V10.48.4.1: account safety cannot be bypassed by changed Java session or d
  assert.match(worker,/minecraftIdentityWarnings=/);
 });
 
-test('V10.48.4.1: identity proof refresh never waits for stats or invents Premium',()=>{
+test('V10.48.4.2: identity proof refresh never waits for stats or invents Premium',()=>{
  const proof=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/PaperIdentitySync.java',import.meta.url),'utf8');
  assert.match(paper,/new PaperIdentitySync\(this,http,this::identityFor/);
  assert.match(paper,/identitySync\.forceAll\(\)/);
@@ -241,4 +241,31 @@ test('V10.48.4.1: identity proof refresh never waits for stats or invents Premiu
  assert.match(worker,/async function minecraftIdentityRefresh\(req,env\)/);
  assert.match(worker,/const minecraftLinkedEdition=/);
  assert.doesNotMatch(proof,/player\.getStatistic|MINE_BLOCK|PlayerStatistic/);
+});
+
+test('V10.48.4.2: status is grouped, coloured and separates FLP session from licence',()=>{
+  const bridge=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/FastLoginSessionBridge.java',import.meta.url),'utf8');
+  assert.match(paper,/void showReadableStatus\(CommandSender sender\)/);
+  assert.match(paper,/statusSection\(sender,"SERVER & WEBSITE"\)/);
+  assert.match(paper,/statusSection\(sender,"AKUN & BUKTI LOGIN"\)/);
+  assert.match(paper,/statusSection\(sender,"PENGIRIMAN KE WEBSITE"\)/);
+  assert.match(paper,/statusSection\(sender,"LANGKAH BERIKUT"\)/);
+  assert.match(paper,/FastLoginSessionBridge\.inspect\(/);
+  assert.match(bridge,/enum Reason/);
+  assert.match(bridge,/case "PREMIUM"/);
+  assert.match(bridge,/case "CRACKED"/);
+  assert.match(bridge,/getMethod\("getStatus",UUID\.class\)/);
+  assert.doesNotMatch(bridge,/api\.mojang\.com/);
+  assert.match(paper,/bukan bukti lisensi Non-Premium/);
+});
+
+test('V10.48.4.2: offline-session label is not mistaken for licence ownership',()=>{
+  const dash=readFileSync(new URL('../player-dashboard.js',import.meta.url),'utf8');
+  const admin=readFileSync(new URL('../minecraft-sync-admin.js',import.meta.url),'utf8');
+  const sync=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/PaperIdentitySync.java',import.meta.url),'utf8');
+  assert.match(dash,/java_non_premium:'Minecraft Java \(sesi offline\)'/);
+  assert.match(admin,/java_non_premium:'Minecraft Java \(sesi offline\)'/);
+  assert.match(worker,/SESI_OFFLINE_BELUM_PREMIUM/);
+  assert.match(sync,/WEB_VERSION_MISMATCH/);
+  assert.match(sync,/IDENTITY_NOT_LINKED/);
 });
