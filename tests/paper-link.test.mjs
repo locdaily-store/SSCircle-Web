@@ -269,3 +269,15 @@ test('V10.48.4.2: offline-session label is not mistaken for licence ownership',(
   assert.match(sync,/WEB_VERSION_MISMATCH/);
   assert.match(sync,/IDENTITY_NOT_LINKED/);
 });
+
+test('V10.48.4.2: Profile/Admin refresh their actual script URLs after Premium fixes',()=>{
+ const profileHtml=readFileSync(new URL('../my-sscircle.html',import.meta.url),'utf8');
+ const adminHtml=readFileSync(new URL('../admin.html',import.meta.url),'utf8');
+ const headers=readFileSync(new URL('../_headers',import.meta.url),'utf8');
+ assert.match(profileHtml,/player-dashboard\.js\?v=10\.48\.4\.2/);
+ assert.match(adminHtml,/minecraft-sync-admin\.js\?v=10\.48\.4\.2/);
+ assert.match(adminHtml,/minecraft-sync-admin\.css\?v=10\.48\.4\.2/);
+ assert.match(headers,/\/my-sscircle\.html\s+Cache-Control: no-store/);
+ assert.match(headers,/\/my-sscircle\s+Cache-Control: no-store/);
+ assert.match(headers,/\/admin\.html\s+Cache-Control: no-store/);
+});
