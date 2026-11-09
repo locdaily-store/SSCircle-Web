@@ -113,7 +113,15 @@ final class PaperSyncTelemetry {
         }
         int code=response.statusCode();
         if(code!=200){
-            heartbeatState="Laporan ditolak (HTTP "+code+")";
+            String responseBody=response.body()==null?"":response.body();
+            if(code==400&&responseBody.contains("\"TELEMETRY_INVALID\""))
+                heartbeatState="Format monitoring ditolak (HTTP 400); perbarui Worker SSCircle.";
+            else if(code==401||code==403)
+                heartbeatState="Monitoring ditolak (HTTP "+code+"); periksa secret server dan Worker.";
+            else if(code==404)
+                heartbeatState="Endpoint monitoring belum ada (HTTP 404); perbarui Worker.";
+            else
+                heartbeatState="Laporan ditolak (HTTP "+code+")";
             return;
         }
         String raw=response.body()==null?"":response.body();

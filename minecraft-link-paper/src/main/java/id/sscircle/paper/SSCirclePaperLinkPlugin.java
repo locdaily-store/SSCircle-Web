@@ -13,6 +13,8 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerLoginEvent;
+import org.bukkit.plugin.RegisteredListener;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -454,6 +456,13 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
             boolean protocol=getServer().getPluginManager().isPluginEnabled("ProtocolLib");
             statusItem(sender,"ProtocolLib",protocol?"Aktif":"Tidak aktif",
                 protocol?NamedTextColor.GREEN:NamedTextColor.RED);
+            // Paper warns that legacy PlayerLoginEvent listeners can disable
+            // configuration-phase re-authentication. Identify that condition
+            // without claiming it conclusively caused this player's failure.
+            if(operator&&protocol&&hasLegacyProtocolLibLoginListener())
+                statusHint(sender,
+                    "ProtocolLib memakai PlayerLoginEvent: fitur konfigurasi login Paper berpotensi terganggu.",
+                    NamedTextColor.YELLOW);
             Plugin adapter=fastLoginPlugin();
             statusItem(sender,"FastLogin adapter",hasConflictingFastLoginPlugins()
                 ?"KONFLIK: dua plugin terpasang":
@@ -493,6 +502,10 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
             statusItem(sender,"Bukti jenis Minecraft",identitySync==null
                 ?"Belum aktif":identitySync.statusFor(player),NamedTextColor.YELLOW);
         }
+        if(!(sender instanceof Player))
+            statusHint(sender,
+                "Console tidak menampilkan identitas pemain. Jalankan /sscircle status dari chat Minecraft.",
+                NamedTextColor.YELLOW);
         statusSection(sender,"STATISTIK");
         boolean enabled=getConfig().getBoolean("stats-sync.enabled",true);
         statusItem(sender,"Sinkronisasi",enabled?"Aktif":"Nonaktif",
@@ -533,6 +546,15 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
             statusHint(sender,"OP: /sscircle sync lalu /sscircle diagnose jika web gagal.",
                 NamedTextColor.AQUA);
         statusHint(sender,"Status tautan akun: lihat Profile SSCircle.",NamedTextColor.GRAY);
+    }
+
+    private boolean hasLegacyProtocolLibLoginListener(){
+        for(RegisteredListener listener:
+                PlayerLoginEvent.getHandlerList().getRegisteredListeners()){
+            if("ProtocolLib".equalsIgnoreCase(listener.getPlugin().getName()))
+                return true;
+        }
+        return false;
     }
 
     static String sessionStatusLabel(FastLoginSessionBridge.Probe probe){

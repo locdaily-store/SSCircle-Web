@@ -1,4 +1,4 @@
-# SSCircle Player Sync Paper V10.48.4.2 (Web V10.48.4.2)
+# SSCircle Player Sync Paper V10.48.4.3 (Web V10.48.4.3)
 
 Penghubung akun Minecraft ke Profile SSCircle, tanpa Velocity. Plugin memakai HMAC, nonce, kode sekali-pakai 10 menit, dan konfirmasi ulang pada website. Satu anggota saat ini mempunyai **satu** akun Minecraft aktif; multi-account adalah fase berikutnya.
 
@@ -170,3 +170,24 @@ berdasarkan nickname. Selengkapnya lihat
 **Gunakan JAR dan paket Cloudflare V10.48.4.2 dari commit yang sama.**
 Tidak perlu migrasi D1, reset UUID, maupun menghapus database AuthMe.
 Lihat [Panduan lengkap V10.48.4.2](../docs/V10.48.4.2-PREMIUM-DIAGNOSIS.md).
+
+## V10.48.4.3: fix Monitoring HTTP 400 dan diagnosa Premium
+
+Sesuai log nyata `latest(6).log`, monitor di Cloudflare menolak
+`pluginVersion: "10.48.4.2"` karena pola versi lama hanya mengizinkan
+`10.x.y`. Worker V10.48.4.3 menerima versi tiga/empat bagian secara
+terbatas dan tetap memeriksa HMAC serta nonce. JAR menampilkan
+petunjuk error monitoring yang lebih jelas.
+
+Console menjalankan `/sscircle status` tanpa sesi Player sehingga
+**bagian bukti autentikasi tidak muncul**. Untuk menguji status Premium,
+jalankan perintah di **chat Minecraft pemain asli**, bukan console.
+
+Operator mendapat peringatan jika ProtocolLib masih mendaftarkan
+`PlayerLoginEvent` yang telah dilaporkan Paper bisa mengganggu
+reconfiguration login. Ini bukti masalah kompatibilitas yang perlu diuji
+dalam staging, **bukan** klaim bahwa SSCircle mampu memaksakan sesi
+Premium dari koneksi offline.
+
+Lihat [panduan berdasarkan latest log](../docs/V10.48.4.3-LATEST-LOG-AUDIT.md).
+Update JAR dan paket Worker bersama, tanpa migrasi D1.

@@ -430,6 +430,21 @@ test('V10.48: only a signed Paper heartbeat can populate private health monitori
   assert.equal(status.json.accounts.length,0);
   assert.equal(JSON.stringify(status.json).includes(SERVER),false);
 });
+test('V10.48.4.3: signed heartbeat accepts deployed four-part Paper version',async()=>{
+  const x=fixture();
+  for(const version of ['10.48.4','10.48.4.2','10.48.4.3']){
+    const response=await monitorBeat(x,telemetryBody({pluginVersion:version}));
+    assert.equal(response.status,200,version+': '+JSON.stringify(response.json));
+    const admin=await x.call('/api/admin/minecraft/sync',{cookie:x.admin});
+    assert.equal(admin.json.telemetry.pluginVersion,version);
+  }
+  for(const version of ['10.48.4.3.5','10.48.test.3','11.48.4.2','10.48','10.48.4a']){
+    assert.equal((await monitorBeat(x,telemetryBody({pluginVersion:version}))).status,400,version);
+  }
+  assert.equal((await monitorBeat(x,telemetryBody({pluginVersion:'10.48.4.3'}),
+    {key:'incorrect-secret'})).status,401);
+});
+
 test('V10.48: admin remote sync request is polled safely, acknowledged and rate-limited',async()=>{
   const x=fixture();
   assert.equal((await x.call('/api/admin/minecraft/sync/request',{method:'POST',data:{}})).status,401);
