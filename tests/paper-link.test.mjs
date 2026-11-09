@@ -57,7 +57,7 @@ test('Paper Direct: no insecure default endpoint or secrets in shipped config',(
 });
 
 test('V10.45.2: safe tab-completion shows matching commands and hides admin-only reload',()=>{
- assert.match(manifest,/version: '10\.48\.3'/);
+ assert.match(manifest,/version: '10\.48\.4'/);
  assert.match(paper,/implements CommandExecutor, TabCompleter, Listener/);
  assert.match(paper,/public List<String> onTabComplete\(CommandSender sender, Command command, String alias, String\[\] args\)/);
  assert.match(paper,/if \(args\.length != 1\) return List\.of\(\)/);
@@ -82,7 +82,7 @@ test('V10.45.2: explain both independent failures without exposing shared secret
 });
 
 test('V10.45.3: operator-only signed diagnostic and safe error presentation',()=>{
- assert.match(manifest,/version: '10\.48\.3'/);
+ assert.match(manifest,/version: '10\.48\.4'/);
  assert.match(paper,/private static final String DIAGNOSE_PATH = "\/api\/minecraft\/link\/diagnose"/);
  assert.match(paper,/options\.add\("diagnose"\)/);
  assert.match(paper,/private void runDiagnostic\(CommandSender sender\)/);
@@ -216,4 +216,15 @@ test('V10.48.3: stats changes to authSource are not discarded as duplicate snaps
   assert.match(bridge,/case "PREMIUM" -> Status\.PREMIUM/);
   assert.match(bridge,/case "CRACKED" -> Status\.CRACKED/);
   assert.doesNotMatch(bridge,/api\.mojang|https?:\/\//);
+});
+
+test('V10.48.4: account safety cannot be bypassed by changed Java session or duplicate login',()=>{
+ const guard=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/IdentitySessionGuard.java',import.meta.url),'utf8');
+ assert.match(guard,/enum State \{ OK, NO_SESSION, INVALID_NAME, ACCOUNT_CHANGED, DUPLICATE_SESSION \}/);
+ assert.match(guard,/owners\.size\(\) != 1/);
+ assert.match(paper,/identitySessions\.check\(player\.getUniqueId\(\),player\.getName\(\),accountId\)/);
+ assert.match(paper,/identitySessions\.joined\(event\.getPlayer\(\)\.getUniqueId\(\),event\.getPlayer\(\)\.getName\(\)\)/);
+ assert.match(paper,/identitySessions\.left\(event\.getPlayer\(\)\.getUniqueId\(\)\)/);
+ assert.match(paper,/IdentitySessionGuard\.State\.OK/);
+ assert.match(worker,/minecraftIdentityWarnings=/);
 });
