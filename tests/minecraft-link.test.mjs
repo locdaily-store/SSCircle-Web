@@ -414,6 +414,12 @@ test('V10.48: only a signed Paper heartbeat can populate private health monitori
   assert.equal((await monitorBeat(x,telemetryBody(),{key:'invalid-key'})).status,401);
   assert.equal((await monitorBeat(x,telemetryBody({deliveryCode:'server-password'}))).status,400);
   assert.equal((await monitorBeat(x,telemetryBody({tps1m:30}))).status,400);
+  // V10.48.4.3: deployed plugin 10.48.4.2 uses FOUR version segments.
+  // Old 10.x.y-only validation rejected every heartbeat with HTTP 400.
+  assert.equal((await monitorBeat(x,telemetryBody({pluginVersion:'10.48.4.2'}))).status,200);
+  assert.equal((await monitorBeat(x,telemetryBody({pluginVersion:'10.48.4.3'}))).status,200);
+  assert.equal((await monitorBeat(x,telemetryBody({pluginVersion:'10.48.4.3.7'}))).status,400);
+  assert.equal((await monitorBeat(x,telemetryBody({pluginVersion:'10.48.4.3;DROP'}))).status,400);
   const nonce=randomUUID();
   const accepted=await monitorBeat(x,telemetryBody(),{nonce});
   assert.equal(accepted.status,200,JSON.stringify(accepted.json));
