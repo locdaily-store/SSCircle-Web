@@ -8,6 +8,8 @@ import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -44,6 +46,7 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
     private static final Pattern RESPONSE_CODE = Pattern.compile("\\\"code\\\"\\s*:\\s*\\\"([A-Z_]{4,40})\\\"");
 
     private final Map<UUID, Long> lastRequestAt = new ConcurrentHashMap<>();
+    private final IdentitySessionGuard identitySessions = new IdentitySessionGuard();
     private HttpClient http;
     private String endpoint = "";
     private String signingSecret = "";
@@ -65,6 +68,10 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
         getCommand("sscircle").setExecutor(this);
         getCommand("sscircle").setTabCompleter(this);
         getServer().getPluginManager().registerEvents(this, this);
+        // Loading a plugin while players are already online must not bypass
+        // session binding. The guard is also populated on ordinary joins.
+        for (Player online : Bukkit.getOnlinePlayers())
+            identitySessions.joined(online.getUniqueId(), online.getName());
         readSettings();
         statsSync = new PaperStatsSync(this,http,this::identityFor,()->endpoint,()->signingSecret);
         statsSync.start();
@@ -89,6 +96,7 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
     @Override
     public void onDisable() {
         if (statsSync != null) statsSync.stop();
+        identitySessions.clear();
         lastRequestAt.clear();
     }
 
@@ -237,6 +245,16 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
                 Identity identity = identityFor(player);
                 sender.sendMessage("Identitas dalam game: " +
                     (identity == null ? "belum terverifikasi; login AuthMe/Floodgate terlebih dahulu" : identity.displayType()));
+                if (!Bukkit.getOnlineMode() && !isVerifiedBedrock(player)) {
+                    String id = AuthMeAccountId.fromPlayerName(player.getName());
+                    IdentitySessionGuard.State guard = identitySessions.check(
+                        player.getUniqueId(),player.getName(),id);
+                    if (guard != IdentitySessionGuard.State.OK) {
+                        sender.sendMessage("Keamanan sesi: "+guard.name()
+                            +". Linking dan statistik ditahan; logout/reconnect. "
+                            +"Jika nama/UUID berubah, minta pengurus melakukan recovery manual.");
+                    }
+                }
             }
             if (statsSync != null) {
                 sender.sendMessage("Statistik SSCircle: "
@@ -432,6 +450,20 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
         }
     }
 
+    private boolean isVerifiedBedrock(Player player) {
+        Plugin floodgate = getServer().getPluginManager().getPlugin("floodgate");
+        if (floodgate == null || !floodgate.isEnabled()) return false;
+        try {
+            Class<?> type = floodgate.getClass().getClassLoader()
+                .loadClass("org.geysermc.floodgate.api.FloodgateApi");
+            Object api = type.getMethod("getInstance").invoke(null);
+            return Boolean.TRUE.equals(type.getMethod("isFloodgatePlayer",UUID.class)
+                .invoke(api,player.getUniqueId()));
+        } catch (ReflectiveOperationException | LinkageError | SecurityException exception) {
+            return false;
+        }
+    }
+
     private Identity identityFor(Player player) {
         if (hasUntrustedLoginPlugin()) return null;
         // Floodgate identity is independently authenticated via its XUID API.
@@ -466,6 +498,11 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
                 || !AuthMeSessionBridge.isAuthenticated(player, authMe)) return null;
             String accountId = AuthMeAccountId.fromPlayerName(player.getName());
             if (accountId == null) return null;
+            // AuthMe authenticates this local account, but a mid-session name
+            // change or two simultaneous same-name sessions is ambiguous.
+            // Deny BOTH linking and stats rather than silently moving identity.
+            if (identitySessions.check(player.getUniqueId(),player.getName(),accountId)
+                    != IdentitySessionGuard.State.OK) return null;
             // Trust only the per-session status returned by the optional FastLogin
             // adapter, not the username/Mojang name availability. Keep the AuthMe
             // identity stable across upgrades, inventory and existing statistics.
@@ -554,8 +591,16 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
         return result.toString();
     }
 
+    // Bind the displayed login identity at the start of the live connection.
+    // Never infer ownership from the offline-mode UUID alone.
+    @EventHandler(priority=EventPriority.LOWEST)
+    public void onJoin(PlayerJoinEvent event) {
+        identitySessions.joined(event.getPlayer().getUniqueId(),event.getPlayer().getName());
+    }
+
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
+        identitySessions.left(event.getPlayer().getUniqueId());
         lastRequestAt.remove(event.getPlayer().getUniqueId());
     }
 

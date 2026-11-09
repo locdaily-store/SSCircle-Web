@@ -186,3 +186,14 @@ Baca petunjuk operasional di `docs/V10.47-PLAYER-STATS.md`.
 - FastLogin dan FastLoginPlus terpasang bersamaan akan dilaporkan sebagai konflik; SSCircle tidak boleh sembarang mengklaim Premium.
 - Plugin Paper versi 10.48.3 dibangun dari CI di `minecraft-link-paper`; folder Paper, statistik, secret, dan D1 produksi tidak diubah ketika source diperbarui.
 - **Pekerjaan yang masih wajib:** tes runtime Paper 26.3 + AuthMe + PacketEvents + ProtocolLib + FastLoginPlus (dan Geyser/Floodgate untuk Bedrock), termasuk pembaruan bukti ketika playtime tidak berubah, reconnect, restart, recovery, dan pemantauan TPS. Rilis berikutnya tetap fokus pada ketahanan identitas dan multi-account linking.
+
+
+## SSCircle V10.48.4 — Session Guard dan peringatan identitas (implementasi source)
+
+- Java AuthMe pada Paper offline-mode hanya diizinkan mengirim klaim/link/statistik ketika identitas nama ternormalisasi dan ID lokal tetap sama selama sesi login; sesi tidak dikenal dan dua sesi bersamaan dengan nama sama ditolak.
+- Keaslian Java Premium tetap berasal dari bukti sesi FastLoginPlus, **bukan nickname atau UUID offline**. Bedrock tetap diperiksa melalui Floodgate secara terpisah.
+- Admin Control → Minecraft Sync menampilkan peringatan identitas lama (lebih dari 7 hari), belum diverifikasi, bukti Bedrock yang tidak tersedia, serta nama tampilan Minecraft yang terduplikasi pada akun berbeda. Tidak menampilkan password, secret, atau kode tautan.
+- Tidak ada migrasi database, pemindahan akun, penghapusan statistik, atau perubahan playerdata otomatis. Recovery nickname/UUID harus ditinjau pengurus dan diuji di staging.
+- Uji Java JUnit dan Node memastikan guard, admin warning, serta API lama tidak regresi; **uji hosting nyata masih wajib**.
+
+**Berikutnya:** V10.48.5 reliability/recovery network dan profil TPS 20–50 pemain → V10.49.0 multi-account linking → V10.49.1 skin/avatar → V10.49.2 dashboard/recovery → V10.50 leaderboard Season dan Hall of Fame.

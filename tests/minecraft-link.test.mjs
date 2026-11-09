@@ -571,3 +571,45 @@ test('V10.48.2: legacy links keep UUID and are unverified until signed session e
   assert.equal(after.edition,'java_premium');
   assert.equal(x.db.prepare('SELECT provider_id FROM minecraft_accounts').get().provider_id,id);
 });
+
+
+test('V10.48.4: admin-only warnings expose unverified and stale FastLogin proof without moving accounts',async()=>{
+  const x=fixture(),cookie=await x.active();
+  const id='70a89d54-c32e-3942-a553-34f71cfde04d';
+  const code=(await x.call('/api/player/minecraft/link/create',
+    {method:'POST',cookie,data:{}})).json.code;
+  assert.equal((await x.claim({code,provider:'java_offline',providerId:id,
+    username:'LocalSteve',authSource:'authme-session'})).status,200);
+  assert.equal((await x.call('/api/player/minecraft/link/confirm',
+    {method:'POST',cookie,data:{}})).status,200);
+  let adminView=await x.call('/api/admin/minecraft/sync',{cookie:x.admin});
+  assert.ok(adminView.json.accounts[0].securityWarnings.includes('PREMIUM_BELUM_VERIFIKASI'));
+  // Old historical proof must be visible as old, not as a current live session.
+  x.db.prepare('UPDATE minecraft_identity_evidence SET auth_source=?, observed_at=? WHERE provider_id=?')
+    .run('fastlogin-premium',new Date(Date.now()-9*86400000).toISOString(),id);
+  adminView=await x.call('/api/admin/minecraft/sync',{cookie:x.admin});
+  assert.equal(adminView.json.accounts[0].edition,'java_premium');
+  assert.ok(adminView.json.accounts[0].securityWarnings.includes('BUKTI_LOGIN_LAMA'));
+  assert.ok(adminView.json.accounts[0].identityProofAt);
+  assert.equal((await x.call('/api/admin/minecraft/sync')).status,401);
+  assert.equal(x.db.prepare('SELECT provider_id FROM minecraft_accounts').get().provider_id,id);
+});
+
+test('V10.48.4: duplicate display name across distinct verified accounts warns admins, never auto-links',async()=>{
+  const x=fixture(),first=await x.active(),second=await x.active(true);
+  async function link(cookie,providerId){
+    const code=(await x.call('/api/player/minecraft/link/create',
+      {method:'POST',cookie,data:{}})).json.code;
+    assert.equal((await x.claim({code,provider:'java_premium',providerId,
+      username:'DuplicateName',authSource:'mojang-online'})).status,200);
+    assert.equal((await x.call('/api/player/minecraft/link/confirm',
+      {method:'POST',cookie,data:{}})).status,200);
+  }
+  await link(first,UUID);
+  await link(second,'a3b127cc-89de-4875-b456-8de073b2e212');
+  const view=await x.call('/api/admin/minecraft/sync',{cookie:x.admin});
+  assert.equal(view.status,200,JSON.stringify(view.json));
+  assert.equal(view.json.summary.linked,2);
+  assert.equal(view.json.accounts.length,2);
+  assert.ok(view.json.accounts.every(a=>a.securityWarnings.includes('NAMA_SAMA_PERIKSA')));
+});

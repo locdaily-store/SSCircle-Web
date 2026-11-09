@@ -154,6 +154,20 @@ window.SSCircleMinecraftSyncAdmin=(()=>{
       const date=el('div','ssc-sync-account-date');
       date.append(el('strong','',a.lastSyncAt?'Sudah ada statistik':'Menunggu statistik'),
         el('small','',a.lastSyncAt?stamp(a.lastSyncAt):'Belum ada sinkronisasi'));
+      const warnings={
+        NAMA_SAMA_PERIKSA:'Ada nama akun yang sama pada tautan lain. Periksa kepemilikan sebelum recovery.',
+        PREMIUM_BELUM_VERIFIKASI:'Sesi Java belum membuktikan Premium. Periksa AuthMe dan FastLoginPlus.',
+        BUKTI_LOGIN_LAMA:'Bukti sesi sudah lebih dari 7 hari. Minta pemain login dan sinkron ulang.',
+        BUKTI_BEDROCK_BELUM_TERSEDIA:'Bukti Floodgate belum tersedia pada akun ini.'
+      };
+      for(const code of (Array.isArray(a.securityWarnings)?a.securityWarnings:[])){
+        if(warnings[code]){
+          const warning=el('small','ssc-sync-account-warning','Periksa identitas: '+warnings[code]);
+          info.append(warning);
+        }
+      }
+      if(a.identityProofAt)info.append(el('small','',
+        'Bukti sesi terakhir: '+stamp(a.identityProofAt)));
       item.append(info,date);container.append(item);
     }
   }

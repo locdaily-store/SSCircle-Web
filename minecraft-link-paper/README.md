@@ -1,4 +1,4 @@
-# SSCircle Player Sync Paper V10.48.3 (Web V10.48.2+)
+# SSCircle Player Sync Paper V10.48.4 (Web V10.48.4)
 
 Penghubung akun Minecraft ke Profile SSCircle, tanpa Velocity. Plugin memakai HMAC, nonce, kode sekali-pakai 10 menit, dan konfirmasi ulang pada website. Satu anggota saat ini mempunyai **satu** akun Minecraft aktif; multi-account adalah fase berikutnya.
 
@@ -121,3 +121,19 @@ Rilis plugin ini mempertahankan kontrak HMAC, nonce, `authSource` dan API Web SS
 **Batasan penting:** status `UNKNOWN` tetap tampil sebagai belum terverifikasi jika adapter belum memperoleh hasil atau status sesi belum ada. Bukti CI/build bukan pengganti tes nyata 1 akun Premium + 1 akun Non-Premium + 1 akun Bedrock dan TPS pada hosting. Pada mode campuran, identitas SSCircle untuk Java tetap berbasis ID AuthMe stabil, **bukan** otomatis berpindah ke UUID Mojang. Mengubah `premiumUuid` FastLoginPlus dapat memengaruhi inventory/plugin lain; jangan lakukan tanpa rencana migrasi.
 
 Referensi upstream: https://github.com/Hayston1001/FastLoginPlus
+
+## V10.48.4: Proteksi identitas dan recovery
+
+Plugin kini mengikat akun AuthMe ke satu sesi Java sejak join sampai quit dan
+menolak linking/sinkronisasi jika nama/ID lokal berubah di tengah sesi atau
+dua koneksi menggunakan nama login lokal sama. Peringatan aman muncul dalam
+`/sscircle status`. Web SSCircle menampilkan warning bukti sesi yang lama,
+belum terverifikasi atau nickname terduplikasi pada
+**Admin Control → Minecraft Sync**.
+
+Untuk menggunakan UI warning terbaru, **deploy paket Cloudflare dari commit
+V10.48.4 juga**, bukan hanya mengganti JAR. Tidak perlu migrasi D1 baru dan
+tidak boleh reset link atau UUID pemain. Lihat
+[`docs/V10.48.4-IDENTITY-SAFETY.md`](../docs/V10.48.4-IDENTITY-SAFETY.md)
+untuk matriks uji staging, batasan kepemilikan nama AuthMe, dan prosedur
+recovery manual.
