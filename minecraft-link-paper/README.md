@@ -1,4 +1,4 @@
-# SSCircle Player Sync Paper V10.48.4.1 (Web V10.48.4.1)
+# SSCircle Player Sync Paper V10.48.4.2 (Web V10.48.4.2)
 
 Penghubung akun Minecraft ke Profile SSCircle, tanpa Velocity. Plugin memakai HMAC, nonce, kode sekali-pakai 10 menit, dan konfirmasi ulang pada website. Satu anggota saat ini mempunyai **satu** akun Minecraft aktif; multi-account adalah fase berikutnya.
 
@@ -7,9 +7,9 @@ Penghubung akun Minecraft ke Profile SSCircle, tanpa Velocity. Plugin memakai HM
 | Konfigurasi | Java Premium | Java dengan AuthMe (termasuk Non-Premium) | Bedrock |
 | --- | --- | --- | --- |
 | Paper `online-mode=true` | UUID Mojang terverifikasi | Tidak menerima login Non-Premium | XUID Floodgate |
-| Paper `online-mode=false` + AuthMe + PacketEvents + SSCircle mixed mode | Dapat masuk via AuthMe Premium Bypass (ditautkan sebagai **Java (AuthMe)**, bukan klaim Mojang Premium) | Login AuthMe wajib | XUID Floodgate |
+| Paper `online-mode=false` + AuthMe + PacketEvents + FastLoginPlus + SSCircle mixed mode | Java Premium hanya jika FastLoginPlus membuktikan sesi `PREMIUM` | Sesi login offline tetap dapat terhubung melalui AuthMe | XUID Floodgate |
 
-**Batasan kejujuran identitas:** API publik AuthMe v3 menyatakan apakah pemain terautentikasi, tetapi tidak membuktikan apakah login tertentu memakai password atau handshake Mojang. Karena itu, pada *mixed mode*, SSCircle menyimpan kedua jenis Java sebagai provider `java_offline` dengan label **Java (AuthMe / Server)**. Pemain Premium tetap bisa bermain/link, tetapi SSCircle tidak mengklaim UUID Mojang terverifikasi secara terpisah. Provider `java_premium` hanya dikeluarkan Paper `online-mode=true`. Jangan ubah klasifikasi ini berdasarkan nickname atau UUID v4 pada server offline.
+**Batasan identitas:** AuthMe v3 membuktikan akun lokal telah login, tetapi tidak membuktikan kepemilikan lisensi Mojang. Dalam *mixed mode*, SSCircle menyimpan Java sebagai provider `java_offline`, lalu membedakan bukti sesi `fastlogin-premium`, `fastlogin-cracked`, dan `authme-session`. Bukti **PREMIUM yang sah** menampilkan Java Premium meskipun provider tetap `java_offline`. Bukti **CRACKED** hanya berarti koneksi offline, sehingga label website sekarang **Minecraft Java (sesi offline)**, bukan pernyataan tentang lisensi pemain. Jangan menyimpulkan Premium dari nickname atau UUID offline.
 
 ## Jalur A: hanya Java Premium + Bedrock (paling aman untuk produksi saat ini)
 
@@ -149,3 +149,24 @@ Jika status sesi FastLoginPlus tetap `CRACKED`, server belum membuktikan koneksi
 tersebut sebagai Premium meskipun akun original dimiliki; jangan mengubah status
 berdasarkan nickname. Selengkapnya lihat
 [`docs/V10.48.4.1-PREMIUM-SYNC-FIX.md`](../docs/V10.48.4.1-PREMIUM-SYNC-FIX.md).
+
+## Hotfix V10.48.4.2 — diagnosis Premium mendalam
+
+- `/sscircle status` menggunakan tampilan warna dan bagian yang mudah dibaca:
+  server, bukti login, pengiriman website, statistik, rekomendasi.
+- Hasil FastLoginPlus lebih detail: `PREMIUM`, `OFFLINE`,
+  `BELUM DIKETAHUI`, API tidak kompatibel, plugin tidak aktif, atau
+  API gagal. Tidak ada asumsi Premium dari username.
+- HTTP 404 dari Worker versi lama tidak lagi salah ditafsirkan sebagai
+  akun belum ditautkan: kode `WEB_VERSION_MISMATCH` menunjukkan
+  paket Cloudflare perlu diperbarui, sedangkan `IDENTITY_NOT_LINKED`
+  menandakan konfirmasi tautan belum selesai.
+- Label `java_non_premium` lama pada API dipertahankan untuk kompatibilitas,
+  tetapi ditampilkan di frontend sebagai **Minecraft Java (sesi offline)**,
+  bukan penilaian kepemilikan lisensi.
+- Operator dapat memeriksa status komponen dan pengaturan FLP yang aman
+  tanpa mengungkap token, UUID, atau secret.
+
+**Gunakan JAR dan paket Cloudflare V10.48.4.2 dari commit yang sama.**
+Tidak perlu migrasi D1, reset UUID, maupun menghapus database AuthMe.
+Lihat [Panduan lengkap V10.48.4.2](../docs/V10.48.4.2-PREMIUM-DIAGNOSIS.md).

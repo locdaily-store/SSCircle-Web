@@ -57,7 +57,7 @@ test('Paper Direct: no insecure default endpoint or secrets in shipped config',(
 });
 
 test('V10.45.2: safe tab-completion shows matching commands and hides admin-only reload',()=>{
- assert.match(manifest,/version: '10\.48\.4\.1'/);
+ assert.match(manifest,/version: '10\.48\.4\.2'/);
  assert.match(paper,/implements CommandExecutor, TabCompleter, Listener/);
  assert.match(paper,/public List<String> onTabComplete\(CommandSender sender, Command command, String alias, String\[\] args\)/);
  assert.match(paper,/if \(args\.length != 1\) return List\.of\(\)/);
@@ -71,10 +71,10 @@ test('V10.45.2: safe tab-completion shows matching commands and hides admin-only
  assert.match(paper,/if \(args\.length == 0 \|\| \(args\.length == 1 && args\[0\]\.equalsIgnoreCase\("help"\)\)\)/);
 });
 test('V10.45.2: explain both independent failures without exposing shared secret',()=>{
- assert.match(paper,/Alamat website HTTPS:/);
- assert.match(paper,/Kunci komunikasi website:/);
- assert.match(paper,/Konfigurasi website:/);
- assert.match(paper,/authme-mixed-mode\.enabled=true/);
+ assert.match(paper,/statusItem\(sender,"Web SSCircle"/);
+ assert.match(paper,/statusItem\(sender,"Kunci aman"/);
+ assert.match(paper,/hasConnectionSettings\(\)/);
+ assert.match(paper,/authme-mixed-mode\.enabled/);
  assert.match(paper,/server-secret\.txt/);
  assert.match(paper,/SecretFileStore\.resolve\(/);
  assert.match(paper,/System\.getenv\(SECRET_ENV\)/);
@@ -82,7 +82,7 @@ test('V10.45.2: explain both independent failures without exposing shared secret
 });
 
 test('V10.45.3: operator-only signed diagnostic and safe error presentation',()=>{
- assert.match(manifest,/version: '10\.48\.4\.1'/);
+ assert.match(manifest,/version: '10\.48\.4\.2'/);
  assert.match(paper,/private static final String DIAGNOSE_PATH = "\/api\/minecraft\/link\/diagnose"/);
  assert.match(paper,/options\.add\("diagnose"\)/);
  assert.match(paper,/private void runDiagnostic\(CommandSender sender\)/);
@@ -104,7 +104,7 @@ test('V10.45.4: private file overrides stale environment without leaking secret'
  assert.match(local,/return new ResolvedSecret\(loadOrCreate\(directory\), "file privat plugin", false\)/);
  assert.match(local,/SecureRandom/);
  assert.match(paper,/SecretFileStore\.resolve\(/);
- assert.match(paper,/Sumber kunci aktif:/);
+ assert.match(paper,/statusItem\(sender,"Sumber kunci",secretSource/);
  assert.doesNotMatch(paper,/sender\.sendMessage\([^\n]*signingSecret\)/);
 });
 
@@ -189,10 +189,10 @@ test('V10.48: health heartbeat is lightweight, asynchronous and cannot execute a
 
 test('V10.48.2: optional FastLogin adapter uses the verified per-session API, never nickname',()=>{
   const bridge=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/FastLoginSessionBridge.java',import.meta.url),'utf8');
-  assert.match(bridge,/getStatus", UUID\.class/);
-  assert.match(bridge,/case "PREMIUM" -> Status\.PREMIUM/);
-  assert.match(bridge,/case "CRACKED" -> Status\.CRACKED/);
-  assert.match(bridge,/default -> Status\.UNKNOWN/);
+   assert.match(bridge,/getMethod\("getStatus",UUID\.class\)/);
+   assert.match(bridge,/case "PREMIUM" -> new Probe\(Status\.PREMIUM/);
+   assert.match(bridge,/case "CRACKED" -> new Probe\(Status\.CRACKED/);
+   assert.match(bridge,/default -> new Probe\(Status\.UNKNOWN/);
   assert.match(paper,/FastLoginSessionBridge\.read\(player, fastLoginPlugin\(\)\)/);
   assert.match(paper,/case PREMIUM -> "fastlogin-premium"/);
   assert.match(paper,/case CRACKED -> "fastlogin-cracked"/);
@@ -212,13 +212,13 @@ test('V10.48.3: stats changes to authSource are not discarded as duplicate snaps
   assert.match(stats,/sameSnapshotAndEvidence\(old,id\.authSource\(\),playtime,deaths,mobs,blocks\)/);
   assert.match(stats,/old\.authSource\(\)\.equals\(authSource\)/);
   const bridge=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/FastLoginSessionBridge.java',import.meta.url),'utf8');
-  assert.match(bridge,/interpretStatus\(result\)/);
-  assert.match(bridge,/case "PREMIUM" -> Status\.PREMIUM/);
-  assert.match(bridge,/case "CRACKED" -> Status\.CRACKED/);
+   assert.match(bridge,/interpretProbe\(Object response\)/);
+   assert.match(bridge,/case "PREMIUM" -> new Probe\(Status\.PREMIUM/);
+   assert.match(bridge,/case "CRACKED" -> new Probe\(Status\.CRACKED/);
   assert.doesNotMatch(bridge,/api\.mojang|https?:\/\//);
 });
 
-test('V10.48.4.1: account safety cannot be bypassed by changed Java session or duplicate login',()=>{
+test('V10.48.4.2: account safety cannot be bypassed by changed Java session or duplicate login',()=>{
  const guard=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/IdentitySessionGuard.java',import.meta.url),'utf8');
  assert.match(guard,/enum State \{ OK, NO_SESSION, INVALID_NAME, ACCOUNT_CHANGED, DUPLICATE_SESSION \}/);
  assert.match(guard,/owners\.size\(\) != 1/);
@@ -229,11 +229,11 @@ test('V10.48.4.1: account safety cannot be bypassed by changed Java session or d
  assert.match(worker,/minecraftIdentityWarnings=/);
 });
 
-test('V10.48.4.1: identity proof refresh never waits for stats or invents Premium',()=>{
+test('V10.48.4.2: identity proof refresh never waits for stats or invents Premium',()=>{
  const proof=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/PaperIdentitySync.java',import.meta.url),'utf8');
  assert.match(paper,/new PaperIdentitySync\(this,http,this::identityFor/);
  assert.match(paper,/identitySync\.forceAll\(\)/);
- assert.match(paper,/FastLoginSessionBridge\.read\(player,fastLoginPlugin\(\)\)/);
+ assert.match(paper,/FastLoginSessionBridge\.read\(player,\s*fastLoginPlugin\(\)\)/);
  assert.match(proof,/\/api\/minecraft\/identity\/refresh/);
  assert.match(proof,/sendAsync\(request,HttpResponse\.BodyHandlers\.ofString/);
  assert.match(proof,/SUCCESS_REFRESH_MS=10\*60000L/);
@@ -241,4 +241,43 @@ test('V10.48.4.1: identity proof refresh never waits for stats or invents Premiu
  assert.match(worker,/async function minecraftIdentityRefresh\(req,env\)/);
  assert.match(worker,/const minecraftLinkedEdition=/);
  assert.doesNotMatch(proof,/player\.getStatistic|MINE_BLOCK|PlayerStatistic/);
+});
+
+test('V10.48.4.2: status is grouped, coloured and separates FLP session from licence',()=>{
+  const bridge=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/FastLoginSessionBridge.java',import.meta.url),'utf8');
+  assert.match(paper,/void showReadableStatus\(CommandSender sender\)/);
+  assert.match(paper,/statusSection\(sender,"SERVER & WEBSITE"\)/);
+  assert.match(paper,/statusSection\(sender,"AKUN & BUKTI LOGIN"\)/);
+  assert.match(paper,/statusSection\(sender,"PENGIRIMAN KE WEBSITE"\)/);
+  assert.match(paper,/statusSection\(sender,"LANGKAH BERIKUT"\)/);
+  assert.match(paper,/FastLoginSessionBridge\.inspect\(/);
+  assert.match(bridge,/enum Reason/);
+  assert.match(bridge,/case "PREMIUM"/);
+  assert.match(bridge,/case "CRACKED"/);
+  assert.match(bridge,/getMethod\("getStatus",UUID\.class\)/);
+  assert.doesNotMatch(bridge,/api\.mojang\.com/);
+  assert.match(paper,/bukan bukti lisensi Non-Premium/);
+});
+
+test('V10.48.4.2: offline-session label is not mistaken for licence ownership',()=>{
+  const dash=readFileSync(new URL('../player-dashboard.js',import.meta.url),'utf8');
+  const admin=readFileSync(new URL('../minecraft-sync-admin.js',import.meta.url),'utf8');
+  const sync=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/PaperIdentitySync.java',import.meta.url),'utf8');
+  assert.match(dash,/java_non_premium:'Minecraft Java \(sesi offline\)'/);
+  assert.match(admin,/java_non_premium:'Minecraft Java \(sesi offline\)'/);
+  assert.match(worker,/SESI_OFFLINE_BELUM_PREMIUM/);
+  assert.match(sync,/WEB_VERSION_MISMATCH/);
+  assert.match(sync,/IDENTITY_NOT_LINKED/);
+});
+
+test('V10.48.4.2: Profile/Admin refresh their actual script URLs after Premium fixes',()=>{
+ const profileHtml=readFileSync(new URL('../my-sscircle.html',import.meta.url),'utf8');
+ const adminHtml=readFileSync(new URL('../admin.html',import.meta.url),'utf8');
+ const headers=readFileSync(new URL('../_headers',import.meta.url),'utf8');
+ assert.match(profileHtml,/player-dashboard\.js\?v=10\.48\.4\.2/);
+ assert.match(adminHtml,/minecraft-sync-admin\.js\?v=10\.48\.4\.2/);
+ assert.match(adminHtml,/minecraft-sync-admin\.css\?v=10\.48\.4\.2/);
+ assert.match(headers,/\/my-sscircle\.html\s+Cache-Control: no-store/);
+ assert.match(headers,/\/my-sscircle\s+Cache-Control: no-store/);
+ assert.match(headers,/\/admin\.html\s+Cache-Control: no-store/);
 });

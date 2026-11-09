@@ -1,6 +1,9 @@
 package id.sscircle.paper;
 
 import org.bukkit.Bukkit;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -223,74 +226,7 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
             return true;
         }
         if (args.length == 1 && args[0].equalsIgnoreCase("status")) {
-            sender.sendMessage("SSCircle Player Sync Paper " + getDescription().getVersion());
-            sender.sendMessage("Alamat website HTTPS: " +
-                (endpoint.isBlank() ? "belum valid - periksa plugins/SSCirclePlayerSync/config.yml" : "terkonfigurasi"));
-            sender.sendMessage("Kunci komunikasi website: " +
-                (SecretFileStore.isValidSecret(signingSecret) ? "terbaca" :
-                "belum terbaca - periksa plugins/SSCirclePlayerSync/server-secret.txt"));
-            if (sender.hasPermission("sscircle.admin")) {
-                sender.sendMessage("Sumber kunci aktif: " + secretSource);
-                sender.sendMessage("File server-secret.txt mengalahkan environment variable Windows bila tersedia.");
-            }
-            sender.sendMessage("Konfigurasi website: " +
-                (hasConnectionSettings() ? "siap (belum menguji koneksi internet)" : "belum lengkap"));
-            if (!Bukkit.getOnlineMode()) {
-                sender.sendMessage("Autentikasi: offline-mode / AuthMe "
-                    + (mixedModeReady() ? "siap untuk Java" : "belum siap untuk Java"));
-                if (!mixedModeReady()) {
-                    sender.sendMessage("Butuh authme-mixed-mode.enabled=true, AuthMe dan PacketEvents aktif.");
-                }
-                if (sender.hasPermission("sscircle.admin")) {
-                    sender.sendMessage("Deteksi Premium: " +
-                        (hasConflictingFastLoginPlugins()
-                            ? "KONFLIK FastLogin dan FastLoginPlus; nonaktifkan salah satu."
-                            : fastLoginPlugin() == null
-                                ? "FastLogin/FastLoginPlus belum aktif; Java AuthMe belum terklasifikasi."
-                                : "Adapter "+fastLoginPlugin().getName()+" aktif (getStatus(UUID) per sesi)."));
-                }
-            } else {
-                sender.sendMessage("Autentikasi: online-mode (Mojang Java Premium).");
-            }
-            if (sender instanceof Player player) {
-                Identity identity = identityFor(player);
-                sender.sendMessage("Identitas dalam game: " +
-                    (identity == null ? "belum terverifikasi; login AuthMe/Floodgate terlebih dahulu" : identity.displayType()));
-                if(!Bukkit.getOnlineMode()&&!isVerifiedBedrock(player)){
-                    FastLoginSessionBridge.Status liveStatus=
-                        FastLoginSessionBridge.read(player,fastLoginPlugin());
-                    sender.sendMessage("Status sesi FastLoginPlus langsung: "+liveStatus.name()
-                        +(liveStatus==FastLoginSessionBridge.Status.CRACKED
-                            ?" (login offline; pemeriksaan Premium harus diperbaiki di FastLoginPlus)"
-                            :liveStatus==FastLoginSessionBridge.Status.UNKNOWN
-                                ?" (belum ada bukti Premium dari adapter)" : " (sesi Premium terverifikasi)"));
-                }
-                if(identitySync!=null)
-                    sender.sendMessage("Pengiriman bukti ke web: "+identitySync.statusFor(player));
-                if (!Bukkit.getOnlineMode() && !isVerifiedBedrock(player)) {
-                    String id = AuthMeAccountId.fromPlayerName(player.getName());
-                    IdentitySessionGuard.State guard = identitySessions.check(
-                        player.getUniqueId(),player.getName(),id);
-                    if (guard != IdentitySessionGuard.State.OK) {
-                        sender.sendMessage("Keamanan sesi: "+guard.name()
-                            +". Linking dan statistik ditahan; logout/reconnect. "
-                            +"Jika nama/UUID berubah, minta pengurus melakukan recovery manual.");
-                    }
-                }
-            }
-            if (statsSync != null) {
-                sender.sendMessage("Statistik SSCircle: "
-                    + (getConfig().getBoolean("stats-sync.enabled",true) ? "aktif" : "nonaktif"));
-                if (sender.hasPermission("sscircle.admin")) {
-                    sender.sendMessage("Antrean statistik: " + statsSync.pendingCount() + " identitas.");
-                    sender.sendMessage("Pengiriman terakhir: " + statsSync.deliveryStatus());
-                    if(identitySync!=null)
-                        sender.sendMessage("Sinkron bukti sesi: "+identitySync.deliveryStatus());
-                if(syncTelemetry!=null)
-                    sender.sendMessage("Monitoring website: "+syncTelemetry.status());
-                }
-            }
-            sender.sendMessage("Status akun tertaut tersedia di Profile website SSCircle.");
+            showReadableStatus(sender);
             return true;
         }
 
@@ -474,6 +410,154 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
         }
     }
 
+    // Grouped, coloured, short diagnostics. Avoid raw secrets, UUIDs or login
+    // tokens. Every value is sent as a component to prevent formatting injection.
+    private void statusHeading(CommandSender sender,String title) {
+        sender.sendMessage(Component.text("──────── ",NamedTextColor.DARK_GRAY)
+            .append(Component.text(title,NamedTextColor.AQUA)
+                .decorate(TextDecoration.BOLD))
+            .append(Component.text(" ────────",NamedTextColor.DARK_GRAY)));
+    }
+    private void statusSection(CommandSender sender,String title) {
+        sender.sendMessage(Component.text("◆ "+title,NamedTextColor.GOLD)
+            .decorate(TextDecoration.BOLD));
+    }
+    private void statusItem(CommandSender sender,String title,String value,NamedTextColor color){
+        sender.sendMessage(Component.text("  "+title+": ",NamedTextColor.GRAY)
+            .append(Component.text(value,color)));
+    }
+    private void statusHint(CommandSender sender,String message,NamedTextColor color){
+        sender.sendMessage(Component.text("  • "+message,color));
+    }
+
+    private void showReadableStatus(CommandSender sender){
+        boolean operator=sender.hasPermission("sscircle.admin");
+        statusHeading(sender,"SSCircle "+getDescription().getVersion());
+        statusSection(sender,"SERVER & WEBSITE");
+        statusItem(sender,"Mode server",Bukkit.getOnlineMode()?"Online (Mojang)":
+            "Offline (AuthMe + FastLoginPlus)",
+            Bukkit.getOnlineMode()?NamedTextColor.GREEN:NamedTextColor.YELLOW);
+        statusItem(sender,"Web SSCircle",endpoint.isBlank()?"URL belum benar":
+            "URL HTTPS terisi (belum tentu online)",
+            endpoint.isBlank()?NamedTextColor.RED:NamedTextColor.GREEN);
+        statusItem(sender,"Kunci aman",SecretFileStore.isValidSecret(signingSecret)
+            ?"Ada (nilai disembunyikan)":"Belum valid",
+            SecretFileStore.isValidSecret(signingSecret)
+                ?NamedTextColor.GREEN:NamedTextColor.RED);
+        if(!Bukkit.getOnlineMode()){
+            statusItem(sender,"AuthMe",authMePlugin()==null?"Tidak aktif":"Terpasang",
+                authMePlugin()==null?NamedTextColor.RED:NamedTextColor.GREEN);
+            boolean packet=getServer().getPluginManager().isPluginEnabled("packetevents")
+                ||getServer().getPluginManager().isPluginEnabled("PacketEvents");
+            statusItem(sender,"PacketEvents",packet?"Aktif":"Tidak aktif",
+                packet?NamedTextColor.GREEN:NamedTextColor.RED);
+            boolean protocol=getServer().getPluginManager().isPluginEnabled("ProtocolLib");
+            statusItem(sender,"ProtocolLib",protocol?"Aktif":"Tidak aktif",
+                protocol?NamedTextColor.GREEN:NamedTextColor.RED);
+            Plugin adapter=fastLoginPlugin();
+            statusItem(sender,"FastLogin adapter",hasConflictingFastLoginPlugins()
+                ?"KONFLIK: dua plugin terpasang":
+                adapter==null?"Tidak terdeteksi":
+                adapter.getName()+" "+adapter.getDescription().getVersion(),
+                adapter!=null?NamedTextColor.GREEN:NamedTextColor.RED);
+            if(!mixedModeReady())
+                statusHint(sender,"Mode campuran belum siap. Cek config, AuthMe dan PacketEvents.",
+                    NamedTextColor.RED);
+        }
+        if(sender instanceof Player player){
+            statusSection(sender,"AKUN & BUKTI LOGIN");
+            if(isVerifiedBedrock(player)){
+                statusItem(sender,"Jenis", "Bedrock - Floodgate XUID",NamedTextColor.GREEN);
+            }else if(Bukkit.getOnlineMode()){
+                statusItem(sender,"Jenis","Java Premium (diverifikasi server online-mode)",
+                    NamedTextColor.GREEN);
+            }else{
+                boolean authenticated=AuthMeSessionBridge.isAuthenticated(player,authMePlugin());
+                statusItem(sender,"Autentikasi AuthMe",authenticated?"Sudah masuk":"Belum diverifikasi",
+                    authenticated?NamedTextColor.GREEN:NamedTextColor.RED);
+                FastLoginSessionBridge.Probe probe=FastLoginSessionBridge.inspect(
+                    player,fastLoginPlugin());
+                statusItem(sender,"Sesi FastLoginPlus",sessionStatusLabel(probe),
+                    probe.status()==FastLoginSessionBridge.Status.PREMIUM
+                        ?NamedTextColor.GREEN:NamedTextColor.YELLOW);
+                statusHint(sender,sessionHelpText(probe),NamedTextColor.YELLOW);
+                String localId=AuthMeAccountId.fromPlayerName(player.getName());
+                IdentitySessionGuard.State guard=identitySessions.check(
+                    player.getUniqueId(),player.getName(),localId);
+                statusItem(sender,"Keamanan sesi",guard==IdentitySessionGuard.State.OK
+                    ?"Aman":guard.name()+" (link ditahan)",
+                    guard==IdentitySessionGuard.State.OK
+                        ?NamedTextColor.GREEN:NamedTextColor.RED);
+            }
+            statusSection(sender,"PENGIRIMAN KE WEBSITE");
+            statusItem(sender,"Bukti jenis Minecraft",identitySync==null
+                ?"Belum aktif":identitySync.statusFor(player),NamedTextColor.YELLOW);
+        }
+        statusSection(sender,"STATISTIK");
+        boolean enabled=getConfig().getBoolean("stats-sync.enabled",true);
+        statusItem(sender,"Sinkronisasi",enabled?"Aktif":"Nonaktif",
+            enabled?NamedTextColor.GREEN:NamedTextColor.YELLOW);
+        if(operator){
+            statusItem(sender,"Antrean",statsSync==null?"Tidak aktif":
+                statsSync.pendingCount()+" akun",NamedTextColor.YELLOW);
+            statusItem(sender,"Hasil statistik",statsSync==null?"Tidak ada":
+                statsSync.deliveryStatus(),NamedTextColor.GRAY);
+            statusItem(sender,"Hasil bukti sesi",identitySync==null?"Tidak ada":
+                identitySync.deliveryStatus(),NamedTextColor.GRAY);
+            if(syncTelemetry!=null)
+                statusItem(sender,"Monitoring",syncTelemetry.status(),NamedTextColor.GRAY);
+            statusItem(sender,"Sumber kunci",secretSource,NamedTextColor.GRAY);
+            Plugin adapter=fastLoginPlugin();
+            if(adapter instanceof JavaPlugin javaAdapter&&!Bukkit.getOnlineMode()){
+                statusItem(sender,"FLP autoLogin",
+                    javaAdapter.getConfig().getBoolean("autoLogin",true)
+                        ?"Aktif":"Nonaktif",NamedTextColor.GRAY);
+                statusItem(sender,"FLP autoRegister",
+                    javaAdapter.getConfig().getBoolean("autoRegister",true)
+                        ?"Aktif":"Nonaktif",NamedTextColor.GRAY);
+                statusItem(sender,"FLP premiumUuid",
+                    javaAdapter.getConfig().getBoolean("premiumUuid",true)
+                        ?"Aktif (jangan ubah tanpa backup)":"Nonaktif",
+                    NamedTextColor.GRAY);
+                statusItem(sender,"FLP offline retry",
+                    javaAdapter.getConfig().getBoolean("secondAttemptCracked",false)
+                        ?"Aktif":"Nonaktif",NamedTextColor.GRAY);
+            }
+        }
+        statusSection(sender,"LANGKAH BERIKUT");
+        statusHint(sender,"Bila FastLoginPlus menunjukkan OFFLINE, periksa login Premium",
+            NamedTextColor.AQUA);
+        statusHint(sender,"di FastLoginPlus/ProtocolLib, bukan mengubah label secara paksa.",
+            NamedTextColor.AQUA);
+        if(operator)
+            statusHint(sender,"OP: /sscircle sync lalu /sscircle diagnose jika web gagal.",
+                NamedTextColor.AQUA);
+        statusHint(sender,"Status tautan akun: lihat Profile SSCircle.",NamedTextColor.GRAY);
+    }
+
+    static String sessionStatusLabel(FastLoginSessionBridge.Probe probe){
+        return switch(probe.reason()){
+            case PREMIUM_VERIFIED -> "PREMIUM - sesi terverifikasi";
+            case OFFLINE_SESSION -> "OFFLINE - bukan bukti lisensi Non-Premium";
+            case SESSION_UNKNOWN -> "BELUM DIKETAHUI - tunggu autentikasi";
+            case NO_PLUGIN,PLUGIN_DISABLED -> "PLUGIN TIDAK AKTIF";
+            case ADAPTER_INCOMPATIBLE -> "API TIDAK KOMPATIBEL";
+            case API_FAILED -> "GAGAL MEMBACA API";
+            case NO_PLAYER -> "TIDAK ADA SESI PEMAIN";
+        };
+    }
+    static String sessionHelpText(FastLoginSessionBridge.Probe probe){
+        return switch(probe.reason()){
+            case PREMIUM_VERIFIED -> "Koneksi ini sudah lolos pemeriksaan Premium.";
+            case OFFLINE_SESSION -> "Koneksi ini memakai login offline. Jika akun original, coba relog dari launcher resmi dan cek log FastLoginPlus.";
+            case SESSION_UNKNOWN -> "Belum ada hasil sesi. Periksa plugin, login AuthMe, lalu reconnect.";
+            case NO_PLUGIN,PLUGIN_DISABLED -> "Pasang satu FastLoginPlus yang cocok pada server Paper ini.";
+            case ADAPTER_INCOMPATIBLE -> "Versi/fork FastLoginPlus tidak cocok dengan API getStatus(UUID).";
+            case API_FAILED -> "Pemeriksaan FastLoginPlus gagal. Lihat console server.";
+            case NO_PLAYER -> "Hanya pemain online yang mempunyai bukti sesi.";
+        };
+    }
+
     private boolean isVerifiedBedrock(Player player) {
         Plugin floodgate = getServer().getPluginManager().getPlugin("floodgate");
         if (floodgate == null || !floodgate.isEnabled()) return false;
@@ -539,7 +623,7 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
             };
             String type = switch (loginStatus) {
                 case PREMIUM -> "Minecraft Java Premium (terverifikasi FastLogin)";
-                case CRACKED -> "Minecraft Java Non-Premium (mode login offline)";
+                case CRACKED -> "Minecraft Java (sesi offline, Premium belum terverifikasi)";
                 default -> "Minecraft Java (status Premium belum terverifikasi)";
             };
             return new Identity("java_offline", accountId, source, type);

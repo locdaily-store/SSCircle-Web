@@ -193,13 +193,35 @@ final class PaperIdentitySync implements Listener {
             state.lastStatus="Bukti "+source+" diterima website";
             lastDelivery="Bukti sesi terbaru diterima";
         }else if(status==404){
-            lastCode="IDENTITY_NOT_LINKED";
-            state.lastStatus="Akun belum dikonfirmasi pada Profile";
-            lastDelivery="Menunggu konfirmasi website";
+            // A missing Worker endpoint and an unlinked player both return
+            // HTTP 404. Never report "not linked" unless the signed backend
+            // explicitly returned that error code.
+            String body=response.body()==null?"":response.body();
+            if(body.contains("\"IDENTITY_NOT_LINKED\"")){
+                lastCode="IDENTITY_NOT_LINKED";
+                state.lastStatus="Akun Minecraft belum dikonfirmasi di Profile";
+                lastDelivery="Menunggu konfirmasi tautan";
+            }else{
+                lastCode="WEB_VERSION_MISMATCH";
+                state.lastStatus="Endpoint sinkron belum tersedia di Cloudflare";
+                lastDelivery="Deploy ZIP Worker SSCircle yang sesuai dengan JAR";
+            }
+        }else if(status==401||status==403){
+            lastCode="IDENTITY_AUTH_ERROR";
+            state.lastStatus="Pengiriman ditolak (HTTP "+status+")";
+            lastDelivery="Periksa secret Paper dan Cloudflare; jalankan /sscircle diagnose";
+        }else if(status==410){
+            lastCode="IDENTITY_PRELINK";
+            state.lastStatus="Bukti sebelum tautan akun tidak digunakan";
+            lastDelivery="Hubungkan akun baru secara aman melalui Profile";
+        }else if(status==503){
+            lastCode="WEB_UNAVAILABLE";
+            state.lastStatus="Layanan Cloudflare belum siap";
+            lastDelivery="Periksa deployment dan binding D1 pada Worker";
         }else{
             lastCode="IDENTITY_HTTP_"+status;
             state.lastStatus="Pembaruan tertunda (HTTP "+status+")";
-            lastDelivery="Periksa secret/endpoint dan login FastLoginPlus";
+            lastDelivery="Periksa status deployment Cloudflare";
         }
     }
 
