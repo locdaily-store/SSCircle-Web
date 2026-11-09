@@ -34,6 +34,7 @@
 .ssc-sync-account-info,.ssc-sync-account-date{display:grid;gap:4px;min-width:0}
 .ssc-sync-account-info strong,.ssc-sync-account-date strong{font-size:12px;overflow-wrap:anywhere}
 .ssc-sync-account-info small,.ssc-sync-account-date small{font-size:11px;color:var(--text-muted,#bcb7c9)}
+.ssc-sync-account-info .ssc-sync-account-warning{color:#e7b77e;line-height:1.5;max-width:58ch;overflow-wrap:anywhere}
 .ssc-sync-account-date{text-align:right}
 .ssc-sync-pagination{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:15px;font-size:12px}
 .ssc-sync-events{display:grid;gap:9px}
