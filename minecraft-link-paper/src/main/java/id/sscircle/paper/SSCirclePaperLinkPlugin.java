@@ -52,6 +52,7 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
     private String signingSecret = "";
     private String secretSource = "tidak tersedia";
     private PaperStatsSync statsSync;
+    private PaperIdentitySync identitySync;
     private PaperSyncTelemetry syncTelemetry;
 
     @Override
@@ -75,6 +76,11 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
         readSettings();
         statsSync = new PaperStatsSync(this,http,this::identityFor,()->endpoint,()->signingSecret);
         statsSync.start();
+        // Refresh session proof without waiting for the next expensive stat
+        // sampling round. This also replaces stale CRACKED labels after login.
+        identitySync=new PaperIdentitySync(this,http,this::identityFor,
+            ()->endpoint,()->signingSecret);
+        identitySync.start();
         syncTelemetry=new PaperSyncTelemetry(this,statsSync,http,()->endpoint,()->signingSecret);
         syncTelemetry.start();
         if (!Bukkit.getOnlineMode()) {
@@ -96,6 +102,7 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
     @Override
     public void onDisable() {
         if (statsSync != null) statsSync.stop();
+        if (identitySync != null) identitySync.stop();
         identitySessions.clear();
         lastRequestAt.clear();
     }
@@ -196,8 +203,12 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
             } else {
                 statsSync.triggerNow();
                 sender.sendMessage("Statistik pemain online dimasukkan ke antrean.");
-                sender.sendMessage("Cek /sscircle status untuk status pengiriman.");
             }
+            if(identitySync!=null) {
+                identitySync.forceAll();
+                sender.sendMessage("Bukti sesi Premium/Non-Premium akan diperiksa ulang secara terpisah.");
+            }
+            sender.sendMessage("Cek /sscircle status untuk status pengiriman.");
             return true;
         }
         if (args.length == 1 && args[0].equalsIgnoreCase("reload")) {
@@ -245,6 +256,17 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
                 Identity identity = identityFor(player);
                 sender.sendMessage("Identitas dalam game: " +
                     (identity == null ? "belum terverifikasi; login AuthMe/Floodgate terlebih dahulu" : identity.displayType()));
+                if(!Bukkit.getOnlineMode()&&!isVerifiedBedrock(player)){
+                    FastLoginSessionBridge.Status liveStatus=
+                        FastLoginSessionBridge.read(player,fastLoginPlugin());
+                    sender.sendMessage("Status sesi FastLoginPlus langsung: "+liveStatus.name()
+                        +(liveStatus==FastLoginSessionBridge.Status.CRACKED
+                            ?" (login offline; pemeriksaan Premium harus diperbaiki di FastLoginPlus)"
+                            :liveStatus==FastLoginSessionBridge.Status.UNKNOWN
+                                ?" (belum ada bukti Premium dari adapter)" : " (sesi Premium terverifikasi)"));
+                }
+                if(identitySync!=null)
+                    sender.sendMessage("Pengiriman bukti ke web: "+identitySync.statusFor(player));
                 if (!Bukkit.getOnlineMode() && !isVerifiedBedrock(player)) {
                     String id = AuthMeAccountId.fromPlayerName(player.getName());
                     IdentitySessionGuard.State guard = identitySessions.check(
@@ -262,6 +284,8 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
                 if (sender.hasPermission("sscircle.admin")) {
                     sender.sendMessage("Antrean statistik: " + statsSync.pendingCount() + " identitas.");
                     sender.sendMessage("Pengiriman terakhir: " + statsSync.deliveryStatus());
+                    if(identitySync!=null)
+                        sender.sendMessage("Sinkron bukti sesi: "+identitySync.deliveryStatus());
                 if(syncTelemetry!=null)
                     sender.sendMessage("Monitoring website: "+syncTelemetry.status());
                 }
