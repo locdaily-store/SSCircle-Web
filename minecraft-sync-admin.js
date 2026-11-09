@@ -15,7 +15,7 @@ window.SSCircleMinecraftSyncAdmin=(()=>{
     return Number.isFinite(value)?new Date(value).toLocaleString(locale):'Belum tersedia';};
   const num=(v)=>new Intl.NumberFormat(locale).format(Number(v)||0);
   const types={java_premium:'Minecraft Java Premium',
-    java_non_premium:'Minecraft Java Non-Premium (sesi offline)',
+    java_non_premium:'Minecraft Java (sesi offline)',
     java_unverified:'Minecraft Java (Premium belum terverifikasi)',
     bedrock:'Minecraft Bedrock'};
   const eventText={IDLE:'Menunggu pengiriman',SYNC_OK:'Berhasil',
@@ -157,6 +157,7 @@ window.SSCircleMinecraftSyncAdmin=(()=>{
       const warnings={
         NAMA_SAMA_PERIKSA:'Ada nama akun yang sama pada tautan lain. Periksa kepemilikan sebelum recovery.',
         PREMIUM_BELUM_VERIFIKASI:'Sesi Java belum membuktikan Premium. Periksa AuthMe dan FastLoginPlus.',
+        SESI_OFFLINE_BELUM_PREMIUM:'Koneksi terakhir memakai login offline. Ini bukan bukti bahwa pemilik tidak membeli Minecraft original. Periksa verifikasi sesi FastLoginPlus.',
         BUKTI_LOGIN_LAMA:'Bukti sesi sudah lebih dari 7 hari. Status Java akan terlihat belum terverifikasi sampai bukti terbaru berhasil dikirim.',
         BUKTI_BEDROCK_BELUM_TERSEDIA:'Bukti Floodgate belum tersedia pada akun ini.'
       };
