@@ -289,5 +289,5 @@ test('V10.48.4.3: monitor heartbeat version validation and precise player diagno
   assert.match(paper,/Console tidak menampilkan identitas pemain/);
   assert.match(telemetry,/TELEMETRY_INVALID/);
   assert.match(worker,/TELEMETRY_INVALID/);
-  assert.match(worker,/input\\.pluginVersion/);
+  assert.ok(worker.includes('input.pluginVersion'));
 });
