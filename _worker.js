@@ -2580,6 +2580,21 @@ const minecraftEdition=(provider,authSource)=>{
   if(provider==='java_offline'&&authSource==='fastlogin-cracked')return 'java_non_premium';
   return 'java_unverified';
 };
+// Admin-only safety hints: historical auth proof is not a live login session.
+const minecraftIdentityWarnings=(provider,source,observedAt,duplicateName,now=Date.now())=>{
+  const warnings=[];
+  if(duplicateName)warnings.push('NAMA_SAMA_PERIKSA');
+  if(provider==='java_offline'){
+    if(!source||source==='authme-session')warnings.push('PREMIUM_BELUM_VERIFIKASI');
+    if(source&&source.startsWith('fastlogin-')
+       && (!Number.isFinite(Date.parse(observedAt))
+         || now-Date.parse(observedAt)>7*86400000))
+      warnings.push('BUKTI_LOGIN_LAMA');
+  }
+  if(provider==='bedrock'&&source!=='floodgate-xuid')
+    warnings.push('BUKTI_BEDROCK_BELUM_TERSEDIA');
+  return warnings;
+};
 const mcCodeHash=(env,code)=>hmac(env.SESSION_SECRET+'|minecraft-link-code',code);
 async function minecraftLinkAPI(req,env,path,method){
   if(path==='/api/admin/minecraft/links' && method==='GET'){
@@ -3018,7 +3033,10 @@ async function minecraftSyncAdmin(req,env,path,method){
     // Escape SQLite LIKE wildcards. All user input remains parameter-bound.
     const needle='%'+query.replace(/[\\%_]/g,c=>'\\'+c)+'%';
     const rows=await env.DB.prepare(`SELECT a.application_id AS member_id,a.provider,a.username,a.verified_at,
-      e.auth_source,COALESCE(p.display_name,'') AS display_name,
+      e.auth_source,e.observed_at,
+      EXISTS(SELECT 1 FROM minecraft_accounts other
+        WHERE other.id<>a.id AND lower(other.username)=lower(a.username))
+        AS duplicate_name,COALESCE(p.display_name,'') AS display_name,
       (SELECT MAX(s.last_synced_at) FROM player_stat_snapshots s
         WHERE s.application_id=a.application_id) AS last_sync_at
       FROM minecraft_accounts a
@@ -3055,6 +3073,9 @@ async function minecraftSyncAdmin(req,env,path,method){
         memberId:x.member_id,memberName:x.display_name||'Anggota',
         provider:x.provider,edition:minecraftEdition(x.provider,x.auth_source),
         username:x.username,linkedAt:x.verified_at,
+        identityProofAt:x.observed_at||null,
+        securityWarnings:minecraftIdentityWarnings(
+          x.provider,x.auth_source,x.observed_at,!!x.duplicate_name),
         lastSyncAt:x.last_sync_at||null
       })),hasMore:(rows.results||[]).length>100,offset,filter,query,
       events:(events.results||[]),pendingCommand:pending?{
