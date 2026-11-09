@@ -140,7 +140,7 @@ test('V10.47: vanilla statistics are only sampled for verified identities',()=>{
  assert.match(stats,/stats-queue\.properties/);
  assert.match(stats,/sendAsync\(request,HttpResponse\.BodyHandlers\.ofString/);
  assert.match(stats,/eventId\(\)\.equals\(eventId\)/);
- assert.match(stats,/scheduleRetry\(\)/);
+ assert.match(stats,/scheduleRetry\(-1,null\)/);
  assert.match(stats,/StandardCopyOption\.ATOMIC_MOVE/);
  assert.match(paper,/statsSync\.start\(\)/);
  assert.match(paper,/statsSync\.stop\(\)/);
@@ -159,7 +159,7 @@ test('V10.47.2: statistic collection is tick-budgeted, disk I/O asynchronous and
  assert.match(stats,/while\(budget-->0&&activeJob\.index<blockMaterials\.size\(\)\)/);
  assert.match(stats,/Executors\.newSingleThreadExecutor/);
  assert.match(stats,/diskWriter\.submit\(\(\)->writeQueue\(copy\)\)/);
- assert.match(stats,/Math\.min\(300000L,retryDelayMs\*2L\)/);
+ assert.match(stats,/SyncRetryPolicy\.nextBaseDelayMs\(retryDelayMs\)/);
  assert.match(stats,/lastDelivery=/);
  assert.match(config,/block-reads-per-tick:\s*24/);
  assert.match(config,/queue-flush-seconds:\s*10/);
