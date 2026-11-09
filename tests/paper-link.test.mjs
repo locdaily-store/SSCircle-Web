@@ -57,7 +57,7 @@ test('Paper Direct: no insecure default endpoint or secrets in shipped config',(
 });
 
 test('V10.45.2: safe tab-completion shows matching commands and hides admin-only reload',()=>{
- assert.match(manifest,/version: '10\.48\.4\.2'/);
+ assert.match(manifest,/version: '10\.48\.4\.3'/);
  assert.match(paper,/implements CommandExecutor, TabCompleter, Listener/);
  assert.match(paper,/public List<String> onTabComplete\(CommandSender sender, Command command, String alias, String\[\] args\)/);
  assert.match(paper,/if \(args\.length != 1\) return List\.of\(\)/);
@@ -82,7 +82,7 @@ test('V10.45.2: explain both independent failures without exposing shared secret
 });
 
 test('V10.45.3: operator-only signed diagnostic and safe error presentation',()=>{
- assert.match(manifest,/version: '10\.48\.4\.2'/);
+ assert.match(manifest,/version: '10\.48\.4\.3'/);
  assert.match(paper,/private static final String DIAGNOSE_PATH = "\/api\/minecraft\/link\/diagnose"/);
  assert.match(paper,/options\.add\("diagnose"\)/);
  assert.match(paper,/private void runDiagnostic\(CommandSender sender\)/);
@@ -218,7 +218,7 @@ test('V10.48.3: stats changes to authSource are not discarded as duplicate snaps
   assert.doesNotMatch(bridge,/api\.mojang|https?:\/\//);
 });
 
-test('V10.48.4.2: account safety cannot be bypassed by changed Java session or duplicate login',()=>{
+test('V10.48.4.3: account safety cannot be bypassed by changed Java session or duplicate login',()=>{
  const guard=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/IdentitySessionGuard.java',import.meta.url),'utf8');
  assert.match(guard,/enum State \{ OK, NO_SESSION, INVALID_NAME, ACCOUNT_CHANGED, DUPLICATE_SESSION \}/);
  assert.match(guard,/owners\.size\(\) != 1/);
@@ -229,7 +229,7 @@ test('V10.48.4.2: account safety cannot be bypassed by changed Java session or d
  assert.match(worker,/minecraftIdentityWarnings=/);
 });
 
-test('V10.48.4.2: identity proof refresh never waits for stats or invents Premium',()=>{
+test('V10.48.4.3: identity proof refresh never waits for stats or invents Premium',()=>{
  const proof=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/PaperIdentitySync.java',import.meta.url),'utf8');
  assert.match(paper,/new PaperIdentitySync\(this,http,this::identityFor/);
  assert.match(paper,/identitySync\.forceAll\(\)/);
@@ -243,7 +243,7 @@ test('V10.48.4.2: identity proof refresh never waits for stats or invents Premiu
  assert.doesNotMatch(proof,/player\.getStatistic|MINE_BLOCK|PlayerStatistic/);
 });
 
-test('V10.48.4.2: status is grouped, coloured and separates FLP session from licence',()=>{
+test('V10.48.4.3: status is grouped, coloured and separates FLP session from licence',()=>{
   const bridge=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/FastLoginSessionBridge.java',import.meta.url),'utf8');
   assert.match(paper,/void showReadableStatus\(CommandSender sender\)/);
   assert.match(paper,/statusSection\(sender,"SERVER & WEBSITE"\)/);
@@ -259,7 +259,7 @@ test('V10.48.4.2: status is grouped, coloured and separates FLP session from lic
   assert.match(paper,/bukan bukti lisensi Non-Premium/);
 });
 
-test('V10.48.4.2: offline-session label is not mistaken for licence ownership',()=>{
+test('V10.48.4.3: offline-session label is not mistaken for licence ownership',()=>{
   const dash=readFileSync(new URL('../player-dashboard.js',import.meta.url),'utf8');
   const admin=readFileSync(new URL('../minecraft-sync-admin.js',import.meta.url),'utf8');
   const sync=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/PaperIdentitySync.java',import.meta.url),'utf8');
@@ -270,14 +270,26 @@ test('V10.48.4.2: offline-session label is not mistaken for licence ownership',(
   assert.match(sync,/IDENTITY_NOT_LINKED/);
 });
 
-test('V10.48.4.2: Profile/Admin refresh their actual script URLs after Premium fixes',()=>{
+test('V10.48.4.3: Profile/Admin refresh their actual script URLs after Premium fixes',()=>{
  const profileHtml=readFileSync(new URL('../my-sscircle.html',import.meta.url),'utf8');
  const adminHtml=readFileSync(new URL('../admin.html',import.meta.url),'utf8');
  const headers=readFileSync(new URL('../_headers',import.meta.url),'utf8');
- assert.match(profileHtml,/player-dashboard\.js\?v=10\.48\.4\.2/);
- assert.match(adminHtml,/minecraft-sync-admin\.js\?v=10\.48\.4\.2/);
- assert.match(adminHtml,/minecraft-sync-admin\.css\?v=10\.48\.4\.2/);
+ assert.match(profileHtml,/player-dashboard\.js\?v=10\.48\.4\.3/);
+ assert.match(adminHtml,/minecraft-sync-admin\.js\?v=10\.48\.4\.3/);
+ assert.match(adminHtml,/minecraft-sync-admin\.css\?v=10\.48\.4\.3/);
  assert.match(headers,/\/my-sscircle\.html\s+Cache-Control: no-store/);
  assert.match(headers,/\/my-sscircle\s+Cache-Control: no-store/);
  assert.match(headers,/\/admin\.html\s+Cache-Control: no-store/);
+});
+
+test('V10.48.4.3: Paper diagnoses login reconfiguration blockers without removing ProtocolLib',()=>{
+ const source=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/SSCirclePaperLinkPlugin.java',import.meta.url),'utf8');
+ const monitor=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/PaperSyncTelemetry.java',import.meta.url),'utf8');
+ assert.match(source,/PlayerLoginEvent\.getHandlerList\(\)\.getRegisteredListeners\(\)/);
+ assert.match(source,/HorriblePlayerLoginEventHack/);
+ assert.match(source,/FastLoginPlus memerlukannya/);
+ assert.match(source,/Status Premium per pemain tidak tersedia dari console/);
+ assert.match(monitor,/TELEMETRY_INVALID/);
+ assert.match(monitor,/HTTP 400/);
+ assert.match(worker,/\(\?:\\\.\[0-9\]\{1,3\}\)\?/);
 });
