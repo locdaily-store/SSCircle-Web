@@ -1,4 +1,4 @@
-# SSCircle Player Sync Paper V10.48.4.3 (Web V10.48.4.3)
+# SSCircle Player Sync Paper V10.48.5 (Web V10.48.5)
 
 Penghubung akun Minecraft ke Profile SSCircle, tanpa Velocity. Plugin memakai HMAC, nonce, kode sekali-pakai 10 menit, dan konfirmasi ulang pada website. Satu anggota saat ini mempunyai **satu** akun Minecraft aktif; multi-account adalah fase berikutnya.
 
@@ -191,3 +191,9 @@ Premium dari koneksi offline.
 
 Lihat [panduan berdasarkan latest log](../docs/V10.48.4.3-LATEST-LOG-AUDIT.md).
 Update JAR dan paket Worker bersama, tanpa migrasi D1.
+
+## V10.48.5: Smart Sync, Offline Recovery dan TPS
+
+Statistik sekarang menurunkan pembacaan blok per tick ketika TPS rendah (default 24 → 6), dengan sampel TPS sekali/detik. Setelah restart, queue statistik memulihkan baseline snapshot, dan pengiriman jaringan memakai backoff maksimal lima menit termasuk `Retry-After` 429/503. Identity refresh menerapkan backoff per sesi terverifikasi. HTTP dan I/O file tetap asinkron.
+
+Tidak ada perubahan migrasi D1, secret, metode pembuktian Premium, kontrak API, atau UUID. Gunakan JAR Paper dan ZIP Cloudflare dari **commit GitHub Actions yang sama**. Lihat [panduan upgrade dan pengujian V10.48.5](../docs/V10.48.5-SMART-SYNC-OFFLINE-RECOVERY.md).

@@ -44,6 +44,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -77,6 +78,11 @@ final class PaperStatsSync implements Listener {
     private CaptureJob activeJob;
     private boolean dirty,inFlight;
     private int blockReadsPerTick=24;
+    private boolean tpsAware=true;
+    private double lowTpsThreshold=18.0;
+    private int lowTpsBlockReadsPerTick=6;
+    private long lastTpsSampleMs;
+    private boolean lowTps;
     private long nextAttemptAtMs,retryDelayMs=3000L;
     private long lastPeriodicCaptureMs;
     private int normalIntervalSeconds=300;
@@ -102,6 +108,11 @@ final class PaperStatsSync implements Listener {
         }
         blockReadsPerTick=Math.max(4,Math.min(96,
             plugin.getConfig().getInt("stats-sync.block-reads-per-tick",24)));
+        tpsAware=plugin.getConfig().getBoolean("stats-sync.tps-aware-enabled",true);
+        lowTpsThreshold=Math.max(10.0,Math.min(20.0,
+            plugin.getConfig().getDouble("stats-sync.low-tps-threshold",18.0)));
+        lowTpsBlockReadsPerTick=Math.max(2,Math.min(blockReadsPerTick,
+            plugin.getConfig().getInt("stats-sync.low-tps-block-reads-per-tick",6)));
         int interval=Math.max(60,Math.min(3600,
             plugin.getConfig().getInt("stats-sync.interval-seconds",300)));
         normalIntervalSeconds=interval;
@@ -112,8 +123,9 @@ final class PaperStatsSync implements Listener {
         plugin.getServer().getScheduler().runTaskTimer(plugin,this::captureScheduled,100L,20L*interval);
         plugin.getServer().getScheduler().runTaskTimer(plugin,this::sendNext,140L,HTTP_PERIOD_TICKS);
         plugin.getServer().getScheduler().runTaskTimer(plugin,this::flushQueue,20L*flush,20L*flush);
-        plugin.getLogger().info("Stats V10.47.2: "+blockReadsPerTick+
-            " block reads/tick, interval "+interval+"s, antrean "+pending.size());
+        plugin.getLogger().info("Stats V10.48.5: "+blockReadsPerTick+
+            " reads/tick (TPS rendah: "+lowTpsBlockReadsPerTick+
+            "), interval "+interval+"s, antrean pulih "+pending.size());
     }
 
     void stop(){
@@ -211,7 +223,7 @@ final class PaperStatsSync implements Listener {
             activeJob=null;
             return;
         }
-        int budget=blockReadsPerTick;
+        int budget=currentReadBudget();
         while(budget-->0&&activeJob.index<blockMaterials.size()){
             Material material=blockMaterials.get(activeJob.index++);
             try{
@@ -231,6 +243,24 @@ final class PaperStatsSync implements Listener {
                 (int)activeJob.blocks);
             activeJob=null;
         }
+    }
+
+    // Cache Paper's TPS once per second, never during individual statistic
+    // reads. Under pressure slow down the scan rather than stall a server tick.
+    private int currentReadBudget(){
+        if(!tpsAware)return blockReadsPerTick;
+        long now=System.currentTimeMillis();
+        if(now-lastTpsSampleMs>=1000L){
+            lastTpsSampleMs=now;
+            try{
+                double[] samples=Bukkit.getTPS();
+                lowTps=samples.length>0&&Double.isFinite(samples[0])
+                    &&samples[0]<lowTpsThreshold;
+            }catch(Exception ignored){
+                lowTps=false; // Missing TPS sample is not a fake performance value.
+            }
+        }
+        return lowTps?lowTpsBlockReadsPerTick:blockReadsPerTick;
     }
 
     private void captureQuickExit(Player player){
@@ -309,7 +339,7 @@ final class PaperStatsSync implements Listener {
         }catch(Exception ex){
             inFlight=false;
             deliveryCode="NETWORK_ERROR";
-            scheduleRetry();
+            scheduleRetry(-1,null);
             lastDelivery="Pengiriman tertunda; periksa domain atau kunci.";
         }
     }
@@ -319,7 +349,7 @@ final class PaperStatsSync implements Listener {
         inFlight=false;
         if(failure!=null||response==null){
             deliveryCode="NETWORK_ERROR";
-            scheduleRetry();
+            scheduleRetry(-1,null);
             lastDelivery="Jaringan terputus; antrean aman di disk.";
             return;
         }
@@ -348,14 +378,17 @@ final class PaperStatsSync implements Listener {
                 "Akun belum tertaut; menunggu statistik berikutnya.";
         }else{
             deliveryCode=(code==401||code==403)?"AUTH_ERROR":"HTTP_ERROR";
-            scheduleRetry();
+            scheduleRetry(code,response.headers().firstValue("Retry-After").orElse(null));
             lastDelivery="HTTP "+code+"; statistik disimpan dan akan dicoba ulang.";
         }
     }
 
-    private void scheduleRetry(){
-        nextAttemptAtMs=System.currentTimeMillis()+retryDelayMs;
-        retryDelayMs=Math.min(300000L,retryDelayMs*2L);
+    private void scheduleRetry(int httpStatus,String retryAfter){
+        long now=System.currentTimeMillis();
+        long jitter=ThreadLocalRandom.current().nextLong(2_001L);
+        long delay=SyncRetryPolicy.delayMs(retryDelayMs,httpStatus,retryAfter,now,jitter);
+        nextAttemptAtMs=now+delay;
+        retryDelayMs=SyncRetryPolicy.nextBaseDelayMs(retryDelayMs);
     }
 
     private static String hmac(String secret,String value)throws GeneralSecurityException{
@@ -375,7 +408,18 @@ final class PaperStatsSync implements Listener {
             int count=Math.min(MAX_PENDING,Integer.parseInt(props.getProperty("count","0")));
             for(int i=0;i<count;i++){
                 Snapshot snap=Snapshot.fromStorage(props.getProperty("item."+i,""));
-                if(snap!=null)pending.put(snap.provider()+":"+snap.providerId(),snap);
+                if(snap!=null){
+                    String key=snap.provider()+":"+snap.providerId();
+                    pending.put(key,snap);
+                    // Preserve last sampled values after restart: a quick
+                    // exit must never accidentally replace recovered blocks
+                    // with an incomplete or zero-valued sample.
+                    latestSample.put(key,snap);
+                }
+            }
+            if(!pending.isEmpty()){
+                deliveryCode="QUEUE_PENDING";
+                lastDelivery="Memulihkan "+pending.size()+" snapshot dari disk.";
             }
         }catch(Exception ex){
             plugin.getLogger().warning("Antrean statistik tidak bisa dibaca; data tidak valid tidak dikirim.");

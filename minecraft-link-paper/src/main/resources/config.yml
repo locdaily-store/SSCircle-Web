@@ -29,6 +29,11 @@ stats-sync:
   busy-interval-seconds: 600
   # Limit 24 pembacaan kategori blok tiap tick (bukan semua pemain sekaligus).
   block-reads-per-tick: 24
+  # V10.48.5: Saat TPS 1 menit jatuh di bawah batas, kecilkan
+  # pembacaan kategori per tick; tidak menonaktifkan data statistik.
+  tps-aware-enabled: true
+  low-tps-threshold: 18.0
+  low-tps-block-reads-per-tick: 6
   # Penulisan file antrean dilakukan asynchronous setiap 10 detik.
   queue-flush-seconds: 10
 

@@ -57,7 +57,7 @@ test('Paper Direct: no insecure default endpoint or secrets in shipped config',(
 });
 
 test('V10.45.2: safe tab-completion shows matching commands and hides admin-only reload',()=>{
- assert.match(manifest,/version: '10\.48\.4\.3'/);
+ assert.match(manifest,/version: '10\.48\.5'/);
  assert.match(paper,/implements CommandExecutor, TabCompleter, Listener/);
  assert.match(paper,/public List<String> onTabComplete\(CommandSender sender, Command command, String alias, String\[\] args\)/);
  assert.match(paper,/if \(args\.length != 1\) return List\.of\(\)/);
@@ -82,7 +82,7 @@ test('V10.45.2: explain both independent failures without exposing shared secret
 });
 
 test('V10.45.3: operator-only signed diagnostic and safe error presentation',()=>{
- assert.match(manifest,/version: '10\.48\.4\.3'/);
+ assert.match(manifest,/version: '10\.48\.5'/);
  assert.match(paper,/private static final String DIAGNOSE_PATH = "\/api\/minecraft\/link\/diagnose"/);
  assert.match(paper,/options\.add\("diagnose"\)/);
  assert.match(paper,/private void runDiagnostic\(CommandSender sender\)/);
@@ -140,7 +140,7 @@ test('V10.47: vanilla statistics are only sampled for verified identities',()=>{
  assert.match(stats,/stats-queue\.properties/);
  assert.match(stats,/sendAsync\(request,HttpResponse\.BodyHandlers\.ofString/);
  assert.match(stats,/eventId\(\)\.equals\(eventId\)/);
- assert.match(stats,/scheduleRetry\(\)/);
+ assert.match(stats,/scheduleRetry\(-1,null\)/);
  assert.match(stats,/StandardCopyOption\.ATOMIC_MOVE/);
  assert.match(paper,/statsSync\.start\(\)/);
  assert.match(paper,/statsSync\.stop\(\)/);
@@ -159,7 +159,7 @@ test('V10.47.2: statistic collection is tick-budgeted, disk I/O asynchronous and
  assert.match(stats,/while\(budget-->0&&activeJob\.index<blockMaterials\.size\(\)\)/);
  assert.match(stats,/Executors\.newSingleThreadExecutor/);
  assert.match(stats,/diskWriter\.submit\(\(\)->writeQueue\(copy\)\)/);
- assert.match(stats,/Math\.min\(300000L,retryDelayMs\*2L\)/);
+ assert.match(stats,/SyncRetryPolicy\.nextBaseDelayMs\(retryDelayMs\)/);
  assert.match(stats,/lastDelivery=/);
  assert.match(config,/block-reads-per-tick:\s*24/);
  assert.match(config,/queue-flush-seconds:\s*10/);
@@ -290,4 +290,24 @@ test('V10.48.4.3: monitor heartbeat version validation and precise player diagno
   assert.match(telemetry,/TELEMETRY_INVALID/);
   assert.match(worker,/TELEMETRY_INVALID/);
   assert.ok(worker.includes('input.pluginVersion'));
+});
+
+test('V10.48.5: TPS-aware capture and offline identity recovery preserve safety',()=>{
+ const stats=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/PaperStatsSync.java',import.meta.url),'utf8');
+ const identity=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/PaperIdentitySync.java',import.meta.url),'utf8');
+ const retry=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/SyncRetryPolicy.java',import.meta.url),'utf8');
+ assert.match(config,/tps-aware-enabled: true/);
+ assert.match(config,/low-tps-block-reads-per-tick: 6/);
+ assert.match(stats,/int budget=currentReadBudget\(\)/);
+ assert.match(stats,/lowTps=samples\.length>0/);
+ assert.match(stats,/latestSample\.put\(key,snap\)/);
+ assert.match(stats,/SyncRetryPolicy\.delayMs\(/);
+ assert.match(stats,/response\.headers\(\)\.firstValue\("Retry-After"\)/);
+ assert.match(identity,/if\(state\.inflight\|\|now<state\.retryNotBeforeMs\)continue/);
+ assert.match(identity,/SyncRetryPolicy\.delayMs\(/);
+ assert.match(identity,/state\.retryDelayMs=RETRY_MS/);
+ assert.match(retry,/httpStatus == 429 \|\| httpStatus == 503/);
+ assert.match(retry,/MAX_DELAY_MS = 300_000L/);
+ assert.doesNotMatch(stats,/http\.send\(/);
+ assert.doesNotMatch(identity,/http\.send\(/);
 });
