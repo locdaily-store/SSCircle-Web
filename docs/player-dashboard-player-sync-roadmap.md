@@ -197,3 +197,23 @@ Baca petunjuk operasional di `docs/V10.47-PLAYER-STATS.md`.
 - Uji Java JUnit dan Node memastikan guard, admin warning, serta API lama tidak regresi; **uji hosting nyata masih wajib**.
 
 **Berikutnya:** V10.48.5 reliability/recovery network dan profil TPS 20–50 pemain → V10.49.0 multi-account linking → V10.49.1 skin/avatar → V10.49.2 dashboard/recovery → V10.50 leaderboard Season dan Hall of Fame.
+
+
+## SSCircle V10.48.4.1 — Reliabilitas status Premium (hotfix source)
+
+- Masalah yang diperiksa: Profile memakai klasifikasi login Java dari bukti historis D1,
+  dan pembaruan status bergantung pada siklus statistik.
+- Worker: endpoint baru `/api/minecraft/identity/refresh` untuk bukti per sesi
+  HMAC/nonce/timestamp; hanya akun tertaut yang sudah dikonfirmasi, tidak mengubah angka statistik.
+- Plugin Paper: `PaperIdentitySync` mengirim bukti FastLoginPlus aktual
+  secara asinkron setelah sesi login, berkala dengan batas request, serta saat
+  OP meminta `/sscircle sync`. `/sscircle status` menampilkan nilai
+  FastLoginPlus langsung dan status bukti yang diterima web.
+- Web: bukti sesi offline Java yang sudah lebih dari tujuh hari tidak lagi
+  diberi label Premium/Non-Premium secara pasti; akun dan riwayat tetap utuh.
+- PENTING: `CRACKED` yang benar-benar dikembalikan FastLoginPlus menandakan
+  koneksi offline, dan tidak boleh otomatis diklaim Premium berdasarkan nickname.
+- Rilis JAR dan Worker harus dipasang berpasangan; uji online-mode,
+  offline-mode AuthMe + FastLoginPlus dan Floodgate tetap wajib di staging.
+- Tahap selanjutnya V10.48.5 stabilisasi jaringan/queue/TPS,
+  V10.49 Multi-Account Linking + avatar/recovery, V10.50 Leaderboard.

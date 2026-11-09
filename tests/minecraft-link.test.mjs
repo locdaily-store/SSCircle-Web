@@ -588,8 +588,9 @@ test('V10.48.4: admin-only warnings expose unverified and stale FastLogin proof 
   x.db.prepare('UPDATE minecraft_identity_evidence SET auth_source=?, observed_at=? WHERE provider_id=?')
     .run('fastlogin-premium',new Date(Date.now()-9*86400000).toISOString(),id);
   adminView=await x.call('/api/admin/minecraft/sync',{cookie:x.admin});
-  assert.equal(adminView.json.accounts[0].edition,'java_premium');
+  assert.equal(adminView.json.accounts[0].edition,'java_unverified');
   assert.ok(adminView.json.accounts[0].securityWarnings.includes('BUKTI_LOGIN_LAMA'));
+  assert.equal((await x.call('/api/player/profile',{cookie})).json.accounts[0].edition,'java_unverified');
   assert.ok(adminView.json.accounts[0].identityProofAt);
   assert.equal((await x.call('/api/admin/minecraft/sync')).status,401);
   assert.equal(x.db.prepare('SELECT provider_id FROM minecraft_accounts').get().provider_id,id);
@@ -612,4 +613,88 @@ test('V10.48.4: duplicate display name across distinct verified accounts warns a
   assert.equal(view.json.summary.linked,2);
   assert.equal(view.json.accounts.length,2);
   assert.ok(view.json.accounts.every(a=>a.securityWarnings.includes('NAMA_SAMA_PERIKSA')));
+});
+
+async function deliverIdentity(x,payload,{nonce=randomUUID(),
+  timestamp=Math.floor(Date.now()/1000),key=SERVER}={}){
+  const raw=JSON.stringify(payload),route='/api/minecraft/identity/refresh';
+  const signature=createHmac('sha256',key)
+    .update('POST\n'+route+'\n'+timestamp+'\n'+nonce+'\n'+raw)
+    .digest('base64url');
+  const res=await worker.fetch(new Request('https://sscircle.test'+route,{
+    method:'POST',headers:{'Content-Type':'application/json',
+      'X-SSC-Timestamp':String(timestamp),'X-SSC-Nonce':nonce,
+      'X-SSC-Signature':signature},body:raw
+  }),x.env);
+  return {status:res.status,json:await res.json()};
+}
+
+test('V10.48.4.1: independently refresh FastLoginPlus PREMIUM after a CRACKED claim without touching statistics',async()=>{
+  const x=fixture(),cookie=await x.active();
+  const id='70a89d54-c32e-3942-a553-34f71cfde04d';
+  const code=(await x.call('/api/player/minecraft/link/create',
+    {method:'POST',cookie,data:{}})).json.code;
+  assert.equal((await x.claim({code,provider:'java_offline',providerId:id,
+    username:'LocalSteve',authSource:'fastlogin-cracked'})).status,200);
+  assert.equal((await x.call('/api/player/minecraft/link/confirm',
+    {method:'POST',cookie,data:{}})).status,200);
+  assert.equal((await x.call('/api/player/profile',{cookie})).json.accounts[0].edition,'java_non_premium');
+  const statsBefore=x.db.prepare('SELECT COUNT(*) AS n FROM player_stat_snapshots').get().n;
+  const premium={provider:'java_offline',providerId:id,authSource:'fastlogin-premium',
+    observedAt:new Date(Date.now()+1000).toISOString()};
+  assert.equal((await deliverIdentity(x,premium,{key:'not-the-server-secret'})).status,401);
+  assert.equal((await deliverIdentity(x,{...premium,authSource:'minecraft-name'})).status,400);
+  const result=await deliverIdentity(x,premium);
+  assert.equal(result.status,200,JSON.stringify(result.json));
+  assert.equal(result.json.code,'IDENTITY_UPDATED');
+  assert.equal((await x.call('/api/player/profile',{cookie})).json.accounts[0].edition,'java_premium');
+  assert.equal((await x.call('/api/player/minecraft/link/state',{cookie})).json.linked.edition,'java_premium');
+  const admin=await x.call('/api/admin/minecraft/sync',{cookie:x.admin});
+  assert.equal(admin.json.accounts[0].edition,'java_premium');
+  assert.equal(x.db.prepare('SELECT COUNT(*) AS n FROM player_stat_snapshots').get().n,statsBefore);
+  assert.equal(x.db.prepare('SELECT provider_id FROM minecraft_accounts').get().provider_id,id);
+});
+
+test('V10.48.4.1: identity-only endpoint requires linked accepted account, freshness, unique nonce',async()=>{
+  const x=fixture(),cookie=await x.active();
+  const id='70a89d54-c32e-3942-a553-34f71cfde04d';
+  const proof={provider:'java_offline',providerId:id,authSource:'fastlogin-premium',
+    observedAt:new Date().toISOString()};
+  assert.equal((await deliverIdentity(x,proof)).status,404);
+  const code=(await x.call('/api/player/minecraft/link/create',
+    {method:'POST',cookie,data:{}})).json.code;
+  await x.claim({code,provider:'java_offline',providerId:id,
+    username:'LocalSteve',authSource:'authme-session'});
+  // Signed evidence must not reserve a pending claim or bypass member confirmation.
+  assert.equal((await deliverIdentity(x,proof)).status,404);
+  await x.call('/api/player/minecraft/link/confirm',{method:'POST',cookie,data:{}});
+  const latest={...proof,observedAt:new Date(Date.now()+2000).toISOString()};
+  assert.equal((await deliverIdentity(x,latest,{timestamp:Math.floor(Date.now()/1000)-250})).status,401);
+  assert.equal((await deliverIdentity(x,{...latest,observedAt:new Date(Date.now()-400000).toISOString()})).status,400);
+  const nonce=randomUUID();
+  assert.equal((await deliverIdentity(x,latest,{nonce})).status,200);
+  assert.equal((await deliverIdentity(x,latest,{nonce})).status,409);
+  const stale={...latest,authSource:'fastlogin-cracked',
+    observedAt:new Date(Date.now()+1000).toISOString()};
+  assert.equal((await deliverIdentity(x,stale)).json.code,'IDENTITY_ALREADY_NEWER');
+  assert.equal((await x.call('/api/player/profile',{cookie})).json.accounts[0].edition,'java_premium');
+  assert.equal((await x.call('/api/admin/minecraft/sync')).status,401);
+});
+
+test('V10.48.4.1: stale Non-Premium proof becomes unverified, then fresh proof restores Premium',async()=>{
+  const x=fixture(),cookie=await x.active();
+  const id='70a89d54-c32e-3942-a553-34f71cfde04d';
+  const code=(await x.call('/api/player/minecraft/link/create',
+    {method:'POST',cookie,data:{}})).json.code;
+  await x.claim({code,provider:'java_offline',providerId:id,
+    username:'LocalSteve',authSource:'fastlogin-cracked'});
+  await x.call('/api/player/minecraft/link/confirm',{method:'POST',cookie,data:{}});
+  x.db.prepare('UPDATE minecraft_identity_evidence SET observed_at=? WHERE provider_id=?')
+    .run(new Date(Date.now()-8*86400000).toISOString(),id);
+  assert.equal((await x.call('/api/player/profile',{cookie})).json.accounts[0].edition,'java_unverified');
+  assert.equal((await x.call('/api/player/minecraft/link/state',{cookie})).json.linked.edition,'java_unverified');
+  const result=await deliverIdentity(x,{provider:'java_offline',providerId:id,
+    authSource:'fastlogin-premium',observedAt:new Date(Date.now()+1000).toISOString()});
+  assert.equal(result.status,200);
+  assert.equal((await x.call('/api/player/profile',{cookie})).json.accounts[0].edition,'java_premium');
 });

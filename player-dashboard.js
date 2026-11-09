@@ -477,7 +477,12 @@
       $('player-link-connected-date').textContent=
         'Terhubung: '+new Date(linked.verifiedAt).toLocaleString('id-ID');
       $('player-edition').textContent=mcProviderLabel(linked);
-      linkNotice('Identitas Minecraft sudah berhasil ditautkan.');
+      if(linked.provider==='java_offline'&&linked.edition==='java_unverified')
+        linkNotice('Akun masih tertaut. Bukti sesi Premium sudah lama atau belum tersedia. Masuk kembali ke Minecraft dan cek /sscircle status.');
+      else if(linked.provider==='java_offline'&&linked.edition==='java_non_premium')
+        linkNotice('Sesi terakhir tercatat sebagai login offline. Jika kamu memakai Minecraft original, cek hasil FastLoginPlus melalui /sscircle status di dalam game.');
+      else linkNotice('Identitas Minecraft berhasil ditautkan. Bukti sesi: '+
+        (linked.identityProofAt?new Date(linked.identityProofAt).toLocaleString('id-ID'):'belum tersedia'));
     }else if(pending?.status==='needs_confirmation'){
       linkCommand='';linkExpires='';
       $('player-link-review-provider').textContent=mcProviderLabel(pending.identity);
