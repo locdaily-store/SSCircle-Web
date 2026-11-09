@@ -450,7 +450,7 @@
       account?.provider==='java_premium'?'java_premium':'java_unverified');
     return ({
       java_premium:'Minecraft Java Premium',
-      java_non_premium:'Minecraft Java Non-Premium',
+      java_non_premium:'Minecraft Java (sesi offline)',
       java_unverified:'Minecraft Java (Premium belum terverifikasi)',
       bedrock:'Minecraft Bedrock'
     })[edition]||'Minecraft';
@@ -480,7 +480,7 @@
       if(linked.provider==='java_offline'&&linked.edition==='java_unverified')
         linkNotice('Akun masih tertaut. Bukti sesi Premium sudah lama atau belum tersedia. Masuk kembali ke Minecraft dan cek /sscircle status.');
       else if(linked.provider==='java_offline'&&linked.edition==='java_non_premium')
-        linkNotice('Sesi terakhir tercatat sebagai login offline. Jika kamu memakai Minecraft original, cek hasil FastLoginPlus melalui /sscircle status di dalam game.');
+        linkNotice('Koneksi Minecraft terakhir memakai jalur offline. Ini belum berarti akunmu tidak original. Masuk menggunakan launcher resmi, kemudian periksa bukti FastLoginPlus melalui /sscircle status.');
       else linkNotice('Identitas Minecraft berhasil ditautkan. Bukti sesi: '+
         (linked.identityProofAt?new Date(linked.identityProofAt).toLocaleString('id-ID'):'belum tersedia'));
     }else if(pending?.status==='needs_confirmation'){
