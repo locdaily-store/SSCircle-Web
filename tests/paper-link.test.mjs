@@ -218,7 +218,7 @@ test('V10.48.3: stats changes to authSource are not discarded as duplicate snaps
   assert.doesNotMatch(bridge,/api\.mojang|https?:\/\//);
 });
 
-test('V10.48.4: account safety cannot be bypassed by changed Java session or duplicate login',()=>{
+test('V10.48.4.1: account safety cannot be bypassed by changed Java session or duplicate login',()=>{
  const guard=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/IdentitySessionGuard.java',import.meta.url),'utf8');
  assert.match(guard,/enum State \{ OK, NO_SESSION, INVALID_NAME, ACCOUNT_CHANGED, DUPLICATE_SESSION \}/);
  assert.match(guard,/owners\.size\(\) != 1/);
@@ -227,4 +227,18 @@ test('V10.48.4: account safety cannot be bypassed by changed Java session or dup
  assert.match(paper,/identitySessions\.left\(event\.getPlayer\(\)\.getUniqueId\(\)\)/);
  assert.match(paper,/IdentitySessionGuard\.State\.OK/);
  assert.match(worker,/minecraftIdentityWarnings=/);
+});
+
+test('V10.48.4.1: identity proof refresh never waits for stats or invents Premium',()=>{
+ const proof=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/PaperIdentitySync.java',import.meta.url),'utf8');
+ assert.match(paper,/new PaperIdentitySync\(this,http,this::identityFor/);
+ assert.match(paper,/identitySync\.forceAll\(\)/);
+ assert.match(paper,/FastLoginSessionBridge\.read\(player,fastLoginPlugin\(\)\)/);
+ assert.match(proof,/\/api\/minecraft\/identity\/refresh/);
+ assert.match(proof,/sendAsync\(request,HttpResponse\.BodyHandlers\.ofString/);
+ assert.match(proof,/SUCCESS_REFRESH_MS=10\*60000L/);
+ assert.match(proof,/MAX_ACTIVE=3/);
+ assert.match(worker,/async function minecraftIdentityRefresh\(req,env\)/);
+ assert.match(worker,/const minecraftLinkedEdition=/);
+ assert.doesNotMatch(proof,/player\.getStatistic|MINE_BLOCK|PlayerStatistic/);
 });
