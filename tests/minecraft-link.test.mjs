@@ -553,6 +553,8 @@ test('V10.48.2: signed newer sessions refresh edition; stale queued snapshots ca
     capturedAt:new Date(now+2000).toISOString()};
   assert.equal((await deliverStats(x,latest)).status,200);
   assert.equal((await x.call('/api/player/profile',{cookie})).json.accounts[0].edition,'java_non_premium');
+  const beforeWarning=await x.call('/api/admin/minecraft/sync',{cookie:x.admin});
+  assert.ok(beforeWarning.json.accounts[0].securityWarnings.includes('SESI_OFFLINE_BELUM_PREMIUM'));
   assert.equal((await deliverStats(x,{...latest,authSource:'untrusted-nickname'})).status,400);
   const evidence=x.db.prepare('SELECT auth_source FROM minecraft_identity_evidence WHERE provider_id=?').get(id);
   assert.equal(evidence.auth_source,'fastlogin-cracked');
