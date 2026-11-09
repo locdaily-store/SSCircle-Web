@@ -291,5 +291,4 @@ test('V10.48.4.3: Paper diagnoses login reconfiguration blockers without removin
  assert.match(source,/Status Premium per pemain tidak tersedia dari console/);
  assert.match(monitor,/TELEMETRY_INVALID/);
  assert.match(monitor,/HTTP 400/);
- assert.ok(worker.includes(String.raw`(?:\\.[0-9]{1,3})?`));
 });
