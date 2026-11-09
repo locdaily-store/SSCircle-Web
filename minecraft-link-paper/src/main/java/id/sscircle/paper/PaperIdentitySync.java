@@ -118,7 +118,9 @@ final class PaperIdentitySync implements Listener {
         for(Player player:Bukkit.getOnlinePlayers()){
             if(active>=MAX_ACTIVE||sent>=MAX_PER_ROUND)break;
             State state=sessions.computeIfAbsent(player.getUniqueId(),ignored->new State());
-            if(state.inflight||now-state.lastAttemptMs<MIN_RETRY_MS)continue;
+            long retryWindow=state.lastSuccessMs>0?MIN_RETRY_MS:RETRY_MS;
+            if(state.inflight||(state.lastAttemptMs>0
+                && now-state.lastAttemptMs<retryWindow))continue;
             SSCirclePaperLinkPlugin.Identity identity=identityFor.apply(player);
             if(identity==null)continue; // AuthMe/Floodgate did not verify session.
             String source=identity.authSource();
