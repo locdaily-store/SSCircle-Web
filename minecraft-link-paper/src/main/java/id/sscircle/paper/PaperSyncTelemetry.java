@@ -113,7 +113,15 @@ final class PaperSyncTelemetry {
         }
         int code=response.statusCode();
         if(code!=200){
-            heartbeatState="Laporan ditolak (HTTP "+code+")";
+            String responseBody=response.body()==null?"":response.body();
+            if(code==400&&responseBody.contains("\"TELEMETRY_INVALID\""))
+                heartbeatState="Laporan tidak valid (HTTP 400). Cek versi Worker dan JAR SSCircle.";
+            else if(code==401||code==403)
+                heartbeatState="Laporan ditolak (HTTP "+code+"). Periksa secret dan jam server.";
+            else if(code==404)
+                heartbeatState="Endpoint monitoring belum ada pada Cloudflare. Deploy ZIP baru.";
+            else
+                heartbeatState="Laporan ditolak (HTTP "+code+")";
             return;
         }
         String raw=response.body()==null?"":response.body();
