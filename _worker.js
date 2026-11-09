@@ -2450,7 +2450,7 @@ async function memberCenterAPI(req,env,path,method) {
     if(hasCredentials && !await memberStrongSession(req,env,application)) return bad('Masuk dengan password dashboard untuk melihat profil.',403);
     const profileRow=await env.DB.prepare('SELECT * FROM member_profiles WHERE application_id=?').bind(application.id).first();
     const policyRow=await env.DB.prepare('SELECT * FROM member_policy WHERE id=1').first();
-    const accounts=await env.DB.prepare(`SELECT a.provider,a.username,a.verified_at,e.auth_source
+    const accounts=await env.DB.prepare(`SELECT a.provider,a.username,a.verified_at,e.auth_source,e.observed_at
       FROM minecraft_accounts a LEFT JOIN minecraft_identity_evidence e
       ON e.provider=a.provider AND e.provider_id=a.provider_id
       AND e.application_id=a.application_id
@@ -2466,7 +2466,8 @@ async function memberCenterAPI(req,env,path,method) {
       activeStatSeason:activeStatKey,
       activeStatSeasonTitle:seasonName.get(form.settings.statSeasonId)||'',
       accounts:(accounts.results||[]).map(a=>({provider:a.provider,
-        edition:minecraftEdition(a.provider,a.auth_source),
+        edition:minecraftLinkedEdition(a.provider,a.auth_source,a.observed_at),
+        identityProofAt:a.observed_at||null,
         username:a.username,verifiedAt:a.verified_at})),
       statistics:(stats.results||[]).map(a=>({seasonId:a.season_id,
         seasonTitle:a.season_id.startsWith('season:')
@@ -2580,6 +2581,17 @@ const minecraftEdition=(provider,authSource)=>{
   if(provider==='java_offline'&&authSource==='fastlogin-cracked')return 'java_non_premium';
   return 'java_unverified';
 };
+// Historic offline-mode login evidence is not permanent proof of a new session.
+// Keep the account and stats, but show unverified for stale auth evidence.
+const MINECRAFT_EVIDENCE_MAX_AGE_MS=7*86400000;
+const minecraftEvidenceFresh=(when,now=Date.now())=>{
+  const time=Date.parse(when);
+  return Number.isFinite(time)&&time<=now+300000
+    && now-time<=MINECRAFT_EVIDENCE_MAX_AGE_MS;
+};
+const minecraftLinkedEdition=(provider,source,when)=>
+  provider==='java_offline'&&!minecraftEvidenceFresh(when)
+    ?'java_unverified':minecraftEdition(provider,source);
 // Admin-only safety hints: historical auth proof is not a live login session.
 const minecraftIdentityWarnings=(provider,source,observedAt,duplicateName,now=Date.now())=>{
   const warnings=[];
@@ -2601,14 +2613,14 @@ async function minecraftLinkAPI(req,env,path,method){
     if(!await admin(req,env))return bad('Masuk ke Admin Control.',401);
     await ensureMemberCenter(env);
     const rows=await env.DB.prepare(
-      `SELECT a.application_id,a.provider,a.username,a.verified_at,e.auth_source
+      `SELECT a.application_id,a.provider,a.username,a.verified_at,e.auth_source,e.observed_at
        FROM minecraft_accounts a LEFT JOIN minecraft_identity_evidence e
        ON e.provider=a.provider AND e.provider_id=a.provider_id
        AND e.application_id=a.application_id
        ORDER BY a.verified_at DESC LIMIT 100`
     ).all();
     return J({links:(rows.results||[]).map(r=>({
-      memberId:r.application_id,provider:r.provider,edition:minecraftEdition(r.provider,r.auth_source),
+      memberId:r.application_id,provider:r.provider,edition:minecraftLinkedEdition(r.provider,r.auth_source,r.observed_at),
       username:r.username,linkedAt:r.verified_at
     }))});
   }
@@ -2620,7 +2632,7 @@ async function minecraftLinkAPI(req,env,path,method){
   if(!active)return bad('Buka Profile dengan password dashboard sebelum menghubungkan akun Minecraft.',403);
   await ensureMemberCenter(env);
   const linked=await env.DB.prepare(
-    `SELECT a.provider,a.provider_id,a.username,a.verified_at,e.auth_source
+    `SELECT a.provider,a.provider_id,a.username,a.verified_at,e.auth_source,e.observed_at
        FROM minecraft_accounts a LEFT JOIN minecraft_identity_evidence e
        ON e.provider=a.provider AND e.provider_id=a.provider_id
        AND e.application_id=a.application_id
@@ -2641,8 +2653,8 @@ async function minecraftLinkAPI(req,env,path,method){
           edition:minecraftEdition(claim.provider,claim.auth_source)}:null};
     }
     return J({linked:linked?{
-      provider:linked.provider,edition:minecraftEdition(linked.provider,linked.auth_source),
-      username:linked.username,verifiedAt:linked.verified_at
+      provider:linked.provider,edition:minecraftLinkedEdition(linked.provider,linked.auth_source,linked.observed_at),
+      username:linked.username,verifiedAt:linked.verified_at,identityProofAt:linked.observed_at||null
     }:null,pending,serverReady:typeof env.SSCIRCLE_LINK_SERVER_SECRET==='string'&&
       env.SSCIRCLE_LINK_SERVER_SECRET.length>=32});
   }
@@ -2750,6 +2762,7 @@ const minecraftLinkError=(code,message,status)=>J({error:message,code},status);
    Data are accepted only for confirmed account links. Browser clients cannot
    submit statistics, and retries/old snapshots cannot inflate counters. */
 const MC_STAT_ROUTE='/api/minecraft/stats/ingest';
+const MC_IDENTITY_ROUTE='/api/minecraft/identity/refresh';
 const mcStatReceiptReady=new WeakSet();
 async function ensureMinecraftStatsReceipts(env){
   if(mcStatReceiptReady.has(env.DB))return;
@@ -2768,6 +2781,60 @@ const mcStatIdentityValid=(value)=>{
   if(value.provider==='bedrock')return source==='floodgate-xuid'&&/^[0-9]{10,22}$/.test(id);
   return false;
 };
+// Separate authenticated channel for current-session evidence. No stats reset.
+async function minecraftIdentityRefresh(req,env){
+  const secret=env.SSCIRCLE_LINK_SERVER_SECRET;
+  if(typeof secret!=='string'||secret.length<32)
+    return minecraftLinkError('SERVER_SECRET_MISSING','Sinkronisasi identitas belum aktif.',503);
+  if(!String(req.headers.get('Content-Type')||'').toLowerCase().startsWith('application/json'))
+    return minecraftLinkError('FORMAT_INVALID','Format permintaan tidak sesuai.',415);
+  const timestamp=Number(req.headers.get('X-SSC-Timestamp'));
+  const nonce=req.headers.get('X-SSC-Nonce')||'';
+  const signature=req.headers.get('X-SSC-Signature')||'';
+  const now=Math.floor(Date.now()/1000);
+  if(!Number.isSafeInteger(timestamp)||Math.abs(now-timestamp)>90)
+    return minecraftLinkError('CLOCK_SKEW','Jam server Minecraft tidak sesuai.',401);
+  if(!/^[0-9a-f-]{36}$/.test(nonce)||!/^[A-Za-z0-9_-]{43}$/.test(signature))
+    return minecraftLinkError('HEADERS_INVALID','Header identitas tidak valid.',401);
+  const raw=await req.text();
+  if(raw.length>700)return minecraftLinkError('PAYLOAD_TOO_LARGE','Data terlalu besar.',413);
+  const expected=await hmac(secret,'POST\n'+MC_IDENTITY_ROUTE+'\n'+timestamp+'\n'+nonce+'\n'+raw);
+  if(!safeEq(expected,signature))
+    return minecraftLinkError('SIGNATURE_INVALID','Tanda tangan server tidak cocok.',401);
+  const value=parse(raw);
+  const stamp=Date.parse(value?.observedAt);
+  if(!mcStatIdentityValid(value)||!Number.isFinite(stamp)
+     ||stamp>Date.now()+60000||stamp<Date.now()-300000)
+    return minecraftLinkError('IDENTITY_INVALID','Bukti autentikasi sesi tidak valid.',400);
+  await ensureMemberCenter(env);
+  const account=await env.DB.prepare(
+    'SELECT application_id,verified_at FROM minecraft_accounts WHERE provider=? AND provider_id=? LIMIT 1'
+  ).bind(value.provider,value.providerId).first();
+  if(!account)
+    return minecraftLinkError('IDENTITY_NOT_LINKED','Akun belum ditautkan dan dikonfirmasi.',404);
+  if(stamp<Date.parse(account.verified_at))
+    return minecraftLinkError('IDENTITY_PRELINK','Bukti sebelum konfirmasi tidak dipakai.',410);
+  const member=await env.DB.prepare('SELECT status FROM submissions WHERE id=?')
+    .bind(account.application_id).first();
+  if(member?.status!=='accepted')
+    return minecraftLinkError('MEMBER_NOT_ACCEPTED','Keanggotaan tidak aktif.',403);
+  const inserted=await env.DB.prepare(
+    'INSERT OR IGNORE INTO minecraft_link_nonces(nonce,seen_at) VALUES(?,?)'
+  ).bind(nonce,now).run();
+  if(!(inserted.meta?.changes>0))
+    return minecraftLinkError('IDENTITY_REPLAY','Bukti sesi sudah diproses.',409);
+  const observedAt=new Date(stamp).toISOString();
+  const result=await env.DB.prepare(`INSERT INTO minecraft_identity_evidence
+    (application_id,provider,provider_id,auth_source,observed_at)
+    VALUES(?,?,?,?,?) ON CONFLICT(provider,provider_id) DO UPDATE SET
+    auth_source=excluded.auth_source,observed_at=excluded.observed_at
+    WHERE minecraft_identity_evidence.application_id=excluded.application_id
+      AND excluded.observed_at>minecraft_identity_evidence.observed_at`)
+    .bind(account.application_id,value.provider,value.providerId,
+      value.authSource,observedAt).run();
+  return J({ok:true,code:result.meta?.changes>0?'IDENTITY_UPDATED':'IDENTITY_ALREADY_NEWER'});
+}
+
 async function minecraftStatsIngest(req,env){
   const secret=env.SSCIRCLE_LINK_SERVER_SECRET;
   if(typeof secret!=='string'||secret.length<32)
@@ -3071,7 +3138,7 @@ async function minecraftSyncAdmin(req,env,path,method){
     }:null,summary:{linked:totals?.linked||0,noStats:totals?.no_stats||0},
       accounts:(rows.results||[]).slice(0,100).map(x=>({
         memberId:x.member_id,memberName:x.display_name||'Anggota',
-        provider:x.provider,edition:minecraftEdition(x.provider,x.auth_source),
+        provider:x.provider,edition:minecraftLinkedEdition(x.provider,x.auth_source,x.observed_at),
         username:x.username,linkedAt:x.verified_at,
         identityProofAt:x.observed_at||null,
         securityWarnings:minecraftIdentityWarnings(
@@ -3431,7 +3498,7 @@ async function mailboxAPI(req,env,path,method){
 
 // SSCircle runtime check: observe what the deployment actually receives.
 // Only public readiness categories. Never expose secret values or private data.
-const SSC_RUNTIME_RELEASE='10.48.4';
+const SSC_RUNTIME_RELEASE='10.48.4.1';
 const SSC_RUNTIME_ISSUES=new Set();
 function sscRuntimeBindings(env){
   return {
@@ -3702,6 +3769,8 @@ async function route(req, env) {
     return await minecraftLinkDiagnose(req,env);
   if(path===MC_STAT_ROUTE && method==='POST')
     return await minecraftStatsIngest(req,env);
+  if(path===MC_IDENTITY_ROUTE && method==='POST')
+    return await minecraftIdentityRefresh(req,env);
   if(path===MC_SYNC_PATH && method==='POST')
     return await minecraftSyncHeartbeat(req,env);
   if (!['GET', 'HEAD'].includes(method) && !sameOrigin(req))
