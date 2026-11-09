@@ -1,4 +1,4 @@
-# SSCircle Player Sync Paper V10.48.4.2 (Web V10.48.4.2)
+# SSCircle Player Sync Paper V10.48.4.3 (Web V10.48.4.3)
 
 Penghubung akun Minecraft ke Profile SSCircle, tanpa Velocity. Plugin memakai HMAC, nonce, kode sekali-pakai 10 menit, dan konfirmasi ulang pada website. Satu anggota saat ini mempunyai **satu** akun Minecraft aktif; multi-account adalah fase berikutnya.
 
@@ -170,3 +170,20 @@ berdasarkan nickname. Selengkapnya lihat
 **Gunakan JAR dan paket Cloudflare V10.48.4.2 dari commit yang sama.**
 Tidak perlu migrasi D1, reset UUID, maupun menghapus database AuthMe.
 Lihat [Panduan lengkap V10.48.4.2](../docs/V10.48.4.2-PREMIUM-DIAGNOSIS.md).
+
+## V10.48.4.3 — audit log Paper 26.3 + monitoring bugfix
+
+- Heartbeat monitoring V10.48.4.2 dapat ditolak Cloudflare HTTP 400 karena
+  Worker versi lama hanya menerima tiga ruas nomor versi, bukan empat.
+  Worker V10.48.4.3 memperbaiki validasi tersebut. **Paket Cloudflare
+  harus diperbarui bersama JAR Paper**.
+- Untuk akun original yang masih menampilkan `OFFLINE`, cek
+  `/sscircle status` **dari Minecraft**, bukan console. Operator melihat
+  plugin pendaftar `PlayerLoginEvent` di Paper. Warning
+  `HorriblePlayerLoginEventHack` dari ProtocolLib dapat menonaktifkan
+  konfigurasi ulang login yang dibutuhkan FastLoginPlus.
+- Jangan mencabut ProtocolLib dari server langsung, atau mengganti
+  `premiumUuid` tanpa backup; uji kompatibilitas Paper/ProtocolLib/
+  FastLoginPlus pada salinan staging.
+- Referensi langkah dan temuan lengkap:
+  [`docs/V10.48.4.3-LOGIN-LOG-AUDIT.md`](../docs/V10.48.4.3-LOGIN-LOG-AUDIT.md).
