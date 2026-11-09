@@ -1,4 +1,4 @@
-# SSCircle Player Sync Paper V10.48.4 (Web V10.48.4)
+# SSCircle Player Sync Paper V10.48.4.1 (Web V10.48.4.1)
 
 Penghubung akun Minecraft ke Profile SSCircle, tanpa Velocity. Plugin memakai HMAC, nonce, kode sekali-pakai 10 menit, dan konfirmasi ulang pada website. Satu anggota saat ini mempunyai **satu** akun Minecraft aktif; multi-account adalah fase berikutnya.
 
@@ -137,3 +137,15 @@ tidak boleh reset link atau UUID pemain. Lihat
 [`docs/V10.48.4-IDENTITY-SAFETY.md`](../docs/V10.48.4-IDENTITY-SAFETY.md)
 untuk matriks uji staging, batasan kepemilikan nama AuthMe, dan prosedur
 recovery manual.
+
+## V10.48.4.1 — Pembaruan jenis Minecraft secara langsung
+
+Bukti autentikasi sesi FastLoginPlus dapat dikirim **tanpa harus menunggu statistik berubah**.
+Pemain dapat melihat status sesi API FastLoginPlus dan status pengiriman bukti pada `/sscircle status`.
+Owner dapat memicu ulang lewat `/sscircle sync`. Untuk melihat hasil terbaru, **perbarui
+JAR Paper dan ZIP Worker Cloudflare** secara bersamaan. Tidak perlu migrasi D1.
+
+Jika status sesi FastLoginPlus tetap `CRACKED`, server belum membuktikan koneksi pemain
+tersebut sebagai Premium meskipun akun original dimiliki; jangan mengubah status
+berdasarkan nickname. Selengkapnya lihat
+[`docs/V10.48.4.1-PREMIUM-SYNC-FIX.md`](../docs/V10.48.4.1-PREMIUM-SYNC-FIX.md).
