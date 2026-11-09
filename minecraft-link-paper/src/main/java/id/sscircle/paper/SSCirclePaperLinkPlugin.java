@@ -13,6 +13,8 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerLoginEvent;
+import org.bukkit.plugin.RegisteredListener;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -463,6 +465,20 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
             if(!mixedModeReady())
                 statusHint(sender,"Mode campuran belum siap. Cek config, AuthMe dan PacketEvents.",
                     NamedTextColor.RED);
+            if(operator){
+                String blocker=paperLoginEventListeners();
+                statusItem(sender,"Listener PlayerLoginEvent",
+                    blocker.isEmpty()?"Tidak ditemukan":blocker,
+                    blocker.isEmpty()?NamedTextColor.GREEN:NamedTextColor.YELLOW);
+                if(!blocker.isEmpty()){
+                    statusHint(sender,
+                        "Paper dapat menonaktifkan API konfigurasi login. Lihat warning HorriblePlayerLoginEventHack.",
+                        NamedTextColor.YELLOW);
+                    statusHint(sender,
+                        "Jangan langsung mencabut ProtocolLib: FastLoginPlus memerlukannya untuk koneksi langsung.",
+                        NamedTextColor.YELLOW);
+                }
+            }
         }
         if(sender instanceof Player player){
             statusSection(sender,"AKUN & BUKTI LOGIN");
@@ -492,6 +508,10 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
             statusSection(sender,"PENGIRIMAN KE WEBSITE");
             statusItem(sender,"Bukti jenis Minecraft",identitySync==null
                 ?"Belum aktif":identitySync.statusFor(player),NamedTextColor.YELLOW);
+        }else{
+            statusHint(sender,
+                "Status Premium per pemain tidak tersedia dari console. Jalankan /sscircle status di dalam Minecraft.",
+                NamedTextColor.YELLOW);
         }
         statusSection(sender,"STATISTIK");
         boolean enabled=getConfig().getBoolean("stats-sync.enabled",true);
@@ -525,7 +545,7 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
             }
         }
         statusSection(sender,"LANGKAH BERIKUT");
-        statusHint(sender,"Bila FastLoginPlus menunjukkan OFFLINE, periksa login Premium",
+        statusHint(sender,"OFFLINE berarti koneksi belum membuktikan Premium, bukan lisensi pemain.",
             NamedTextColor.AQUA);
         statusHint(sender,"di FastLoginPlus/ProtocolLib, bukan mengubah label secara paksa.",
             NamedTextColor.AQUA);
@@ -533,6 +553,15 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
             statusHint(sender,"OP: /sscircle sync lalu /sscircle diagnose jika web gagal.",
                 NamedTextColor.AQUA);
         statusHint(sender,"Status tautan akun: lihat Profile SSCircle.",NamedTextColor.GRAY);
+    }
+
+    private String paperLoginEventListeners(){
+        java.util.Set<String> blockers=new java.util.TreeSet<>();
+        for(RegisteredListener listener : PlayerLoginEvent.getHandlerList().getRegisteredListeners()){
+            Plugin provider=listener.getPlugin();
+            if(provider!=null&&provider.isEnabled())blockers.add(provider.getName());
+        }
+        return String.join(", ",blockers.stream().limit(6).toList());
     }
 
     static String sessionStatusLabel(FastLoginSessionBridge.Probe probe){
