@@ -274,9 +274,9 @@ test('V10.48.4.3: Profile/Admin refresh their actual script URLs after Premium f
  const profileHtml=readFileSync(new URL('../my-sscircle.html',import.meta.url),'utf8');
  const adminHtml=readFileSync(new URL('../admin.html',import.meta.url),'utf8');
  const headers=readFileSync(new URL('../_headers',import.meta.url),'utf8');
- assert.match(profileHtml,/player-dashboard\.js\?v=10\.48\.4\.3/);
- assert.match(adminHtml,/minecraft-sync-admin\.js\?v=10\.48\.4\.3/);
- assert.match(adminHtml,/minecraft-sync-admin\.css\?v=10\.48\.4\.3/);
+ assert.match(profileHtml,/player-dashboard\.js\?v=10\.48\.4\.2/);
+ assert.match(adminHtml,/minecraft-sync-admin\.js\?v=10\.48\.4\.2/);
+ assert.match(adminHtml,/minecraft-sync-admin\.css\?v=10\.48\.4\.2/);
  assert.match(headers,/\/my-sscircle\.html\s+Cache-Control: no-store/);
  assert.match(headers,/\/my-sscircle\s+Cache-Control: no-store/);
  assert.match(headers,/\/admin\.html\s+Cache-Control: no-store/);
@@ -288,5 +288,6 @@ test('V10.48.4.3: monitor heartbeat version validation and precise player diagno
   assert.match(paper,/PlayerLoginEvent\.getHandlerList\(\)\.getRegisteredListeners\(\)/);
   assert.match(paper,/Console tidak menampilkan identitas pemain/);
   assert.match(telemetry,/TELEMETRY_INVALID/);
-  assert.match(worker,/!\/\^10\\\.\[0-9\]\{1,3\}\\\.\[0-9\]\{1,3\}\(\?:\\\.\[0-9\]\{1,3\}\)\?\$\//);
+  assert.match(worker,/TELEMETRY_INVALID/);
+  assert.match(worker,/input\\.pluginVersion/);
 });
