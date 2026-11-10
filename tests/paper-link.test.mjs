@@ -57,7 +57,7 @@ test('Paper Direct: no insecure default endpoint or secrets in shipped config',(
 });
 
 test('V10.45.2: safe tab-completion shows matching commands and hides admin-only reload',()=>{
- assert.match(manifest,/version: '10\.49\.0'/);
+ assert.match(manifest,/version: '10\.49\.1'/);
  assert.match(paper,/implements CommandExecutor, TabCompleter, Listener/);
  assert.match(paper,/public List<String> onTabComplete\(CommandSender sender, Command command, String alias, String\[\] args\)/);
  assert.match(paper,/if \(args\.length != 1\) return List\.of\(\)/);
@@ -82,7 +82,7 @@ test('V10.45.2: explain both independent failures without exposing shared secret
 });
 
 test('V10.45.3: operator-only signed diagnostic and safe error presentation',()=>{
- assert.match(manifest,/version: '10\.49\.0'/);
+ assert.match(manifest,/version: '10\.49\.1'/);
  assert.match(paper,/private static final String DIAGNOSE_PATH = "\/api\/minecraft\/link\/diagnose"/);
  assert.match(paper,/options\.add\("diagnose"\)/);
  assert.match(paper,/private void runDiagnostic\(CommandSender sender\)/);
@@ -274,7 +274,7 @@ test('V10.48.4.3: Profile/Admin refresh their actual script URLs after Premium f
  const profileHtml=readFileSync(new URL('../my-sscircle.html',import.meta.url),'utf8');
  const adminHtml=readFileSync(new URL('../admin.html',import.meta.url),'utf8');
  const headers=readFileSync(new URL('../_headers',import.meta.url),'utf8');
- assert.match(profileHtml,/player-dashboard\.js\?v=10\.48\.4\.2/);
+ assert.match(profileHtml,/player-dashboard\.js\?v=10\.49\.1/);
  assert.match(adminHtml,/minecraft-sync-admin\.js\?v=10\.48\.4\.2/);
  assert.match(adminHtml,/minecraft-sync-admin\.css\?v=10\.48\.4\.2/);
  assert.match(headers,/\/my-sscircle\.html\s+Cache-Control: no-store/);

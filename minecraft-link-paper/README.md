@@ -1,6 +1,6 @@
-# SSCircle Player Sync Paper V10.49.0 (Web V10.49.0)
+# SSCircle Player Sync Paper V10.49.1 (Web V10.49.1)
 
-Penghubung akun Minecraft ke Profile SSCircle, tanpa Velocity. Plugin memakai HMAC, nonce, kode sekali-pakai 10 menit, dan konfirmasi ulang pada website. Satu anggota saat ini mempunyai **satu** akun Minecraft aktif; multi-account adalah fase berikutnya.
+Penghubung akun Minecraft ke Profile SSCircle, tanpa Velocity. Plugin memakai HMAC, nonce, kode sekali-pakai 10 menit, dan konfirmasi ulang pada website. Satu anggota dapat menghubungkan beberapa identitas Minecraft sesuai kebijakan Admin (default 3, batas 1–5). Identitas, statistik, UUID dan inventory tetap terpisah.
 
 ## Dukungan autentikasi
 
@@ -207,3 +207,12 @@ Tidak ada perubahan migrasi D1, secret, metode pembuktian Premium, kontrak API, 
 - Sinkron statistik Paper tetap memakai payload `provider` dan `providerId` yang sama. Backend V10.49.0 kini menghitung statistik per identitas, dan menyediakan pilihan akun + Season. Riwayat lama ditampilkan terpisah karena tidak bisa aman dibagi berdasarkan akun.
 - JAR Paper hanya dibump ke versi V10.49.0 agar cocok dengan rilis Worker; tidak menambah beban polling atau mengubah HMAC.
 - Backup D1, server secret, queue, AuthMe/FastLoginPlus dan playerdata sebelum memasang. Gunakan JAR dan ZIP dari commit yang sama. Lihat `docs/V10.49.0-MULTI-ACCOUNT-LINKING.md` untuk checklist pengujian.
+
+
+## V10.49.1: avatar & skin pada website
+
+- Skin Premium Mojang (kepala dan preview tampak depan) dimuat **oleh Cloudflare Worker**, hanya untuk UUID yang benar-benar tertaut sebagai provider `java_premium` hasil sesi Mojang online-mode.
+- Akun Java yang login menggunakan AuthMe atau FastLoginPlus dalam offline-mode **tidak otomatis** dicocokkan ke skin Mojang dari nickname. Provider `java_offline` sekalipun sesi saat ini bertanda `PREMIUM` tetap menggunakan avatar fallback hingga ada bukti UUID Mojang yang aman.
+- Floodgate XUID juga memakai fallback. Avatar hanya hiasan, **bukan** bukti autentikasi, kepemilikan lisensi, atau dasar migrasi akun.
+- Tanpa penambahan polling Minecraft, pengiriman HMAC, D1, antrean statistik, atau dependency JAR. Versi JAR mengikuti rilis situs supaya paket CI berada dalam satu revisi.
+- Periksa URL `/api/health` setelah upload ZIP dan jangan install dua versi JAR sekaligus. Konfigurasi dan secret lama dipertahankan.

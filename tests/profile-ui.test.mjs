@@ -145,3 +145,34 @@ test('V10.48: monitoring is integrated into private Admin Control and is respons
  assert.match(worker,/if\(!await admin\(req,env\)\)/);
  assert.doesNotMatch(widget,/server-secret\.txt|SSCIRCLE_LINK_SERVER_SECRET/);
 });
+
+
+test('V10.49.1: avatar client never infers a Mojang skin from nickname or offline UUID',async()=>{
+ const {runInNewContext}=await import('node:vm');
+ const context={window:{}};
+ runInNewContext(source('minecraft-avatars.js'),context);
+ const avatar=context.window.SSCircleMinecraftAvatars;
+ const account={id:'12345678-1234-4234-8234-123456789012',provider:'java_premium',
+  edition:'java_premium',providerId:'a3b127cc-89de-4875-b456-8de073b2e211',
+  username:'VerifiedMinecraft',isPrimary:true};
+ assert.equal(avatar.eligible(account),true);
+ assert.equal(avatar.urlForAccount(account),
+  '/api/player/minecraft/skin/'+account.id);
+ for(const bad of [
+  {...account,provider:'java_offline',edition:'java_premium'},
+  {...account,edition:'java_unverified'},
+  {...account,provider:'bedrock',providerId:'12345678901234567'},
+  {...account,providerId:'offline-uuid'},
+  {...account,id:'../../api/admin'}
+ ]){
+  assert.equal(avatar.eligible(bad),false);
+  assert.equal(avatar.urlForAccount(bad),null);
+ }
+ const html=source('my-sscircle.html');
+ const profile=source('player-dashboard.js');
+ const css=source('player-dashboard.css');
+ assert.match(html,/minecraft-avatars\.js\?v=10\.49\.1/);
+ assert.match(profile,/SSCircleMinecraftAvatars\?\.renderPrimary\(accounts\)/);
+ assert.match(profile,/SSCircleMinecraftAvatars\?\.cardAvatar\(account\)/);
+ assert.match(css,/\.ssc-skin-dialog/);
+});

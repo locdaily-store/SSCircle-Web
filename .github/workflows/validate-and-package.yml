@@ -170,7 +170,6 @@ jobs:
           PY
 
       - name: Simpan ZIP Cloudflare sebagai artifact
-        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           name: SSCircle-Cloudflare-Upload
@@ -197,7 +196,6 @@ jobs:
       - name: Kompilasi dan kemas plugin Velocity
         run: gradle -p minecraft-link-velocity clean build --no-daemon --stacktrace
       - name: Simpan JAR plugin
-        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           name: SSCircle-Minecraft-Link-Velocity
@@ -224,7 +222,6 @@ jobs:
       - name: Kompilasi SSCircle Player Sync Paper
         run: gradle -p minecraft-link-paper clean build --no-daemon --stacktrace
       - name: Simpan JAR Paper
-        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           name: SSCircle-Player-Sync-Paper

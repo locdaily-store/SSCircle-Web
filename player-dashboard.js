@@ -82,6 +82,7 @@
     // V10.49.0: account selector + independent season selector. Old member-wide
     // stats are preserved separately, never silently assigned to an account.
     const accounts=Array.isArray(payload.accounts)?payload.accounts:[];
+    window.SSCircleMinecraftAvatars?.renderPrimary(accounts);
     const records=Array.isArray(payload.accountStatistics)?payload.accountStatistics:[];
     const legacy=Array.isArray(payload.statistics)?payload.statistics:[];
     const selector=$('player-season-select');
@@ -530,6 +531,14 @@
         };
         actions.append(primary);
       }
+      if(window.SSCircleMinecraftAvatars?.eligible(account)){
+        const preview=document.createElement('button');
+        preview.type='button';
+        preview.className='player-action player-action-secondary';
+        preview.textContent='Lihat skin';
+        preview.onclick=()=>window.SSCircleMinecraftAvatars.openPreview(account);
+        actions.append(preview);
+      }
       const unlink=document.createElement('button');unlink.type='button';
       unlink.className='player-action player-action-secondary';unlink.textContent='Putuskan';
       unlink.onclick=()=>{
@@ -537,7 +546,10 @@
         $('player-link-unlink-form').hidden=false;
         $('player-link-unlink-password').focus();
       };
-      actions.append(unlink);card.append(summary,actions);list.append(card);
+      actions.append(unlink);
+      const avatar=window.SSCircleMinecraftAvatars?.cardAvatar(account);
+      if(avatar)card.append(avatar);
+      card.append(summary,actions);list.append(card);
     }
     let select=$('ssc-mc-unlink-account');
     if(!select){
