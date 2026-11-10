@@ -251,3 +251,45 @@
 @media(max-width:620px){.ssc-minecraft-avatar{align-self:flex-start}
   .ssc-skin-dialog-content{padding:18px}
   .ssc-skin-full{width:158px}}
+
+/* V10.49.1.1: native Minecraft 3D skin viewer with touch drag + keyboard controls */
+.ssc-skin-dialog{width:min(94vw,530px);max-width:530px}
+.ssc-skin-viewer{width:100%;height:min(55vh,430px);min-height:300px;position:relative;
+  cursor:grab;touch-action:none;user-select:none;border-radius:14px;overflow:hidden;
+  background:radial-gradient(ellipse at 50% 42%,rgba(170,157,224,.24),transparent 70%);
+  border:1px solid var(--player-border);perspective:850px;perspective-origin:50% 46%}
+.ssc-skin-viewer:active{cursor:grabbing}
+.ssc-skin-viewer:focus-visible{outline:2px solid var(--ssc-primary,#ab86d9);outline-offset:3px}
+.ssc-skin-world{position:absolute;left:50%;top:48%;width:0;height:0;transform-style:preserve-3d;
+  transition:transform .08s linear}
+.ssc-skin-character,.ssc-skin-cube{position:absolute;left:0;top:0;transform-style:preserve-3d}
+.ssc-skin-face{position:absolute;background-position:center;background-repeat:no-repeat;
+  background-size:100% 100%;image-rendering:pixelated;backface-visibility:hidden}
+.ssc-skin-controls{display:flex;gap:7px;flex-wrap:wrap;justify-content:center}
+.ssc-skin-controls button{border:1px solid var(--player-border);border-radius:9px;
+  background:transparent;color:inherit;padding:9px 13px;cursor:pointer}
+.ssc-skin-controls button:focus-visible{outline:2px solid var(--ssc-primary,#ab86d9)}
+@media(max-width:620px){.ssc-skin-viewer{height:340px;min-height:280px}
+  .ssc-skin-dialog{max-height:95dvh}}
+
+/* V10.49.1.2: informative missing-skin state, rather than a blank 3D rectangle. */
+.ssc-skin-empty{position:absolute;inset:0;display:flex;flex-direction:column;
+  justify-content:center;align-items:center;gap:8px;padding:26px;text-align:center;
+  color:var(--ssc-text,#faf8ff);pointer-events:none}
+.ssc-skin-empty[hidden],.ssc-skin-controls[hidden],.ssc-skin-dialog-source[hidden]{display:none!important}
+.ssc-skin-empty strong{font-size:16px}
+.ssc-skin-empty span{font-size:12px;max-width:220px;opacity:.78}
+.ssc-skin-dialog-source{font-size:11px;line-height:1.55;opacity:.8;margin:0}
+
+/* V10.49.1.5: orthographic, pixel-accurate WebGL skin preview.
+   Fit canvas to panel; model never inherits CSS transforms that stretch it. */
+.ssc-skin-render-canvas{display:block;position:absolute;inset:0;width:100%;height:100%;
+  image-rendering:pixelated;pointer-events:none}
+.ssc-skin-controls [data-skin-action="outer"]{background:color-mix(in srgb,var(--ssc-primary,#ab86d9) 17%,transparent)}
+.ssc-skin-controls [data-skin-action="outer"][aria-pressed="false"]{opacity:.72;background:transparent}
+.ssc-skin-viewer{perspective:none;touch-action:none}
+
+/* Fallback: orthographic CSS3D, no perspective distortion on zoom. */
+.ssc-skin-css-world{z-index:1}
+.ssc-skin-css-world [hidden]{display:none!important}
+.ssc-skin-render-canvas[hidden]{display:none!important}

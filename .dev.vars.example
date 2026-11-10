@@ -1,0 +1,5 @@
+# Example ONLY. `npm run dev` generates .dev.vars with unique secrets if absent.
+# Never commit the real .dev.vars or reuse live Cloudflare credentials.
+SESSION_SECRET=GENERATED_LOCALLY_ON_FIRST_RUN
+ADMIN_PASSWORD=GENERATED_LOCALLY_ON_FIRST_RUN
+SSCIRCLE_LINK_SERVER_SECRET=GENERATED_LOCALLY_ON_FIRST_RUN

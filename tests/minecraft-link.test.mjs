@@ -838,7 +838,7 @@ test('V10.49.1: member-only Mojang skin proxy validates ownership, UUID and text
       }
       throw new Error('SSRF attempt');
     };
-    assert.equal((await x.call(endpoint,{cookie})).status,502);
+    assert.equal((await x.call(endpoint,{cookie})).status,404);
     assert.equal(calls.at(-1).startsWith('https://sessionserver.mojang.com/'),true);
   }finally{globalThis.fetch=originalFetch;}
 });
@@ -859,4 +859,142 @@ test('V10.49.1: AuthMe/offline identity never resolves a Mojang skin by nickname
     const response=await x.call('/api/player/minecraft/skin/'+accountId,{cookie});
     assert.equal(response.status,404);
   }finally{globalThis.fetch=originalFetch;}
+});
+
+// V10.49.1.1: signed Paper skin snapshots are cosmetic and scoped to the linked identity.
+async function sendSkinForTest(x,data,{key=SERVER,nonce=randomUUID()}={}) {
+ const timestamp=Math.floor(Date.now()/1000);
+ const raw=JSON.stringify(data);
+ const sig=createHmac('sha256',key).update('POST\n/api/minecraft/skin/sync\n'+timestamp+'\n'+nonce+'\n'+raw).digest('base64url');
+ const response=await worker.fetch(new Request('https://sscircle.test/api/minecraft/skin/sync',{
+   method:'POST',headers:{'Content-Type':'application/json','X-SSC-Timestamp':String(timestamp),
+    'X-SSC-Nonce':nonce,'X-SSC-Signature':sig},body:raw
+ }),x.env);
+ return {status:response.status,json:await response.json()};
+}
+
+test('V10.49.1.1: signed offline skin updates only the authenticated linked account',async()=>{
+ const x=fixture(),cookie=await x.active(),other=await x.active(true);
+ const created=await x.call('/api/player/minecraft/link/create',{method:'POST',cookie,data:{}});
+ const offline={code:created.json.code,provider:'java_offline',
+   providerId:'70a89d54-c32e-3942-a553-34f71cfde04d',
+   username:'PlayerOffline',authSource:'authme-session'};
+ assert.equal((await x.claim(offline)).status,200);
+ assert.equal((await x.call('/api/player/minecraft/link/confirm',{method:'POST',cookie,data:{}})).status,200);
+ const base={provider:offline.provider,providerId:offline.providerId,authSource:offline.authSource,
+   textureHash:'a'.repeat(64),model:'slim',source:'skinsrestorer',capturedAt:new Date().toISOString()};
+ assert.equal((await sendSkinForTest(x,base,{key:'wrong'})).status,401);
+ assert.equal((await sendSkinForTest(x,{...base,textureHash:'https://bad.test/asset'})).status,400);
+ assert.equal((await sendSkinForTest(x,{...base,providerId:'70a89d54-c32e-3942-a553-34f71cfde04e'})).status,404);
+ const nonce=randomUUID();
+ assert.equal((await sendSkinForTest(x,base,{nonce})).status,200);
+ assert.equal((await sendSkinForTest(x,base,{nonce})).status,409);
+ const profile=(await x.call('/api/player/profile',{cookie})).json;
+ assert.equal(profile.accounts[0].skinAvailable,true);
+ assert.equal(profile.accounts[0].skinModel,'slim');
+ const id=profile.accounts[0].id;
+ const path='/api/player/minecraft/skin/'+id;
+ assert.equal((await x.call(path,{cookie:other})).status,404);
+ assert.equal((await x.call(path)).status,403);
+ const original=globalThis.fetch,calls=[];
+ try{
+   const png=new Uint8Array(128);png.set([137,80,78,71,13,10,26,10]);
+   globalThis.fetch=async url=>{calls.push(String(url));return new Response(png,{headers:{'Content-Type':'image/png'}})};
+   const response=await x.call(path,{cookie});
+   assert.equal(response.status,200);
+   assert.deepEqual(calls,['https://textures.minecraft.net/texture/'+'a'.repeat(64)]);
+   assert.equal(response.res.headers.get('Content-Type'),'image/png');
+ }finally{globalThis.fetch=original;}
+});
+
+test('V10.49.1.2: fresh FastLoginPlus PREMIUM evidence allows read-only Mojang cosmetic fallback',async()=>{
+ const x=fixture(),cookie=await x.active();
+ const create=await x.call('/api/player/minecraft/link/create',{method:'POST',cookie,data:{}});
+ const offline={code:create.json.code,provider:'java_offline',providerId:'70a89d54-c32e-3942-a553-34f71cfde04d',
+   username:'TestSteve',authSource:'fastlogin-premium'};
+ assert.equal((await x.claim(offline)).status,200);
+ assert.equal((await x.call('/api/player/minecraft/link/confirm',{method:'POST',cookie,data:{}})).status,200);
+ const account=x.db.prepare('SELECT id FROM minecraft_accounts LIMIT 1').get().id;
+ const url='/api/player/minecraft/skin/'+account;
+ const original=globalThis.fetch,calls=[];
+ try{
+   const png=new Uint8Array(128);png.set([137,80,78,71,13,10,26,10]);
+   globalThis.fetch=async (input)=>{
+     const request=String(input);calls.push(request);
+     if(request.startsWith('https://api.minecraftservices.com/minecraft/profile/lookup/name/'))
+       return new Response(JSON.stringify({id:'a'.repeat(32),name:'TestSteve'}));
+     if(request.startsWith('https://sessionserver.mojang.com/session/minecraft/profile/')){
+       const value=Buffer.from(JSON.stringify({textures:{SKIN:{
+         url:'https://textures.minecraft.net/texture/'+'b'.repeat(64),metadata:{model:'slim'}
+       }}})).toString('base64');
+       return new Response(JSON.stringify({name:'TestSteve',properties:[{name:'textures',value}]}));
+     }
+     if(request.startsWith('https://textures.minecraft.net/texture/'))return new Response(png);
+     throw Error('Unexpected external host');
+   };
+   const good=await x.call(url,{cookie});
+   assert.equal(good.status,200);
+   assert.equal(good.res.headers.get('X-SSC-Skin-Source'),'mojang-fallback');
+   assert.equal(good.res.headers.get('X-SSC-Skin-Model'),'slim');
+   assert.equal(calls.length,3);
+   // Historic session proof is not permanently trusted for lookups.
+   x.db.prepare('UPDATE minecraft_identity_evidence SET observed_at=?').run('2020-01-01T00:00:00Z');
+   calls.length=0;
+   assert.equal((await x.call(url,{cookie})).status,404);
+   assert.equal(calls.length,0);
+ }finally{globalThis.fetch=original;}
+});
+
+test('V10.49.1.2: offline mode without Premium proof cannot query public Mojang by username',async()=>{
+ const x=fixture(),cookie=await x.active();
+ const create=await x.call('/api/player/minecraft/link/create',{method:'POST',cookie,data:{}});
+ const offline={code:create.json.code,provider:'java_offline',providerId:'70a89d54-c32e-3942-a553-34f71cfde04d',
+   username:'TestSteve',authSource:'fastlogin-cracked'};
+ assert.equal((await x.claim(offline)).status,200);
+ assert.equal((await x.call('/api/player/minecraft/link/confirm',{method:'POST',cookie,data:{}})).status,200);
+ const account=x.db.prepare('SELECT id FROM minecraft_accounts LIMIT 1').get().id;
+ const original=globalThis.fetch;
+ try{
+   globalThis.fetch=async()=>{throw Error('Unverified session must never call public Mojang');};
+   assert.equal((await x.call('/api/player/minecraft/skin/'+account,{cookie})).status,404);
+ }finally{globalThis.fetch=original;}
+});
+
+// V10.49.1.3: the source server, not the browser, sends PNG content over HMAC.
+// This avoids Cloudflare fetching a texture CDN on every Profile view.
+const SKIN_PNG_BASE64='iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAZ0lEQVR42u3QAQEAIAgAIHNdn3rZIf2hMIFz369YLGM5AQIECBAgQIAAAQIECBAgQIAAAQIECBAgQIAAAQIECBAgQIAAAQIECBAgQIAAAQIECBAgQIAAAQIECBAgQIAAAQIECBAwQQP4KwMUjsyocAAAAABJRU5ErkJggg==';
+test('V10.49.1.3: signed full PNG stored in D1 and served without an external request',async()=>{
+ const x=fixture(),cookie=await x.active(),other=await x.active(true);
+ const created=await x.call('/api/player/minecraft/link/create',{method:'POST',cookie,data:{}});
+ const offline={code:created.json.code,provider:'java_offline',
+   providerId:'70a89d54-c32e-3942-a553-34f71cfde04d',
+   username:'SkinOffline',authSource:'authme-session'};
+ assert.equal((await x.claim(offline)).status,200);
+ assert.equal((await x.call('/api/player/minecraft/link/confirm',{method:'POST',cookie,data:{}})).status,200);
+ const data={provider:offline.provider,providerId:offline.providerId,authSource:offline.authSource,
+   textureHash:'f'.repeat(64),model:'slim',source:'skinsrestorer',
+   capturedAt:new Date().toISOString(),skinPngBase64:SKIN_PNG_BASE64};
+ assert.equal((await sendSkinForTest(x,{...data,skinPngBase64:'AAAA'})).status,400);
+ assert.equal((await sendSkinForTest(x,data,{key:'bad-key'})).status,401);
+ const sent=await sendSkinForTest(x,data);
+ assert.equal(sent.status,200,JSON.stringify(sent.json));
+ assert.equal(sent.json.imageStored,true);
+ assert.equal(sent.json.code,'SKIN_IMAGE_STORED');
+ const account=(await x.call('/api/player/minecraft/link/state',{cookie})).json.accounts[0];
+ assert.equal(account.skinAvailable,true);
+ assert.equal(account.skinImageStored,true);
+ const url='/api/player/minecraft/skin/'+account.id;
+ const status='/api/player/minecraft/skin/status/'+account.id;
+ assert.equal((await x.call(status,{cookie:other})).status,404);
+ assert.equal((await x.call(status)).status,403);
+ assert.equal((await x.call(status,{cookie})).json.skinImageStored,true);
+ const previousFetch=globalThis.fetch;
+ try{
+   globalThis.fetch=async()=>{throw Error('No external PNG fetch expected when stored in D1');};
+   const image=await x.call(url,{cookie});
+   assert.equal(image.status,200);
+   assert.equal(image.res.headers.get('X-SSC-Skin-Source'),'server-d1');
+   assert.equal(image.res.headers.get('X-SSC-Skin-Model'),'slim');
+   assert.deepEqual(Buffer.from(await image.res.arrayBuffer()),Buffer.from(SKIN_PNG_BASE64,'base64'));
+ }finally{globalThis.fetch=previousFetch;}
 });

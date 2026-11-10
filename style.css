@@ -14289,3 +14289,53 @@ body .ssc-unified-footer :is(span, small) {
     overflow-wrap: anywhere;
   }
 }
+
+
+/* SSCircle V10.49.1.6: native select/dropdown theme normalization.
+   An opaque surface is essential: native Windows menus can otherwise blend
+   transparent CSS backgrounds against a white operating-system popup.
+   Keep a native select for keyboard navigation, screen readers, and touch.
+   The theme tokens are resolved on <body> so Admin Control color edits apply. */
+body {
+  --ssc-select-surface: var(--ssc-input, var(--ssc-panel, var(--panel, #181126)));
+  --ssc-select-ink: var(--ssc-input-text, var(--ssc-text, var(--text, #f5efff)));
+  --ssc-select-outline: var(--ssc-input-border, var(--ssc-border, var(--line, #62457d)));
+}
+body select {
+  color-scheme: dark;
+  background-color: var(--ssc-select-surface);
+  color: var(--ssc-select-ink);
+  border-color: var(--ssc-select-outline);
+}
+/* Higher specificity intentionally replaces legacy transparent/white selects
+   in Admin Control, player cards, voting and the public registration form. */
+body:is(.admin-page, .public-page, .home-page, .player-page, .status-standalone,
+        .voting-page, .mailbox-page, .theme-v3) select:not([multiple]) {
+  background-color: var(--ssc-select-surface);
+  color: var(--ssc-select-ink);
+  border-color: var(--ssc-select-outline);
+  color-scheme: dark;
+}
+body select option,
+body select optgroup {
+  background-color: var(--ssc-select-surface);
+  color: var(--ssc-select-ink);
+  color-scheme: dark;
+}
+body select option:checked {
+  background-color: var(--ssc-selected-bg, #70509c);
+  color: var(--ssc-selected-text, #ffffff);
+}
+body select option:disabled,
+body select optgroup:disabled {
+  color: var(--ssc-muted, var(--muted, #aaa0b9));
+}
+body select:focus-visible {
+  outline-color: var(--ssc-input-focus, var(--ssc-primary, #c7a4ff));
+}
+/* The unlink selector has an ID-level legacy rule with a transparent surface. */
+body #ssc-mc-unlink-account {
+  background-color: var(--ssc-select-surface);
+  color: var(--ssc-select-ink);
+  border-color: var(--ssc-select-outline);
+}

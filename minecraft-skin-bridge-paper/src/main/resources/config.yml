@@ -1,0 +1,5 @@
+# Menggunakan endpoint dan server-secret.txt milik SSCirclePlayerSync.
+# Jangan menuliskan atau menyalin secret ke folder plugin ini.
+skin-sync:
+  enabled: true
+  interval-seconds: 300

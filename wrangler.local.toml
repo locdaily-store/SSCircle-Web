@@ -1,0 +1,14 @@
+# LOCAL ONLY: never use this file for Cloudflare Pages production deployments.
+# The UUID is deliberately synthetic. It is not an actual Cloudflare D1 database.
+name = "sscircle-local-only"
+compatibility_date = "2026-11-10"
+
+[vars]
+MEDIA_MODE = "D1"
+STORAGE_LIMIT_MB = "500"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "sscircle-local"
+database_id = "00000000-0000-4000-8000-000000000001"
+preview_database_id = "DB"

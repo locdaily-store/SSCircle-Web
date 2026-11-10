@@ -1895,16 +1895,24 @@ async function sscMultiSettings(env){
 }
 async function sscAccountList(env,memberId){
   const rows=await env.DB.prepare(`SELECT a.id,a.provider,a.provider_id,a.username,a.verified_at,
-    e.auth_source,e.observed_at,p.primary_account_id FROM minecraft_accounts a
+    e.auth_source,e.observed_at,p.primary_account_id,
+    sk.texture_hash,sk.model AS skin_model,sk.source AS skin_source,sk.updated_at AS skin_updated_at,
+    pic.account_id AS skin_image_account_id
+    FROM minecraft_accounts a
     LEFT JOIN minecraft_identity_evidence e ON e.provider=a.provider AND e.provider_id=a.provider_id
       AND e.application_id=a.application_id
+    LEFT JOIN minecraft_account_skins sk ON sk.account_id=a.id
+    LEFT JOIN minecraft_account_skin_images pic ON pic.account_id=a.id AND pic.texture_hash=sk.texture_hash
     LEFT JOIN minecraft_link_preferences p ON p.application_id=a.application_id
     WHERE a.application_id=? ORDER BY a.verified_at ASC,a.id ASC LIMIT 6`).bind(memberId).all();
   const a=rows.results||[];
   const primary=a.find(x=>x.id===a[0]?.primary_account_id)?.id||a[0]?.id;
   return a.map(x=>({id:x.id,provider:x.provider,providerId:x.provider_id,
     username:x.username,edition:minecraftLinkedEdition(x.provider,x.auth_source,x.observed_at),
-    verifiedAt:x.verified_at,identityProofAt:x.observed_at||null,isPrimary:x.id===primary}));
+    verifiedAt:x.verified_at,identityProofAt:x.observed_at||null,isPrimary:x.id===primary,
+    skinAvailable:!!x.texture_hash,skinImageStored:!!x.skin_image_account_id,
+    skinModel:x.skin_model||'classic',
+    skinSource:x.skin_source||null,skinUpdatedAt:x.skin_updated_at||null}));
 }
 async function sscAccountStatistics(env,memberId){
   const result=await env.DB.prepare(`SELECT a.id AS account_id,s.season_id,s.total_playtime,s.total_deaths,
@@ -1941,6 +1949,15 @@ async function ensureMemberCenter(env) {
       action TEXT NOT NULL,at TEXT NOT NULL,
       FOREIGN KEY(application_id) REFERENCES submissions(id) ON DELETE CASCADE)`,
     `CREATE INDEX IF NOT EXISTS idx_ssc_mc_audit_member ON minecraft_link_audit(application_id,at)`,
+    `CREATE TABLE IF NOT EXISTS minecraft_account_skins (
+      account_id TEXT PRIMARY KEY, texture_hash TEXT NOT NULL,
+      model TEXT NOT NULL DEFAULT 'classic',source TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY(account_id) REFERENCES minecraft_accounts(id) ON DELETE CASCADE)`,
+    `CREATE TABLE IF NOT EXISTS minecraft_account_skin_images (
+      account_id TEXT PRIMARY KEY,texture_hash TEXT NOT NULL,
+      png_base64 TEXT NOT NULL,updated_at TEXT NOT NULL,
+      FOREIGN KEY(account_id) REFERENCES minecraft_accounts(id) ON DELETE CASCADE)`,
     `CREATE TABLE IF NOT EXISTS minecraft_account_stat_progress (
       account_id TEXT NOT NULL,season_id TEXT NOT NULL,
       last_captured_at TEXT NOT NULL,last_playtime INTEGER NOT NULL DEFAULT 0,
@@ -2668,56 +2685,197 @@ const minecraftIdentityWarnings=(provider,source,observedAt,duplicateName,now=Da
    The account must be linked to this member with a signed online-mode Mojang UUID.
    Do not use a username, AuthMe/offline UUID, FastLoginPlus CRACKED or Floodgate XUID
    to resolve a different person's public Minecraft skin. */
+// Skin is only cosmetic. The signed server identity is the authority;
+// a username or the texture URL is never used to claim account ownership.
+const MC_SKIN_ROUTE='/api/minecraft/skin/sync';
+const MC_SKIN_HASH=/^[0-9a-f]{32,128}$/;
+// V10.49.1.3: the server sends validated PNG bytes so Profile no longer relies
+// on a second external Mojang fetch, which may be slow/blocked at Cloudflare.
+// Typical 64x64 PNG skins are small, and D1 keeps one image per linked account.
+const MC_SKIN_MAX_BYTES=131072;
+function mcSkinPng(raw){
+  if(typeof raw!=='string'||raw.length<92||raw.length>175000
+     ||raw.length%4!==0||!/^[A-Za-z0-9+/]+={0,2}$/.test(raw))return null;
+  let decoded;
+  try{decoded=Uint8Array.from(atob(raw),c=>c.charCodeAt(0));}catch{return null;}
+  if(decoded.length<67||decoded.length>MC_SKIN_MAX_BYTES)return null;
+  if(![137,80,78,71,13,10,26,10].every((x,i)=>decoded[i]===x))return null;
+  if(decoded[12]!==73||decoded[13]!==72||decoded[14]!==68||decoded[15]!==82)return null; // IHDR
+  const width=((decoded[16]<<24)|(decoded[17]<<16)|(decoded[18]<<8)|decoded[19])>>>0;
+  const height=((decoded[20]<<24)|(decoded[21]<<16)|(decoded[22]<<8)|decoded[23])>>>0;
+  if(width!==64||![32,64].includes(height))return null;
+  // PNG must end with the IEND chunk. Browser performs full CRC/zlib decoding.
+  if(decoded.slice(-8).some((x,i)=>x!==[73,69,78,68,174,66,96,130][i]))return null;
+  return decoded;
+}
+
+async function minecraftSkinSync(req,env){
+  const secret=env.SSCIRCLE_LINK_SERVER_SECRET;
+  if(typeof secret!=='string'||secret.length<32)
+    return minecraftLinkError('SERVER_SECRET_MISSING','Sinkronisasi skin belum aktif.',503);
+  if(!String(req.headers.get('Content-Type')||'').toLowerCase().startsWith('application/json'))
+    return minecraftLinkError('FORMAT_INVALID','Konten tidak valid.',415);
+  const timestamp=Number(req.headers.get('X-SSC-Timestamp'));
+  const nonce=req.headers.get('X-SSC-Nonce')||'';
+  const signature=req.headers.get('X-SSC-Signature')||'';
+  const now=Math.floor(Date.now()/1000);
+  if(!Number.isSafeInteger(timestamp)||Math.abs(now-timestamp)>90
+    || !/^[0-9a-f-]{36}$/.test(nonce)||!/^[A-Za-z0-9_-]{43}$/.test(signature))
+    return minecraftLinkError('SKIN_SIGNATURE_HEADERS','Header tidak valid.',401);
+  const raw=await req.text();
+  if(raw.length>190000)return minecraftLinkError('SKIN_TOO_LARGE','Data terlalu besar.',413);
+  const expected=await hmac(secret,'POST\n'+MC_SKIN_ROUTE+'\n'+timestamp+'\n'+nonce+'\n'+raw);
+  if(!safeEq(expected,signature))
+    return minecraftLinkError('SKIN_SIGNATURE_INVALID','Tanda tangan tidak sesuai.',401);
+  const input=parse(raw);
+  const stamp=Date.parse(input?.capturedAt);
+  if(!mcStatIdentityValid(input)||!MC_SKIN_HASH.test(input?.textureHash||'')
+    ||!['classic','slim'].includes(input?.model)
+    ||!['skinsrestorer','paper-profile'].includes(input?.source)
+    ||!Number.isFinite(stamp)||stamp>Date.now()+60000||stamp<Date.now()-300000)
+    return minecraftLinkError('SKIN_INVALID','Bukti skin tidak valid.',400);
+  const hasPng=Object.hasOwn(input,'skinPngBase64');
+  const png=hasPng?mcSkinPng(input.skinPngBase64):null;
+  if(hasPng&&!png)return minecraftLinkError('SKIN_PNG_INVALID','PNG skin tidak valid.',400);
+  await ensureMemberCenter(env);
+  const account=await env.DB.prepare('SELECT id,application_id,verified_at FROM minecraft_accounts WHERE provider=? AND provider_id=? LIMIT 1')
+    .bind(input.provider,input.providerId).first();
+  if(!account)return minecraftLinkError('SKIN_NOT_LINKED','Akun belum ditautkan.',404);
+  if(stamp<Date.parse(account.verified_at))
+    return minecraftLinkError('SKIN_PRELINK','Bukti sebelum penautan ditolak.',410);
+  const member=await env.DB.prepare('SELECT status FROM submissions WHERE id=?')
+    .bind(account.application_id).first();
+  if(member?.status!=='accepted')return minecraftLinkError('SKIN_MEMBER_INACTIVE','Keanggotaan tidak aktif.',403);
+  const inserted=await env.DB.prepare('INSERT OR IGNORE INTO minecraft_link_nonces(nonce,seen_at) VALUES(?,?)')
+    .bind(nonce,now).run();
+  if(!(inserted.meta?.changes>0))return minecraftLinkError('SKIN_REPLAY','Paket sudah diterima.',409);
+  // A later snapshot cannot be replaced by an older, delayed network response.
+  const updatedAt=new Date(stamp).toISOString();
+  const statements=[env.DB.prepare(`INSERT INTO minecraft_account_skins
+    (account_id,texture_hash,model,source,updated_at) VALUES(?,?,?,?,?)
+    ON CONFLICT(account_id) DO UPDATE SET texture_hash=excluded.texture_hash,
+    model=excluded.model,source=excluded.source,updated_at=excluded.updated_at
+    WHERE excluded.updated_at>=minecraft_account_skins.updated_at`)
+    .bind(account.id,input.textureHash,input.model,input.source,updatedAt)];
+  if(png)statements.push(env.DB.prepare(`INSERT INTO minecraft_account_skin_images
+    (account_id,texture_hash,png_base64,updated_at) VALUES(?,?,?,?)
+    ON CONFLICT(account_id) DO UPDATE SET texture_hash=excluded.texture_hash,
+      png_base64=excluded.png_base64,updated_at=excluded.updated_at
+    WHERE excluded.updated_at>=minecraft_account_skin_images.updated_at`)
+    .bind(account.id,input.textureHash,input.skinPngBase64,updatedAt));
+  // A successful HTTP 200 is proof of durable D1 writes, not merely a queue ACK.
+  const results=await env.DB.batch(statements);
+  const imageStored=!!png&&results.length>1;
+  return J({ok:true,code:imageStored?'SKIN_IMAGE_STORED':'SKIN_REFERENCE_STORED',
+    imageStored,updated:results[0]?.meta?.changes>0});
+}
+async function minecraftMemberSkinStatus(req,env,accountId){
+  const member=await playerSession(req,env);
+  if(!member||member.status!=='accepted')return bad('Akses akun ditolak.',403);
+  await ensureMemberCenter(env);await ensureMemberSecurity(env);
+  if(!await memberStrongSession(req,env,member))return bad('Login password Dashboard diperlukan.',403);
+  const account=(await sscAccountList(env,member.id)).find(x=>x.id===accountId);
+  if(!account)return bad('Akun tidak ditemukan.',404);
+  return J({ok:true,skinAvailable:account.skinAvailable,
+    skinImageStored:account.skinImageStored,skinUpdatedAt:account.skinUpdatedAt,
+    skinModel:account.skinModel,source:account.skinSource},200,
+    {'Cache-Control':'private, no-store','Vary':'Cookie'});
+}
 async function minecraftMemberSkin(req,env,accountId){
   const member=await playerSession(req,env);
-  if(!member||member.status!=='accepted')
-    return bad('Hanya anggota yang diterima dapat melihat skin akun tertaut.',403);
+  if(!member||member.status!=='accepted')return bad('Akses akun ditolak.',403);
   await ensureMemberCenter(env);
   await ensureMemberSecurity(env);
-  if(!await memberStrongSession(req,env,member))
-    return bad('Masuk dengan password dashboard untuk melihat skin.',403);
+  if(!await memberStrongSession(req,env,member))return bad('Login password Dashboard diperlukan.',403);
   if(!/^[0-9a-f-]{36}$/.test(accountId))return bad('Akun tidak ditemukan.',404);
   const account=(await sscAccountList(env,member.id)).find(x=>x.id===accountId);
   if(!account)return bad('Akun tidak ditemukan.',404);
-  if(account.provider!=='java_premium'||account.edition!=='java_premium'
-      ||!MC_UUID.test(account.providerId))
-    return bad('Skin Mojang tidak tersedia untuk jenis identitas ini.',404);
-  // Official Mojang APIs only. The URL returned by Mojang is never fetched
-  // unless it matches the exact known textures.minecraft.net path.
-  try{
-    const id=account.providerId.replace(/-/g,'');
-    const profile=await fetch('https://sessionserver.mojang.com/session/minecraft/profile/'+id,{
-      redirect:'error',signal:AbortSignal.timeout(4500),
-      headers:{Accept:'application/json'}});
-    if(!profile.ok)return bad('Profil skin Mojang belum tersedia.',503);
-    const raw=await profile.text();
-    if(raw.length>16384)return bad('Respons Mojang terlalu besar.',502);
-    const data=JSON.parse(raw);
-    const value=data.properties?.find(p=>p.name==='textures')?.value;
-    if(typeof value!=='string'||value.length>8192)
-      return bad('Tekstur skin tidak tersedia.',404);
-    const skin=JSON.parse(atob(value)).textures?.SKIN?.url;
-    if(typeof skin!=='string'
-       ||!/^https?:\/\/textures\.minecraft\.net\/texture\/[0-9a-f]{32,128}$/.test(skin))
-      return bad('Alamat skin Mojang tidak sah.',502);
-    const url=skin.replace(/^http:\/\//,'https://');
-    const response=await fetch(url,{redirect:'error',signal:AbortSignal.timeout(4500),
-      headers:{Accept:'image/png'}});
-    if(!response.ok)return bad('Tekstur skin Mojang belum tersedia.',503);
-    if(Number(response.headers.get('content-length')||0)>1048576)
-      return bad('Tekstur skin terlalu besar.',502);
-    const bytes=new Uint8Array(await response.arrayBuffer());
-    const signature=[137,80,78,71,13,10,26,10];
-    if(bytes.length<67||bytes.length>1048576||!signature.every((n,i)=>bytes[i]===n))
-      return bad('Tekstur Mojang bukan PNG yang valid.',502);
-    return new Response(bytes,{status:200,headers:{
-      'Content-Type':'image/png','Cache-Control':'private, max-age=900',
-      'X-Content-Type-Options':'nosniff',
-      'Content-Security-Policy':"default-src 'none'"
-    }});
-  }catch{
-    return bad('Skin Minecraft belum dapat dimuat. Coba kembali nanti.',503);
+  let hash=null;
+  if(account.skinAvailable){
+    const row=await env.DB.prepare('SELECT texture_hash FROM minecraft_account_skins WHERE account_id=?')
+      .bind(account.id).first();
+    hash=row?.texture_hash;
+    if(hash&&account.skinImageStored){
+      const image=await env.DB.prepare(`SELECT texture_hash,png_base64 FROM minecraft_account_skin_images
+        WHERE account_id=? AND texture_hash=? LIMIT 1`).bind(account.id,hash).first();
+      const png=image?mcSkinPng(image.png_base64):null;
+      if(png)return new Response(png,{status:200,headers:{
+        'Content-Type':'image/png','Cache-Control':'private, no-store','Vary':'Cookie',
+        'X-SSC-Skin-Source':'server-d1','X-SSC-Skin-Model':account.skinModel,
+        'X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'"}});
+    }
   }
+  // Cosmetic-only Mojang fallback when the server has not yet supplied a texture.
+  // Online-mode UUID is validated by Mojang. In mixed mode, the *fresh*, signed
+  // FastLoginPlus PREMIUM evidence is required before using a username lookup.
+  // Neither lookup can change identity, linking, statistics or ownership.
+  let skinSource=hash?'server':null;
+  let skinModel=account.skinModel||'classic';
+  const premiumOnline=account.provider==='java_premium'
+    && account.edition==='java_premium'&&MC_UUID.test(account.providerId);
+  const premiumMixed=account.provider==='java_offline'
+    && account.edition==='java_premium'
+    && minecraftEvidenceFresh(account.identityProofAt)
+    && /^[a-zA-Z0-9_]{3,16}$/.test(account.username);
+  if(!hash&&(premiumOnline||premiumMixed)){
+    try{
+      let premiumUuid=premiumOnline?account.providerId.replace(/-/g,''):null;
+      if(premiumMixed){
+        // This is NOT a login proof; the proof already came from FastLoginPlus.
+        // The name only retrieves the public cosmetic texture for that session.
+        const lookup=await fetch('https://api.minecraftservices.com/minecraft/profile/lookup/name/'
+          +encodeURIComponent(account.username),
+          {redirect:'error',signal:AbortSignal.timeout(4000)});
+        if(lookup.ok){
+          const raw=await lookup.text();
+          if(raw.length<4096){
+            const data=JSON.parse(raw);
+            if(String(data.name||'').toLowerCase()===account.username.toLowerCase()
+              &&/^[0-9a-f]{32}$/i.test(data.id||''))premiumUuid=data.id;
+          }
+        }
+      }
+      if(premiumUuid){
+        const profile=await fetch('https://sessionserver.mojang.com/session/minecraft/profile/'
+          +premiumUuid,{redirect:'error',signal:AbortSignal.timeout(4000)});
+        if(profile.ok){
+          const raw=await profile.text();
+          if(raw.length<16384){
+            const data=JSON.parse(raw);
+            if(!premiumMixed || String(data.name||'').toLowerCase()===account.username.toLowerCase()){
+              const encoded=data.properties?.find(p=>p.name==='textures')?.value;
+              if(typeof encoded==='string'&&encoded.length<8192){
+                const payload=JSON.parse(atob(encoded));
+                const url=payload.textures?.SKIN?.url||'';
+                hash=/^https?:\/\/textures\.minecraft\.net\/texture\/([0-9a-f]{32,128})$/.exec(url)?.[1];
+                if(hash){
+                  skinModel=payload.textures.SKIN.metadata?.model==='slim'?'slim':'classic';
+                  skinSource='mojang-fallback';
+                }
+              }
+            }
+          }
+        }
+      }
+    }catch{/* Missing public cosmetic skin must not affect the member session. */}
+  }
+  if(!MC_SKIN_HASH.test(hash||''))return bad('Skin server belum tersinkron.',404);
+  try{
+    const response=await fetch('https://textures.minecraft.net/texture/'+hash,
+      {redirect:'error',signal:AbortSignal.timeout(5000),headers:{Accept:'image/png'}});
+    if(!response.ok)return bad('Tekstur skin belum tersedia.',503);
+    if(Number(response.headers.get('content-length')||0)>1048576)
+      return bad('Tekstur terlalu besar.',502);
+    const bytes=new Uint8Array(await response.arrayBuffer());
+    if(bytes.length<67||bytes.length>1048576
+      ||![137,80,78,71,13,10,26,10].every((n,i)=>bytes[i]===n))
+      return bad('Tekstur bukan PNG yang valid.',502);
+    return new Response(bytes,{status:200,headers:{
+      'Content-Type':'image/png','Cache-Control':'private, max-age=120',
+      'X-SSC-Skin-Source':skinSource||'server',
+      'X-SSC-Skin-Model':skinModel,
+      'X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'"}});
+  }catch{return bad('Tekstur skin belum dapat dimuat.',503);}
 }
 
 const mcCodeHash=(env,code)=>hmac(env.SESSION_SECRET+'|minecraft-link-code',code);
@@ -3639,7 +3797,7 @@ async function mailboxAPI(req,env,path,method){
 
 // SSCircle runtime check: observe what the deployment actually receives.
 // Only public readiness categories. Never expose secret values or private data.
-const SSC_RUNTIME_RELEASE='10.49.1';
+const SSC_RUNTIME_RELEASE='10.49.1.6';
 const SSC_RUNTIME_ISSUES=new Set();
 function sscRuntimeBindings(env){
   return {
@@ -3910,6 +4068,8 @@ async function route(req, env) {
     return await minecraftLinkDiagnose(req,env);
   if(path===MC_STAT_ROUTE && method==='POST')
     return await minecraftStatsIngest(req,env);
+  if(path===MC_SKIN_ROUTE && method==='POST')
+    return await minecraftSkinSync(req,env);
   if(path===MC_IDENTITY_ROUTE && method==='POST')
     return await minecraftIdentityRefresh(req,env);
   if(path===MC_SYNC_PATH && method==='POST')
@@ -3928,6 +4088,8 @@ async function route(req, env) {
   if ((path.startsWith('/api/admin/minecraft/sync')) &&
       ['GET','POST'].includes(method))
     return await minecraftSyncAdmin(req,env,path,method);
+  if(path.startsWith('/api/player/minecraft/skin/status/') && method==='GET')
+    return await minecraftMemberSkinStatus(req,env,path.slice('/api/player/minecraft/skin/status/'.length));
   if(path.startsWith('/api/player/minecraft/skin/') && method==='GET')
     return await minecraftMemberSkin(req,env,path.slice('/api/player/minecraft/skin/'.length));
   if ((path.startsWith('/api/player/minecraft/link/') || (path==='/api/admin/minecraft/links' || path==='/api/admin/minecraft/multi-settings')) &&
