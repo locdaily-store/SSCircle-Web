@@ -715,3 +715,124 @@ test('V10.48.4.1: stale Non-Premium proof becomes unverified, then fresh proof r
   assert.equal(result.status,200);
   assert.equal((await x.call('/api/player/profile',{cookie})).json.accounts[0].edition,'java_premium');
 });
+
+test('V10.49.0: one member can link three identities but not four, with exactly one primary',async()=>{
+ const x=fixture(),cookie=await x.active();
+ const ids=[UUID,randomUUID(),randomUUID()];
+ async function attach(id){
+  const code=(await x.call('/api/player/minecraft/link/create',{method:'POST',cookie,data:{}})).json.code;
+  assert.equal((await x.claim(payload(code,id))).status,200);
+  const response=await x.call('/api/player/minecraft/link/confirm',{method:'POST',cookie,data:{}});
+  assert.equal(response.status,200,JSON.stringify(response.json));
+ }
+ for(const id of ids)await attach(id);
+ const state=await x.call('/api/player/minecraft/link/state',{cookie});
+ assert.equal(state.status,200);
+ assert.equal(state.json.accounts.length,3);
+ assert.equal(state.json.maxAccounts,3);
+ assert.equal(state.json.accounts.filter(a=>a.isPrimary).length,1);
+ assert.equal((await x.call('/api/player/minecraft/link/create',{method:'POST',cookie,data:{}})).status,409);
+ assert.equal((await x.claim(payload('SC-'+Buffer.alloc(18).toString('base64url'),ids[0]))).status,404);
+ const primaryId=state.json.accounts[2].id;
+ assert.equal((await x.call('/api/player/minecraft/link/primary',{method:'POST',cookie,
+  data:{accountId:primaryId}})).status,200);
+ const after=(await x.call('/api/player/minecraft/link/state',{cookie})).json;
+ assert.equal(after.accounts.filter(a=>a.isPrimary).length,1);
+ assert.equal(after.accounts.find(a=>a.isPrimary).id,primaryId);
+ assert.equal((await x.call('/api/player/minecraft/link/primary',{method:'POST',cookie,
+  data:{accountId:randomUUID()}})).status,404);
+ const salt=x.db.prepare('SELECT password_salt FROM member_credentials WHERE application_id=?').get(ID).password_salt;
+ const proof=pbkdf2Sync(PASSWORD,salt,220000,32,'sha256').toString('base64url');
+ const unlink=await x.call('/api/player/minecraft/link/unlink',{method:'POST',cookie,
+  data:{accountId:primaryId,currentProof:proof}});
+ assert.equal(unlink.status,200,JSON.stringify(unlink.json));
+ const remaining=(await x.call('/api/player/minecraft/link/state',{cookie})).json;
+ assert.equal(remaining.accounts.length,2);
+ assert.equal(remaining.accounts.filter(a=>a.isPrimary).length,1);
+ assert.equal(x.db.prepare('SELECT COUNT(*) AS n FROM minecraft_accounts WHERE application_id=?').get(ID).n,2);
+});
+test('V10.49.0: admin limits and enabled toggle do not remove existing links',async()=>{
+ const x=fixture(),cookie=await x.active();
+ assert.equal((await x.call('/api/admin/minecraft/multi-account')).status,401);
+ const settings=await x.call('/api/admin/minecraft/multi-account',{cookie:x.admin});
+ assert.equal(settings.status,200);
+ assert.equal(settings.json.maxAccounts,3);
+ assert.equal((await x.call('/api/admin/minecraft/multi-account',{method:'PUT',cookie:x.admin,
+  data:{enabled:true,maxAccounts:0}})).status,400);
+ const saved=await x.call('/api/admin/minecraft/multi-account',{method:'PUT',cookie:x.admin,
+  data:{enabled:true,maxAccounts:1}});
+ assert.equal(saved.status,200,JSON.stringify(saved.json));
+ const code=(await x.call('/api/player/minecraft/link/create',{method:'POST',cookie,data:{}})).json.code;
+ assert.equal((await x.claim(payload(code))).status,200);
+ assert.equal((await x.call('/api/player/minecraft/link/confirm',{method:'POST',cookie,data:{}})).status,200);
+ assert.equal((await x.call('/api/player/minecraft/link/create',{method:'POST',cookie,data:{}})).status,409);
+ const off=await x.call('/api/admin/minecraft/multi-account',{method:'PUT',cookie:x.admin,
+  data:{enabled:false,maxAccounts:3}});
+ assert.equal(off.status,200);
+ assert.equal((await x.call('/api/player/minecraft/link/create',{method:'POST',cookie,data:{}})).status,403);
+ const old=(await x.call('/api/player/minecraft/link/state',{cookie})).json;
+ assert.equal(old.accounts.length,1);
+ assert.equal(old.enabled,false);
+ const audit=(await x.call('/api/admin/minecraft/multi-account/audit',{cookie:x.admin})).json;
+ assert.equal(audit.events[0].action,'linked');
+});
+test('V10.49.0: independent stats per account and safe combined totals',async()=>{
+ const x=fixture(),cookie=await x.active();
+ const ids=[UUID,randomUUID()];
+ const accountIds=[];
+ for(const id of ids){
+  const code=(await x.call('/api/player/minecraft/link/create',{method:'POST',cookie,data:{}})).json.code;
+  assert.equal((await x.claim(payload(code,id))).status,200);
+  const conf=await x.call('/api/player/minecraft/link/confirm',{method:'POST',cookie,data:{}});
+  assert.equal(conf.status,200,JSON.stringify(conf.json));
+  accountIds.push(conf.json.linked.id);
+ }
+ const now=Date.now()+1000;
+ for(let i=0;i<2;i++){
+  const stats={...statsPayload('java_premium',ids[i],'mojang-online'),
+    capturedAt:new Date(now+i*1000).toISOString(),
+    stats:{playtimeSeconds:i===0?7200:3600,deaths:i+1,
+      mobKills:i===0?30:12,blocksMined:i===0?500:100}};
+  const result=await deliverStats(x,stats);
+  assert.equal(result.status,200,JSON.stringify(result.json));
+ }
+ const profile=(await x.call('/api/player/profile',{cookie})).json;
+ const lifetime=profile.statistics.find(a=>a.seasonId==='');
+ assert.equal(lifetime.playtimeSeconds,10800);
+ assert.equal(lifetime.mobKills,42);
+ const primary=profile.accountStatistics.find(a=>a.accountId===accountIds[0]&&a.seasonId==='');
+ const alt=profile.accountStatistics.find(a=>a.accountId===accountIds[1]&&a.seasonId==='');
+ assert.equal(primary.playtimeSeconds,7200);
+ assert.equal(alt.playtimeSeconds,3600);
+ assert.equal(profile.accounts.length,2);
+ assert.equal(JSON.stringify(profile).includes(SERVER),false);
+});
+test('V10.49.0: migrate one-account legacy season totals exactly once',async()=>{
+ const x=fixture(),cookie=await x.active();
+ const at=new Date(Date.now()-20000).toISOString();
+ x.db.prepare('INSERT INTO minecraft_accounts VALUES(?,?,?,?,?,?)')
+   .run(randomUUID(),ID,'java_premium',UUID,'LegacyPlayer',at);
+ x.db.prepare(`INSERT INTO minecraft_stat_progress
+   (application_id,season_id,provider,provider_id,last_captured_at,
+    last_playtime,last_deaths,last_mobs,last_blocks,
+    total_playtime,total_deaths,total_mobs,total_blocks)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+   .run(ID,'','java_premium',UUID,at,7200,3,41,501,7200,3,41,501);
+ x.db.prepare(`INSERT INTO player_stat_snapshots
+   (application_id,season_id,playtime_seconds,deaths,mob_kills,blocks_mined,last_synced_at)
+   VALUES(?,?,?,?,?,?,?)`).run(ID,'',7200,3,41,501,at);
+ const state=await x.call('/api/player/minecraft/link/state',{cookie});
+ assert.equal(state.status,200,JSON.stringify(state.json));
+ const accountId=state.json.accounts[0].id;
+ let profile=(await x.call('/api/player/profile',{cookie})).json;
+ assert.equal(profile.accountStatistics.find(a=>a.accountId===accountId).playtimeSeconds,7200);
+ const next={...statsPayload(),capturedAt:new Date().toISOString(),
+  stats:{playtimeSeconds:7300,deaths:3,mobKills:44,blocksMined:521}};
+ assert.equal((await deliverStats(x,next)).status,200);
+ profile=(await x.call('/api/player/profile',{cookie})).json;
+ assert.equal(profile.accountStatistics.find(a=>a.accountId===accountId).playtimeSeconds,7300);
+ assert.equal(profile.statistics.find(a=>a.seasonId==='').playtimeSeconds,7300);
+ const legacy=x.db.prepare('SELECT playtime_seconds FROM minecraft_stat_legacy WHERE application_id=? AND season_id=?')
+   .get(ID,'');
+ assert.equal(legacy.playtime_seconds,0);
+});
