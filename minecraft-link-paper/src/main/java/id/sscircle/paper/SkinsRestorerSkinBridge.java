@@ -17,12 +17,14 @@ final class SkinsRestorerSkinBridge {
         try {
             Class<?> provider=Class.forName("net.skinsrestorer.api.SkinsRestorerProvider",true,loader);
             Object api=provider.getMethod("get").invoke(null);
-            Object storage=api.getClass().getMethod("getPlayerStorage").invoke(api);
+            Class<?> facade=Class.forName("net.skinsrestorer.api.SkinsRestorer",true,loader);
+            Object storage=facade.getMethod("getPlayerStorage").invoke(api);
+            Class<?> playerStorage=Class.forName("net.skinsrestorer.api.storage.PlayerStorage",true,loader);
             // Only saved/selected skin IDs, not arbitrary nickname lookup.
-            Object selected=storage.getClass().getMethod("getSkinIdForPlayer",UUID.class,String.class)
+            Object selected=playerStorage.getMethod("getSkinIdForPlayer",UUID.class,String.class)
                 .invoke(storage,playerId,name);
             if(!(selected instanceof Optional<?> opt)||opt.isEmpty())return null;
-            Object raw=storage.getClass().getMethod("getSkinForPlayer",UUID.class,String.class,boolean.class)
+            Object raw=playerStorage.getMethod("getSkinForPlayer",UUID.class,String.class,boolean.class)
                 .invoke(storage,playerId,name,false);
             if(!(raw instanceof Optional<?> property)||property.isEmpty())return null;
             Object skin=property.get();
