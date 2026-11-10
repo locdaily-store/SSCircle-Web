@@ -1,4 +1,4 @@
-# SSCircle Player Sync Paper V10.48.5 (Web V10.48.5)
+# SSCircle Player Sync Paper V10.49.0 (Web V10.49.0)
 
 Penghubung akun Minecraft ke Profile SSCircle, tanpa Velocity. Plugin memakai HMAC, nonce, kode sekali-pakai 10 menit, dan konfirmasi ulang pada website. Satu anggota saat ini mempunyai **satu** akun Minecraft aktif; multi-account adalah fase berikutnya.
 
@@ -197,3 +197,13 @@ Update JAR dan paket Worker bersama, tanpa migrasi D1.
 Statistik sekarang menurunkan pembacaan blok per tick ketika TPS rendah (default 24 → 6), dengan sampel TPS sekali/detik. Setelah restart, queue statistik memulihkan baseline snapshot, dan pengiriman jaringan memakai backoff maksimal lima menit termasuk `Retry-After` 429/503. Identity refresh menerapkan backoff per sesi terverifikasi. HTTP dan I/O file tetap asinkron.
 
 Tidak ada perubahan migrasi D1, secret, metode pembuktian Premium, kontrak API, atau UUID. Gunakan JAR Paper dan ZIP Cloudflare dari **commit GitHub Actions yang sama**. Lihat [panduan upgrade dan pengujian V10.48.5](../docs/V10.48.5-SMART-SYNC-OFFLINE-RECOVERY.md).
+
+
+## V10.49.0: Multi-Account Linking
+
+- Satu akun SSCircle dapat menautkan hingga tiga akun Minecraft; pengurus bisa menetapkan batas 1–5 pada Admin Control → Minecraft Sync.
+- Proses yang sama tetap digunakan: Profile → kode sekali pakai → `/sscircle link <kode>` → konfirmasi di website. Pemain tidak perlu plugin Minecraft tambahan.
+- Pilihan akun utama hanya menentukan tampilan situs; jangan ubah UUID, `premiumUuid`, AuthMe, playerdata atau inventory Minecraft.
+- Sinkron statistik Paper tetap memakai payload `provider` dan `providerId` yang sama. Backend V10.49.0 kini menghitung statistik per identitas, dan menyediakan pilihan akun + Season. Riwayat lama ditampilkan terpisah karena tidak bisa aman dibagi berdasarkan akun.
+- JAR Paper hanya dibump ke versi V10.49.0 agar cocok dengan rilis Worker; tidak menambah beban polling atau mengubah HMAC.
+- Backup D1, server secret, queue, AuthMe/FastLoginPlus dan playerdata sebelum memasang. Gunakan JAR dan ZIP dari commit yang sama. Lihat `docs/V10.49.0-MULTI-ACCOUNT-LINKING.md` untuk checklist pengujian.

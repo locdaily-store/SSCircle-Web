@@ -122,7 +122,7 @@ test('server-only signed claim, nonce replay prevention and explicit confirmatio
  assert.equal((await x.call('/api/player/minecraft/link/confirm',{method:'POST',cookie,data:{}})).status,200);
  const profile=await x.call('/api/player/profile',{cookie});
  assert.equal(profile.json.accounts[0].provider,'java_premium');
- assert.equal((await x.call('/api/player/minecraft/link/confirm',{method:'POST',cookie,data:{}})).status,409);
+ assert.equal((await x.call('/api/player/minecraft/link/confirm',{method:'POST',cookie,data:{}})).status,410);
 });
 test('duplicate identity across members is rejected',async()=>{
  const x=fixture(),one=await x.active(),two=await x.active(true);
@@ -152,7 +152,7 @@ test('expired or cancelled code is rejected, and unlink needs password reauthent
   .get(ID).password_salt;
  const proof=pbkdf2Sync(PASSWORD,salt,220000,32,'sha256').toString('base64url');
  assert.equal((await x.call('/api/player/minecraft/link/unlink',{method:'POST',cookie,
-  data:{currentProof:proof}})).status,200);
+  data:{currentProof:proof,accountId:x.db.prepare('SELECT id FROM minecraft_accounts LIMIT 1').get().id}})).status,200);
  assert.equal(x.db.prepare('SELECT COUNT(*) AS n FROM minecraft_accounts').get().n,0);
 });
 test('bedrock identity requires Floodgate authority, admin listing requires admin session',async()=>{
@@ -266,12 +266,12 @@ test('V10.47: signed Vanilla stats are accepted only after member confirms link'
  assert.equal(result.status,200,JSON.stringify(result.json));
  assert.equal(result.json.code,'STATS_SYNCED');
  const profile=await x.call('/api/player/profile',{cookie});
- assert.deepEqual(profile.json.statistics[0]&&[
-   profile.json.statistics[0].playtimeSeconds,
-   profile.json.statistics[0].deaths,
-   profile.json.statistics[0].mobKills,
-   profile.json.statistics[0].blocksMined],[7200,3,41,501]);
- assert.notEqual(profile.json.statistics[0].updatedAt,'');
+ assert.deepEqual(profile.json.accountStatistics[0]&&[
+   profile.json.accountStatistics[0].playtimeSeconds,
+   profile.json.accountStatistics[0].deaths,
+   profile.json.accountStatistics[0].mobKills,
+   profile.json.accountStatistics[0].blocksMined],[7200,3,41,501]);
+ assert.notEqual(profile.json.accountStatistics[0].updatedAt,'');
 });
 test('V10.47: retries deduplicate and out-of-order counters never decrease',async()=>{
  const x=fixture(),cookie=await x.active();
@@ -294,7 +294,7 @@ test('V10.47: retries deduplicate and out-of-order counters never decrease',asyn
  const earlier={...newer,eventId:randomUUID(),
    stats:{playtimeSeconds:1000,deaths:1,mobKills:5,blocksMined:10}};
  assert.equal((await deliverStats(x,earlier)).status,200);
- const profile=(await x.call('/api/player/profile',{cookie})).json.statistics[0];
+ const profile=(await x.call('/api/player/profile',{cookie})).json.accountStatistics[0];
  assert.equal(profile.playtimeSeconds,7200);
  assert.equal(profile.mobKills,41);
  assert.equal(profile.blocksMined,501);
@@ -313,7 +313,7 @@ test('V10.47: AuthMe Non-Premium and Bedrock require matching signed identities'
    assert.equal((await deliverStats(x,{...data,authSource:'minecraft-name'})).status,400);
    assert.equal((await deliverStats(x,data)).status,200);
    const profile=(await x.call('/api/player/profile',{cookie})).json;
-   assert.equal(profile.statistics[0].deaths,3);
+   assert.equal(profile.accountStatistics[0].deaths,3);
  }
 });
 
@@ -335,18 +335,18 @@ test('V10.47.2: season starts at a fresh baseline and world resets never erase a
  assert.equal((await deliverStats(x,stat(0,1000,8,40,300))).status,200);
  let profile=(await x.call('/api/player/profile',{cookie})).json;
  assert.equal(profile.activeStatSeason,'season:season-1:'+seasonStart);
- assert.equal(profile.statistics.find(s=>s.seasonId==='').playtimeSeconds,1000);
- assert.equal(profile.statistics.find(s=>s.seasonId===profile.activeStatSeason).playtimeSeconds,0);
+ assert.equal(profile.accountStatistics.find(s=>s.seasonId==='').playtimeSeconds,1000);
+ assert.equal(profile.accountStatistics.find(s=>s.seasonId===profile.activeStatSeason).playtimeSeconds,0);
  assert.equal((await deliverStats(x,stat(1,1100,9,43,310))).status,200);
  profile=(await x.call('/api/player/profile',{cookie})).json;
- assert.equal(profile.statistics.find(s=>s.seasonId===profile.activeStatSeason).playtimeSeconds,100);
- assert.equal(profile.statistics.find(s=>s.seasonId===profile.activeStatSeason).deaths,1);
+ assert.equal(profile.accountStatistics.find(s=>s.seasonId===profile.activeStatSeason).playtimeSeconds,100);
+ assert.equal(profile.accountStatistics.find(s=>s.seasonId===profile.activeStatSeason).deaths,1);
  // Reset vanilla world stats. The new segment increments by the new raw value.
  assert.equal((await deliverStats(x,stat(2,10,1,2,3))).status,200);
  profile=(await x.call('/api/player/profile',{cookie})).json;
- assert.equal(profile.statistics.find(s=>s.seasonId==='').playtimeSeconds,1110);
- assert.equal(profile.statistics.find(s=>s.seasonId===profile.activeStatSeason).playtimeSeconds,110);
- assert.equal(profile.statistics.find(s=>s.seasonId===profile.activeStatSeason).deaths,2);
+ assert.equal(profile.accountStatistics.find(s=>s.seasonId==='').playtimeSeconds,1110);
+ assert.equal(profile.accountStatistics.find(s=>s.seasonId===profile.activeStatSeason).playtimeSeconds,110);
+ assert.equal(profile.accountStatistics.find(s=>s.seasonId===profile.activeStatSeason).deaths,2);
  const oldKey=profile.activeStatSeason;
  // Changing season creates a distinct epoch, with no deletion of old rows.
  const nextStart=new Date(base+2500).toISOString();
@@ -354,11 +354,11 @@ test('V10.47.2: season starts at a fresh baseline and world resets never erase a
  assert.equal((await deliverStats(x,stat(3,70,2,5,13))).status,200);
  profile=(await x.call('/api/player/profile',{cookie})).json;
  assert.equal(profile.activeStatSeason,'season:season-2:'+nextStart);
- assert.equal(profile.statistics.find(s=>s.seasonId===oldKey).playtimeSeconds,110);
- assert.equal(profile.statistics.find(s=>s.seasonId===profile.activeStatSeason).playtimeSeconds,0);
- assert.equal(profile.statistics.find(s=>s.seasonId==='').playtimeSeconds,1170);
- assert.equal(profile.statistics.find(s=>s.seasonId===oldKey).seasonTitle,'Season Pertama');
- assert.equal(profile.statistics.find(s=>s.seasonId===profile.activeStatSeason).seasonTitle,'Season Kedua');
+ assert.equal(profile.accountStatistics.find(s=>s.seasonId===oldKey).playtimeSeconds,110);
+ assert.equal(profile.accountStatistics.find(s=>s.seasonId===profile.activeStatSeason).playtimeSeconds,0);
+ assert.equal(profile.accountStatistics.find(s=>s.seasonId==='').playtimeSeconds,1170);
+ assert.equal(profile.accountStatistics.find(s=>s.seasonId===oldKey).seasonTitle,'Season Pertama');
+ assert.equal(profile.accountStatistics.find(s=>s.seasonId===profile.activeStatSeason).seasonTitle,'Season Kedua');
 });
 test('V10.47.2: out-of-order season snapshots are ignored rather than decreasing totals',async()=>{
  const x=fixture(),cookie=await x.active();
@@ -379,8 +379,8 @@ test('V10.47.2: out-of-order season snapshots are ignored rather than decreasing
  const late=mk(12000,1010);
  assert.equal((await deliverStats(x,late)).status,200);
  const profile=(await x.call('/api/player/profile',{cookie})).json;
- assert.equal(profile.statistics.find(s=>s.seasonId==='').playtimeSeconds,1050);
- assert.equal(profile.statistics.find(s=>s.seasonId).playtimeSeconds,50);
+ assert.equal(profile.accountStatistics.find(s=>s.seasonId==='').playtimeSeconds,1050);
+ assert.equal(profile.accountStatistics.find(s=>s.seasonId).playtimeSeconds,50);
  assert.equal((await deliverStats(x,later)).json.code,'STATS_DUPLICATE');
 });
 
@@ -503,7 +503,7 @@ test('V10.48.1: admin search and status filter cover every page, not only first 
     insertLink.run(minecraft,member,'java_premium',minecraft,
       i===0?'RareTarget':'Player_'+i,timestamp);
     if(i===0)insertProfile.run(member,'Hidden Finder');
-    if(i===5)x.db.prepare("INSERT INTO player_stat_snapshots (application_id,season_id,playtime_seconds,deaths,mob_kills,blocks_mined,last_synced_at) VALUES(?,'',10,1,0,2,?)").run(member,timestamp);
+    if(i===5)x.db.prepare("INSERT INTO minecraft_account_stat_progress (account_id,season_id,last_captured_at,last_playtime,last_deaths,last_mobs,last_blocks,total_playtime,total_deaths,total_mobs,total_blocks) VALUES(?,'',?,10,1,0,2,10,1,0,2)").run(minecraft,timestamp);
   }
   const page=await x.call('/api/admin/minecraft/sync?offset=100',{cookie:x.admin});
   assert.equal(page.status,200,JSON.stringify(page.json));
@@ -714,4 +714,81 @@ test('V10.48.4.1: stale Non-Premium proof becomes unverified, then fresh proof r
     authSource:'fastlogin-premium',observedAt:new Date(Date.now()+1000).toISOString()});
   assert.equal(result.status,200);
   assert.equal((await x.call('/api/player/profile',{cookie})).json.accounts[0].edition,'java_premium');
+});
+
+test('V10.49.0: three linked identities, account selector, targeted removal and preserved primary',async()=>{
+ const x=fixture(),cookie=await x.active();
+ const identities=[
+  payload('',UUID),
+  payload('','b3b127cc-89de-4875-b456-8de073b2e212'),
+  {code:'',provider:'bedrock',providerId:'12345678901234568',
+    username:'BedrockOther',authSource:'floodgate-xuid'}
+ ];
+ for(const identity of identities){
+  const created=await x.call('/api/player/minecraft/link/create',{method:'POST',cookie,data:{}});
+  assert.equal(created.status,200,JSON.stringify(created.json));
+  assert.equal((await x.claim({...identity,code:created.json.code})).status,200);
+  const confirmed=await x.call('/api/player/minecraft/link/confirm',{method:'POST',cookie,data:{}});
+  assert.equal(confirmed.status,200,JSON.stringify(confirmed.json));
+ }
+ const state=await x.call('/api/player/minecraft/link/state',{cookie});
+ assert.equal(state.status,200);
+ assert.equal(state.json.accounts.length,3);
+ assert.equal(state.json.multiAccount.maxAccounts,3);
+ assert.equal(state.json.multiAccount.availableSlots,0);
+ assert.equal(state.json.accounts.filter(a=>a.isPrimary).length,1);
+ assert.equal((await x.call('/api/player/minecraft/link/create',{method:'POST',cookie,data:{}})).status,409);
+ const second=state.json.accounts[1];
+ assert.equal((await x.call('/api/player/minecraft/link/primary',{method:'POST',cookie,
+  data:{accountId:second.id}})).status,200);
+ assert.equal((await x.call('/api/player/minecraft/link/state',{cookie})).json.linked.id,second.id);
+ const salt=x.db.prepare('SELECT password_salt FROM member_credentials WHERE application_id=?')
+  .get(ID).password_salt;
+ const proof=pbkdf2Sync(PASSWORD,salt,220000,32,'sha256').toString('base64url');
+ assert.equal((await x.call('/api/player/minecraft/link/unlink',{method:'POST',cookie,
+  data:{currentProof:proof,accountId:second.id}})).status,200);
+ const remaining=(await x.call('/api/player/minecraft/link/state',{cookie})).json.accounts;
+ assert.equal(remaining.length,2);
+ assert.equal(remaining.filter(a=>a.isPrimary).length,1);
+ assert.equal(remaining.some(a=>a.id===second.id),false);
+ assert.equal(x.db.prepare('SELECT COUNT(*) AS n FROM minecraft_accounts').get().n,2);
+});
+test('V10.49.0: account statistics remain isolated and legacy snapshots never get fabricated',async()=>{
+ const x=fixture(),cookie=await x.active();
+ const otherUUID='b3b127cc-89de-4875-b456-8de073b2e212';
+ for(const id of [UUID,otherUUID]){
+  const created=await x.call('/api/player/minecraft/link/create',{method:'POST',cookie,data:{}});
+  assert.equal((await x.claim(payload(created.json.code,id))).status,200);
+  assert.equal((await x.call('/api/player/minecraft/link/confirm',{method:'POST',cookie,data:{}})).status,200);
+ }
+ assert.equal((await deliverStats(x,{...statsPayload(),stats:{
+  playtimeSeconds:7200,deaths:3,mobKills:41,blocksMined:500}})).status,200);
+ assert.equal((await deliverStats(x,{...statsPayload('java_premium',otherUUID),
+  stats:{playtimeSeconds:1200,deaths:1,mobKills:5,blocksMined:30}})).status,200);
+ const profile=(await x.call('/api/player/profile',{cookie})).json;
+ const byId=new Map(profile.accounts.map(a=>[a.providerId,a.id]));
+ const first=profile.accountStatistics.find(a=>a.accountId===byId.get(UUID)&&a.seasonId==='');
+ const second=profile.accountStatistics.find(a=>a.accountId===byId.get(otherUUID)&&a.seasonId==='');
+ assert.equal(first.playtimeSeconds,7200);
+ assert.equal(second.playtimeSeconds,1200);
+ assert.equal(first.blocksMined,500);
+ assert.equal(second.blocksMined,30);
+ assert.equal(profile.statisticsLegacyOnly,true);
+ assert.equal(profile.statistics.length,0);
+});
+test('V10.49.0: admin policy changes limit without unlinking existing accounts',async()=>{
+ const x=fixture(),cookie=await x.active();
+ assert.equal((await x.call('/api/admin/minecraft/multi-settings',{cookie})).status,401);
+ const before=await x.call('/api/admin/minecraft/multi-settings',{cookie:x.admin});
+ assert.equal(before.json.maxAccounts,3);
+ const updated=await x.call('/api/admin/minecraft/multi-settings',{cookie:x.admin,method:'POST',
+  data:{enabled:false,maxAccounts:1}});
+ assert.equal(updated.status,200,JSON.stringify(updated.json));
+ assert.equal(updated.json.maxAccounts,1);
+ const created=await x.call('/api/player/minecraft/link/create',{method:'POST',cookie,data:{}});
+ assert.equal(created.status,200);
+ assert.equal((await x.claim(payload(created.json.code))).status,200);
+ assert.equal((await x.call('/api/player/minecraft/link/confirm',{method:'POST',cookie,data:{}})).status,200);
+ assert.equal((await x.call('/api/player/minecraft/link/create',{method:'POST',cookie,data:{}})).status,403);
+ assert.equal(x.db.prepare('SELECT COUNT(*) AS n FROM minecraft_accounts').get().n,1);
 });

@@ -1886,6 +1886,35 @@ function activePublicMedia(row) {
 /* SSCircle V10.36 - Member Center. No Minecraft identity is claimed without
    a future trusted server-side verification. Schema creation is additive. */
 const memberCenterReady = new WeakSet();
+// SSCircle V10.49.0: multi-account state and statistics are isolated by account ID.
+const SSC_MULTI_DEFAULT_MAX=3;
+const sscMultiMax=v=>Number.isSafeInteger(v)?Math.max(1,Math.min(5,v)):SSC_MULTI_DEFAULT_MAX;
+async function sscMultiSettings(env){
+  const r=await env.DB.prepare('SELECT enabled,max_accounts FROM minecraft_multi_settings WHERE id=1').first();
+  return {enabled:r?.enabled!==0,maxAccounts:sscMultiMax(Number(r?.max_accounts??SSC_MULTI_DEFAULT_MAX))};
+}
+async function sscAccountList(env,memberId){
+  const rows=await env.DB.prepare(`SELECT a.id,a.provider,a.provider_id,a.username,a.verified_at,
+    e.auth_source,e.observed_at,p.primary_account_id FROM minecraft_accounts a
+    LEFT JOIN minecraft_identity_evidence e ON e.provider=a.provider AND e.provider_id=a.provider_id
+      AND e.application_id=a.application_id
+    LEFT JOIN minecraft_link_preferences p ON p.application_id=a.application_id
+    WHERE a.application_id=? ORDER BY a.verified_at ASC,a.id ASC LIMIT 6`).bind(memberId).all();
+  const a=rows.results||[];
+  const primary=a.find(x=>x.id===a[0]?.primary_account_id)?.id||a[0]?.id;
+  return a.map(x=>({id:x.id,provider:x.provider,providerId:x.provider_id,
+    username:x.username,edition:minecraftLinkedEdition(x.provider,x.auth_source,x.observed_at),
+    verifiedAt:x.verified_at,identityProofAt:x.observed_at||null,isPrimary:x.id===primary}));
+}
+async function sscAccountStatistics(env,memberId){
+  const result=await env.DB.prepare(`SELECT a.id AS account_id,s.season_id,s.total_playtime,s.total_deaths,
+    s.total_mobs,s.total_blocks,s.last_captured_at FROM minecraft_account_stat_progress s
+    JOIN minecraft_accounts a ON a.id=s.account_id WHERE a.application_id=?
+    ORDER BY s.season_id ASC LIMIT 150`).bind(memberId).all();
+  return (result.results||[]).map(r=>({accountId:r.account_id,seasonId:r.season_id,
+    playtimeSeconds:r.total_playtime,deaths:r.total_deaths,mobKills:r.total_mobs,
+    blocksMined:r.total_blocks,updatedAt:r.last_captured_at}));
+}
 async function ensureMemberCenter(env) {
   if (memberCenterReady.has(env.DB)) return;
   const statements = [
@@ -1900,6 +1929,36 @@ async function ensureMemberCenter(env) {
       allow_public INTEGER NOT NULL DEFAULT 0, allow_stats INTEGER NOT NULL DEFAULT 1,
       allow_event_alerts INTEGER NOT NULL DEFAULT 1,
       updated_at TEXT NOT NULL DEFAULT '')`,
+    `CREATE TABLE IF NOT EXISTS minecraft_multi_settings (
+      id INTEGER PRIMARY KEY CHECK(id=1),enabled INTEGER NOT NULL DEFAULT 1,
+      max_accounts INTEGER NOT NULL DEFAULT 3)`,
+    `INSERT OR IGNORE INTO minecraft_multi_settings(id,enabled,max_accounts) VALUES(1,1,3)`,
+    `CREATE TABLE IF NOT EXISTS minecraft_link_preferences (
+      application_id TEXT PRIMARY KEY,primary_account_id TEXT NOT NULL DEFAULT '',
+      FOREIGN KEY(application_id) REFERENCES submissions(id) ON DELETE CASCADE)`,
+    `CREATE TABLE IF NOT EXISTS minecraft_link_audit (
+      id TEXT PRIMARY KEY,application_id TEXT NOT NULL,account_id TEXT NOT NULL,
+      action TEXT NOT NULL,at TEXT NOT NULL,
+      FOREIGN KEY(application_id) REFERENCES submissions(id) ON DELETE CASCADE)`,
+    `CREATE INDEX IF NOT EXISTS idx_ssc_mc_audit_member ON minecraft_link_audit(application_id,at)`,
+    `CREATE TABLE IF NOT EXISTS minecraft_account_stat_progress (
+      account_id TEXT NOT NULL,season_id TEXT NOT NULL,
+      last_captured_at TEXT NOT NULL,last_playtime INTEGER NOT NULL DEFAULT 0,
+      last_deaths INTEGER NOT NULL DEFAULT 0,last_mobs INTEGER NOT NULL DEFAULT 0,
+      last_blocks INTEGER NOT NULL DEFAULT 0,total_playtime INTEGER NOT NULL DEFAULT 0,
+      total_deaths INTEGER NOT NULL DEFAULT 0,total_mobs INTEGER NOT NULL DEFAULT 0,
+      total_blocks INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY(account_id,season_id),
+      FOREIGN KEY(account_id) REFERENCES minecraft_accounts(id) ON DELETE CASCADE)`,
+    `CREATE INDEX IF NOT EXISTS idx_ssc_mc_acc_stats_season ON minecraft_account_stat_progress(season_id)`,
+    `CREATE TABLE IF NOT EXISTS minecraft_account_stat_archive (
+      archive_id TEXT NOT NULL,application_id TEXT NOT NULL,account_id TEXT NOT NULL,
+      provider TEXT NOT NULL,provider_id TEXT NOT NULL,season_id TEXT NOT NULL,
+      playtime_seconds INTEGER NOT NULL,deaths INTEGER NOT NULL,
+      mob_kills INTEGER NOT NULL,blocks_mined INTEGER NOT NULL,
+      last_synced_at TEXT NOT NULL,archived_at TEXT NOT NULL,
+      PRIMARY KEY(archive_id,season_id),
+      FOREIGN KEY(application_id) REFERENCES submissions(id) ON DELETE CASCADE)`,
     `CREATE TABLE IF NOT EXISTS minecraft_accounts (
       id TEXT PRIMARY KEY, application_id TEXT NOT NULL,
       provider TEXT NOT NULL, provider_id TEXT NOT NULL, username TEXT NOT NULL,
@@ -2450,11 +2509,8 @@ async function memberCenterAPI(req,env,path,method) {
     if(hasCredentials && !await memberStrongSession(req,env,application)) return bad('Masuk dengan password dashboard untuk melihat profil.',403);
     const profileRow=await env.DB.prepare('SELECT * FROM member_profiles WHERE application_id=?').bind(application.id).first();
     const policyRow=await env.DB.prepare('SELECT * FROM member_policy WHERE id=1').first();
-    const accounts=await env.DB.prepare(`SELECT a.provider,a.username,a.verified_at,e.auth_source,e.observed_at
-      FROM minecraft_accounts a LEFT JOIN minecraft_identity_evidence e
-      ON e.provider=a.provider AND e.provider_id=a.provider_id
-      AND e.application_id=a.application_id
-      WHERE a.application_id=? ORDER BY a.verified_at DESC`).bind(application.id).all();
+    const accounts=await sscAccountList(env,application.id);
+    const accountStatistics=await sscAccountStatistics(env,application.id);
     const stats=await env.DB.prepare(`SELECT season_id,playtime_seconds,deaths,mob_kills,
       blocks_mined,last_synced_at FROM player_stat_snapshots WHERE application_id=?
       ORDER BY season_id ASC LIMIT 25`).bind(application.id).all();
@@ -2465,10 +2521,10 @@ async function memberCenterAPI(req,env,path,method) {
     return J({profile:memberProfile(profileRow),policy:memberPolicy(policyRow),
       activeStatSeason:activeStatKey,
       activeStatSeasonTitle:seasonName.get(form.settings.statSeasonId)||'',
-      accounts:(accounts.results||[]).map(a=>({provider:a.provider,
-        edition:minecraftLinkedEdition(a.provider,a.auth_source,a.observed_at),
-        identityProofAt:a.observed_at||null,
-        username:a.username,verifiedAt:a.verified_at})),
+      accounts,accountStatistics:accountStatistics.map(a=>({...a,
+        seasonTitle:a.seasonId.startsWith('season:')
+          ?(seasonName.get(a.seasonId.split(':')[1])||'Season tersimpan')
+          :'Sepanjang masa'})),statisticsLegacyOnly:true,
       statistics:(stats.results||[]).map(a=>({seasonId:a.season_id,
         seasonTitle:a.season_id.startsWith('season:')
           ? (seasonName.get(a.season_id.split(':')[1])||'Season tersimpan')
@@ -2610,6 +2666,20 @@ const minecraftIdentityWarnings=(provider,source,observedAt,duplicateName,now=Da
 };
 const mcCodeHash=(env,code)=>hmac(env.SESSION_SECRET+'|minecraft-link-code',code);
 async function minecraftLinkAPI(req,env,path,method){
+  if(path==='/api/admin/minecraft/multi-settings'){
+    if(!await admin(req,env))return bad('Masuk ke Admin Control.',401);
+    await ensureMemberCenter(env);
+    if(method==='GET')return J(await sscMultiSettings(env));
+    if(method!=='POST')return bad('Metode tidak tersedia.',405);
+    if(!await rateLimit(env,req,'minecraft-multi-settings',8,900))
+      return bad('Terlalu banyak perubahan.',429);
+    const data=await body(req,400);
+    if(typeof data?.enabled!=='boolean'||!Number.isSafeInteger(data?.maxAccounts)||
+      data.maxAccounts<1||data.maxAccounts>5)return bad('Pengaturan tidak valid.',400);
+    await env.DB.prepare('UPDATE minecraft_multi_settings SET enabled=?,max_accounts=? WHERE id=1')
+      .bind(data.enabled?1:0,data.maxAccounts).run();
+    return J(await sscMultiSettings(env));
+  }
   if(path==='/api/admin/minecraft/links' && method==='GET'){
     if(!await admin(req,env))return bad('Masuk ke Admin Control.',401);
     await ensureMemberCenter(env);
@@ -2632,13 +2702,9 @@ async function minecraftLinkAPI(req,env,path,method){
   const active=await memberStrongSession(req,env,app);
   if(!active)return bad('Buka Profile dengan password dashboard sebelum menghubungkan akun Minecraft.',403);
   await ensureMemberCenter(env);
-  const linked=await env.DB.prepare(
-    `SELECT a.provider,a.provider_id,a.username,a.verified_at,e.auth_source,e.observed_at
-       FROM minecraft_accounts a LEFT JOIN minecraft_identity_evidence e
-       ON e.provider=a.provider AND e.provider_id=a.provider_id
-       AND e.application_id=a.application_id
-       WHERE a.application_id=? ORDER BY a.verified_at DESC LIMIT 1`
-  ).bind(app.id).first();
+  const linkedAccounts=await sscAccountList(env,app.id);
+  const linked=linkedAccounts.find(a=>a.isPrimary)||linkedAccounts[0]||null;
+  const settings=await sscMultiSettings(env);
   if(path==='/api/player/minecraft/link/state' && method==='GET'){
     const challenge=await env.DB.prepare(
       'SELECT id,expires_at,claimed_at,created_at FROM minecraft_link_challenges WHERE application_id=? ORDER BY created_at DESC LIMIT 1'
@@ -2653,14 +2719,17 @@ async function minecraftLinkAPI(req,env,path,method){
         identity:claim?{provider:claim.provider,username:claim.username,
           edition:minecraftEdition(claim.provider,claim.auth_source)}:null};
     }
-    return J({linked:linked?{
-      provider:linked.provider,edition:minecraftLinkedEdition(linked.provider,linked.auth_source,linked.observed_at),
-      username:linked.username,verifiedAt:linked.verified_at,identityProofAt:linked.observed_at||null
-    }:null,pending,serverReady:typeof env.SSCIRCLE_LINK_SERVER_SECRET==='string'&&
-      env.SSCIRCLE_LINK_SERVER_SECRET.length>=32});
+    return J({linked,accounts:linkedAccounts,pending,
+      multiAccount:{enabled:settings.enabled,maxAccounts:settings.maxAccounts,
+        availableSlots:Math.max(0,settings.maxAccounts-linkedAccounts.length)},
+      serverReady:typeof env.SSCIRCLE_LINK_SERVER_SECRET==='string'&&
+        env.SSCIRCLE_LINK_SERVER_SECRET.length>=32});
   }
   if(path==='/api/player/minecraft/link/create' && method==='POST'){
-    if(linked)return bad('Akun Minecraft sudah terhubung. Putuskan tautan terlebih dahulu.',409);
+    if(linkedAccounts.length>0&&!settings.enabled)
+      return bad('Penambahan akun Minecraft sementara dinonaktifkan.',403);
+    if(linkedAccounts.length>=settings.maxAccounts)
+      return bad('Batas akun Minecraft sudah tercapai.',409);
     if(!env.SSCIRCLE_LINK_SERVER_SECRET||env.SSCIRCLE_LINK_SERVER_SECRET.length<32)
       return bad('Penghubung Minecraft belum diaktifkan oleh pengelola server.',503);
     if(!await rateLimit(env,req,'minecraft-link-create',5,900))
@@ -2689,7 +2758,8 @@ async function minecraftLinkAPI(req,env,path,method){
     return J({ok:true});
   }
   if(path==='/api/player/minecraft/link/confirm' && method==='POST'){
-    if(linked)return bad('Akun Minecraft ini sudah memiliki tautan.',409);
+    if(linkedAccounts.length>0&&!settings.enabled)return bad('Penambahan akun sedang nonaktif.',403);
+    if(linkedAccounts.length>=settings.maxAccounts)return bad('Batas akun sudah tercapai.',409);
     const challenge=await env.DB.prepare(
       'SELECT id,expires_at FROM minecraft_link_challenges WHERE application_id=? ORDER BY created_at DESC LIMIT 1'
     ).bind(app.id).first();
@@ -2704,8 +2774,10 @@ async function minecraftLinkAPI(req,env,path,method){
       const results=await env.DB.batch([
         env.DB.prepare(
           'INSERT INTO minecraft_accounts(id,application_id,provider,provider_id,username,verified_at) '+
-          'SELECT ?,?,?,?,?,? WHERE NOT EXISTS(SELECT 1 FROM minecraft_accounts WHERE application_id=?)'
-        ).bind(uid(),app.id,claim.provider,claim.provider_id,claim.username,timestamp,app.id),
+          'SELECT ?,?,?,?,?,? WHERE (SELECT COUNT(*) FROM minecraft_accounts WHERE application_id=?)<? '+
+          'AND NOT EXISTS(SELECT 1 FROM minecraft_accounts WHERE provider=? AND provider_id=?)'
+        ).bind(uid(),app.id,claim.provider,claim.provider_id,claim.username,timestamp,
+          app.id,settings.maxAccounts,claim.provider,claim.provider_id),
         env.DB.prepare(`INSERT INTO minecraft_identity_evidence
           (application_id,provider,provider_id,auth_source,observed_at)
           SELECT ?,?,?,?,? WHERE EXISTS(SELECT 1 FROM minecraft_accounts
@@ -2730,6 +2802,21 @@ async function minecraftLinkAPI(req,env,path,method){
       edition:minecraftEdition(claim.provider,claim.auth_source),
       username:claim.username,verifiedAt:timestamp}});
   }
+  if(path==='/api/player/minecraft/link/primary' && method==='POST'){
+    if(!await rateLimit(env,req,'minecraft-primary',6,900))
+      return bad('Terlalu sering mengubah akun utama.',429);
+    const val=await body(req,500);
+    if(!/^[a-f0-9-]{36}$/.test(val?.accountId||''))
+      return bad('Pilih akun Minecraft yang valid.',400);
+    if(!linkedAccounts.some(a=>a.id===val.accountId))
+      return bad('Akun Minecraft tidak ditemukan.',404);
+    await env.DB.prepare(`INSERT INTO minecraft_link_preferences(application_id,primary_account_id)
+      VALUES(?,?) ON CONFLICT(application_id) DO UPDATE SET primary_account_id=excluded.primary_account_id`)
+      .bind(app.id,val.accountId).run();
+    await env.DB.prepare('INSERT INTO minecraft_link_audit(id,application_id,account_id,action,at) VALUES(?,?,?,?,?)')
+      .bind(uid(),app.id,val.accountId,'SET_PRIMARY',new Date().toISOString()).run();
+    return J({ok:true});
+  }
   if(path==='/api/player/minecraft/link/unlink' && method==='POST'){
     if(!await rateLimit(env,req,'minecraft-link-unlink',5,600))
       return bad('Terlalu banyak percobaan. Coba lagi nanti.',429);
@@ -2743,14 +2830,31 @@ async function minecraftLinkAPI(req,env,path,method){
       ?safeEq(stored,'v2.'+await memberVerifier(value.currentProof))
       :safeEq(stored,value.currentProof);
     if(!valid)return bad('Password tidak sesuai.',403);
+    const targetId=String(value?.accountId||'');
+    if(!/^[0-9a-f-]{36}$/.test(targetId))
+      return bad('Pilih akun spesifik yang ingin diputuskan.',400);
+    const target=linkedAccounts.find(a=>a.id===targetId);
+    if(!target)return bad('Akun tidak ditemukan atau bukan milik anggota.',404);
+    const archiveAt=new Date().toISOString();
     await env.DB.batch([
-      env.DB.prepare(
-        'DELETE FROM minecraft_link_claims WHERE challenge_id IN (SELECT id FROM minecraft_link_challenges WHERE application_id=?)'
-      ).bind(app.id),
-      env.DB.prepare('DELETE FROM minecraft_link_challenges WHERE application_id=?').bind(app.id),
-      env.DB.prepare('DELETE FROM minecraft_identity_evidence WHERE application_id=?').bind(app.id),
-      env.DB.prepare('DELETE FROM minecraft_accounts WHERE application_id=?').bind(app.id)
+      env.DB.prepare(`INSERT INTO minecraft_account_stat_archive
+        (archive_id,application_id,account_id,provider,provider_id,season_id,
+          playtime_seconds,deaths,mob_kills,blocks_mined,last_synced_at,archived_at)
+        SELECT ?,?,?,?,?,season_id,total_playtime,total_deaths,total_mobs,total_blocks,
+          last_captured_at,? FROM minecraft_account_stat_progress WHERE account_id=?`)
+        .bind(uid(),app.id,targetId,target.provider,target.providerId,archiveAt,targetId),
+      env.DB.prepare('DELETE FROM minecraft_identity_evidence WHERE application_id=? AND provider=? AND provider_id=?')
+        .bind(app.id,target.provider,target.providerId),
+      env.DB.prepare('DELETE FROM minecraft_accounts WHERE id=? AND application_id=?').bind(targetId,app.id),
+      env.DB.prepare('INSERT INTO minecraft_link_audit(id,application_id,account_id,action,at) VALUES(?,?,?,?,?)')
+        .bind(uid(),app.id,targetId,'UNLINK',new Date().toISOString())
     ]);
+    if(target.isPrimary){
+      const remaining=await sscAccountList(env,app.id);
+      await env.DB.prepare(`INSERT INTO minecraft_link_preferences(application_id,primary_account_id)
+        VALUES(?,?) ON CONFLICT(application_id) DO UPDATE SET primary_account_id=excluded.primary_account_id`)
+        .bind(app.id,remaining[0]?.id||'').run();
+    }
     return J({ok:true});
   }
   return bad('Endpoint Minecraft tidak ditemukan.',404);
@@ -2867,7 +2971,7 @@ async function minecraftStatsIngest(req,env){
     return minecraftLinkError('STATS_INVALID','Statistik tidak valid atau terlalu lama.',400);
   await ensureMemberCenter(env);
   const account=await env.DB.prepare(
-    'SELECT application_id,verified_at FROM minecraft_accounts WHERE provider=? AND provider_id=? LIMIT 1'
+    'SELECT id,application_id,verified_at FROM minecraft_accounts WHERE provider=? AND provider_id=? LIMIT 1'
   ).bind(payload.provider,payload.providerId).first();
   if(!account)
     return minecraftLinkError('STATS_NOT_LINKED','Akun Minecraft belum tertaut ke Profile.',404);
@@ -2897,66 +3001,41 @@ async function minecraftStatsIngest(req,env){
     && /^[A-Za-z0-9_-]{1,64}$/.test(activeSeason)
     && stamp>=Date.parse(seasonStart)
       ? 'season:'+activeSeason+':'+seasonStart : '';
-  const oldLifetime=await env.DB.prepare(`SELECT playtime_seconds,deaths,mob_kills,blocks_mined
-    FROM player_stat_snapshots WHERE application_id=? AND season_id=''`)
-    .bind(account.application_id).first();
+  // V10.49.0: independent per-identity raw counter ledgers.
+  // Preserve old member-wide snapshots read-only because their account attribution is unknown.
   const names=['playtime','deaths','mobs','blocks'];
-  const cols=['playtimeSeconds','deaths','mobKills','blocksMined'];
-  const initial=cols.map((k,i)=>Math.max(metrics[k],Number(oldLifetime?.[
-    ['playtime_seconds','deaths','mob_kills','blocks_mined'][i]
-  ]||0)));
-  const upsertProgress=`INSERT INTO minecraft_stat_progress (
-    application_id,season_id,provider,provider_id,last_captured_at,
-    last_playtime,last_deaths,last_mobs,last_blocks,
-    total_playtime,total_deaths,total_mobs,total_blocks
-  ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
-  ON CONFLICT(application_id,season_id) DO UPDATE SET
-  ${names.map(name=>`total_${name}=
-    MIN(2147483647,minecraft_stat_progress.total_${name}+
-      CASE WHEN minecraft_stat_progress.provider=excluded.provider
-        AND minecraft_stat_progress.provider_id=excluded.provider_id
-      THEN CASE WHEN excluded.last_${name}>=minecraft_stat_progress.last_${name}
-        THEN excluded.last_${name}-minecraft_stat_progress.last_${name}
-        ELSE excluded.last_${name} END
-      ELSE 0 END)`).join(',\n  ')},
-  ${names.map(name=>`last_${name}=excluded.last_${name}`).join(',\n  ')},
-  provider=excluded.provider,provider_id=excluded.provider_id,
-  last_captured_at=excluded.last_captured_at
-  WHERE excluded.last_captured_at>minecraft_stat_progress.last_captured_at`;
-  const snapshotFromProgress=`INSERT INTO player_stat_snapshots
-    (application_id,season_id,playtime_seconds,deaths,mob_kills,blocks_mined,last_synced_at)
-    SELECT application_id,season_id,total_playtime,total_deaths,total_mobs,total_blocks,last_captured_at
-    FROM minecraft_stat_progress WHERE application_id=? AND season_id=?
-    ON CONFLICT(application_id,season_id) DO UPDATE SET
-    playtime_seconds=excluded.playtime_seconds,deaths=excluded.deaths,
-    mob_kills=excluded.mob_kills,blocks_mined=excluded.blocks_mined,
-    last_synced_at=excluded.last_synced_at
-    WHERE excluded.last_synced_at>player_stat_snapshots.last_synced_at`;
-  const entry=(key,totals)=>env.DB.prepare(upsertProgress).bind(
-    account.application_id,key,payload.provider,payload.providerId,capturedAt,
-    metrics.playtimeSeconds,metrics.deaths,metrics.mobKills,metrics.blocksMined,...totals);
+  const vals=[metrics.playtimeSeconds,metrics.deaths,metrics.mobKills,metrics.blocksMined];
+  const upsert=`INSERT INTO minecraft_account_stat_progress
+    (account_id,season_id,last_captured_at,last_playtime,last_deaths,last_mobs,last_blocks,
+      total_playtime,total_deaths,total_mobs,total_blocks)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?)
+    ON CONFLICT(account_id,season_id) DO UPDATE SET
+      ${names.map(name=>`total_${name}=MIN(2147483647,
+        minecraft_account_stat_progress.total_${name}+
+        CASE WHEN excluded.last_${name}>=minecraft_account_stat_progress.last_${name}
+          THEN excluded.last_${name}-minecraft_account_stat_progress.last_${name}
+          ELSE excluded.last_${name} END)`).join(',\n      ')},
+      ${names.map(name=>`last_${name}=excluded.last_${name}`).join(',\n      ')},
+      last_captured_at=excluded.last_captured_at
+    WHERE excluded.last_captured_at>minecraft_account_stat_progress.last_captured_at`;
+  const save=(season,initial)=>env.DB.prepare(upsert).bind(
+    account.id,season,capturedAt,...vals,...initial);
   const transaction=[
     env.DB.prepare(`INSERT OR IGNORE INTO minecraft_stat_receipts
       (event_id,application_id,provider,provider_id,received_at) VALUES(?,?,?,?,?)`)
       .bind(payload.eventId,account.application_id,payload.provider,payload.providerId,receivedAt),
-    entry('',initial),
-    env.DB.prepare(snapshotFromProgress).bind(account.application_id,''),
-    // Only an authenticated signed session for an already-linked account can
-    // refresh this evidence; queued older packets cannot overwrite newer proof.
+    save('',vals),
     env.DB.prepare(`INSERT INTO minecraft_identity_evidence
       (application_id,provider,provider_id,auth_source,observed_at)
       VALUES(?,?,?,?,?) ON CONFLICT(provider,provider_id) DO UPDATE SET
       application_id=excluded.application_id,auth_source=excluded.auth_source,
       observed_at=excluded.observed_at
       WHERE excluded.observed_at>=minecraft_identity_evidence.observed_at`)
-      .bind(account.application_id,payload.provider,payload.providerId,
-        payload.authSource,capturedAt)
+      .bind(account.application_id,payload.provider,payload.providerId,payload.authSource,capturedAt)
   ];
-  if(seasonId){
-    transaction.push(entry(seasonId,[0,0,0,0]));
-    transaction.push(env.DB.prepare(snapshotFromProgress).bind(account.application_id,seasonId));
-  }
+  if(seasonId)transaction.push(save(seasonId,[0,0,0,0]));
   const results=await env.DB.batch(transaction);
+  // No old member-wide totals are added to account totals: would double-count.
   // Old receipt rows may be purged safely: cumulative MAX prevents inflation
   // if an old event is ever retried after receipt expiry.
   if(now%31===0){
@@ -3105,8 +3184,8 @@ async function minecraftSyncAdmin(req,env,path,method){
       EXISTS(SELECT 1 FROM minecraft_accounts other
         WHERE other.id<>a.id AND lower(other.username)=lower(a.username))
         AS duplicate_name,COALESCE(p.display_name,'') AS display_name,
-      (SELECT MAX(s.last_synced_at) FROM player_stat_snapshots s
-        WHERE s.application_id=a.application_id) AS last_sync_at
+      (SELECT MAX(s.last_captured_at) FROM minecraft_account_stat_progress s
+        WHERE s.account_id=a.id) AS last_sync_at
       FROM minecraft_accounts a
       LEFT JOIN member_profiles p ON p.application_id=a.application_id
       LEFT JOIN minecraft_identity_evidence e ON e.provider=a.provider
@@ -3115,15 +3194,15 @@ async function minecraftSyncAdmin(req,env,path,method){
         OR lower(COALESCE(p.display_name,'')) LIKE ? ESCAPE '\\'
         OR lower(a.application_id) LIKE ? ESCAPE '\\')
         AND (?='all' OR (?='synced' AND EXISTS(
-          SELECT 1 FROM player_stat_snapshots s WHERE s.application_id=a.application_id))
+          SELECT 1 FROM minecraft_account_stat_progress s WHERE s.account_id=a.id))
           OR (?='missing' AND NOT EXISTS(
-          SELECT 1 FROM player_stat_snapshots s WHERE s.application_id=a.application_id)))
+          SELECT 1 FROM minecraft_account_stat_progress s WHERE s.account_id=a.id)))
       ORDER BY a.verified_at DESC LIMIT 101 OFFSET ?`)
       .bind(query,needle,needle,needle,filter,filter,filter,offset).all();
     const totals=await env.DB.prepare(`SELECT
       COUNT(*) AS linked,
       SUM(CASE WHEN NOT EXISTS(
-        SELECT 1 FROM player_stat_snapshots s WHERE s.application_id=a.application_id
+        SELECT 1 FROM minecraft_account_stat_progress s WHERE s.account_id=a.id
       ) THEN 1 ELSE 0 END) AS no_stats
       FROM minecraft_accounts a`).first();
     const events=await env.DB.prepare(`SELECT at,code,details FROM minecraft_sync_events
@@ -3255,10 +3334,15 @@ async function minecraftLinkClaim(req,env){
   const owner=await env.DB.prepare('SELECT id,status FROM submissions WHERE id=?')
     .bind(challenge.application_id).first();
   if(owner?.status!=='accepted')return minecraftLinkError('MEMBER_NOT_ACCEPTED','Keanggotaan tidak lagi aktif.',403);
+  const settings=await sscMultiSettings(env);
+  const count=await env.DB.prepare('SELECT COUNT(*) AS total FROM minecraft_accounts WHERE application_id=?')
+    .bind(challenge.application_id).first();
+  if(Number(count?.total||0)>=settings.maxAccounts || (Number(count?.total||0)>0&&!settings.enabled))
+    return bad('Penambahan akun Minecraft dibatasi oleh pengaturan komunitas.',409);
   const used=await env.DB.prepare(
-    'SELECT application_id FROM minecraft_accounts WHERE application_id=? OR (provider=? AND provider_id=?) LIMIT 1'
-  ).bind(challenge.application_id,bodyValue.provider,bodyValue.providerId).first();
-  if(used)return bad('Akun Minecraft telah terhubung. Hubungi pengurus jika perlu pemindahan.',409);
+    'SELECT application_id FROM minecraft_accounts WHERE provider=? AND provider_id=? LIMIT 1'
+  ).bind(bodyValue.provider,bodyValue.providerId).first();
+  if(used)return bad('Identitas Minecraft sudah tertaut. Hubungi pengurus jika perlu pemindahan.',409);
   const stamp=new Date().toISOString();
   try{
     const results=await env.DB.batch([
@@ -3499,7 +3583,7 @@ async function mailboxAPI(req,env,path,method){
 
 // SSCircle runtime check: observe what the deployment actually receives.
 // Only public readiness categories. Never expose secret values or private data.
-const SSC_RUNTIME_RELEASE='10.48.5';
+const SSC_RUNTIME_RELEASE='10.49.0';
 const SSC_RUNTIME_ISSUES=new Set();
 function sscRuntimeBindings(env){
   return {
@@ -3788,7 +3872,7 @@ async function route(req, env) {
   if ((path.startsWith('/api/admin/minecraft/sync')) &&
       ['GET','POST'].includes(method))
     return await minecraftSyncAdmin(req,env,path,method);
-  if ((path.startsWith('/api/player/minecraft/link/') || path==='/api/admin/minecraft/links') &&
+  if ((path.startsWith('/api/player/minecraft/link/') || (path==='/api/admin/minecraft/links' || path==='/api/admin/minecraft/multi-settings')) &&
       ['GET','POST'].includes(method))
     return await minecraftLinkAPI(req,env,path,method);
   if ((path.startsWith('/api/player/mailbox') || path==='/api/admin/mailbox/approve') &&
