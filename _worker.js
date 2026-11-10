@@ -3440,8 +3440,8 @@ async function minecraftLinkClaim(req,env){
     .bind(challenge.application_id).first();
   if(owner?.status!=='accepted')return minecraftLinkError('MEMBER_NOT_ACCEPTED','Keanggotaan tidak lagi aktif.',403);
   const used=await env.DB.prepare(
-    'SELECT application_id FROM minecraft_accounts WHERE application_id=? OR (provider=? AND provider_id=?) LIMIT 1'
-  ).bind(challenge.application_id,bodyValue.provider,bodyValue.providerId).first();
+    'SELECT application_id FROM minecraft_accounts WHERE provider=? AND provider_id=? LIMIT 1'
+  ).bind(bodyValue.provider,bodyValue.providerId).first();
   if(used)return bad('Akun Minecraft telah terhubung. Hubungi pengurus jika perlu pemindahan.',409);
   const stamp=new Date().toISOString();
   try{
