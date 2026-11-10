@@ -1950,6 +1950,13 @@ async function ensureMemberCenter(env) {
       PRIMARY KEY(account_id,season_id),
       FOREIGN KEY(account_id) REFERENCES minecraft_accounts(id) ON DELETE CASCADE)`,
     `CREATE INDEX IF NOT EXISTS idx_ssc_mc_acc_stats_season ON minecraft_account_stat_progress(season_id)`,
+    `CREATE TABLE IF NOT EXISTS minecraft_account_stat_archive (
+      archive_id TEXT NOT NULL,application_id TEXT NOT NULL,account_id TEXT NOT NULL,
+      provider TEXT NOT NULL,provider_id TEXT NOT NULL,season_id TEXT NOT NULL,
+      playtime_seconds INTEGER NOT NULL,deaths INTEGER NOT NULL,
+      mob_kills INTEGER NOT NULL,blocks_mined INTEGER NOT NULL,
+      last_synced_at TEXT NOT NULL,archived_at TEXT NOT NULL,
+      PRIMARY KEY(archive_id,season_id))`,
     `CREATE TABLE IF NOT EXISTS minecraft_accounts (
       id TEXT PRIMARY KEY, application_id TEXT NOT NULL,
       provider TEXT NOT NULL, provider_id TEXT NOT NULL, username TEXT NOT NULL,
@@ -2823,7 +2830,14 @@ async function minecraftLinkAPI(req,env,path,method){
       return bad('Pilih akun spesifik yang ingin diputuskan.',400);
     const target=linkedAccounts.find(a=>a.id===targetId);
     if(!target)return bad('Akun tidak ditemukan atau bukan milik anggota.',404);
+    const archiveAt=new Date().toISOString();
     await env.DB.batch([
+      env.DB.prepare(`INSERT INTO minecraft_account_stat_archive
+        (archive_id,application_id,account_id,provider,provider_id,season_id,
+          playtime_seconds,deaths,mob_kills,blocks_mined,last_synced_at,archived_at)
+        SELECT ?,?,?,?,?,season_id,total_playtime,total_deaths,total_mobs,total_blocks,
+          last_captured_at,? FROM minecraft_account_stat_progress WHERE account_id=?`)
+        .bind(uid(),app.id,targetId,target.provider,target.providerId,archiveAt,targetId),
       env.DB.prepare('DELETE FROM minecraft_identity_evidence WHERE application_id=? AND provider=? AND provider_id=?')
         .bind(app.id,target.provider,target.providerId),
       env.DB.prepare('DELETE FROM minecraft_accounts WHERE id=? AND application_id=?').bind(targetId,app.id),
