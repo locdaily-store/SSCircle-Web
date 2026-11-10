@@ -20,7 +20,10 @@ with TemporaryDirectory(prefix='ssc-dropdown-') as temp:
 <label for="ssc-mc-unlink-account">Akun Minecraft</label><select id="ssc-mc-unlink-account"><option value="player">Akun Utama</option><option value="guest">Akun Tambahan</option></select>
 <label for="disabled">Pengaturan terbatas</label><select id="disabled" disabled><option>Belum tersedia</option></select></main></body></html>''',encoding='utf8')
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(headless=True, executable_path='/usr/bin/chromium', args=['--no-sandbox'])
+        opts = {'headless': True, 'args': ['--no-sandbox']}
+        if Path('/usr/bin/chromium').exists():
+            opts['executable_path'] = '/usr/bin/chromium'
+        browser = pw.chromium.launch(**opts)
         for w,h in [(1200,800),(390,844)]:
             page = browser.new_page(viewport={'width':w,'height':h},device_scale_factor=1)
             page.set_content(fixture.read_text(encoding='utf8').replace(f'<link rel="stylesheet" href="{style.as_uri()}">','<style>'+style.read_text(encoding='utf8')+'</style>'))
