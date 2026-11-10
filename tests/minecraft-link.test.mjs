@@ -715,3 +715,80 @@ test('V10.48.4.1: stale Non-Premium proof becomes unverified, then fresh proof r
   assert.equal(result.status,200);
   assert.equal((await x.call('/api/player/profile',{cookie})).json.accounts[0].edition,'java_premium');
 });
+
+test('V10.49.0: three linked identities, account selector, targeted removal and preserved primary',async()=>{
+ const x=fixture(),cookie=await x.active();
+ const identities=[
+  payload('',UUID),
+  payload('','b3b127cc-89de-4875-b456-8de073b2e212'),
+  {code:'',provider:'bedrock',providerId:'12345678901234568',
+    username:'BedrockOther',authSource:'floodgate-xuid'}
+ ];
+ for(const identity of identities){
+  const created=await x.call('/api/player/minecraft/link/create',{method:'POST',cookie,data:{}});
+  assert.equal(created.status,200,JSON.stringify(created.json));
+  assert.equal((await x.claim({...identity,code:created.json.code})).status,200);
+  const confirmed=await x.call('/api/player/minecraft/link/confirm',{method:'POST',cookie,data:{}});
+  assert.equal(confirmed.status,200,JSON.stringify(confirmed.json));
+ }
+ const state=await x.call('/api/player/minecraft/link/state',{cookie});
+ assert.equal(state.status,200);
+ assert.equal(state.json.accounts.length,3);
+ assert.equal(state.json.multiAccount.maxAccounts,3);
+ assert.equal(state.json.multiAccount.availableSlots,0);
+ assert.equal(state.json.accounts.filter(a=>a.isPrimary).length,1);
+ assert.equal((await x.call('/api/player/minecraft/link/create',{method:'POST',cookie,data:{}})).status,409);
+ const second=state.json.accounts[1];
+ assert.equal((await x.call('/api/player/minecraft/link/primary',{method:'POST',cookie,
+  data:{accountId:second.id}})).status,200);
+ assert.equal((await x.call('/api/player/minecraft/link/state',{cookie})).json.linked.id,second.id);
+ const salt=x.db.prepare('SELECT password_salt FROM member_credentials WHERE application_id=?')
+  .get(ID).password_salt;
+ const proof=pbkdf2Sync(PASSWORD,salt,220000,32,'sha256').toString('base64url');
+ assert.equal((await x.call('/api/player/minecraft/link/unlink',{method:'POST',cookie,
+  data:{currentProof:proof,accountId:second.id}})).status,200);
+ const remaining=(await x.call('/api/player/minecraft/link/state',{cookie})).json.accounts;
+ assert.equal(remaining.length,2);
+ assert.equal(remaining.filter(a=>a.isPrimary).length,1);
+ assert.equal(remaining.some(a=>a.id===second.id),false);
+ assert.equal(x.db.prepare('SELECT COUNT(*) AS n FROM minecraft_accounts').get().n,2);
+});
+test('V10.49.0: account statistics remain isolated and legacy snapshots never get fabricated',async()=>{
+ const x=fixture(),cookie=await x.active();
+ const otherUUID='b3b127cc-89de-4875-b456-8de073b2e212';
+ for(const id of [UUID,otherUUID]){
+  const created=await x.call('/api/player/minecraft/link/create',{method:'POST',cookie,data:{}});
+  assert.equal((await x.claim(payload(created.json.code,id))).status,200);
+  assert.equal((await x.call('/api/player/minecraft/link/confirm',{method:'POST',cookie,data:{}})).status,200);
+ }
+ assert.equal((await deliverStats(x,{...statsPayload(),stats:{
+  playtimeSeconds:7200,deaths:3,mobKills:41,blocksMined:500}})).status,200);
+ assert.equal((await deliverStats(x,{...statsPayload('java_premium',otherUUID),
+  stats:{playtimeSeconds:1200,deaths:1,mobKills:5,blocksMined:30}})).status,200);
+ const profile=(await x.call('/api/player/profile',{cookie})).json;
+ const byId=new Map(profile.accounts.map(a=>[a.providerId,a.id]));
+ const first=profile.accountStatistics.find(a=>a.accountId===byId.get(UUID)&&a.seasonId==='');
+ const second=profile.accountStatistics.find(a=>a.accountId===byId.get(otherUUID)&&a.seasonId==='');
+ assert.equal(first.playtimeSeconds,7200);
+ assert.equal(second.playtimeSeconds,1200);
+ assert.equal(first.blocksMined,500);
+ assert.equal(second.blocksMined,30);
+ assert.equal(profile.statisticsLegacyOnly,true);
+ assert.equal(profile.statistics.length,0);
+});
+test('V10.49.0: admin policy changes limit without unlinking existing accounts',async()=>{
+ const x=fixture(),cookie=await x.active();
+ assert.equal((await x.call('/api/admin/minecraft/multi-settings',{cookie})).status,401);
+ const before=await x.call('/api/admin/minecraft/multi-settings',{cookie:x.admin});
+ assert.equal(before.json.maxAccounts,3);
+ const updated=await x.call('/api/admin/minecraft/multi-settings',{cookie:x.admin,method:'POST',
+  data:{enabled:false,maxAccounts:1}});
+ assert.equal(updated.status,200,JSON.stringify(updated.json));
+ assert.equal(updated.json.maxAccounts,1);
+ const created=await x.call('/api/player/minecraft/link/create',{method:'POST',cookie,data:{}});
+ assert.equal(created.status,200);
+ assert.equal((await x.claim(payload(created.json.code))).status,200);
+ assert.equal((await x.call('/api/player/minecraft/link/confirm',{method:'POST',cookie,data:{}})).status,200);
+ assert.equal((await x.call('/api/player/minecraft/link/create',{method:'POST',cookie,data:{}})).status,403);
+ assert.equal(x.db.prepare('SELECT COUNT(*) AS n FROM minecraft_accounts').get().n,1);
+});
