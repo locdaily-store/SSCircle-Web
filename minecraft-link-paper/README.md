@@ -1,4 +1,4 @@
-# SSCircle Player Sync Paper V10.49.1 (Web V10.49.1)
+# SSCircle Player Sync Paper V10.49.1.1 (Web V10.49.1.1)
 
 Penghubung akun Minecraft ke Profile SSCircle, tanpa Velocity. Plugin memakai HMAC, nonce, kode sekali-pakai 10 menit, dan konfirmasi ulang pada website. Satu anggota dapat menghubungkan beberapa identitas Minecraft sesuai kebijakan Admin (default 3, batas 1–5). Identitas, statistik, UUID dan inventory tetap terpisah.
 
@@ -216,3 +216,7 @@ Tidak ada perubahan migrasi D1, secret, metode pembuktian Premium, kontrak API, 
 - Floodgate XUID juga memakai fallback. Avatar hanya hiasan, **bukan** bukti autentikasi, kepemilikan lisensi, atau dasar migrasi akun.
 - Tanpa penambahan polling Minecraft, pengiriman HMAC, D1, antrean statistik, atau dependency JAR. Versi JAR mengikuti rilis situs supaya paket CI berada dalam satu revisi.
 - Periksa URL `/api/health` setelah upload ZIP dan jangan install dua versi JAR sekaligus. Konfigurasi dan secret lama dipertahankan.
+
+## V10.49.1.1 — Server-applied skin sync dan viewer 3D
+
+`PaperSkinSync` mengirim URL skin aktif dari Paper/SkinsRestorer secara asinkron menggunakan HMAC dan nonce. Profile kini mendukung avatar utama, semua identitas (termasuk AuthMe offline), serta popup 3D interaktif. Tidak mengubah data login, UUID, statistik, atau antrean. Lihat `docs/V10.49.1.1-SERVER-SKIN-3D.md` pada repositori.

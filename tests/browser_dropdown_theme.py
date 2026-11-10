@@ -37,9 +37,9 @@ with TemporaryDirectory(prefix='ssc-dropdown-') as temp:
             page.select_option('#option', 'c')
             assert page.locator('#option').input_value() == 'c'
             if w==1200:
-                page.screenshot(path='/mnt/data/SSCircle-V10.49.1.6-Dropdown-Desktop.png',full_page=True)
+                page.screenshot(path=str(Path(temp) / 'dropdown-desktop.png'),full_page=True)
             else:
-                page.screenshot(path='/mnt/data/SSCircle-V10.49.1.6-Dropdown-Mobile.png',full_page=True)
+                page.screenshot(path=str(Path(temp) / 'dropdown-mobile.png'),full_page=True)
             # After applying a custom (bright) theme, both the native control and options
             # must follow the same theme tokens, without reverting to white-on-white.
             page.eval_on_selector('body',"e=>{e.style.setProperty('--ssc-input','#f0e9fa');e.style.setProperty('--ssc-input-text','#21122e');}")

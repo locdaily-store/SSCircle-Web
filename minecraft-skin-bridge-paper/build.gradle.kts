@@ -16,7 +16,7 @@ java { toolchain.languageVersion.set(JavaLanguageVersion.of(25)) }
 
 tasks.withType<JavaCompile>().configureEach {
     options.encoding = "UTF-8"
-    options.release.set(21) // Java 21 bytecode, compatible with Paper running Java 25
+    options.release.set(25) // Paper 26.3 API requires Java 25 bytecode
 }
 
 tasks.jar {

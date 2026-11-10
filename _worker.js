@@ -1901,7 +1901,7 @@ async function sscAccountList(env,memberId){
     FROM minecraft_accounts a
     LEFT JOIN minecraft_identity_evidence e ON e.provider=a.provider AND e.provider_id=a.provider_id
       AND e.application_id=a.application_id
-    LEFT JOIN minecraft_account_skins sk ON sk.account_id=a.id
+    LEFT JOIN minecraft_account_skin_state sk ON sk.account_id=a.id
     LEFT JOIN minecraft_account_skin_images pic ON pic.account_id=a.id AND pic.texture_hash=sk.texture_hash
     LEFT JOIN minecraft_link_preferences p ON p.application_id=a.application_id
     WHERE a.application_id=? ORDER BY a.verified_at ASC,a.id ASC LIMIT 6`).bind(memberId).all();
@@ -1949,7 +1949,7 @@ async function ensureMemberCenter(env) {
       action TEXT NOT NULL,at TEXT NOT NULL,
       FOREIGN KEY(application_id) REFERENCES submissions(id) ON DELETE CASCADE)`,
     `CREATE INDEX IF NOT EXISTS idx_ssc_mc_audit_member ON minecraft_link_audit(application_id,at)`,
-    `CREATE TABLE IF NOT EXISTS minecraft_account_skins (
+    `CREATE TABLE IF NOT EXISTS minecraft_account_skin_state (
       account_id TEXT PRIMARY KEY, texture_hash TEXT NOT NULL,
       model TEXT NOT NULL DEFAULT 'classic',source TEXT NOT NULL,
       updated_at TEXT NOT NULL,
@@ -2023,6 +2023,24 @@ async function ensureMemberCenter(env) {
     `INSERT OR IGNORE INTO member_policy(id) VALUES(1)`
   ];
   for (const sql of statements) await env.DB.prepare(sql).run();
+
+  // Non-destructive reconciliation of the 1.1 texture_url and 1.3 texture_hash
+  // variants. Import once per Worker instance; never rewrite the legacy table.
+  const legacyColumns=await env.DB.prepare('PRAGMA table_info(minecraft_account_skins)').all();
+  const legacy=new Set((legacyColumns.results||[]).map(column=>column.name));
+  if(legacy.has('texture_url')){
+    await env.DB.prepare(`INSERT OR IGNORE INTO minecraft_account_skin_state
+      (account_id,texture_hash,model,source,updated_at)
+      SELECT account_id,lower(substr(texture_url,length('https://textures.minecraft.net/texture/')+1)),
+        model,'paper-profile',observed_at
+      FROM minecraft_account_skins
+      WHERE texture_url LIKE 'https://textures.minecraft.net/texture/%'
+        AND length(texture_url) BETWEEN 69 AND 165`).run();
+  }else if(legacy.has('texture_hash')&&legacy.has('updated_at')){
+    await env.DB.prepare(`INSERT OR IGNORE INTO minecraft_account_skin_state
+      (account_id,texture_hash,model,source,updated_at)
+      SELECT account_id,texture_hash,model,source,updated_at FROM minecraft_account_skins`).run();
+  }
   memberCenterReady.add(env.DB);
 }
 async function memberEpoch(env, id) {
@@ -2709,6 +2727,43 @@ function mcSkinPng(raw){
   return decoded;
 }
 
+
+// Preserve the HMAC-signed metadata-only Paper endpoint from main V10.49.1.1.
+// Verify its original path-bound signature, then reuse the new storage protocol.
+const MC_SKIN_LEGACY_ROUTE='/api/minecraft/skin/refresh';
+async function minecraftSkinLegacyRefresh(req,env){
+  const secret=env.SSCIRCLE_LINK_SERVER_SECRET;
+  if(typeof secret!=='string'||secret.length<32)
+    return minecraftLinkError('SERVER_SECRET_MISSING','Sinkronisasi skin belum aktif.',503);
+  if(!String(req.headers.get('Content-Type')||'').toLowerCase().startsWith('application/json'))
+    return minecraftLinkError('FORMAT_INVALID','Konten tidak valid.',415);
+  const timestamp=Number(req.headers.get('X-SSC-Timestamp'));
+  const nonce=req.headers.get('X-SSC-Nonce')||'';
+  const signature=req.headers.get('X-SSC-Signature')||'';
+  if(!Number.isSafeInteger(timestamp)||Math.abs(Math.floor(Date.now()/1000)-timestamp)>90
+    || !/^[0-9a-f-]{36}$/.test(nonce)||!/^[A-Za-z0-9_-]{43}$/.test(signature))
+    return minecraftLinkError('SKIN_SIGNATURE_HEADERS','Header keamanan tidak valid.',401);
+  const raw=await req.text();
+  if(raw.length>1300)return minecraftLinkError('SKIN_TOO_LARGE','Data terlalu besar.',413);
+  const expected=await hmac(secret,'POST\n'+MC_SKIN_LEGACY_ROUTE+'\n'+timestamp+'\n'+nonce+'\n'+raw);
+  if(!safeEq(expected,signature))
+    return minecraftLinkError('SKIN_SIGNATURE_INVALID','Tanda tangan tidak sesuai.',401);
+  const input=parse(raw);
+  const texture=/^https:\/\/textures\.minecraft\.net\/texture\/([0-9a-fA-F]{32,128})$/.exec(input?.skinUrl||'');
+  if(!mcStatIdentityValid(input)||!texture
+    ||!['classic','slim'].includes(input?.model)
+    ||!Number.isFinite(Date.parse(input?.observedAt)))
+    return minecraftLinkError('SKIN_INVALID','Bukti skin tidak valid.',400);
+  const body=JSON.stringify({provider:input.provider,providerId:input.providerId,
+    authSource:input.authSource,textureHash:texture[1].toLowerCase(),
+    model:input.model,source:'paper-profile',capturedAt:input.observedAt});
+  const forwardedSignature=await hmac(secret,
+    'POST\n'+MC_SKIN_ROUTE+'\n'+timestamp+'\n'+nonce+'\n'+body);
+  const headers=new Headers(req.headers);
+  headers.set('X-SSC-Signature',forwardedSignature);
+  return minecraftSkinSync(new Request(req.url,{method:'POST',headers,body}),env);
+}
+
 async function minecraftSkinSync(req,env){
   const secret=env.SSCIRCLE_LINK_SERVER_SECRET;
   if(typeof secret!=='string'||secret.length<32)
@@ -2751,11 +2806,11 @@ async function minecraftSkinSync(req,env){
   if(!(inserted.meta?.changes>0))return minecraftLinkError('SKIN_REPLAY','Paket sudah diterima.',409);
   // A later snapshot cannot be replaced by an older, delayed network response.
   const updatedAt=new Date(stamp).toISOString();
-  const statements=[env.DB.prepare(`INSERT INTO minecraft_account_skins
+  const statements=[env.DB.prepare(`INSERT INTO minecraft_account_skin_state
     (account_id,texture_hash,model,source,updated_at) VALUES(?,?,?,?,?)
     ON CONFLICT(account_id) DO UPDATE SET texture_hash=excluded.texture_hash,
     model=excluded.model,source=excluded.source,updated_at=excluded.updated_at
-    WHERE excluded.updated_at>=minecraft_account_skins.updated_at`)
+    WHERE excluded.updated_at>=minecraft_account_skin_state.updated_at`)
     .bind(account.id,input.textureHash,input.model,input.source,updatedAt)];
   if(png)statements.push(env.DB.prepare(`INSERT INTO minecraft_account_skin_images
     (account_id,texture_hash,png_base64,updated_at) VALUES(?,?,?,?)
@@ -2792,7 +2847,7 @@ async function minecraftMemberSkin(req,env,accountId){
   if(!account)return bad('Akun tidak ditemukan.',404);
   let hash=null;
   if(account.skinAvailable){
-    const row=await env.DB.prepare('SELECT texture_hash FROM minecraft_account_skins WHERE account_id=?')
+    const row=await env.DB.prepare('SELECT texture_hash FROM minecraft_account_skin_state WHERE account_id=?')
       .bind(account.id).first();
     hash=row?.texture_hash;
     if(hash&&account.skinImageStored){
@@ -4070,6 +4125,8 @@ async function route(req, env) {
     return await minecraftStatsIngest(req,env);
   if(path===MC_SKIN_ROUTE && method==='POST')
     return await minecraftSkinSync(req,env);
+  if(path===MC_SKIN_LEGACY_ROUTE && method==='POST')
+    return await minecraftSkinLegacyRefresh(req,env);
   if(path===MC_IDENTITY_ROUTE && method==='POST')
     return await minecraftIdentityRefresh(req,env);
   if(path===MC_SYNC_PATH && method==='POST')
