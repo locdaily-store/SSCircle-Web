@@ -3315,10 +3315,15 @@ async function minecraftLinkClaim(req,env){
   const owner=await env.DB.prepare('SELECT id,status FROM submissions WHERE id=?')
     .bind(challenge.application_id).first();
   if(owner?.status!=='accepted')return minecraftLinkError('MEMBER_NOT_ACCEPTED','Keanggotaan tidak lagi aktif.',403);
+  const settings=await sscMultiSettings(env);
+  const count=await env.DB.prepare('SELECT COUNT(*) AS total FROM minecraft_accounts WHERE application_id=?')
+    .bind(challenge.application_id).first();
+  if(Number(count?.total||0)>=settings.maxAccounts || (Number(count?.total||0)>0&&!settings.enabled))
+    return bad('Penambahan akun Minecraft dibatasi oleh pengaturan komunitas.',409);
   const used=await env.DB.prepare(
-    'SELECT application_id FROM minecraft_accounts WHERE application_id=? OR (provider=? AND provider_id=?) LIMIT 1'
-  ).bind(challenge.application_id,bodyValue.provider,bodyValue.providerId).first();
-  if(used)return bad('Akun Minecraft telah terhubung. Hubungi pengurus jika perlu pemindahan.',409);
+    'SELECT application_id FROM minecraft_accounts WHERE provider=? AND provider_id=? LIMIT 1'
+  ).bind(bodyValue.provider,bodyValue.providerId).first();
+  if(used)return bad('Identitas Minecraft sudah tertaut. Hubungi pengurus jika perlu pemindahan.',409);
   const stamp=new Date().toISOString();
   try{
     const results=await env.DB.batch([
