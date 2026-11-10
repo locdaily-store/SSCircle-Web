@@ -77,7 +77,7 @@
 
   // Vanilla CSS 3D scene. Six real textured faces for every cuboid, with outer
   // layers (hat, jacket, sleeves, trousers). One pixel is five CSS pixels.
-  const UNIT=5;
+  const UNIT=7;
   function faceImage(image,x,y,w,h){
     const canvas=document.createElement('canvas');
     canvas.width=w;canvas.height=h;
