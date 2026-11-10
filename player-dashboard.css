@@ -208,3 +208,17 @@
 .player-link-unlink>form[hidden]{display:none!important}
 #player-link-notice{overflow-wrap:anywhere}
 @media(max-width:520px){.player-link-step{padding:11px}.player-link-command button{flex:1 1 100%}.player-link-panel .player-actions{flex-wrap:wrap}.player-link-panel .player-actions button{flex:1 1 130px}}
+
+/* V10.49.0: account cards remain fluid on phone and desktop. */
+.player-linked-account-list{display:grid;gap:12px;margin:12px 0 16px;min-width:0}
+.player-linked-account{display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;border:1px solid var(--player-border,rgba(150,160,180,.3));border-radius:13px;padding:14px;min-width:0}
+.player-linked-account-info{display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0;overflow-wrap:anywhere}
+.player-linked-account-info strong{font-size:1.05rem}
+.player-linked-account-info small{opacity:.8}
+.player-linked-account-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.player-linked-account-actions .player-action{min-height:36px;font-size:.88rem}
+.player-season-chooser select{min-width:0;max-width:100%;width:100%}
+@media(max-width:640px){.player-linked-account{flex-direction:column;align-items:stretch}
+.player-linked-account-actions{width:100%;display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr))}
+.player-linked-account-actions .player-action{white-space:normal}
+.player-season-chooser{min-width:0;width:100%}}
