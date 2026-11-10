@@ -489,28 +489,107 @@
     })[edition]||'Minecraft';
   };
   const linkNotice=message=>{$('player-link-notice').textContent=message;};
+  let minecraftLinkAccounts=[];
+  function renderLinkedAccounts(items,limit){
+    const host=$('player-link-panel');
+    if(!host)return;
+    let list=$('ssc-linked-account-list');
+    if(!list){
+      list=document.createElement('section');list.id='ssc-linked-account-list';
+      list.className='ssc-linked-account-list';
+      host.insertBefore(list,host.firstChild);
+    }
+    list.replaceChildren();
+    const heading=document.createElement('div');heading.className='ssc-link-list-heading';
+    const title=document.createElement('strong');title.textContent='Akun Minecraft Saya';
+    const count=document.createElement('small');count.textContent=items.length+' / '+limit+' akun';
+    heading.append(title,count);list.append(heading);
+    for(const account of items){
+      const card=document.createElement('article');card.className='ssc-link-account-card';
+      const summary=document.createElement('div');summary.className='ssc-link-account-summary';
+      const name=document.createElement('strong');
+      name.textContent=account.username+(account.isPrimary?' ★ Utama':'');
+      const edition=document.createElement('small');edition.textContent=mcProviderLabel(account);
+      const last=document.createElement('small');
+      last.textContent='Bukti sesi: '+(account.identityProofAt
+        ?new Date(account.identityProofAt).toLocaleString('id-ID'):'belum tersedia');
+      summary.append(name,edition,last);
+      const actions=document.createElement('div');actions.className='ssc-link-account-actions';
+      if(!account.isPrimary){
+        const primary=document.createElement('button');primary.type='button';
+        primary.className='player-action player-action-secondary';primary.textContent='Jadikan utama';
+        primary.onclick=async()=>{
+          if(!window.confirm('Jadikan '+account.username+' sebagai akun utama?'))return;
+          primary.disabled=true;
+          try{
+            await request('/api/player/minecraft/link/primary',{method:'POST',
+              headers:{'Content-Type':'application/json'},body:JSON.stringify({accountId:account.id})});
+            await loadMinecraftLink();await loadProfile();
+          }catch(error){linkNotice('Tidak dapat memilih akun utama: '+error.message);}
+          finally{primary.disabled=false;}
+        };
+        actions.append(primary);
+      }
+      const unlink=document.createElement('button');unlink.type='button';
+      unlink.className='player-action player-action-secondary';unlink.textContent='Putuskan';
+      unlink.onclick=()=>{
+        const select=$('ssc-mc-unlink-account');if(select)select.value=account.id;
+        $('player-link-unlink-form').hidden=false;
+        $('player-link-unlink-password').focus();
+      };
+      actions.append(unlink);card.append(summary,actions);list.append(card);
+    }
+    let select=$('ssc-mc-unlink-account');
+    if(!select){
+      const form=$('player-link-unlink-form');select=document.createElement('select');
+      select.id='ssc-mc-unlink-account';select.setAttribute('aria-label','Pilih akun Minecraft yang akan diputuskan');
+      form.insertBefore(select,form.firstChild);
+    }
+    const previous=select.value;select.replaceChildren();
+    for(const item of items){
+      const opt=document.createElement('option');opt.value=item.id;opt.textContent=item.username;
+      select.append(opt);
+    }
+    if(items.some(x=>x.id===previous))select.value=previous;
+    if(!items.length)$('player-link-unlink-form').hidden=true;
+  }
   function renderMinecraftLink(data){
     const linked=data?.linked||null,pending=data?.pending||null;
     const ready=data?.serverReady===true;
-    $('player-link-tag').textContent=linked?'Terverifikasi':
+    minecraftLinkAccounts=Array.isArray(data?.accounts)?data.accounts:[];
+    const limit=Number(data?.multiAccount?.maxAccounts)||1;
+    const hasSlot=minecraftLinkAccounts.length<limit&&
+      (data?.multiAccount?.enabled||minecraftLinkAccounts.length===0);
+    renderLinkedAccounts(minecraftLinkAccounts,limit);
+    $('player-link-tag').textContent=linked?minecraftLinkAccounts.length+' / '+limit+' tertaut':
       pending?.status==='needs_confirmation'?'Perlu konfirmasi':
       pending?'Menunggu Minecraft':ready?'Belum terhubung':'Belum diaktifkan';
     $('player-link-connected').hidden=!linked;
-    $('player-link-waiting').hidden=!!linked||!!pending||!ready;
-    $('player-link-review').hidden=!!linked||pending?.status!=='needs_confirmation';
-    $('player-link-code-wrap').hidden=!!linked||!pending||
+    $('player-link-waiting').hidden=!!pending||!ready||!hasSlot;
+    $('player-link-review').hidden=pending?.status!=='needs_confirmation';
+    $('player-link-code-wrap').hidden=!pending||
       pending.status!=='waiting_in_game'||!linkCommand||!linkExpires||
       Date.parse(linkExpires)<=Date.now();
-    $('player-link-cancel').hidden=!!linked||!pending;
-    $('player-link-create').disabled=!ready||!!linked||!!pending||linkBusy;
+    $('player-link-cancel').hidden=!pending;
+    $('player-link-create').disabled=!ready||!hasSlot||!!pending||linkBusy;
     if(linked){
-      linkCommand='';linkExpires='';
+      if(!pending){linkCommand='';linkExpires='';}
       $('player-link-connected-provider').textContent=mcProviderLabel(linked);
       $('player-link-connected-name').textContent=linked.username;
       $('player-link-connected-date').textContent=
         'Terhubung: '+new Date(linked.verifiedAt).toLocaleString('id-ID');
       $('player-edition').textContent=mcProviderLabel(linked);
-      if(linked.provider==='java_offline'&&linked.edition==='java_unverified')
+      if(pending?.status==='needs_confirmation'){
+        $('player-link-review-provider').textContent=mcProviderLabel(pending.identity);
+        $('player-link-review-name').textContent=pending.identity?.username||'Akun Minecraft';
+        linkNotice('Akun tambahan menunggu konfirmasi. Pastikan identitasnya benar.');
+      }else if(pending?.status==='waiting_in_game'){
+        if(linkCommand&&linkExpires&&Date.parse(linkExpires)>Date.now()){
+          $('player-link-command').textContent=linkCommand;
+          $('player-link-expires').textContent='Berlaku sampai '+new Date(linkExpires).toLocaleTimeString('id-ID');
+        }
+        linkNotice('Akun tambahan menunggu perintah /sscircle link di Minecraft.');
+      }else if(linked.provider==='java_offline'&&linked.edition==='java_unverified')
         linkNotice('Akun masih tertaut. Bukti sesi Premium sudah lama atau belum tersedia. Masuk kembali ke Minecraft dan cek /sscircle status.');
       else if(linked.provider==='java_offline'&&linked.edition==='java_non_premium')
         linkNotice('Koneksi Minecraft terakhir memakai jalur offline. Ini belum berarti akunmu tidak original. Masuk menggunakan launcher resmi, kemudian periksa bukti FastLoginPlus melalui /sscircle status.');
@@ -586,14 +665,17 @@
   });
   $('player-link-unlink-form').addEventListener('submit',async event=>{
     event.preventDefault();
-    if(!window.confirm('Putuskan tautan Minecraft dari akun SSCircle ini?'))return;
+    const selected=$('ssc-mc-unlink-account')?.value;
+    const target=minecraftLinkAccounts.find(a=>a.id===selected);
+    if(!target)return linkNotice('Pilih akun Minecraft yang ingin diputuskan.');
+    if(!window.confirm('Putuskan tautan '+target.username+'? Akun Minecraft lain tetap terhubung.'))return;
     const button=$('player-link-unlink-submit');button.disabled=true;
     try{
       const payload=await window.SSCirclePassword.login(
         playerCodeForSecureLogin,$('player-link-unlink-password').value);
       await request('/api/player/minecraft/link/unlink',{method:'POST',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({currentProof:payload.proof})});
+        body:JSON.stringify({currentProof:payload.proof,accountId:selected})});
       $('player-link-unlink-form').reset();$('player-link-unlink-form').hidden=true;
       await loadMinecraftLink();await loadProfile();
       linkNotice('Tautan Minecraft berhasil diputuskan. Data historis komunitas tidak otomatis dihapus.');
