@@ -2519,7 +2519,10 @@ async function memberCenterAPI(req,env,path,method) {
     return J({profile:memberProfile(profileRow),policy:memberPolicy(policyRow),
       activeStatSeason:activeStatKey,
       activeStatSeasonTitle:seasonName.get(form.settings.statSeasonId)||'',
-      accounts,accountStatistics,statisticsLegacyOnly:true,
+      accounts,accountStatistics:accountStatistics.map(a=>({...a,
+        seasonTitle:a.seasonId.startsWith('season:')
+          ?(seasonName.get(a.seasonId.split(':')[1])||'Season tersimpan')
+          :'Sepanjang masa'})),statisticsLegacyOnly:true,
       statistics:(stats.results||[]).map(a=>({seasonId:a.season_id,
         seasonTitle:a.season_id.startsWith('season:')
           ? (seasonName.get(a.season_id.split(':')[1])||'Season tersimpan')
