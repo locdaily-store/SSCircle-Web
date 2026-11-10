@@ -2622,13 +2622,13 @@ const minecraftIdentityWarnings=(provider,source,observedAt,duplicateName,now=Da
   return warnings;
 };
 const mcCodeHash=(env,code)=>hmac(env.SESSION_SECRET+'|minecraft-link-code',code);
-function sscAccountStatStatements(env,account,payload,seasonId,capturedAt,receivedAt){
+function sscAccountStatStatements(env,account,payload,seasonId,capturedAt,receivedAt,previousOwner){
   const names=['playtime','deaths','mobs','blocks'];
   const progress=`INSERT INTO minecraft_account_stat_progress (
     application_id,provider,provider_id,season_id,last_captured_at,
     last_playtime,last_deaths,last_mobs,last_blocks,
     total_playtime,total_deaths,total_mobs,total_blocks)
-    VALUES (?,?,?,?,?,?,?,?,?,0,0,0,0)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
     ON CONFLICT(application_id,provider,provider_id,season_id) DO UPDATE SET
     ${names.map(name=>`total_${name}=MIN(2147483647,
       minecraft_account_stat_progress.total_${name}+
@@ -2654,9 +2654,17 @@ function sscAccountStatStatements(env,account,payload,seasonId,capturedAt,receiv
       playtime_seconds=excluded.playtime_seconds,deaths=excluded.deaths,
       mob_kills=excluded.mob_kills,blocks_mined=excluded.blocks_mined,
       last_synced_at=MAX(player_stat_snapshots.last_synced_at,excluded.last_synced_at)`;
-  const entry=(season)=>env.DB.prepare(progress).bind(
-    account.application_id,payload.provider,payload.providerId,season,capturedAt,
-    payload.stats.playtimeSeconds,payload.stats.deaths,payload.stats.mobKills,payload.stats.blocksMined);
+  const entry=(season)=>{
+    // Preserve V10.47 first-link lifetime semantics, but never transfer history
+    // from an account previously linked to another member. New Seasons start at zero.
+    const initial=season||previousOwner?[0,0,0,0]:[
+      payload.stats.playtimeSeconds,payload.stats.deaths,
+      payload.stats.mobKills,payload.stats.blocksMined];
+    return env.DB.prepare(progress).bind(
+      account.application_id,payload.provider,payload.providerId,season,capturedAt,
+      payload.stats.playtimeSeconds,payload.stats.deaths,payload.stats.mobKills,payload.stats.blocksMined,
+      ...initial);
+  };
   const transaction=[
     env.DB.prepare(`INSERT OR IGNORE INTO minecraft_stat_receipts
       (event_id,application_id,provider,provider_id,received_at) VALUES(?,?,?,?,?)`)
@@ -3143,7 +3151,11 @@ async function minecraftStatsIngest(req,env){
     && /^[A-Za-z0-9_-]{1,64}$/.test(activeSeason)
     && stamp>=Date.parse(seasonStart)
       ? 'season:'+activeSeason+':'+seasonStart : '';
-  const transaction=sscAccountStatStatements(env,account,payload,seasonId,capturedAt,receivedAt);
+  const previousOwner=await env.DB.prepare(`SELECT application_id
+    FROM minecraft_account_stat_progress WHERE provider=? AND provider_id=?
+      AND application_id<>? LIMIT 1`)
+    .bind(payload.provider,payload.providerId,account.application_id).first();
+  const transaction=sscAccountStatStatements(env,account,payload,seasonId,capturedAt,receivedAt,!!previousOwner);
   const results=await env.DB.batch(transaction);
   // Old receipt rows may be purged safely: cumulative MAX prevents inflation
   // if an old event is ever retried after receipt expiry.
