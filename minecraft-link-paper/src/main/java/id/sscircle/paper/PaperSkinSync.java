@@ -36,7 +36,7 @@ final class PaperSkinSync {
     private static final Pattern TEXTURE = Pattern.compile(
         "https://textures\\.minecraft\\.net/texture/[0-9a-fA-F]{32,128}");
     private static final long RETRY_MS = 60_000L;
-    private static final long REFRESH_MS = 15 * 60_000L;
+    private static final long REFRESH_MS = 90_000L;
     private static final int MAX_ACTIVE = 2;
     private final SSCirclePaperLinkPlugin plugin;
     private final HttpClient http;
