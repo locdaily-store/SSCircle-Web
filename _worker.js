@@ -1938,7 +1938,8 @@ async function ensureMemberCenter(env) {
       FOREIGN KEY(application_id) REFERENCES submissions(id) ON DELETE CASCADE)`,
     `CREATE TABLE IF NOT EXISTS minecraft_link_audit (
       id TEXT PRIMARY KEY,application_id TEXT NOT NULL,account_id TEXT NOT NULL,
-      action TEXT NOT NULL,at TEXT NOT NULL)`,
+      action TEXT NOT NULL,at TEXT NOT NULL,
+      FOREIGN KEY(application_id) REFERENCES submissions(id) ON DELETE CASCADE)`,
     `CREATE INDEX IF NOT EXISTS idx_ssc_mc_audit_member ON minecraft_link_audit(application_id,at)`,
     `CREATE TABLE IF NOT EXISTS minecraft_account_stat_progress (
       account_id TEXT NOT NULL,season_id TEXT NOT NULL,
@@ -1956,7 +1957,8 @@ async function ensureMemberCenter(env) {
       playtime_seconds INTEGER NOT NULL,deaths INTEGER NOT NULL,
       mob_kills INTEGER NOT NULL,blocks_mined INTEGER NOT NULL,
       last_synced_at TEXT NOT NULL,archived_at TEXT NOT NULL,
-      PRIMARY KEY(archive_id,season_id))`,
+      PRIMARY KEY(archive_id,season_id),
+      FOREIGN KEY(application_id) REFERENCES submissions(id) ON DELETE CASCADE)`,
     `CREATE TABLE IF NOT EXISTS minecraft_accounts (
       id TEXT PRIMARY KEY, application_id TEXT NOT NULL,
       provider TEXT NOT NULL, provider_id TEXT NOT NULL, username TEXT NOT NULL,
