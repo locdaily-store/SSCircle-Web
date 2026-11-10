@@ -2708,6 +2708,7 @@ async function sscEnsureMulti(env){
       PRIMARY KEY(application_id,provider,provider_id,season_id))`,
     `CREATE INDEX IF NOT EXISTS idx_mc_acct_stats_member_season
       ON minecraft_account_stat_progress(application_id,season_id)`,
+    `CREATE TABLE IF NOT EXISTS minecraft_multi_migrated (id INTEGER PRIMARY KEY CHECK(id=1),at TEXT NOT NULL)`,
     `CREATE TABLE IF NOT EXISTS minecraft_stat_legacy (
       application_id TEXT NOT NULL,season_id TEXT NOT NULL,
       playtime_seconds INTEGER NOT NULL,deaths INTEGER NOT NULL,
@@ -2744,7 +2745,8 @@ async function sscEnsureMulti(env){
           AND p.provider=a.provider AND p.provider_id=a.provider_id AND p.season_id=s.season_id
           WHERE a.application_id=s.application_id)
         THEN 0 ELSE s.blocks_mined END,
-      s.last_synced_at FROM player_stat_snapshots s`,
+      s.last_synced_at FROM player_stat_snapshots s
+      WHERE NOT EXISTS(SELECT 1 FROM minecraft_multi_migrated WHERE id=1)`,
     `INSERT OR IGNORE INTO minecraft_account_stat_progress
       (application_id,provider,provider_id,season_id,last_captured_at,
        last_playtime,last_deaths,last_mobs,last_blocks,
@@ -2755,13 +2757,15 @@ async function sscEnsureMulti(env){
       FROM minecraft_stat_progress p
       JOIN minecraft_accounts a ON a.application_id=p.application_id
        AND a.provider=p.provider AND a.provider_id=p.provider_id
-      WHERE (SELECT COUNT(*) FROM minecraft_accounts x WHERE x.application_id=p.application_id)=1`,
+      WHERE (SELECT COUNT(*) FROM minecraft_accounts x WHERE x.application_id=p.application_id)=1
+        AND NOT EXISTS(SELECT 1 FROM minecraft_multi_migrated WHERE id=1)`,
     `INSERT OR IGNORE INTO minecraft_account_preferences(account_id,application_id,is_primary)
       SELECT a.id,a.application_id,
        CASE WHEN a.id=(SELECT first.id FROM minecraft_accounts first
          WHERE first.application_id=a.application_id ORDER BY first.verified_at,first.id LIMIT 1)
        THEN 1 ELSE 0 END
-      FROM minecraft_accounts a`
+      FROM minecraft_accounts a`,
+    `INSERT OR IGNORE INTO minecraft_multi_migrated(id,at) VALUES(1,datetime('now'))`
   ])await env.DB.prepare(sql).run();
   sscMultiReady.add(env.DB);
 }
