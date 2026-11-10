@@ -2908,7 +2908,8 @@ async function minecraftLinkAPI(req,env,path,method){
     const challenge=await env.DB.prepare(
       'SELECT id,expires_at FROM minecraft_link_challenges WHERE application_id=? ORDER BY created_at DESC LIMIT 1'
     ).bind(app.id).first();
-    if(!challenge||challenge.expires_at<=new Date().toISOString())
+    if(!challenge)return bad('Tidak ada kode baru yang menunggu konfirmasi.',accounts.length?409:410);
+    if(challenge.expires_at<=new Date().toISOString())
       return bad('Kode sudah kedaluwarsa. Buat kode baru.',410);
     const claim=await env.DB.prepare(
       'SELECT provider,provider_id,username,auth_source FROM minecraft_link_claims WHERE challenge_id=?'
