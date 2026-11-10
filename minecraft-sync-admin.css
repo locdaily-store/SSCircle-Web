@@ -56,3 +56,16 @@
 .ssc-sync-event{flex-wrap:wrap}.ssc-sync-event small{flex:1 0 100%;padding-left:20px}}
 @media(max-width:360px){.ssc-sync-metrics{grid-template-columns:1fr}}
 @media(prefers-reduced-motion:reduce){.ssc-sync-admin-root *{scroll-behavior:auto}}
+
+/* V10.49.0 multi-account settings inherit the dashboard palette. */
+.ssc-multi-settings{margin-block:16px}
+.ssc-multi-fields{display:flex;align-items:end;gap:14px;flex-wrap:wrap;margin-top:16px}
+.ssc-multi-field{display:flex;gap:10px;align-items:center;flex-wrap:wrap;min-width:180px;flex:1}
+.ssc-multi-field select{min-height:42px;min-width:140px;max-width:100%}
+.ssc-multi-field input[type="checkbox"]{width:20px;height:20px;accent-color:var(--ssc-primary,#718fe1)}
+.ssc-multi-audit{margin-top:20px}
+.ssc-multi-audit h3{font-size:1rem;margin-bottom:10px}
+.ssc-multi-audit-row{display:flex;gap:10px;flex-wrap:wrap;justify-content:space-between;padding:9px 0;border-top:1px solid rgba(150,160,180,.18)}
+.ssc-multi-audit-row small{opacity:.7}
+@media(max-width:640px){.ssc-multi-fields{display:grid;grid-template-columns:1fr}
+.ssc-multi-field{min-width:0}}
