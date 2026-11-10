@@ -503,7 +503,7 @@ test('V10.48.1: admin search and status filter cover every page, not only first 
     insertLink.run(minecraft,member,'java_premium',minecraft,
       i===0?'RareTarget':'Player_'+i,timestamp);
     if(i===0)insertProfile.run(member,'Hidden Finder');
-    if(i===5)x.db.prepare("INSERT INTO player_stat_snapshots (application_id,season_id,playtime_seconds,deaths,mob_kills,blocks_mined,last_synced_at) VALUES(?,'',10,1,0,2,?)").run(member,timestamp);
+    if(i===5)x.db.prepare("INSERT INTO minecraft_account_stat_progress (account_id,season_id,last_captured_at,last_playtime,last_deaths,last_mobs,last_blocks,total_playtime,total_deaths,total_mobs,total_blocks) VALUES(?,'',?,10,1,0,2,10,1,0,2)").run(minecraft,timestamp);
   }
   const page=await x.call('/api/admin/minecraft/sync?offset=100',{cookie:x.admin});
   assert.equal(page.status,200,JSON.stringify(page.json));
