@@ -59,6 +59,7 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
     private PaperStatsSync statsSync;
     private PaperIdentitySync identitySync;
     private PaperSyncTelemetry syncTelemetry;
+    private PaperSkinSync skinSync;
 
     @Override
     public void onEnable() {
@@ -88,6 +89,8 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
         identitySync.start();
         syncTelemetry=new PaperSyncTelemetry(this,statsSync,http,()->endpoint,()->signingSecret);
         syncTelemetry.start();
+        skinSync=new PaperSkinSync(this,http,this::identityFor,()->endpoint,()->signingSecret);
+        skinSync.start();
         if (!Bukkit.getOnlineMode()) {
             if (mixedModeReady()) {
                 getLogger().warning("Mode campuran AuthMe siap. Status Premium hanya ditentukan dari bukti sesi FastLogin; Bedrock melalui Floodgate.");
@@ -108,6 +111,7 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
     public void onDisable() {
         if (statsSync != null) statsSync.stop();
         if (identitySync != null) identitySync.stop();
+        if (skinSync != null) skinSync.stop();
         identitySessions.clear();
         lastRequestAt.clear();
     }
@@ -212,6 +216,10 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
             if(identitySync!=null) {
                 identitySync.forceAll();
                 sender.sendMessage("Bukti sesi Premium/Non-Premium akan diperiksa ulang secara terpisah.");
+            }
+            if (skinSync!=null) {
+                skinSync.forceAll();
+                sender.sendMessage("Pemeriksaan skin server masuk antrean ringan (maksimal 2 HTTP aktif).");
             }
             sender.sendMessage("Cek /sscircle status untuk status pengiriman.");
             return true;
@@ -542,9 +550,11 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
             NamedTextColor.AQUA);
         statusHint(sender,"di FastLoginPlus/ProtocolLib, bukan mengubah label secara paksa.",
             NamedTextColor.AQUA);
-        if(operator)
+        if(operator){
+            if(skinSync!=null)statusItem(sender,"Skin server",skinSync.deliveryStatus(),NamedTextColor.GRAY);
             statusHint(sender,"OP: /sscircle sync lalu /sscircle diagnose jika web gagal.",
                 NamedTextColor.AQUA);
+        }
         statusHint(sender,"Status tautan akun: lihat Profile SSCircle.",NamedTextColor.GRAY);
     }
 
@@ -726,12 +736,14 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
     @EventHandler(priority=EventPriority.LOWEST)
     public void onJoin(PlayerJoinEvent event) {
         identitySessions.joined(event.getPlayer().getUniqueId(),event.getPlayer().getName());
+        if(skinSync!=null)skinSync.onJoin(event.getPlayer());
     }
 
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
         identitySessions.left(event.getPlayer().getUniqueId());
         lastRequestAt.remove(event.getPlayer().getUniqueId());
+        if(skinSync!=null)skinSync.onQuit(event.getPlayer());
     }
 
     record Identity(String provider, String verifiedId, String authSource, String displayType) {}
