@@ -292,7 +292,7 @@ test('V10.48.4.3: monitor heartbeat version validation and precise player diagno
   assert.ok(worker.includes('input.pluginVersion'));
 });
 
-test('V10.48.5: TPS-aware capture and offline identity recovery preserve safety',()=>{
+test('V10.49.0: TPS-aware capture and offline identity recovery preserve safety',()=>{
  const stats=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/PaperStatsSync.java',import.meta.url),'utf8');
  const identity=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/PaperIdentitySync.java',import.meta.url),'utf8');
  const retry=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/SyncRetryPolicy.java',import.meta.url),'utf8');
