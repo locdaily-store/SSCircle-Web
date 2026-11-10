@@ -226,3 +226,28 @@
 .ssc-account-stats-filter label{font-weight:600}
 @media(max-width:620px){.ssc-link-account-card{align-items:stretch;flex-direction:column}
   .ssc-link-account-actions{width:100%}.ssc-link-account-actions button{flex:1;min-width:110px}}
+
+
+/* V10.49.1: verified skin heads, accessible full-body preview and safe fallback. */
+.player-avatar .ssc-primary-avatar{width:100%;height:100%;image-rendering:pixelated;object-fit:contain}
+.ssc-minecraft-avatar{width:54px;height:54px;flex:0 0 54px;border-radius:12px;
+  display:grid;place-items:center;overflow:hidden;
+  background:color-mix(in srgb,var(--ssc-primary,#ab86d9) 14%,transparent);
+  border:1px solid var(--player-border)}
+.ssc-minecraft-avatar canvas{width:100%;height:100%;image-rendering:pixelated}
+.ssc-minecraft-avatar-fallback{font-size:13px;font-weight:800;letter-spacing:.1em;color:var(--ssc-primary,#ab86d9)}
+.ssc-minecraft-avatar [hidden]{display:none!important}
+.ssc-link-account-summary{flex:1 1 155px}
+.ssc-skin-dialog{max-width:min(94vw,410px);width:100%;padding:0;border:1px solid var(--player-border);
+  border-radius:18px;color:var(--ssc-text,#faf8ff);background:var(--ssc-panel,#21172f);
+  box-shadow:0 22px 90px #0008}
+.ssc-skin-dialog::backdrop{background:rgba(5,2,12,.8);backdrop-filter:blur(5px)}
+.ssc-skin-dialog-content{padding:24px;display:grid;justify-items:center;gap:14px;text-align:center}
+.ssc-skin-dialog-content h2{margin:0;font-size:20px}
+.ssc-skin-dialog-caption,.ssc-skin-dialog-message{margin:0;overflow-wrap:anywhere}
+.ssc-skin-dialog-caption{font-weight:600}
+.ssc-skin-dialog-message{font-size:12px;opacity:.82}
+.ssc-skin-full{width:192px;max-height:272px;height:auto;object-fit:contain;image-rendering:pixelated}
+@media(max-width:620px){.ssc-minecraft-avatar{align-self:flex-start}
+  .ssc-skin-dialog-content{padding:18px}
+  .ssc-skin-full{width:158px}}
