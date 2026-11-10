@@ -3287,7 +3287,7 @@ async function minecraftSyncHeartbeat(req,env){
 }
 async function minecraftSyncAdmin(req,env,path,method){
   if(!await admin(req,env))return bad('Masuk ke Admin Control terlebih dahulu.',401);
-  await ensureMemberCenter(env);
+  await sscEnsureMulti(env);
   await ensureMinecraftSyncMonitor(env);
   if(path==='/api/admin/minecraft/sync'&&method==='GET'){
     const url=new URL(req.url);
@@ -3306,8 +3306,13 @@ async function minecraftSyncAdmin(req,env,path,method){
       EXISTS(SELECT 1 FROM minecraft_accounts other
         WHERE other.id<>a.id AND lower(other.username)=lower(a.username))
         AS duplicate_name,COALESCE(p.display_name,'') AS display_name,
-      (SELECT MAX(s.last_synced_at) FROM player_stat_snapshots s
-        WHERE s.application_id=a.application_id) AS last_sync_at
+      COALESCE(
+        (SELECT MAX(p.last_captured_at) FROM minecraft_account_stat_progress p
+          WHERE p.application_id=a.application_id AND p.provider=a.provider AND p.provider_id=a.provider_id),
+        CASE WHEN (SELECT COUNT(*) FROM minecraft_accounts x WHERE x.application_id=a.application_id)=1
+          THEN (SELECT MAX(s.last_synced_at) FROM player_stat_snapshots s WHERE s.application_id=a.application_id)
+          ELSE NULL END
+      ) AS last_sync_at
       FROM minecraft_accounts a
       LEFT JOIN member_profiles p ON p.application_id=a.application_id
       LEFT JOIN minecraft_identity_evidence e ON e.provider=a.provider
@@ -3315,17 +3320,22 @@ async function minecraftSyncAdmin(req,env,path,method){
       WHERE (?='' OR lower(a.username) LIKE ? ESCAPE '\\'
         OR lower(COALESCE(p.display_name,'')) LIKE ? ESCAPE '\\'
         OR lower(a.application_id) LIKE ? ESCAPE '\\')
-        AND (?='all' OR (?='synced' AND EXISTS(
-          SELECT 1 FROM player_stat_snapshots s WHERE s.application_id=a.application_id))
-          OR (?='missing' AND NOT EXISTS(
-          SELECT 1 FROM player_stat_snapshots s WHERE s.application_id=a.application_id)))
+        AND (?='all' OR (?='synced' AND (EXISTS(SELECT 1 FROM minecraft_account_stat_progress ap
+          WHERE ap.application_id=a.application_id AND ap.provider=a.provider AND ap.provider_id=a.provider_id)
+          OR ((SELECT COUNT(*) FROM minecraft_accounts x WHERE x.application_id=a.application_id)=1
+            AND EXISTS(SELECT 1 FROM player_stat_snapshots s WHERE s.application_id=a.application_id))))
+          OR (?='missing' AND NOT (EXISTS(SELECT 1 FROM minecraft_account_stat_progress ap
+          WHERE ap.application_id=a.application_id AND ap.provider=a.provider AND ap.provider_id=a.provider_id)
+          OR ((SELECT COUNT(*) FROM minecraft_accounts x WHERE x.application_id=a.application_id)=1
+            AND EXISTS(SELECT 1 FROM player_stat_snapshots s WHERE s.application_id=a.application_id)))))
       ORDER BY a.verified_at DESC LIMIT 101 OFFSET ?`)
       .bind(query,needle,needle,needle,filter,filter,filter,offset).all();
     const totals=await env.DB.prepare(`SELECT
       COUNT(*) AS linked,
-      SUM(CASE WHEN NOT EXISTS(
-        SELECT 1 FROM player_stat_snapshots s WHERE s.application_id=a.application_id
-      ) THEN 1 ELSE 0 END) AS no_stats
+      SUM(CASE WHEN NOT (EXISTS(SELECT 1 FROM minecraft_account_stat_progress ap
+          WHERE ap.application_id=a.application_id AND ap.provider=a.provider AND ap.provider_id=a.provider_id)
+          OR ((SELECT COUNT(*) FROM minecraft_accounts x WHERE x.application_id=a.application_id)=1
+            AND EXISTS(SELECT 1 FROM player_stat_snapshots s WHERE s.application_id=a.application_id))) THEN 1 ELSE 0 END) AS no_stats
       FROM minecraft_accounts a`).first();
     const events=await env.DB.prepare(`SELECT at,code,details FROM minecraft_sync_events
       ORDER BY at DESC LIMIT 30`).all();
