@@ -2791,6 +2791,18 @@ function sscPublicAccount(a){
 }
 
 async function minecraftLinkAPI(req,env,path,method){
+  if(path==='/api/admin/minecraft/multi-account/audit' && method==='GET'){
+    if(!await admin(req,env))return bad('Masuk ke Admin Control.',401);
+    await sscEnsureMulti(env);
+    const rows=await env.DB.prepare(`SELECT x.action,x.at,a.username,
+      (SELECT COALESCE(display_name,'') FROM member_profiles WHERE application_id=x.application_id) AS member_name
+      FROM minecraft_account_audit x LEFT JOIN minecraft_accounts a ON a.id=x.account_id
+      ORDER BY x.at DESC LIMIT 30`).all();
+    return J({events:(rows.results||[]).map(x=>({
+      action:x.action,at:x.at,username:x.username||'Akun yang sudah dilepas',
+      memberName:x.member_name||'Anggota SSCircle'
+    }))});
+  }
   if(path==='/api/admin/minecraft/multi-account'){
     if(!await admin(req,env))return bad('Masuk ke Admin Control.',401);
     const settings=await sscMultiSettings(env);
@@ -3961,7 +3973,7 @@ async function route(req, env) {
       ['GET','POST'].includes(method))
     return await minecraftSyncAdmin(req,env,path,method);
   if ((path.startsWith('/api/player/minecraft/link/') || path==='/api/admin/minecraft/links' ||
-       path==='/api/admin/minecraft/multi-account') &&
+       path.startsWith('/api/admin/minecraft/multi-account')) &&
       ['GET','POST','PUT'].includes(method))
     return await minecraftLinkAPI(req,env,path,method);
   if ((path.startsWith('/api/player/mailbox') || path==='/api/admin/mailbox/approve') &&
