@@ -998,3 +998,90 @@ test('V10.49.1.3: signed full PNG stored in D1 and served without an external re
    assert.deepEqual(Buffer.from(await image.res.arrayBuffer()),Buffer.from(SKIN_PNG_BASE64,'base64'));
  }finally{globalThis.fetch=previousFetch;}
 });
+
+
+test('V10.49.1.6: pre-existing 1.1 skin data is preserved and imported additively',async()=>{
+  const x=fixture();
+  x.db.exec(`CREATE TABLE minecraft_accounts(
+    id TEXT PRIMARY KEY,application_id TEXT NOT NULL,provider TEXT NOT NULL,
+    provider_id TEXT NOT NULL,username TEXT NOT NULL,verified_at TEXT NOT NULL,
+    UNIQUE(provider,provider_id));
+    CREATE TABLE minecraft_account_skins(
+    account_id TEXT PRIMARY KEY,application_id TEXT NOT NULL,texture_url TEXT NOT NULL,
+    model TEXT NOT NULL,observed_at TEXT NOT NULL);`);
+  const id=randomUUID(), texture='https://textures.minecraft.net/texture/'+'a'.repeat(64);
+  x.db.prepare('INSERT INTO minecraft_accounts VALUES(?,?,?,?,?,?)').run(
+    id,ID,'java_offline','70a89d54-c32e-3942-a553-34f71cfde04d','LegacyPlayer',new Date().toISOString());
+  x.db.prepare('INSERT INTO minecraft_account_skins VALUES(?,?,?,?,?)').run(
+    id,ID,texture,'slim',new Date().toISOString());
+  const cookie=await x.active();
+  const profile=(await x.call('/api/player/profile',{cookie})).json;
+  assert.equal(profile.accounts[0].skinAvailable,true);
+  assert.equal(profile.accounts[0].skinModel,'slim');
+  assert.equal(x.db.prepare('SELECT texture_url FROM minecraft_account_skins WHERE account_id=?')
+    .get(id).texture_url,texture,'never rewrite the legacy schema or metadata');
+  assert.equal(x.db.prepare('SELECT texture_hash FROM minecraft_account_skin_state WHERE account_id=?')
+    .get(id).texture_hash,'a'.repeat(64));
+});
+
+test('V10.49.1.6: pre-existing 1.3 skin schema keeps its PNG data and imports metadata',async()=>{
+  const x=fixture();
+  x.db.exec(`CREATE TABLE minecraft_accounts(
+    id TEXT PRIMARY KEY,application_id TEXT NOT NULL,provider TEXT NOT NULL,
+    provider_id TEXT NOT NULL,username TEXT NOT NULL,verified_at TEXT NOT NULL,
+    UNIQUE(provider,provider_id));
+    CREATE TABLE minecraft_account_skins(
+    account_id TEXT PRIMARY KEY,texture_hash TEXT NOT NULL,model TEXT NOT NULL,
+    source TEXT NOT NULL,updated_at TEXT NOT NULL);
+    CREATE TABLE minecraft_account_skin_images(
+    account_id TEXT PRIMARY KEY,texture_hash TEXT NOT NULL,
+    png_base64 TEXT NOT NULL,updated_at TEXT NOT NULL);`);
+  const id=randomUUID(),hash='b'.repeat(64),now=new Date().toISOString();
+  x.db.prepare('INSERT INTO minecraft_accounts VALUES(?,?,?,?,?,?)').run(
+    id,ID,'java_offline','70a89d54-c32e-3942-a553-34f71cfde04d','OldSkinBridge',now);
+  x.db.prepare('INSERT INTO minecraft_account_skins VALUES(?,?,?,?,?)').run(id,hash,'classic','skinsrestorer',now);
+  x.db.prepare('INSERT INTO minecraft_account_skin_images VALUES(?,?,?,?)').run(id,hash,SKIN_PNG_BASE64,now);
+  const cookie=await x.active();
+  const account=(await x.call('/api/player/profile',{cookie})).json.accounts[0];
+  assert.equal(account.skinAvailable,true);
+  assert.equal(account.skinImageStored,true);
+  assert.equal(x.db.prepare('SELECT texture_hash FROM minecraft_account_skins WHERE account_id=?')
+    .get(id).texture_hash,hash);
+  assert.equal(x.db.prepare('SELECT texture_hash FROM minecraft_account_skin_state WHERE account_id=?')
+    .get(id).texture_hash,hash);
+  const image=await x.call('/api/player/minecraft/skin/'+id,{cookie});
+  assert.equal(image.status,200);
+  assert.equal(image.res.headers.get('X-SSC-Skin-Source'),'server-d1');
+});
+
+test('V10.49.1.6: signed Paper 1.1 legacy skin route retains HMAC, nonce and ownership checks',async()=>{
+  const x=fixture(),cookie=await x.active();
+  const create=await x.call('/api/player/minecraft/link/create',{method:'POST',cookie,data:{}});
+  const offline={code:create.json.code,provider:'java_offline',
+    providerId:'70a89d54-c32e-3942-a553-34f71cfde04d',
+    username:'LegacyCore',authSource:'authme-session'};
+  assert.equal((await x.claim(offline)).status,200);
+  assert.equal((await x.call('/api/player/minecraft/link/confirm',{method:'POST',cookie,data:{}})).status,200);
+  const timestamp=Math.floor(Date.now()/1000),nonce=randomUUID();
+  const payload={provider:offline.provider,providerId:offline.providerId,authSource:offline.authSource,
+    skinUrl:'https://textures.minecraft.net/texture/'+'c'.repeat(64),
+    model:'classic',observedAt:new Date().toISOString()};
+  const raw=JSON.stringify(payload);
+  async function send(body=raw,key=SERVER){
+    const sig=createHmac('sha256',key)
+      .update('POST\n/api/minecraft/skin/refresh\n'+timestamp+'\n'+nonce+'\n'+body)
+      .digest('base64url');
+    const res=await worker.fetch(new Request('https://sscircle.test/api/minecraft/skin/refresh',{
+      method:'POST',headers:{'Content-Type':'application/json','X-SSC-Timestamp':String(timestamp),
+        'X-SSC-Nonce':nonce,'X-SSC-Signature':sig},body
+    }),x.env);
+    return {status:res.status,json:await res.json()};
+  }
+  assert.equal((await send(raw,'wrong-key')).status,401);
+  assert.equal((await send()).status,200);
+  assert.equal((await send()).status,409);
+  const account=(await x.call('/api/player/profile',{cookie})).json.accounts[0];
+  assert.equal(account.skinAvailable,true);
+  assert.equal(x.db.prepare('SELECT texture_hash FROM minecraft_account_skin_state WHERE account_id=?')
+    .get(account.id).texture_hash,'c'.repeat(64));
+});

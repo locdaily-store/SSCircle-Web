@@ -2035,7 +2035,7 @@ async function ensureMemberCenter(env) {
         model,'paper-profile',observed_at
       FROM minecraft_account_skins
       WHERE texture_url LIKE 'https://textures.minecraft.net/texture/%'
-        AND length(texture_url) BETWEEN 69 AND 165`).run();
+        AND length(texture_url) BETWEEN 71 AND 167`).run();
   }else if(legacy.has('texture_hash')&&legacy.has('updated_at')){
     await env.DB.prepare(`INSERT OR IGNORE INTO minecraft_account_skin_state
       (account_id,texture_hash,model,source,updated_at)
