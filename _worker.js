@@ -2450,11 +2450,18 @@ async function memberCenterAPI(req,env,path,method) {
     if(hasCredentials && !await memberStrongSession(req,env,application)) return bad('Masuk dengan password dashboard untuk melihat profil.',403);
     const profileRow=await env.DB.prepare('SELECT * FROM member_profiles WHERE application_id=?').bind(application.id).first();
     const policyRow=await env.DB.prepare('SELECT * FROM member_policy WHERE id=1').first();
-    const accounts=await env.DB.prepare(`SELECT a.provider,a.username,a.verified_at,e.auth_source,e.observed_at
-      FROM minecraft_accounts a LEFT JOIN minecraft_identity_evidence e
-      ON e.provider=a.provider AND e.provider_id=a.provider_id
-      AND e.application_id=a.application_id
-      WHERE a.application_id=? ORDER BY a.verified_at DESC`).bind(application.id).all();
+    await sscEnsureMulti(env);
+    const accounts=await sscAccounts(env,application.id);
+    const accountStats=await env.DB.prepare(`SELECT a.id AS account_id,p.season_id,p.total_playtime,p.total_deaths,
+      p.total_mobs,p.total_blocks,p.last_captured_at FROM minecraft_account_stat_progress p
+      JOIN minecraft_accounts a ON a.application_id=p.application_id
+        AND a.provider=p.provider AND a.provider_id=p.provider_id
+      WHERE a.application_id=? ORDER BY p.season_id ASC LIMIT 100`)
+      .bind(application.id).all();
+    const historicUnassigned=await env.DB.prepare(`SELECT COUNT(*) AS rows_left
+      FROM minecraft_stat_legacy l WHERE l.application_id=? AND
+      (l.playtime_seconds>0 OR l.deaths>0 OR l.mob_kills>0 OR l.blocks_mined>0)`)
+      .bind(application.id).first();
     const stats=await env.DB.prepare(`SELECT season_id,playtime_seconds,deaths,mob_kills,
       blocks_mined,last_synced_at FROM player_stat_snapshots WHERE application_id=?
       ORDER BY season_id ASC LIMIT 25`).bind(application.id).all();
@@ -2465,10 +2472,16 @@ async function memberCenterAPI(req,env,path,method) {
     return J({profile:memberProfile(profileRow),policy:memberPolicy(policyRow),
       activeStatSeason:activeStatKey,
       activeStatSeasonTitle:seasonName.get(form.settings.statSeasonId)||'',
-      accounts:(accounts.results||[]).map(a=>({provider:a.provider,
-        edition:minecraftLinkedEdition(a.provider,a.auth_source,a.observed_at),
-        identityProofAt:a.observed_at||null,
-        username:a.username,verifiedAt:a.verified_at})),
+      accounts:accounts.map(sscPublicAccount),
+      historicalUnassigned:!!historicUnassigned?.rows_left,
+      accountStatistics:(accountStats.results||[]).map(a=>({
+        accountId:a.account_id,seasonId:a.season_id,
+        seasonTitle:a.season_id.startsWith('season:')
+          ? (seasonName.get(a.season_id.split(':')[1])||'Season tersimpan')
+          : 'Sepanjang masa',
+        playtimeSeconds:a.total_playtime,deaths:a.total_deaths,
+        mobKills:a.total_mobs,blocksMined:a.total_blocks,
+        updatedAt:a.last_captured_at})),
       statistics:(stats.results||[]).map(a=>({seasonId:a.season_id,
         seasonTitle:a.season_id.startsWith('season:')
           ? (seasonName.get(a.season_id.split(':')[1])||'Season tersimpan')
