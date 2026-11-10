@@ -21,7 +21,7 @@ window.SSCircleMinecraftSyncAdmin=(()=>{
   const eventText={IDLE:'Menunggu pengiriman',SYNC_OK:'Berhasil',
     QUEUE_PENDING:'Menunggu pengiriman',NETWORK_ERROR:'Gangguan jaringan',
     HTTP_ERROR:'Permintaan gagal',AUTH_ERROR:'Masalah autentikasi'};
-  let state=null,loading=false,offset=0,term='',filter='all',searchTimer=null;
+  let multi=null,multiAudit=[],state=null,loading=false,offset=0,term='',filter='all',searchTimer=null;
   async function api(path,options={}){
     const res=await fetch(path,{credentials:'same-origin',cache:'no-store',
       headers:{Accept:'application/json',...(options.body?{'Content-Type':'application/json'}:{})},...options});
@@ -95,6 +95,47 @@ window.SSCircleMinecraftSyncAdmin=(()=>{
         '. Akan kedaluwarsa '+stamp(state.pendingCommand.expiresAt)+'.'));
     }
     root.append(overview);
+    if(multi){
+      const section=el('section','panel ssc-multi-settings');
+      section.append(el('h2','','Multi-Account Linking'),
+        el('p','ssc-sync-subtitle','Batasi jumlah identitas Minecraft per anggota. Mengurangi batas tidak memutus tautan yang sudah ada.'));
+      const fields=el('div','ssc-multi-fields');
+      const enabledLabel=el('label','ssc-multi-field');
+      const enabled=el('input');enabled.type='checkbox';enabled.checked=multi.enabled===true;
+      enabledLabel.append(enabled,el('span','','Izinkan anggota menambahkan akun Minecraft'));
+      const limitLabel=el('label','ssc-multi-field');
+      limitLabel.append(el('span','','Maksimal akun per anggota'));
+      const max=el('select');
+      for(let count=1;count<=5;count++){
+        const option=el('option','',count+' akun');option.value=String(count);max.append(option);
+      }
+      max.value=String(multi.maxAccounts||3);limitLabel.append(max);
+      const save=button('Simpan batas akun',async()=>{
+        save.disabled=true;
+        try{
+          multi=await api('/api/admin/minecraft/multi-account',{
+            method:'PUT',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({enabled:enabled.checked,maxAccounts:Number(max.value)})});
+          status('Pengaturan Multi-Account telah tersimpan.');
+          await load();
+        }catch(error){status(error.message,true);save.disabled=false;}
+      },'button primary');
+      fields.append(enabledLabel,limitLabel,save);
+      section.append(fields);
+      if(multiAudit.length){
+        const audit=el('div','ssc-multi-audit');
+        audit.append(el('h3','','Perubahan tautan terbaru'));
+        for(const item of multiAudit.slice(0,8)){
+          const labels={linked:'Ditautkan',unlinked:'Diputus',primary_changed:'Akun utama diubah'};
+          const line=el('div','ssc-multi-audit-row');
+          line.append(el('span','',(labels[item.action]||'Aktivitas')+' · '+item.username),
+            el('small','',stamp(item.at)));
+          audit.append(line);
+        }
+        section.append(audit);
+      }
+      root.append(section);
+    }
     const accounts=el('section','panel ssc-sync-accounts');
     accounts.append(el('h2','','Akun & status statistik'));
     accounts.append(el('p','ssc-sync-subtitle',
@@ -178,6 +219,8 @@ window.SSCircleMinecraftSyncAdmin=(()=>{
     try {
       const params=new URLSearchParams({offset:String(offset),filter,q:term.trim().slice(0,64)});
       state=await api('/api/admin/minecraft/sync?'+params.toString());
+      multi=await api('/api/admin/minecraft/multi-account').catch(()=>null);
+      multiAudit=(await api('/api/admin/minecraft/multi-account/audit').catch(()=>({events:[]}))).events||[];
       render();
       if(focusSearch){
         const input=root.querySelector('input[type=search]');
