@@ -216,7 +216,7 @@
 
         <section data-profile-section="linking" class="player-card player-linking" aria-labelledby="player-link-title">
           <div class="player-section-head">
-            <div><span class="player-overline">MINECRAFT ACCOUNT</span><h2 id="player-link-title">Hubungkan akun Minecraft</h2></div>
+            <div><span class="player-overline">MINECRAFT ACCOUNT</span><h2 id="player-link-title">Akun Minecraft Saya</h2></div>
             <span class="player-tag" id="player-link-tag">Belum terhubung</span>
           </div>
           <p>Hubungkan Profile SSCircle dengan identitas Minecraft yang diverifikasi server. Jangan pernah memasukkan password Minecraft ke website ini.</p>
@@ -245,17 +245,16 @@
               <p class="player-helper">Jika ini bukan akunmu, batalkan permintaan dan buat kode baru.</p>
             </div>
             <div id="player-link-connected" class="player-link-step" hidden>
-              <span class="player-link-success">✓ Akun Minecraft terverifikasi</span>
-              <div class="player-link-identity"><span id="player-link-connected-provider"></span>
-                <strong id="player-link-connected-name"></strong><small id="player-link-connected-date"></small></div>
-              <div class="player-link-unlink">
-                <button class="player-action player-action-secondary" id="player-link-show-unlink" type="button">Putuskan tautan</button>
-                <form class="player-settings-form" id="player-link-unlink-form" hidden>
-                  <p class="player-helper">Verifikasi ulang password dashboard untuk memutuskan tautan. Statistik historis tidak otomatis dihapus.</p>
-                  <label class="player-setting-field"><span>Password dashboard</span><input id="player-link-unlink-password" type="password" autocomplete="current-password" minlength="8" maxlength="128" required></label>
-                  <button class="player-action player-action-primary" id="player-link-unlink-submit" type="submit">Konfirmasi putuskan tautan</button>
-                </form>
-              </div>
+              <strong>Daftar akun Minecraft terhubung</strong>
+              <p id="player-link-count" class="player-helper"></p>
+              <div id="player-link-accounts" class="player-linked-account-list" aria-label="Akun Minecraft yang tertaut"></div>
+              <form class="player-settings-form" id="player-link-unlink-form" hidden>
+                <p class="player-helper" id="player-link-unlink-target"></p>
+                <p class="player-helper">Masukkan ulang password Dashboard. Hanya tautan akun yang dipilih yang dilepas; akun Minecraft dan statistik historis tidak dihapus.</p>
+                <label class="player-setting-field"><span>Password dashboard</span>
+                  <input id="player-link-unlink-password" type="password" autocomplete="current-password" minlength="8" maxlength="128" required></label>
+                <button class="player-action player-action-primary" id="player-link-unlink-submit" type="submit">Konfirmasi putuskan tautan</button>
+              </form>
             </div>
             <div class="player-actions" id="player-link-actions">
               <button class="player-action player-action-secondary" type="button" id="player-link-refresh">Perbarui status</button>
@@ -272,7 +271,13 @@
             <span class="player-tag" id="player-stats-tag">Menunggu sinkronisasi</span>
           </div>
           <div class="player-season-chooser">
-            <label for="player-season-select">Lihat statistik</label>
+            <label for="player-account-select">Pilih akun Minecraft</label>
+            <select id="player-account-select" aria-label="Pilih akun untuk melihat statistik">
+              <option value="all">Gabungan Semua Akun</option>
+            </select>
+          </div>
+          <div class="player-season-chooser">
+            <label for="player-season-select">Pilih Season</label>
             <select id="player-season-select" aria-label="Pilih Season untuk melihat statistik" disabled>
               <option value="">Sepanjang masa</option>
             </select>
