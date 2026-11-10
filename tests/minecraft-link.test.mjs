@@ -122,7 +122,7 @@ test('server-only signed claim, nonce replay prevention and explicit confirmatio
  assert.equal((await x.call('/api/player/minecraft/link/confirm',{method:'POST',cookie,data:{}})).status,200);
  const profile=await x.call('/api/player/profile',{cookie});
  assert.equal(profile.json.accounts[0].provider,'java_premium');
- assert.equal((await x.call('/api/player/minecraft/link/confirm',{method:'POST',cookie,data:{}})).status,409);
+ assert.equal((await x.call('/api/player/minecraft/link/confirm',{method:'POST',cookie,data:{}})).status,410);
 });
 test('duplicate identity across members is rejected',async()=>{
  const x=fixture(),one=await x.active(),two=await x.active(true);
