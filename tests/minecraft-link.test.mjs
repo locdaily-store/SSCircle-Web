@@ -152,7 +152,7 @@ test('expired or cancelled code is rejected, and unlink needs password reauthent
   .get(ID).password_salt;
  const proof=pbkdf2Sync(PASSWORD,salt,220000,32,'sha256').toString('base64url');
  assert.equal((await x.call('/api/player/minecraft/link/unlink',{method:'POST',cookie,
-  data:{currentProof:proof}})).status,200);
+  data:{currentProof:proof,accountId:x.db.prepare('SELECT id FROM minecraft_accounts LIMIT 1').get().id}})).status,200);
  assert.equal(x.db.prepare('SELECT COUNT(*) AS n FROM minecraft_accounts').get().n,0);
 });
 test('bedrock identity requires Floodgate authority, admin listing requires admin session',async()=>{
