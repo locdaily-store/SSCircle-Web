@@ -2609,6 +2609,117 @@ const minecraftIdentityWarnings=(provider,source,observedAt,duplicateName,now=Da
   return warnings;
 };
 const mcCodeHash=(env,code)=>hmac(env.SESSION_SECRET+'|minecraft-link-code',code);
+const sscMultiReady=new WeakSet();
+async function sscEnsureMulti(env){
+  if(sscMultiReady.has(env.DB))return;
+  await ensureMemberCenter(env);
+  for(const sql of [
+    `CREATE TABLE IF NOT EXISTS minecraft_multi_settings (
+      id INTEGER PRIMARY KEY CHECK(id=1),enabled INTEGER NOT NULL DEFAULT 1,
+      max_accounts INTEGER NOT NULL DEFAULT 3,updated_at TEXT NOT NULL DEFAULT '')`,
+    `INSERT OR IGNORE INTO minecraft_multi_settings(id,enabled,max_accounts,updated_at)
+      VALUES(1,1,3,'')`,
+    `CREATE TABLE IF NOT EXISTS minecraft_account_preferences (
+      account_id TEXT PRIMARY KEY,application_id TEXT NOT NULL,is_primary INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY(account_id) REFERENCES minecraft_accounts(id) ON DELETE CASCADE)`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_mc_primary_per_member ON minecraft_account_preferences(application_id)
+      WHERE is_primary=1`,
+    `CREATE TABLE IF NOT EXISTS minecraft_account_audit (
+      id TEXT PRIMARY KEY,application_id TEXT NOT NULL,account_id TEXT NOT NULL,
+      action TEXT NOT NULL,at TEXT NOT NULL)`,
+    `CREATE INDEX IF NOT EXISTS idx_mc_account_audit_member ON minecraft_account_audit(application_id,at)`,
+    `CREATE TABLE IF NOT EXISTS minecraft_account_stat_progress (
+      application_id TEXT NOT NULL,provider TEXT NOT NULL,provider_id TEXT NOT NULL,season_id TEXT NOT NULL,
+      last_captured_at TEXT NOT NULL,last_playtime INTEGER NOT NULL DEFAULT 0,
+      last_deaths INTEGER NOT NULL DEFAULT 0,last_mobs INTEGER NOT NULL DEFAULT 0,
+      last_blocks INTEGER NOT NULL DEFAULT 0,total_playtime INTEGER NOT NULL DEFAULT 0,
+      total_deaths INTEGER NOT NULL DEFAULT 0,total_mobs INTEGER NOT NULL DEFAULT 0,
+      total_blocks INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY(application_id,provider,provider_id,season_id))`,
+    `CREATE INDEX IF NOT EXISTS idx_mc_acct_stats_member_season
+      ON minecraft_account_stat_progress(application_id,season_id)`,
+    `CREATE TABLE IF NOT EXISTS minecraft_stat_legacy (
+      application_id TEXT NOT NULL,season_id TEXT NOT NULL,
+      playtime_seconds INTEGER NOT NULL,deaths INTEGER NOT NULL,
+      mob_kills INTEGER NOT NULL,blocks_mined INTEGER NOT NULL,
+      last_synced_at TEXT NOT NULL,PRIMARY KEY(application_id,season_id))`,
+    `INSERT OR IGNORE INTO minecraft_stat_legacy
+      (application_id,season_id,playtime_seconds,deaths,mob_kills,blocks_mined,last_synced_at)
+      SELECT s.application_id,s.season_id,
+      CASE WHEN
+        (SELECT COUNT(*) FROM minecraft_accounts a WHERE a.application_id=s.application_id)=1
+        AND EXISTS(SELECT 1 FROM minecraft_accounts a
+          JOIN minecraft_stat_progress p ON p.application_id=a.application_id
+          AND p.provider=a.provider AND p.provider_id=a.provider_id AND p.season_id=s.season_id
+          WHERE a.application_id=s.application_id)
+        THEN 0 ELSE s.playtime_seconds END,
+      CASE WHEN
+        (SELECT COUNT(*) FROM minecraft_accounts a WHERE a.application_id=s.application_id)=1
+        AND EXISTS(SELECT 1 FROM minecraft_accounts a
+          JOIN minecraft_stat_progress p ON p.application_id=a.application_id
+          AND p.provider=a.provider AND p.provider_id=a.provider_id AND p.season_id=s.season_id
+          WHERE a.application_id=s.application_id)
+        THEN 0 ELSE s.deaths END,
+      CASE WHEN
+        (SELECT COUNT(*) FROM minecraft_accounts a WHERE a.application_id=s.application_id)=1
+        AND EXISTS(SELECT 1 FROM minecraft_accounts a
+          JOIN minecraft_stat_progress p ON p.application_id=a.application_id
+          AND p.provider=a.provider AND p.provider_id=a.provider_id AND p.season_id=s.season_id
+          WHERE a.application_id=s.application_id)
+        THEN 0 ELSE s.mob_kills END,
+      CASE WHEN
+        (SELECT COUNT(*) FROM minecraft_accounts a WHERE a.application_id=s.application_id)=1
+        AND EXISTS(SELECT 1 FROM minecraft_accounts a
+          JOIN minecraft_stat_progress p ON p.application_id=a.application_id
+          AND p.provider=a.provider AND p.provider_id=a.provider_id AND p.season_id=s.season_id
+          WHERE a.application_id=s.application_id)
+        THEN 0 ELSE s.blocks_mined END,
+      s.last_synced_at FROM player_stat_snapshots s`,
+    `INSERT OR IGNORE INTO minecraft_account_stat_progress
+      (application_id,provider,provider_id,season_id,last_captured_at,
+       last_playtime,last_deaths,last_mobs,last_blocks,
+       total_playtime,total_deaths,total_mobs,total_blocks)
+      SELECT p.application_id,p.provider,p.provider_id,p.season_id,p.last_captured_at,
+       p.last_playtime,p.last_deaths,p.last_mobs,p.last_blocks,
+       p.total_playtime,p.total_deaths,p.total_mobs,p.total_blocks
+      FROM minecraft_stat_progress p
+      JOIN minecraft_accounts a ON a.application_id=p.application_id
+       AND a.provider=p.provider AND a.provider_id=p.provider_id
+      WHERE (SELECT COUNT(*) FROM minecraft_accounts x WHERE x.application_id=p.application_id)=1`,
+    `INSERT OR IGNORE INTO minecraft_account_preferences(account_id,application_id,is_primary)
+      SELECT a.id,a.application_id,
+       CASE WHEN a.id=(SELECT first.id FROM minecraft_accounts first
+         WHERE first.application_id=a.application_id ORDER BY first.verified_at,first.id LIMIT 1)
+       THEN 1 ELSE 0 END
+      FROM minecraft_accounts a`
+  ])await env.DB.prepare(sql).run();
+  sscMultiReady.add(env.DB);
+}
+
+async function sscMultiSettings(env){
+  await sscEnsureMulti(env);
+  const cfg=await env.DB.prepare('SELECT enabled,max_accounts FROM minecraft_multi_settings WHERE id=1').first();
+  return {enabled:cfg?.enabled!==0,maxAccounts:Math.max(1,Math.min(5,Number(cfg?.max_accounts)||3))};
+}
+
+async function sscAccounts(env,memberId){
+  await sscEnsureMulti(env);
+  const rows=await env.DB.prepare(`SELECT a.id,a.provider,a.provider_id,a.username,a.verified_at,
+    COALESCE(p.is_primary,0) AS is_primary,e.auth_source,e.observed_at
+    FROM minecraft_accounts a
+    LEFT JOIN minecraft_account_preferences p ON p.account_id=a.id AND p.application_id=a.application_id
+    LEFT JOIN minecraft_identity_evidence e ON e.provider=a.provider AND e.provider_id=a.provider_id
+      AND e.application_id=a.application_id
+    WHERE a.application_id=? ORDER BY is_primary DESC,a.verified_at ASC,a.id ASC LIMIT 10`).bind(memberId).all();
+  return rows.results||[];
+}
+
+function sscPublicAccount(a){
+  return {id:a.id,provider:a.provider,username:a.username,
+    edition:minecraftLinkedEdition(a.provider,a.auth_source,a.observed_at),
+    isPrimary:a.is_primary===1,verifiedAt:a.verified_at,identityProofAt:a.observed_at||null};
+}
+
 async function minecraftLinkAPI(req,env,path,method){
   if(path==='/api/admin/minecraft/links' && method==='GET'){
     if(!await admin(req,env))return bad('Masuk ke Admin Control.',401);
