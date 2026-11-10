@@ -89,6 +89,12 @@ jobs:
       - name: Uji Mail Box responsif dan alur Cek Status tanpa redirect Voting
         run: python tests/browser_mailbox.py
 
+      - name: Uji dropdown native agar tidak putih-putih di desktop dan HP
+        run: python tests/browser_dropdown_theme.py
+
+      - name: Uji tema dropdown, seluruh kontrak Worker, dan lingkungan localhost
+        run: node --test tests/*.test.mjs
+
       - name: Periksa file sensitif (pemeriksaan dasar)
         shell: bash
         run: |
@@ -101,9 +107,9 @@ jobs:
           secret_names = {'credentials.json','secrets.json','id_rsa','id_ed25519'}
           for relative in tracked:
               name = relative.name.lower()
-              if relative.suffix.lower() == '.sql' and (len(relative.parts) != 2 or relative.parts[0] != 'migrations'):
+              if relative.suffix.lower() == '.sql' and str(relative) not in {'dev/local-schema.sql','dev/local-seed.sql'} and (len(relative.parts) != 2 or relative.parts[0] != 'migrations'):
                   sys.exit(f'SQL di luar folder migrations tidak diizinkan: {relative}')
-              if name.startswith('.env') or name.startswith('.dev.vars') or name in secret_names or name.startswith('service-account') or relative.suffix.lower() in secret_suffixes:
+              if name.startswith('.env') or (name.startswith('.dev.vars') and name != '.dev.vars.example') or name in secret_names or name.startswith('service-account') or relative.suffix.lower() in secret_suffixes:
                   sys.exit(f'File berisiko ikut di-commit: {relative}; hapus dari Git dan rotasi credential jika perlu')
 
           patterns = [
@@ -112,6 +118,13 @@ jobs:
               ('AWS access key',re.compile(r'\b(?:AKIA|ASIA)[A-Z0-9]{16}\b')),
               ('API key inline',re.compile(r"""(?i)\b(?:api[_-]?token|api[_-]?key|client[_-]?secret|admin[_-]?password|session[_-]?secret)\b\s*[:=]\s*['\"][^'\"]{8,}['\"]""")),
           ]
+          # Dev sample values must be placeholders, not usable production credentials.
+          if PurePosixPath('.dev.vars.example') in tracked:
+              example=Path('.dev.vars.example').read_text('utf-8')
+              if not all(token in example for token in ('SESSION_SECRET=','ADMIN_PASSWORD=','SSCIRCLE_LINK_SERVER_SECRET=')):
+                  sys.exit('Contoh .dev.vars tidak lengkap.')
+              if any(len(value.strip())>80 for value in example.splitlines() if '=' in value and not value.lstrip().startswith('#')):
+                  sys.exit('Contoh .dev.vars terlalu panjang: tinjau kemungkinan rahasia.\n')
           checked = 0
           for relative in tracked:
               # Definisi regex di workflow memang berisi pola token. Jangan memicu false positive atas definisinya sendiri.
@@ -141,8 +154,8 @@ jobs:
           asset_ext = root_ext | {'.ogg','.ttf','.otf','.avif','.wasm'}
           required = {'index.html','admin.html','registration.html','status.html','voting.html','_worker.js','_routes.json'}
           extra_root = {'_headers','_redirects','_version.txt','robots.txt','favicon.ico'}
-          excluded_dirs = {'.github','docs','scripts','tests','migrations','.vscode','minecraft-link-velocity','minecraft-link-paper'}
-          excluded_root = {'.gitignore','.gitattributes','README.md','CONTRIBUTING.md','SECURITY.md','PANDUAN-GITHUB.md','rules-defaults.json'}
+          excluded_dirs = {'.github','docs','scripts','tests','migrations','.vscode','minecraft-link-velocity','minecraft-link-paper','minecraft-skin-bridge-paper','dev'}
+          excluded_root = {'.gitignore','.gitattributes','README.md','CONTRIBUTING.md','SECURITY.md','PANDUAN-GITHUB.md','rules-defaults.json','wrangler.local.toml','.dev.vars.example','MULAI-LOCALHOST.bat','package.json'}
           site = []
           for rel in tracked:
               path = Path(rel)
@@ -226,5 +239,32 @@ jobs:
         with:
           name: SSCircle-Player-Sync-Paper
           path: minecraft-link-paper/build/libs/*.jar
+          if-no-files-found: error
+          retention-days: 14
+
+
+  build-skin-bridge:
+    name: Bangun SSCircle Skin Bridge Paper 26.3
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Ambil source terbaru
+        uses: actions/checkout@v4
+      - name: Pasang Java 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - name: Pasang Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - name: Kompilasi addon terhadap Paper API asli
+        run: gradle -p minecraft-skin-bridge-paper clean build --no-daemon --stacktrace
+      - name: Simpan JAR addon
+        uses: actions/upload-artifact@v4
+        with:
+          name: SSCircle-Skin-Bridge-Paper
+          path: minecraft-skin-bridge-paper/build/libs/*.jar
           if-no-files-found: error
           retention-days: 14

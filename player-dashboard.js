@@ -516,9 +516,12 @@
         ?new Date(account.identityProofAt).toLocaleString('id-ID'):'belum tersedia');
       summary.append(name,edition,last);
       const skinStatus=document.createElement('small');
-      skinStatus.textContent=account.skinUpdatedAt
-        ?'Skin server terakhir: '+new Date(account.skinUpdatedAt).toLocaleString('id-ID')
-        :'Skin server belum tersinkron';
+      skinStatus.className='ssc-account-skin-state';
+      skinStatus.textContent=account.skinImageStored
+        ?'Skin siap ditampilkan · '+new Date(account.skinUpdatedAt).toLocaleString('id-ID')
+        :account.skinAvailable
+          ?'Skin terdaftar, PNG sedang disiapkan. Pemeriksaan otomatis aktif.'
+          :'Menunggu skin dari server. Gambar akan muncul otomatis setelah login.';
       summary.append(skinStatus);
       const actions=document.createElement('div');actions.className='ssc-link-account-actions';
       if(!account.isPrimary){
@@ -536,11 +539,11 @@
         };
         actions.append(primary);
       }
-      if(account.id && window.SSCircleMinecraftAvatars?.eligible(account)){
+      if(account.id){
         const preview=document.createElement('button');
         preview.type='button';
         preview.className='player-action player-action-secondary';
-        preview.textContent='Lihat skin';
+        preview.textContent='Lihat skin 3D';
         preview.onclick=()=>window.SSCircleMinecraftAvatars.openPreview(account);
         actions.append(preview);
       }
@@ -631,6 +634,7 @@
     if(!strongAuthorized)return;
     const data=await request('/api/player/minecraft/link/state');
     renderMinecraftLink(data);
+    window.SSCircleMinecraftAvatars?.renderPrimary(data.accounts||[]);
   }
   $('player-link-create').addEventListener('click',async()=>{
     if(linkBusy||!strongAuthorized)return;
@@ -699,12 +703,28 @@
     }catch(error){linkNotice('Tidak dapat memutuskan tautan: '+error.message);}
     finally{button.disabled=false;}
   });
-  // Only poll while the member is looking at an already initiated claim.
+  // V10.49.1.3: first-join skin delivery is asynchronous. Keep checking
+  // lightly while Profile is visible; no browser-to-server secret or manual OP
+  // refresh is required. One lightweight private state GET per 20 seconds.
+  let skinPollBusy=false,lastSkinPoll=0;
+  async function refreshSkinAvailability(){
+    if(!strongAuthorized||document.hidden||skinPollBusy||!minecraftLinkAccounts.length)return;
+    if(!minecraftLinkAccounts.some(a=>!a.skinImageStored))return;
+    if(Date.now()-lastSkinPoll<15000)return;
+    skinPollBusy=true;lastSkinPoll=Date.now();
+    try{await loadMinecraftLink();}catch{/* Keep existing view; retry next tick. */}
+    finally{skinPollBusy=false;}
+  }
   setInterval(()=>{
     if(!strongAuthorized||document.hidden||$('player-link-panel').hidden)return;
     if(!$('player-link-cancel').hidden||!$('player-link-review').hidden)
       void loadMinecraftLink().catch(()=>{});
-  },12000);
+    else void refreshSkinAvailability();
+  },20000);
+  window.addEventListener('focus',()=>void refreshSkinAvailability());
+  document.addEventListener('visibilitychange',()=>{
+    if(!document.hidden)void refreshSkinAvailability();
+  });
 
   async function load() {
     if (loading) return;

@@ -57,7 +57,7 @@ test('Paper Direct: no insecure default endpoint or secrets in shipped config',(
 });
 
 test('V10.45.2: safe tab-completion shows matching commands and hides admin-only reload',()=>{
- assert.match(manifest,/version: '10\.49\.1\.1'/);
+ assert.match(manifest,/version: '10\.49\.1\.6'/);
  assert.match(paper,/implements CommandExecutor, TabCompleter, Listener/);
  assert.match(paper,/public List<String> onTabComplete\(CommandSender sender, Command command, String alias, String\[\] args\)/);
  assert.match(paper,/if \(args\.length != 1\) return List\.of\(\)/);
@@ -82,7 +82,7 @@ test('V10.45.2: explain both independent failures without exposing shared secret
 });
 
 test('V10.45.3: operator-only signed diagnostic and safe error presentation',()=>{
- assert.match(manifest,/version: '10\.49\.1\.1'/);
+ assert.match(manifest,/version: '10\.49\.1\.6'/);
  assert.match(paper,/private static final String DIAGNOSE_PATH = "\/api\/minecraft\/link\/diagnose"/);
  assert.match(paper,/options\.add\("diagnose"\)/);
  assert.match(paper,/private void runDiagnostic\(CommandSender sender\)/);
@@ -310,4 +310,48 @@ test('V10.49.0: TPS-aware capture and offline identity recovery preserve safety'
  assert.match(retry,/MAX_DELAY_MS = 300_000L/);
  assert.doesNotMatch(stats,/http\.send\(/);
  assert.doesNotMatch(identity,/http\.send\(/);
+});
+
+test('V10.49.1.1: separate Skin Bridge never bypasses the existing SSCircle login identity guard',()=>{
+ const bridge=readFileSync(new URL('../minecraft-skin-bridge-paper/src/main/java/id/sscircle/skin/SSCircleSkinBridge.java',import.meta.url),'utf8');
+ const publisher=readFileSync(new URL('../minecraft-skin-bridge-paper/src/main/java/id/sscircle/skin/SkinPublisher.java',import.meta.url),'utf8');
+ const addonYml=readFileSync(new URL('../minecraft-skin-bridge-paper/src/main/resources/plugin.yml',import.meta.url),'utf8');
+ assert.match(addonYml,/depend: \[SSCirclePlayerSync\]/);
+ assert.match(addonYml,/softdepend: \[SkinsRestorer\]/);
+ assert.match(bridge,/getDeclaredMethod\("identityFor",Player\.class\)/);
+ assert.match(bridge,/identity==null\)return null/);
+ assert.match(bridge,/server-secret\.txt/);
+ assert.doesNotMatch(bridge,/setSkin\(|setSkinIdOfPlayer|UUID\.nameUUIDFromBytes/);
+ assert.match(publisher,/http\.send\(request,HttpResponse\.BodyHandlers\.ofString\(\)\)/);
+ assert.match(publisher,/getSkinForPlayer/);
+ assert.match(publisher,/textures/);
+ assert.match(publisher,/MAX_ACTIVE=2/);
+ assert.match(publisher,/runTaskAsynchronously/); // HTTP only on a bounded Bukkit async worker
+});
+
+
+test('V10.49.1.2: Paper Skin Bridge exposes useful HTTP and texture-source diagnostics',()=>{
+ const bridge=readFileSync(new URL('../minecraft-skin-bridge-paper/src/main/java/id/sscircle/skin/SSCircleSkinBridge.java',import.meta.url),'utf8');
+ const source=readFileSync(new URL('../minecraft-skin-bridge-paper/src/main/java/id/sscircle/skin/SkinPublisher.java',import.meta.url),'utf8');
+ assert.match(bridge,/\/ssskin inspect/);
+ assert.match(source,/SKINSRESTORER_BELUM_MEMILIKI_SKIN/);
+ assert.match(source,/getSkinOfPlayer/);
+ assert.match(source,/X-SSC-Signature/);
+ assert.match(source,/statusCode==200/);
+ assert.match(source,/SKIN_GAMBAR_TERSIMPAN_HTTP_200/);
+ assert.match(source,/HTTP_/);
+});
+
+
+test('V10.49.1.3: addon sends PNG only after CDN validation, retries automatic first login and checks D1 ACK',()=>{
+ const source=readFileSync(new URL('../minecraft-skin-bridge-paper/src/main/java/id/sscircle/skin/SkinPublisher.java',import.meta.url),'utf8');
+ const addon=readFileSync(new URL('../minecraft-skin-bridge-paper/src/main/java/id/sscircle/skin/SSCircleSkinBridge.java',import.meta.url),'utf8');
+ assert.match(source,/skinPngBase64/);
+ assert.match(source,/MAX_IMAGE_BYTES=131072/);
+ assert.match(source,/textures\.minecraft\.net\/texture\//);
+ assert.match(source,/scheduleRetry\(uuid,0,100L\)/);
+ assert.match(source,/LOGIN_BELUM_TERVERIFIKASI.*retry\(uuid,attempt\)/);
+ assert.match(source,/imageStored/);
+ assert.match(source,/WORKER_BELUM_SUPPORT_SIMPAN_PNG/);
+ assert.match(addon,/10\.49\.1\.3/);
 });

@@ -82,7 +82,7 @@ final class PaperSkinSync {
     void onQuit(Player p){states.remove(p.getUniqueId());}
     String deliveryStatus(){return deliveryStatus;}
     void onJoin(Player player) {
-        if(stopping || !plugin.getConfig().getBoolean("skin-sync.enabled",true))return;
+        if(stopping || Bukkit.getPluginManager().isPluginEnabled("SSCircleSkinBridge") || !plugin.getConfig().getBoolean("skin-sync.enabled",true))return;
         final UUID uuid=player.getUniqueId();
         // AuthMe and skin plugins may apply the chosen skin after PlayerJoinEvent.
         Bukkit.getScheduler().runTaskLater(plugin,()->{
@@ -91,7 +91,7 @@ final class PaperSkinSync {
         },120L);
     }
     void forceAll(){
-        if(stopping)return;
+        if(stopping || Bukkit.getPluginManager().isPluginEnabled("SSCircleSkinBridge"))return;
         for(Player p:Bukkit.getOnlinePlayers()){
             State state=states.computeIfAbsent(p.getUniqueId(),id->new State());
             state.nextAttempt=0;
@@ -100,7 +100,7 @@ final class PaperSkinSync {
         scan();
     }
     private void scan(){
-        if(stopping || !plugin.isEnabled() || !plugin.getConfig().getBoolean("skin-sync.enabled",true) || active>=MAX_ACTIVE)return;
+        if(stopping || !plugin.isEnabled() || Bukkit.getPluginManager().isPluginEnabled("SSCircleSkinBridge") || !plugin.getConfig().getBoolean("skin-sync.enabled",true) || active>=MAX_ACTIVE)return;
         Player[] players=Bukkit.getOnlinePlayers().toArray(new Player[0]);
         if(players.length==0)return;
         if(offset>=players.length)offset=0;

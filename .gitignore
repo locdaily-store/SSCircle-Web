@@ -52,3 +52,11 @@ __pycache__/
 Thumbs.db
 .idea/
 .vscode/
+
+# SSCircle localhost: no local state or generated asset preview in repository
+.local-pages/
+!dev/*.sql
+!.vscode/
+.vscode/*
+!.vscode/tasks.json
+!.dev.vars.example

@@ -147,30 +147,78 @@ test('V10.48: monitoring is integrated into private Admin Control and is respons
 });
 
 
-test('V10.49.1.1: authenticated skins are available to all linked providers without guessing usernames',async()=>{
+test('V10.49.1: avatar client never infers a Mojang skin from nickname or offline UUID',async()=>{
  const {runInNewContext}=await import('node:vm');
  const context={window:{}};
  runInNewContext(source('minecraft-avatars.js'),context);
  const avatar=context.window.SSCircleMinecraftAvatars;
  const account={id:'12345678-1234-4234-8234-123456789012',provider:'java_premium',
-  edition:'java_premium',providerId:'a3b127cc-89de-4875-b456-8de073b2e211',username:'VerifiedMinecraft'};
- for(const provider of ['java_premium','java_offline','bedrock']){
-  const choice={...account,provider,providerId:'offline-uuid'};
-  assert.equal(avatar.eligible(choice),true);
-  assert.equal(avatar.urlForAccount(choice),'/api/player/minecraft/skin/'+account.id);
+  edition:'java_premium',providerId:'a3b127cc-89de-4875-b456-8de073b2e211',
+  username:'VerifiedMinecraft',isPrimary:true};
+ assert.equal(avatar.eligible(account),true);
+ assert.equal(avatar.urlForAccount(account),
+  '/api/player/minecraft/skin/'+account.id);
+ for(const bad of [
+  {...account,id:'../../api/admin'}
+ ]){
+  assert.equal(avatar.eligible(bad),false);
+  assert.equal(avatar.urlForAccount(bad),null);
  }
- for(const choice of [{...account,id:'../../api/admin'},{...account,provider:'unknown'}]){
-  assert.equal(avatar.eligible(choice),false);
-  assert.equal(avatar.urlForAccount(choice),null);
- }
- const html=source('my-sscircle.html'),script=source('player-dashboard.js');
+ assert.equal(avatar.eligible({...account,provider:'java_offline',edition:'java_unverified',skinAvailable:true}),true);
+ const html=source('my-sscircle.html');
+ const profile=source('player-dashboard.js');
  const css=source('player-dashboard.css');
- assert.match(html,/minecraft-avatars\.js\?v=10\.49\.1\.1/);
- assert.match(script,/SSCircleMinecraftAvatars\?\.renderPrimary\(accounts\)/);
- assert.match(script,/SSCircleMinecraftAvatars\?\.cardAvatar\(account\)/);
- assert.match(script,/preview\.textContent='Lihat skin'/);
- assert.match(html,/id="player-avatar-image"/);
- assert.match(css,/\.ssc-skin-viewport/);
- assert.match(source('minecraft-avatars.js'),/rotateY\(/);
- assert.match(source('minecraft-avatars.js'),/pointermove/);
+ assert.match(html,/minecraft-avatars\.js\?v=10\.49\.1\.5/);
+ assert.match(profile,/SSCircleMinecraftAvatars\?\.renderPrimary\(accounts\)/);
+ assert.match(profile,/SSCircleMinecraftAvatars\?\.cardAvatar\(account\)/);
+ assert.match(css,/\.ssc-skin-dialog/);
+});
+
+test('V10.49.1.1: 3D skin viewer uses local CSS faces and supports offline-linked skins',async()=>{
+ const {runInNewContext}=await import('node:vm');
+ const context={window:{}};
+ runInNewContext(source('minecraft-avatars.js'),context);
+ const viewer=context.window.SSCircleMinecraftAvatars;
+ const account={id:'12345678-1234-4234-8234-123456789012',username:'OfflineSkin',
+   provider:'java_offline',edition:'java_unverified',skinAvailable:true,skinModel:'slim'};
+ assert.equal(viewer.eligible(account),true);
+ assert.equal(viewer.urlForAccount(account),'/api/player/minecraft/skin/'+account.id);
+ assert.equal(viewer.eligible({...account,skinAvailable:false}),true); // Loading is now automatic after first login
+ const code=source('minecraft-avatars.js');
+ assert.match(source('minecraft-skin-3d.js'),/projected\.sort\(\(a,b\)=>a\.depth-b\.depth\)/);
+ assert.match(code,/pointermove/);
+ assert.match(code,/pointercancel/);
+ assert.match(code,/imageSmoothingEnabled=false/);
+ assert.match(source('minecraft-skin-3d.js'),/\['hat',32,0,8,8,8/);
+ assert.match(code,/data-skin-action="reset"/);
+ assert.doesNotMatch(code,/https?:\/\//);
+ const html=source('my-sscircle.html');
+ assert.match(html,/player-dashboard\.css\?v=10\.49\.1\.5/);
+ assert.match(html,/minecraft-avatars\.js\?v=10\.49\.1\.5/);
+});
+
+
+test('V10.49.1.2: verified mixed-mode Premium can use only the cosmetic Mojang fallback',async()=>{
+ const {runInNewContext}=await import('node:vm');
+ const context={window:{}};runInNewContext(source('minecraft-avatars.js'),context);
+ const avatar=context.window.SSCircleMinecraftAvatars;
+ const id='12345678-1234-4234-8234-123456789012';
+ const account={id,provider:'java_offline',edition:'java_premium',
+   identityProofAt:new Date().toISOString(),skinAvailable:false};
+ assert.equal(avatar.eligible(account),true);
+ assert.equal(avatar.eligible({...account,identityProofAt:'2000-01-01T00:00:00.000Z'}),true); // UI is not an authentication boundary
+ assert.equal(avatar.eligible({...account,edition:'java_unverified'}),true); // Worker enforces ownership and proof
+ assert.match(source('minecraft-avatars.js'),/data-skin-action="refresh"/);
+ assert.match(source('minecraft-avatars.js'),/\/ssskin inspect/);
+});
+
+
+test('V10.49.1.3: linked skins automatically poll for PNG delivery and update Profile avatar',()=>{
+ const ui=source('player-dashboard.js'),avatar=source('minecraft-avatars.js');
+ assert.match(ui,/refreshSkinAvailability/);
+ assert.match(ui,/!a\.skinImageStored/);
+ assert.match(ui,/visibilitychange/);
+ assert.match(ui,/SSCircleMinecraftAvatars\?\.renderPrimary\(data\.accounts\|\|\[\]\)/);
+ assert.match(avatar,/Boolean\(a\.skinImageStored\)/);
+ assert.match(ui,/Gambar akan muncul otomatis setelah login/);
 });
