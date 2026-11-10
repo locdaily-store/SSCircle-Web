@@ -792,3 +792,71 @@ test('V10.49.0: admin policy changes limit without unlinking existing accounts',
  assert.equal((await x.call('/api/player/minecraft/link/create',{method:'POST',cookie,data:{}})).status,403);
  assert.equal(x.db.prepare('SELECT COUNT(*) AS n FROM minecraft_accounts').get().n,1);
 });
+
+
+test('V10.49.1: member-only Mojang skin proxy validates ownership, UUID and texture host',async()=>{
+  const x=fixture(),cookie=await x.active(),other=await x.active(true);
+  const created=await x.call('/api/player/minecraft/link/create',{method:'POST',cookie,data:{}});
+  assert.equal((await x.claim(payload(created.json.code))).status,200);
+  assert.equal((await x.call('/api/player/minecraft/link/confirm',{method:'POST',cookie,data:{}})).status,200);
+  const accountId=x.db.prepare('SELECT id FROM minecraft_accounts LIMIT 1').get().id;
+  const endpoint='/api/player/minecraft/skin/'+accountId;
+  const png=new Uint8Array(128);
+  png.set([137,80,78,71,13,10,26,10]);
+  let calls=[];
+  const originalFetch=globalThis.fetch;
+  try{
+    globalThis.fetch=async url=>{
+      calls.push(String(url));
+      if(String(url).startsWith('https://sessionserver.mojang.com/')){
+        const value=Buffer.from(JSON.stringify({textures:{SKIN:{
+          url:'https://textures.minecraft.net/texture/'+'a'.repeat(64)
+        }}})).toString('base64');
+        return new Response(JSON.stringify({properties:[{name:'textures',value}]}));
+      }
+      if(String(url).startsWith('https://textures.minecraft.net/'))
+        return new Response(png,{headers:{'Content-Type':'image/png'}});
+      throw new Error('Untrusted external host');
+    };
+    assert.equal((await x.call(endpoint)).status,403);
+    assert.equal((await x.call(endpoint,{cookie:other})).status,404);
+    assert.equal((await x.call('/api/player/minecraft/skin/invalid',{cookie})).status,404);
+    assert.equal(calls.length,0,'Unauthorized requests cannot fetch from Mojang');
+    const valid=await x.call(endpoint,{cookie});
+    assert.equal(valid.status,200);
+    assert.match(valid.res.headers.get('Cache-Control'),/private/);
+    assert.equal(valid.res.headers.get('Content-Type'),'image/png');
+    assert.equal((await valid.res.arrayBuffer()).byteLength,png.length);
+    assert.equal(calls.length,2,'Only official Mojang session and texture services contacted');
+    globalThis.fetch=async url=>{
+      calls.push(String(url));
+      if(String(url).startsWith('https://sessionserver.mojang.com/')){
+        const value=Buffer.from(JSON.stringify({textures:{SKIN:{
+          url:'https://evil.example/texture/'+'a'.repeat(64)
+        }}})).toString('base64');
+        return new Response(JSON.stringify({properties:[{name:'textures',value}]}));
+      }
+      throw new Error('SSRF attempt');
+    };
+    assert.equal((await x.call(endpoint,{cookie})).status,502);
+    assert.equal(calls.at(-1).startsWith('https://sessionserver.mojang.com/'),true);
+  }finally{globalThis.fetch=originalFetch;}
+});
+
+test('V10.49.1: AuthMe/offline identity never resolves a Mojang skin by nickname',async()=>{
+  const x=fixture(),cookie=await x.active();
+  const created=await x.call('/api/player/minecraft/link/create',{method:'POST',cookie,data:{}});
+  const offline={code:created.json.code,provider:'java_offline',
+    providerId:'70a89d54-c32e-3942-a553-34f71cfde04d',
+    username:'LooksLikePremium',authSource:'authme-session'};
+  assert.equal((await x.claim(offline)).status,200);
+  assert.equal((await x.call('/api/player/minecraft/link/confirm',
+    {method:'POST',cookie,data:{}})).status,200);
+  const accountId=x.db.prepare('SELECT id FROM minecraft_accounts LIMIT 1').get().id;
+  const originalFetch=globalThis.fetch;
+  try{
+    globalThis.fetch=async()=>{throw new Error('Must not fetch for offline identity');};
+    const response=await x.call('/api/player/minecraft/skin/'+accountId,{cookie});
+    assert.equal(response.status,404);
+  }finally{globalThis.fetch=originalFetch;}
+});
