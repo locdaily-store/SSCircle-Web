@@ -3848,7 +3848,7 @@ async function route(req, env) {
   if ((path.startsWith('/api/admin/minecraft/sync')) &&
       ['GET','POST'].includes(method))
     return await minecraftSyncAdmin(req,env,path,method);
-  if ((path.startsWith('/api/player/minecraft/link/') || path==='/api/admin/minecraft/links') &&
+  if ((path.startsWith('/api/player/minecraft/link/') || (path==='/api/admin/minecraft/links' || path==='/api/admin/minecraft/multi-settings')) &&
       ['GET','POST'].includes(method))
     return await minecraftLinkAPI(req,env,path,method);
   if ((path.startsWith('/api/player/mailbox') || path==='/api/admin/mailbox/approve') &&
