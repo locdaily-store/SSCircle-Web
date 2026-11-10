@@ -211,8 +211,8 @@ Tidak ada perubahan migrasi D1, secret, metode pembuktian Premium, kontrak API, 
 
 ## V10.49.1: avatar & skin pada website
 
-- Skin Premium Mojang (kepala dan preview tampak depan) dimuat **oleh Cloudflare Worker**, hanya untuk UUID yang benar-benar tertaut sebagai provider \`java_premium\` hasil sesi Mojang online-mode.
-- Akun Java yang login menggunakan AuthMe atau FastLoginPlus dalam offline-mode **tidak otomatis** dicocokkan ke skin Mojang dari nickname. Provider \`java_offline\` sekalipun sesi saat ini bertanda \`PREMIUM\` tetap menggunakan avatar fallback hingga ada bukti UUID Mojang yang aman.
+- Skin Premium Mojang (kepala dan preview tampak depan) dimuat **oleh Cloudflare Worker**, hanya untuk UUID yang benar-benar tertaut sebagai provider `java_premium` hasil sesi Mojang online-mode.
+- Akun Java yang login menggunakan AuthMe atau FastLoginPlus dalam offline-mode **tidak otomatis** dicocokkan ke skin Mojang dari nickname. Provider `java_offline` sekalipun sesi saat ini bertanda `PREMIUM` tetap menggunakan avatar fallback hingga ada bukti UUID Mojang yang aman.
 - Floodgate XUID juga memakai fallback. Avatar hanya hiasan, **bukan** bukti autentikasi, kepemilikan lisensi, atau dasar migrasi akun.
 - Tanpa penambahan polling Minecraft, pengiriman HMAC, D1, antrean statistik, atau dependency JAR. Versi JAR mengikuti rilis situs supaya paket CI berada dalam satu revisi.
-- Periksa URL \`/api/health\` setelah upload ZIP dan jangan install dua versi JAR sekaligus. Konfigurasi dan secret lama dipertahankan.
+- Periksa URL `/api/health` setelah upload ZIP dan jangan install dua versi JAR sekaligus. Konfigurasi dan secret lama dipertahankan.
