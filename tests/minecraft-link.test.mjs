@@ -266,12 +266,12 @@ test('V10.47: signed Vanilla stats are accepted only after member confirms link'
  assert.equal(result.status,200,JSON.stringify(result.json));
  assert.equal(result.json.code,'STATS_SYNCED');
  const profile=await x.call('/api/player/profile',{cookie});
- assert.deepEqual(profile.json.statistics[0]&&[
-   profile.json.statistics[0].playtimeSeconds,
-   profile.json.statistics[0].deaths,
-   profile.json.statistics[0].mobKills,
-   profile.json.statistics[0].blocksMined],[7200,3,41,501]);
- assert.notEqual(profile.json.statistics[0].updatedAt,'');
+ assert.deepEqual(profile.json.accountStatistics[0]&&[
+   profile.json.accountStatistics[0].playtimeSeconds,
+   profile.json.accountStatistics[0].deaths,
+   profile.json.accountStatistics[0].mobKills,
+   profile.json.accountStatistics[0].blocksMined],[7200,3,41,501]);
+ assert.notEqual(profile.json.accountStatistics[0].updatedAt,'');
 });
 test('V10.47: retries deduplicate and out-of-order counters never decrease',async()=>{
  const x=fixture(),cookie=await x.active();
@@ -294,7 +294,7 @@ test('V10.47: retries deduplicate and out-of-order counters never decrease',asyn
  const earlier={...newer,eventId:randomUUID(),
    stats:{playtimeSeconds:1000,deaths:1,mobKills:5,blocksMined:10}};
  assert.equal((await deliverStats(x,earlier)).status,200);
- const profile=(await x.call('/api/player/profile',{cookie})).json.statistics[0];
+ const profile=(await x.call('/api/player/profile',{cookie})).json.accountStatistics[0];
  assert.equal(profile.playtimeSeconds,7200);
  assert.equal(profile.mobKills,41);
  assert.equal(profile.blocksMined,501);
@@ -313,7 +313,7 @@ test('V10.47: AuthMe Non-Premium and Bedrock require matching signed identities'
    assert.equal((await deliverStats(x,{...data,authSource:'minecraft-name'})).status,400);
    assert.equal((await deliverStats(x,data)).status,200);
    const profile=(await x.call('/api/player/profile',{cookie})).json;
-   assert.equal(profile.statistics[0].deaths,3);
+   assert.equal(profile.accountStatistics[0].deaths,3);
  }
 });
 
@@ -335,18 +335,18 @@ test('V10.47.2: season starts at a fresh baseline and world resets never erase a
  assert.equal((await deliverStats(x,stat(0,1000,8,40,300))).status,200);
  let profile=(await x.call('/api/player/profile',{cookie})).json;
  assert.equal(profile.activeStatSeason,'season:season-1:'+seasonStart);
- assert.equal(profile.statistics.find(s=>s.seasonId==='').playtimeSeconds,1000);
- assert.equal(profile.statistics.find(s=>s.seasonId===profile.activeStatSeason).playtimeSeconds,0);
+ assert.equal(profile.accountStatistics.find(s=>s.seasonId==='').playtimeSeconds,1000);
+ assert.equal(profile.accountStatistics.find(s=>s.seasonId===profile.activeStatSeason).playtimeSeconds,0);
  assert.equal((await deliverStats(x,stat(1,1100,9,43,310))).status,200);
  profile=(await x.call('/api/player/profile',{cookie})).json;
- assert.equal(profile.statistics.find(s=>s.seasonId===profile.activeStatSeason).playtimeSeconds,100);
- assert.equal(profile.statistics.find(s=>s.seasonId===profile.activeStatSeason).deaths,1);
+ assert.equal(profile.accountStatistics.find(s=>s.seasonId===profile.activeStatSeason).playtimeSeconds,100);
+ assert.equal(profile.accountStatistics.find(s=>s.seasonId===profile.activeStatSeason).deaths,1);
  // Reset vanilla world stats. The new segment increments by the new raw value.
  assert.equal((await deliverStats(x,stat(2,10,1,2,3))).status,200);
  profile=(await x.call('/api/player/profile',{cookie})).json;
- assert.equal(profile.statistics.find(s=>s.seasonId==='').playtimeSeconds,1110);
- assert.equal(profile.statistics.find(s=>s.seasonId===profile.activeStatSeason).playtimeSeconds,110);
- assert.equal(profile.statistics.find(s=>s.seasonId===profile.activeStatSeason).deaths,2);
+ assert.equal(profile.accountStatistics.find(s=>s.seasonId==='').playtimeSeconds,1110);
+ assert.equal(profile.accountStatistics.find(s=>s.seasonId===profile.activeStatSeason).playtimeSeconds,110);
+ assert.equal(profile.accountStatistics.find(s=>s.seasonId===profile.activeStatSeason).deaths,2);
  const oldKey=profile.activeStatSeason;
  // Changing season creates a distinct epoch, with no deletion of old rows.
  const nextStart=new Date(base+2500).toISOString();
@@ -354,11 +354,11 @@ test('V10.47.2: season starts at a fresh baseline and world resets never erase a
  assert.equal((await deliverStats(x,stat(3,70,2,5,13))).status,200);
  profile=(await x.call('/api/player/profile',{cookie})).json;
  assert.equal(profile.activeStatSeason,'season:season-2:'+nextStart);
- assert.equal(profile.statistics.find(s=>s.seasonId===oldKey).playtimeSeconds,110);
- assert.equal(profile.statistics.find(s=>s.seasonId===profile.activeStatSeason).playtimeSeconds,0);
- assert.equal(profile.statistics.find(s=>s.seasonId==='').playtimeSeconds,1170);
- assert.equal(profile.statistics.find(s=>s.seasonId===oldKey).seasonTitle,'Season Pertama');
- assert.equal(profile.statistics.find(s=>s.seasonId===profile.activeStatSeason).seasonTitle,'Season Kedua');
+ assert.equal(profile.accountStatistics.find(s=>s.seasonId===oldKey).playtimeSeconds,110);
+ assert.equal(profile.accountStatistics.find(s=>s.seasonId===profile.activeStatSeason).playtimeSeconds,0);
+ assert.equal(profile.accountStatistics.find(s=>s.seasonId==='').playtimeSeconds,1170);
+ assert.equal(profile.accountStatistics.find(s=>s.seasonId===oldKey).seasonTitle,'Season Pertama');
+ assert.equal(profile.accountStatistics.find(s=>s.seasonId===profile.activeStatSeason).seasonTitle,'Season Kedua');
 });
 test('V10.47.2: out-of-order season snapshots are ignored rather than decreasing totals',async()=>{
  const x=fixture(),cookie=await x.active();
@@ -379,8 +379,8 @@ test('V10.47.2: out-of-order season snapshots are ignored rather than decreasing
  const late=mk(12000,1010);
  assert.equal((await deliverStats(x,late)).status,200);
  const profile=(await x.call('/api/player/profile',{cookie})).json;
- assert.equal(profile.statistics.find(s=>s.seasonId==='').playtimeSeconds,1050);
- assert.equal(profile.statistics.find(s=>s.seasonId).playtimeSeconds,50);
+ assert.equal(profile.accountStatistics.find(s=>s.seasonId==='').playtimeSeconds,1050);
+ assert.equal(profile.accountStatistics.find(s=>s.seasonId).playtimeSeconds,50);
  assert.equal((await deliverStats(x,later)).json.code,'STATS_DUPLICATE');
 });
 
