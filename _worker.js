@@ -1886,6 +1886,35 @@ function activePublicMedia(row) {
 /* SSCircle V10.36 - Member Center. No Minecraft identity is claimed without
    a future trusted server-side verification. Schema creation is additive. */
 const memberCenterReady = new WeakSet();
+// SSCircle V10.49.0: multi-account state and statistics are isolated by account ID.
+const SSC_MULTI_DEFAULT_MAX=3;
+const sscMultiMax=v=>Number.isSafeInteger(v)?Math.max(1,Math.min(5,v)):SSC_MULTI_DEFAULT_MAX;
+async function sscMultiSettings(env){
+  const r=await env.DB.prepare('SELECT enabled,max_accounts FROM minecraft_multi_settings WHERE id=1').first();
+  return {enabled:r?.enabled!==0,maxAccounts:sscMultiMax(Number(r?.max_accounts??SSC_MULTI_DEFAULT_MAX))};
+}
+async function sscAccountList(env,memberId){
+  const rows=await env.DB.prepare(`SELECT a.id,a.provider,a.provider_id,a.username,a.verified_at,
+    e.auth_source,e.observed_at,p.primary_account_id FROM minecraft_accounts a
+    LEFT JOIN minecraft_identity_evidence e ON e.provider=a.provider AND e.provider_id=a.provider_id
+      AND e.application_id=a.application_id
+    LEFT JOIN minecraft_link_preferences p ON p.application_id=a.application_id
+    WHERE a.application_id=? ORDER BY a.verified_at ASC,a.id ASC LIMIT 6`).bind(memberId).all();
+  const a=rows.results||[];
+  const primary=a.find(x=>x.id===a[0]?.primary_account_id)?.id||a[0]?.id;
+  return a.map(x=>({id:x.id,provider:x.provider,providerId:x.provider_id,
+    username:x.username,edition:minecraftLinkedEdition(x.provider,x.auth_source,x.observed_at),
+    verifiedAt:x.verified_at,identityProofAt:x.observed_at||null,isPrimary:x.id===primary}));
+}
+async function sscAccountStatistics(env,memberId){
+  const result=await env.DB.prepare(`SELECT a.id AS account_id,s.season_id,s.total_playtime,s.total_deaths,
+    s.total_mobs,s.total_blocks,s.last_captured_at FROM minecraft_account_stat_progress s
+    JOIN minecraft_accounts a ON a.id=s.account_id WHERE a.application_id=?
+    ORDER BY s.season_id ASC LIMIT 150`).bind(memberId).all();
+  return (result.results||[]).map(r=>({accountId:r.account_id,seasonId:r.season_id,
+    playtimeSeconds:r.total_playtime,deaths:r.total_deaths,mobKills:r.total_mobs,
+    blocksMined:r.total_blocks,updatedAt:r.last_captured_at}));
+}
 async function ensureMemberCenter(env) {
   if (memberCenterReady.has(env.DB)) return;
   const statements = [
@@ -1900,6 +1929,27 @@ async function ensureMemberCenter(env) {
       allow_public INTEGER NOT NULL DEFAULT 0, allow_stats INTEGER NOT NULL DEFAULT 1,
       allow_event_alerts INTEGER NOT NULL DEFAULT 1,
       updated_at TEXT NOT NULL DEFAULT '')`,
+    `CREATE TABLE IF NOT EXISTS minecraft_multi_settings (
+      id INTEGER PRIMARY KEY CHECK(id=1),enabled INTEGER NOT NULL DEFAULT 1,
+      max_accounts INTEGER NOT NULL DEFAULT 3)`,
+    `INSERT OR IGNORE INTO minecraft_multi_settings(id,enabled,max_accounts) VALUES(1,1,3)`,
+    `CREATE TABLE IF NOT EXISTS minecraft_link_preferences (
+      application_id TEXT PRIMARY KEY,primary_account_id TEXT NOT NULL DEFAULT '',
+      FOREIGN KEY(application_id) REFERENCES submissions(id) ON DELETE CASCADE)`,
+    `CREATE TABLE IF NOT EXISTS minecraft_link_audit (
+      id TEXT PRIMARY KEY,application_id TEXT NOT NULL,account_id TEXT NOT NULL,
+      action TEXT NOT NULL,at TEXT NOT NULL)`,
+    `CREATE INDEX IF NOT EXISTS idx_ssc_mc_audit_member ON minecraft_link_audit(application_id,at)`,
+    `CREATE TABLE IF NOT EXISTS minecraft_account_stat_progress (
+      account_id TEXT NOT NULL,season_id TEXT NOT NULL,
+      last_captured_at TEXT NOT NULL,last_playtime INTEGER NOT NULL DEFAULT 0,
+      last_deaths INTEGER NOT NULL DEFAULT 0,last_mobs INTEGER NOT NULL DEFAULT 0,
+      last_blocks INTEGER NOT NULL DEFAULT 0,total_playtime INTEGER NOT NULL DEFAULT 0,
+      total_deaths INTEGER NOT NULL DEFAULT 0,total_mobs INTEGER NOT NULL DEFAULT 0,
+      total_blocks INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY(account_id,season_id),
+      FOREIGN KEY(account_id) REFERENCES minecraft_accounts(id) ON DELETE CASCADE)`,
+    `CREATE INDEX IF NOT EXISTS idx_ssc_mc_acc_stats_season ON minecraft_account_stat_progress(season_id)`,
     `CREATE TABLE IF NOT EXISTS minecraft_accounts (
       id TEXT PRIMARY KEY, application_id TEXT NOT NULL,
       provider TEXT NOT NULL, provider_id TEXT NOT NULL, username TEXT NOT NULL,
@@ -2450,11 +2500,8 @@ async function memberCenterAPI(req,env,path,method) {
     if(hasCredentials && !await memberStrongSession(req,env,application)) return bad('Masuk dengan password dashboard untuk melihat profil.',403);
     const profileRow=await env.DB.prepare('SELECT * FROM member_profiles WHERE application_id=?').bind(application.id).first();
     const policyRow=await env.DB.prepare('SELECT * FROM member_policy WHERE id=1').first();
-    const accounts=await env.DB.prepare(`SELECT a.provider,a.username,a.verified_at,e.auth_source,e.observed_at
-      FROM minecraft_accounts a LEFT JOIN minecraft_identity_evidence e
-      ON e.provider=a.provider AND e.provider_id=a.provider_id
-      AND e.application_id=a.application_id
-      WHERE a.application_id=? ORDER BY a.verified_at DESC`).bind(application.id).all();
+    const accounts=await sscAccountList(env,application.id);
+    const accountStatistics=await sscAccountStatistics(env,application.id);
     const stats=await env.DB.prepare(`SELECT season_id,playtime_seconds,deaths,mob_kills,
       blocks_mined,last_synced_at FROM player_stat_snapshots WHERE application_id=?
       ORDER BY season_id ASC LIMIT 25`).bind(application.id).all();
@@ -2465,10 +2512,7 @@ async function memberCenterAPI(req,env,path,method) {
     return J({profile:memberProfile(profileRow),policy:memberPolicy(policyRow),
       activeStatSeason:activeStatKey,
       activeStatSeasonTitle:seasonName.get(form.settings.statSeasonId)||'',
-      accounts:(accounts.results||[]).map(a=>({provider:a.provider,
-        edition:minecraftLinkedEdition(a.provider,a.auth_source,a.observed_at),
-        identityProofAt:a.observed_at||null,
-        username:a.username,verifiedAt:a.verified_at})),
+      accounts,accountStatistics,statisticsLegacyOnly:true,
       statistics:(stats.results||[]).map(a=>({seasonId:a.season_id,
         seasonTitle:a.season_id.startsWith('season:')
           ? (seasonName.get(a.season_id.split(':')[1])||'Season tersimpan')
@@ -3499,7 +3543,7 @@ async function mailboxAPI(req,env,path,method){
 
 // SSCircle runtime check: observe what the deployment actually receives.
 // Only public readiness categories. Never expose secret values or private data.
-const SSC_RUNTIME_RELEASE='10.48.5';
+const SSC_RUNTIME_RELEASE='10.49.0';
 const SSC_RUNTIME_ISSUES=new Set();
 function sscRuntimeBindings(env){
   return {
