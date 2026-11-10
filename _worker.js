@@ -2664,6 +2664,62 @@ const minecraftIdentityWarnings=(provider,source,observedAt,duplicateName,now=Da
     warnings.push('BUKTI_BEDROCK_BELUM_TERSEDIA');
   return warnings;
 };
+/* V10.49.1: private, read-only Minecraft skin proxy.
+   The account must be linked to this member with a signed online-mode Mojang UUID.
+   Do not use a username, AuthMe/offline UUID, FastLoginPlus CRACKED or Floodgate XUID
+   to resolve a different person's public Minecraft skin. */
+async function minecraftMemberSkin(req,env,accountId){
+  const member=await playerSession(req,env);
+  if(!member||member.status!=='accepted')
+    return bad('Hanya anggota yang diterima dapat melihat skin akun tertaut.',403);
+  await ensureMemberCenter(env);
+  await ensureMemberSecurity(env);
+  if(!await memberStrongSession(req,env,member))
+    return bad('Masuk dengan password dashboard untuk melihat skin.',403);
+  if(!/^[0-9a-f-]{36}$/.test(accountId))return bad('Akun tidak ditemukan.',404);
+  const account=(await sscAccountList(env,member.id)).find(x=>x.id===accountId);
+  if(!account)return bad('Akun tidak ditemukan.',404);
+  if(account.provider!=='java_premium'||account.edition!=='java_premium'
+      ||!MC_UUID.test(account.providerId))
+    return bad('Skin Mojang tidak tersedia untuk jenis identitas ini.',404);
+  // Official Mojang APIs only. The URL returned by Mojang is never fetched
+  // unless it matches the exact known textures.minecraft.net path.
+  try{
+    const id=account.providerId.replace(/-/g,'');
+    const profile=await fetch('https://sessionserver.mojang.com/session/minecraft/profile/'+id,{
+      redirect:'error',signal:AbortSignal.timeout(4500),
+      headers:{Accept:'application/json'}});
+    if(!profile.ok)return bad('Profil skin Mojang belum tersedia.',503);
+    const raw=await profile.text();
+    if(raw.length>16384)return bad('Respons Mojang terlalu besar.',502);
+    const data=JSON.parse(raw);
+    const value=data.properties?.find(p=>p.name==='textures')?.value;
+    if(typeof value!=='string'||value.length>8192)
+      return bad('Tekstur skin tidak tersedia.',404);
+    const skin=JSON.parse(atob(value)).textures?.SKIN?.url;
+    if(typeof skin!=='string'
+       ||!/^https?:\/\/textures\.minecraft\.net\/texture\/[0-9a-f]{32,128}$/.test(skin))
+      return bad('Alamat skin Mojang tidak sah.',502);
+    const url=skin.replace(/^http:\/\//,'https://');
+    const response=await fetch(url,{redirect:'error',signal:AbortSignal.timeout(4500),
+      headers:{Accept:'image/png'}});
+    if(!response.ok)return bad('Tekstur skin Mojang belum tersedia.',503);
+    if(Number(response.headers.get('content-length')||0)>1048576)
+      return bad('Tekstur skin terlalu besar.',502);
+    const bytes=new Uint8Array(await response.arrayBuffer());
+    const signature=[137,80,78,71,13,10,26,10];
+    if(bytes.length<67||bytes.length>1048576||!signature.every((n,i)=>bytes[i]===n))
+      return bad('Tekstur Mojang bukan PNG yang valid.',502);
+    return new Response(bytes,{status:200,headers:{
+      'Content-Type':'image/png','Cache-Control':'private, max-age=900',
+      'X-Content-Type-Options':'nosniff',
+      'Content-Security-Policy':"default-src 'none'"
+    }});
+  }catch{
+    return bad('Skin Minecraft belum dapat dimuat. Coba kembali nanti.',503);
+  }
+}
+
 const mcCodeHash=(env,code)=>hmac(env.SESSION_SECRET+'|minecraft-link-code',code);
 async function minecraftLinkAPI(req,env,path,method){
   if(path==='/api/admin/minecraft/multi-settings'){
@@ -3583,7 +3639,7 @@ async function mailboxAPI(req,env,path,method){
 
 // SSCircle runtime check: observe what the deployment actually receives.
 // Only public readiness categories. Never expose secret values or private data.
-const SSC_RUNTIME_RELEASE='10.49.0';
+const SSC_RUNTIME_RELEASE='10.49.1';
 const SSC_RUNTIME_ISSUES=new Set();
 function sscRuntimeBindings(env){
   return {
@@ -3872,6 +3928,8 @@ async function route(req, env) {
   if ((path.startsWith('/api/admin/minecraft/sync')) &&
       ['GET','POST'].includes(method))
     return await minecraftSyncAdmin(req,env,path,method);
+  if(path.startsWith('/api/player/minecraft/skin/') && method==='GET')
+    return await minecraftMemberSkin(req,env,path.slice('/api/player/minecraft/skin/'.length));
   if ((path.startsWith('/api/player/minecraft/link/') || (path==='/api/admin/minecraft/links' || path==='/api/admin/minecraft/multi-settings')) &&
       ['GET','POST'].includes(method))
     return await minecraftLinkAPI(req,env,path,method);
