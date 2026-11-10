@@ -251,3 +251,26 @@
 @media(max-width:620px){.ssc-minecraft-avatar{align-self:flex-start}
   .ssc-skin-dialog-content{padding:18px}
   .ssc-skin-full{width:158px}}
+
+/* V10.49.1.1 · CSS 3D viewer without external scripts/CDNs */
+.ssc-skin-dialog{width:min(96vw,540px);max-width:540px}
+.ssc-skin-dialog-content{gap:12px;padding:18px}
+.ssc-skin-viewport{height:min(53vh,370px);min-height:245px;width:100%;min-width:0;
+  position:relative;display:grid;place-items:center;perspective:900px;overflow:hidden;
+  border:1px solid var(--player-border);border-radius:16px;
+  background:radial-gradient(circle at 50% 35%,rgba(172,144,230,.2),transparent 75%),rgba(0,0,0,.12);
+  touch-action:none;user-select:none;cursor:grab;outline-offset:3px}
+.ssc-skin-viewport:active{cursor:grabbing}
+.ssc-skin-scene{position:relative;transform-style:preserve-3d;
+  width:0;height:0;transition:transform 65ms linear;will-change:transform}
+.ssc-skin-cuboid{position:absolute;left:0;top:0;width:0;height:0;
+  transform-style:preserve-3d}
+.ssc-skin-face{position:absolute;left:0;top:0;transform-style:preserve-3d;
+  transform-origin:center center;backface-visibility:hidden;
+  background-size:100% 100%;background-repeat:no-repeat;image-rendering:pixelated;
+  margin-left:0;margin-top:0;translate:-50% -50%}
+.ssc-skin-controls{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:6px}
+.ssc-skin-controls .player-action{padding:9px 12px;font-size:12px;min-width:0}
+.ssc-skin-dialog-content>small{font-size:11px;opacity:.7}
+.ssc-skin-dialog-message{font-size:12px;min-height:16px}
+@media(max-width:520px){.ssc-skin-viewport{height:300px;min-height:260px}.ssc-skin-dialog-content{padding:13px}}

@@ -47,3 +47,9 @@ sync-monitor:
 # Status PREMIUM/CRACKED dibaca hanya dari sesi FastLogin yang sudah berhasil
 # login melalui AuthMe. Tanpa FastLogin, label Java tetap "belum terverifikasi".
 # Jangan mengubah online-mode maupun UUID/playerdata tanpa migrasi terencana.
+
+# V10.49.1.1: skin Paper yang aktif (termasuk AuthMe/SkinsRestorer).
+# Hanya URL texture CDN Minecraft resmi, bukan pencarian nickname/UUID offline.
+# Polling bertahap: satu pemain per 40 tick, maksimal dua permintaan HTTPS aktif.
+skin-sync:
+  enabled: true

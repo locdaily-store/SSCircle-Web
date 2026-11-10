@@ -803,6 +803,7 @@ test('V10.49.1: member-only Mojang skin proxy validates ownership, UUID and text
   const endpoint='/api/player/minecraft/skin/'+accountId;
   const png=new Uint8Array(128);
   png.set([137,80,78,71,13,10,26,10]);
+  png.set([0,0,0,64,0,0,0,64],16);
   let calls=[];
   const originalFetch=globalThis.fetch;
   try{
@@ -838,7 +839,7 @@ test('V10.49.1: member-only Mojang skin proxy validates ownership, UUID and text
       }
       throw new Error('SSRF attempt');
     };
-    assert.equal((await x.call(endpoint,{cookie})).status,502);
+    assert.equal((await x.call(endpoint,{cookie})).status,404);
     assert.equal(calls.at(-1).startsWith('https://sessionserver.mojang.com/'),true);
   }finally{globalThis.fetch=originalFetch;}
 });
@@ -859,4 +860,91 @@ test('V10.49.1: AuthMe/offline identity never resolves a Mojang skin by nickname
     const response=await x.call('/api/player/minecraft/skin/'+accountId,{cookie});
     assert.equal(response.status,404);
   }finally{globalThis.fetch=originalFetch;}
+});
+
+async function deliverSkin(x,payload,{nonce=randomUUID(),timestamp=Math.floor(Date.now()/1000),key=SERVER}={}){
+ const raw=JSON.stringify(payload),route='/api/minecraft/skin/refresh';
+ const signature=createHmac('sha256',key)
+  .update('POST\n'+route+'\n'+timestamp+'\n'+nonce+'\n'+raw)
+  .digest('base64url');
+ const response=await worker.fetch(new Request('https://sscircle.test'+route,{
+  method:'POST',headers:{'Content-Type':'application/json',
+   'X-SSC-Timestamp':String(timestamp),'X-SSC-Nonce':nonce,'X-SSC-Signature':signature},
+  body:raw}),x.env);
+ return {status:response.status,json:await response.json()};
+}
+const testSkinUrl='https://textures.minecraft.net/texture/'+'b'.repeat(64);
+test('V10.49.1.1: HMAC signed offline/Bedrock skins are tied to linked provider IDs and never infer Premium',async()=>{
+ for(const [provider,providerId,authSource] of [
+  ['java_offline','70a89d54-c32e-3942-a553-34f71cfde04d','fastlogin-cracked'],
+  ['bedrock','12345678901234567','floodgate-xuid']]){
+  const x=fixture(),cookie=await x.active();
+  const code=(await x.call('/api/player/minecraft/link/create',{method:'POST',cookie,data:{}})).json.code;
+  const claim={code,provider,providerId,authSource,username:provider==='bedrock'?'.BedrockUser':'LocalSteve'};
+  assert.equal((await x.claim(claim)).status,200);
+  assert.equal((await x.call('/api/player/minecraft/link/confirm',{method:'POST',cookie,data:{}})).status,200);
+  const payload={provider,providerId,authSource,skinUrl:testSkinUrl,
+    model:'slim',observedAt:new Date().toISOString()};
+  assert.equal((await deliverSkin(x,payload,{key:'wrong-key'})).status,401);
+  assert.equal((await deliverSkin(x,{...payload,skinUrl:'https://evil.example/skin'})).status,400);
+  assert.equal((await deliverSkin(x,{...payload,model:'invalid'})).status,400);
+  assert.equal((await deliverSkin(x,{...payload,providerId:'not-matching'})).status,400);
+  assert.equal((await deliverSkin(x,payload,{timestamp:Math.floor(Date.now()/1000)-300})).status,401);
+  const nonce=randomUUID();
+  assert.equal((await deliverSkin(x,payload,{nonce})).status,200);
+  assert.equal((await deliverSkin(x,payload,{nonce})).status,409);
+  const profile=(await x.call('/api/player/profile',{cookie})).json;
+  assert.equal(profile.accounts[0].skinModel,'slim');
+  assert.equal(profile.accounts[0].provider,provider);
+  assert.equal(profile.accounts[0].edition,provider==='bedrock'?'bedrock':'java_non_premium');
+  const accountId=profile.accounts[0].id;
+  assert.equal((await x.call('/api/player/minecraft/skin-info/'+accountId)).status,403);
+  const meta=await x.call('/api/player/minecraft/skin-info/'+accountId,{cookie});
+  assert.equal(meta.status,200);
+  assert.equal(meta.json.hasSkin,true);
+  assert.equal(meta.json.model,'slim');
+  assert.equal(meta.json.source,'server');
+  const outsider=await x.active(true);
+  assert.equal((await x.call('/api/player/minecraft/skin-info/'+accountId,{cookie:outsider})).status,404);
+  assert.equal((await x.call('/api/player/minecraft/skin-info/'+accountId,{cookie})).json.model,'slim');
+  const originalFetch=globalThis.fetch;
+  try{
+   let calls=0;
+   const png=new Uint8Array(128);png.set([137,80,78,71,13,10,26,10]);
+   png.set([0,0,0,64,0,0,0,64],16);
+   globalThis.fetch=async url=>{
+     calls++;
+     assert.equal(String(url),testSkinUrl);
+     return new Response(png,{headers:{'Content-Type':'image/png'}});
+   };
+   const result=await x.call('/api/player/minecraft/skin/'+accountId,{cookie});
+   assert.equal(result.status,200);
+   assert.equal(result.res.headers.get('Content-Type'),'image/png');
+   assert.equal(calls,1);
+   const noAccess=await x.call('/api/player/minecraft/skin/'+accountId,{cookie:outsider});
+   assert.equal(noAccess.status,404);
+   assert.equal(calls,1);
+  }finally{globalThis.fetch=originalFetch;}
+ }
+});
+test('V10.49.1.1: rejected unlinked identities and stale skin reports do not alter D1 account records',async()=>{
+ const x=fixture(),cookie=await x.active();
+ const payload={provider:'java_offline',providerId:'70a89d54-c32e-3942-a553-34f71cfde04d',
+  authSource:'fastlogin-cracked',skinUrl:testSkinUrl,
+  model:'classic',observedAt:new Date().toISOString()};
+ assert.equal((await deliverSkin(x,payload)).status,404);
+ assert.equal(x.db.prepare('SELECT COUNT(*) AS n FROM minecraft_account_skins').get().n,0);
+ const code=(await x.call('/api/player/minecraft/link/create',{method:'POST',cookie,data:{}})).json.code;
+ await x.claim({code,provider:payload.provider,providerId:payload.providerId,
+  authSource:payload.authSource,username:'LocalSteve'});
+ assert.equal((await deliverSkin(x,payload)).status,404,'unconfirmed claim cannot ingest skin');
+ await x.call('/api/player/minecraft/link/confirm',{method:'POST',cookie,data:{}});
+ assert.equal((await deliverSkin(x,payload)).status,200);
+ assert.equal((await deliverSkin(x,{...payload,observedAt:new Date(Date.now()-3600000).toISOString()})).status,400);
+ const before=x.db.prepare('SELECT texture_url FROM minecraft_account_skins').get().texture_url;
+ assert.equal(before,testSkinUrl);
+ const id=x.db.prepare('SELECT id FROM minecraft_accounts').get().id;
+ assert.equal((await x.call('/api/player/minecraft/link/unlink',{method:'POST',cookie,
+  data:{accountId:id,currentProof:'bad'}})).status,400);
+ assert.equal(x.db.prepare('SELECT texture_url FROM minecraft_account_skins').get().texture_url,before);
 });

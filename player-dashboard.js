@@ -515,6 +515,11 @@
       last.textContent='Bukti sesi: '+(account.identityProofAt
         ?new Date(account.identityProofAt).toLocaleString('id-ID'):'belum tersedia');
       summary.append(name,edition,last);
+      const skinStatus=document.createElement('small');
+      skinStatus.textContent=account.skinUpdatedAt
+        ?'Skin server terakhir: '+new Date(account.skinUpdatedAt).toLocaleString('id-ID')
+        :'Skin server belum tersinkron';
+      summary.append(skinStatus);
       const actions=document.createElement('div');actions.className='ssc-link-account-actions';
       if(!account.isPrimary){
         const primary=document.createElement('button');primary.type='button';
@@ -531,7 +536,7 @@
         };
         actions.append(primary);
       }
-      if(window.SSCircleMinecraftAvatars?.eligible(account)){
+      if(account.id && window.SSCircleMinecraftAvatars?.eligible(account)){
         const preview=document.createElement('button');
         preview.type='button';
         preview.className='player-action player-action-secondary';
