@@ -2609,6 +2609,63 @@ const minecraftIdentityWarnings=(provider,source,observedAt,duplicateName,now=Da
   return warnings;
 };
 const mcCodeHash=(env,code)=>hmac(env.SESSION_SECRET+'|minecraft-link-code',code);
+function sscAccountStatStatements(env,account,payload,seasonId,capturedAt,receivedAt){
+  const names=['playtime','deaths','mobs','blocks'];
+  const progress=`INSERT INTO minecraft_account_stat_progress (
+    application_id,provider,provider_id,season_id,last_captured_at,
+    last_playtime,last_deaths,last_mobs,last_blocks,
+    total_playtime,total_deaths,total_mobs,total_blocks)
+    VALUES (?,?,?,?,?,?,?,?,?,0,0,0,0)
+    ON CONFLICT(application_id,provider,provider_id,season_id) DO UPDATE SET
+    ${names.map(name=>`total_${name}=MIN(2147483647,
+      minecraft_account_stat_progress.total_${name}+
+      CASE WHEN excluded.last_${name}>=minecraft_account_stat_progress.last_${name}
+      THEN excluded.last_${name}-minecraft_account_stat_progress.last_${name}
+      ELSE excluded.last_${name} END)`).join(',\n    ')},
+    ${names.map(name=>`last_${name}=excluded.last_${name}`).join(',\n    ')},
+    last_captured_at=excluded.last_captured_at
+    WHERE excluded.last_captured_at>minecraft_account_stat_progress.last_captured_at`;
+  const snapshot=`INSERT INTO player_stat_snapshots
+    (application_id,season_id,playtime_seconds,deaths,mob_kills,blocks_mined,last_synced_at)
+    SELECT p.application_id,p.season_id,
+      MIN(2147483647,COALESCE(SUM(p.total_playtime),0)+COALESCE(MAX(l.playtime_seconds),0)),
+      MIN(2147483647,COALESCE(SUM(p.total_deaths),0)+COALESCE(MAX(l.deaths),0)),
+      MIN(2147483647,COALESCE(SUM(p.total_mobs),0)+COALESCE(MAX(l.mob_kills),0)),
+      MIN(2147483647,COALESCE(SUM(p.total_blocks),0)+COALESCE(MAX(l.blocks_mined),0)),
+      MAX(p.last_captured_at)
+    FROM minecraft_account_stat_progress p
+    LEFT JOIN minecraft_stat_legacy l ON l.application_id=p.application_id AND l.season_id=p.season_id
+    WHERE p.application_id=? AND p.season_id=?
+    GROUP BY p.application_id,p.season_id
+    ON CONFLICT(application_id,season_id) DO UPDATE SET
+      playtime_seconds=excluded.playtime_seconds,deaths=excluded.deaths,
+      mob_kills=excluded.mob_kills,blocks_mined=excluded.blocks_mined,
+      last_synced_at=MAX(player_stat_snapshots.last_synced_at,excluded.last_synced_at)`;
+  const entry=(season)=>env.DB.prepare(progress).bind(
+    account.application_id,payload.provider,payload.providerId,season,capturedAt,
+    payload.stats.playtimeSeconds,payload.stats.deaths,payload.stats.mobKills,payload.stats.blocksMined);
+  const transaction=[
+    env.DB.prepare(`INSERT OR IGNORE INTO minecraft_stat_receipts
+      (event_id,application_id,provider,provider_id,received_at) VALUES(?,?,?,?,?)`)
+      .bind(payload.eventId,account.application_id,payload.provider,payload.providerId,receivedAt),
+    entry(''),
+    env.DB.prepare(snapshot).bind(account.application_id,''),
+    env.DB.prepare(`INSERT INTO minecraft_identity_evidence
+      (application_id,provider,provider_id,auth_source,observed_at)
+      VALUES(?,?,?,?,?) ON CONFLICT(provider,provider_id) DO UPDATE SET
+      application_id=excluded.application_id,auth_source=excluded.auth_source,
+      observed_at=excluded.observed_at
+      WHERE excluded.observed_at>=minecraft_identity_evidence.observed_at`)
+      .bind(account.application_id,payload.provider,payload.providerId,
+        payload.authSource,capturedAt)
+  ];
+  if(seasonId){
+    transaction.push(entry(seasonId));
+    transaction.push(env.DB.prepare(snapshot).bind(account.application_id,seasonId));
+  }
+  return transaction;
+}
+
 const sscMultiReady=new WeakSet();
 async function sscEnsureMulti(env){
   if(sscMultiReady.has(env.DB))return;
@@ -3025,7 +3082,7 @@ async function minecraftStatsIngest(req,env){
     !['playtimeSeconds','deaths','mobKills','blocksMined'].every(k=>validMetric(metrics[k]))||
     !Number.isFinite(stamp)||stamp>Date.now()+300000||stamp<Date.now()-30*86400000)
     return minecraftLinkError('STATS_INVALID','Statistik tidak valid atau terlalu lama.',400);
-  await ensureMemberCenter(env);
+  await sscEnsureMulti(env);
   const account=await env.DB.prepare(
     'SELECT application_id,verified_at FROM minecraft_accounts WHERE provider=? AND provider_id=? LIMIT 1'
   ).bind(payload.provider,payload.providerId).first();
@@ -3057,65 +3114,7 @@ async function minecraftStatsIngest(req,env){
     && /^[A-Za-z0-9_-]{1,64}$/.test(activeSeason)
     && stamp>=Date.parse(seasonStart)
       ? 'season:'+activeSeason+':'+seasonStart : '';
-  const oldLifetime=await env.DB.prepare(`SELECT playtime_seconds,deaths,mob_kills,blocks_mined
-    FROM player_stat_snapshots WHERE application_id=? AND season_id=''`)
-    .bind(account.application_id).first();
-  const names=['playtime','deaths','mobs','blocks'];
-  const cols=['playtimeSeconds','deaths','mobKills','blocksMined'];
-  const initial=cols.map((k,i)=>Math.max(metrics[k],Number(oldLifetime?.[
-    ['playtime_seconds','deaths','mob_kills','blocks_mined'][i]
-  ]||0)));
-  const upsertProgress=`INSERT INTO minecraft_stat_progress (
-    application_id,season_id,provider,provider_id,last_captured_at,
-    last_playtime,last_deaths,last_mobs,last_blocks,
-    total_playtime,total_deaths,total_mobs,total_blocks
-  ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
-  ON CONFLICT(application_id,season_id) DO UPDATE SET
-  ${names.map(name=>`total_${name}=
-    MIN(2147483647,minecraft_stat_progress.total_${name}+
-      CASE WHEN minecraft_stat_progress.provider=excluded.provider
-        AND minecraft_stat_progress.provider_id=excluded.provider_id
-      THEN CASE WHEN excluded.last_${name}>=minecraft_stat_progress.last_${name}
-        THEN excluded.last_${name}-minecraft_stat_progress.last_${name}
-        ELSE excluded.last_${name} END
-      ELSE 0 END)`).join(',\n  ')},
-  ${names.map(name=>`last_${name}=excluded.last_${name}`).join(',\n  ')},
-  provider=excluded.provider,provider_id=excluded.provider_id,
-  last_captured_at=excluded.last_captured_at
-  WHERE excluded.last_captured_at>minecraft_stat_progress.last_captured_at`;
-  const snapshotFromProgress=`INSERT INTO player_stat_snapshots
-    (application_id,season_id,playtime_seconds,deaths,mob_kills,blocks_mined,last_synced_at)
-    SELECT application_id,season_id,total_playtime,total_deaths,total_mobs,total_blocks,last_captured_at
-    FROM minecraft_stat_progress WHERE application_id=? AND season_id=?
-    ON CONFLICT(application_id,season_id) DO UPDATE SET
-    playtime_seconds=excluded.playtime_seconds,deaths=excluded.deaths,
-    mob_kills=excluded.mob_kills,blocks_mined=excluded.blocks_mined,
-    last_synced_at=excluded.last_synced_at
-    WHERE excluded.last_synced_at>player_stat_snapshots.last_synced_at`;
-  const entry=(key,totals)=>env.DB.prepare(upsertProgress).bind(
-    account.application_id,key,payload.provider,payload.providerId,capturedAt,
-    metrics.playtimeSeconds,metrics.deaths,metrics.mobKills,metrics.blocksMined,...totals);
-  const transaction=[
-    env.DB.prepare(`INSERT OR IGNORE INTO minecraft_stat_receipts
-      (event_id,application_id,provider,provider_id,received_at) VALUES(?,?,?,?,?)`)
-      .bind(payload.eventId,account.application_id,payload.provider,payload.providerId,receivedAt),
-    entry('',initial),
-    env.DB.prepare(snapshotFromProgress).bind(account.application_id,''),
-    // Only an authenticated signed session for an already-linked account can
-    // refresh this evidence; queued older packets cannot overwrite newer proof.
-    env.DB.prepare(`INSERT INTO minecraft_identity_evidence
-      (application_id,provider,provider_id,auth_source,observed_at)
-      VALUES(?,?,?,?,?) ON CONFLICT(provider,provider_id) DO UPDATE SET
-      application_id=excluded.application_id,auth_source=excluded.auth_source,
-      observed_at=excluded.observed_at
-      WHERE excluded.observed_at>=minecraft_identity_evidence.observed_at`)
-      .bind(account.application_id,payload.provider,payload.providerId,
-        payload.authSource,capturedAt)
-  ];
-  if(seasonId){
-    transaction.push(entry(seasonId,[0,0,0,0]));
-    transaction.push(env.DB.prepare(snapshotFromProgress).bind(account.application_id,seasonId));
-  }
+  const transaction=sscAccountStatStatements(env,account,payload,seasonId,capturedAt,receivedAt);
   const results=await env.DB.batch(transaction);
   // Old receipt rows may be purged safely: cumulative MAX prevents inflation
   // if an old event is ever retried after receipt expiry.
