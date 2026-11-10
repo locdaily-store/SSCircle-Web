@@ -79,47 +79,80 @@
     $('player-edition').textContent=(payload.accounts||[]).map(a=>
       mcProviderLabel(a)).join(', ')||'Belum terhubung';
     drawAwards(payload.achievements);
-    const list=Array.isArray(payload.statistics)?payload.statistics:[];
+    // V10.49.0: account selector + independent season selector. Old member-wide
+    // stats are preserved separately, never silently assigned to an account.
+    const accounts=Array.isArray(payload.accounts)?payload.accounts:[];
+    const records=Array.isArray(payload.accountStatistics)?payload.accountStatistics:[];
+    const legacy=Array.isArray(payload.statistics)?payload.statistics:[];
     const selector=$('player-season-select');
-    const previous=selector.value;
-    const active=payload.activeStatSeason||'';
-    const names=new Map(list.filter(a=>a.seasonId).map(a=>[a.seasonId,a.seasonTitle||'Season']));
-    if(active&&!names.has(active))names.set(active,payload.activeStatSeasonTitle||'Season aktif');
-    selector.replaceChildren();
-    const all=document.createElement('option');all.value='';all.textContent='Sepanjang masa';selector.append(all);
-    for(const [id,name] of names){
-      const option=document.createElement('option');option.value=id;option.textContent=name;selector.append(option);
+    let accountSelect=$('ssc-player-stat-account');
+    if(!accountSelect){
+      const control=document.createElement('div');control.className='ssc-account-stats-filter';
+      const label=document.createElement('label');label.htmlFor='ssc-player-stat-account';
+      label.textContent='Tampilkan statistik akun';
+      accountSelect=document.createElement('select');accountSelect.id='ssc-player-stat-account';
+      control.append(label,accountSelect);
+      selector.parentElement?.insertAdjacentElement('beforebegin',control);
     }
+    const priorAccount=accountSelect.value;
+    accountSelect.replaceChildren();
+    const opt=(value,label)=>{const item=document.createElement('option');
+      item.value=value;item.textContent=label;accountSelect.append(item);};
+    opt('all','Semua akun (gabungan)');
+    for(const a of accounts)opt(a.id,(a.isPrimary?'★ ':'')+a.username+' · '+mcProviderLabel(a));
+    if(legacy.length)opt('legacy','Riwayat lama (belum dapat dipisahkan)');
+    accountSelect.value=Array.from(accountSelect.options).some(o=>o.value===priorAccount)
+      ?priorAccount:(accounts.find(a=>a.isPrimary)?.id||'all');
+    const previous=selector.value,active=payload.activeStatSeason||'';
+    const names=new Map(legacy.filter(a=>a.seasonId).map(a=>[a.seasonId,a.seasonTitle||'Season']));
+    for(const r of records)if(r.seasonId&&!names.has(r.seasonId))
+      names.set(r.seasonId,'Season '+(r.seasonId.split(':')[1]||'tersimpan'));
+    if(active&&!names.has(active))names.set(active,payload.activeStatSeasonTitle||'Season aktif');
+    selector.replaceChildren();optSeason('','Sepanjang masa');
+    function optSeason(value,title){const option=document.createElement('option');
+      option.value=value;option.textContent=title;selector.append(option);}
+    for(const [id,name] of names)optSeason(id,name);
     selector.disabled=names.size===0;
     selector.value=previous && names.has(previous)?previous:active && names.has(active)?active:'';
     function showCurrentStats(){
-      const stats=list.find(a=>a.seasonId===selector.value);
+      const season=selector.value,chosen=accountSelect.value;
+      const matching=records.filter(r=>r.seasonId===season&&
+        (chosen==='all'||r.accountId===chosen));
+      const stats=chosen==='legacy'
+        ?legacy.find(r=>r.seasonId===season)||null
+        :matching.length?{
+          playtimeSeconds:matching.reduce((n,r)=>n+(Number(r.playtimeSeconds)||0),0),
+          deaths:matching.reduce((n,r)=>n+(Number(r.deaths)||0),0),
+          mobKills:matching.reduce((n,r)=>n+(Number(r.mobKills)||0),0),
+          blocksMined:matching.reduce((n,r)=>n+(Number(r.blocksMined)||0),0),
+          updatedAt:matching.reduce((latest,r)=>r.updatedAt>latest?r.updatedAt:latest,'')
+        }:null;
       const ids=['player-stat-playtime','player-stat-deaths','player-stat-mobkills','player-stat-blocks'];
       const number=new Intl.NumberFormat('id-ID');
-      const archived=list.filter(a=>a.seasonId).length;
-      $('player-stat-seasons').textContent=list.length?number.format(archived):'Belum tersedia';
+      $('player-stat-seasons').textContent=names.size?number.format(names.size):'Belum tersedia';
       if(!stats){
         ids.forEach(id=>{$(id).textContent='Belum tersedia';});
-        $('player-stats-sync-status').textContent=
-          selector.value?'Belum ada statistik yang direkam untuk Season ini.':
-          'Belum ada data resmi dari server. Statistik akan muncul setelah sinkronisasi pertama berhasil.';
-        $('player-stats-tag').textContent='Menunggu sinkronisasi';
-        return;
+        $('player-stats-sync-status').textContent=chosen==='legacy'
+          ?'Belum ada statistik historis untuk Season ini.'
+          :'Belum ada snapshot akun ini untuk pilihan Season. Gunakan /sscircle sync setelah akun tertaut.';
+        $('player-stats-tag').textContent='Menunggu sinkronisasi';return;
       }
       const seconds=Math.max(0,Math.floor(Number(stats.playtimeSeconds)||0));
       const hours=Math.floor(seconds/3600),minutes=Math.floor((seconds%3600)/60);
       const duration=hours>0?number.format(hours)+' jam '+minutes+' menit':
         minutes>0?number.format(minutes)+' menit':'Kurang dari 1 menit';
-      const values=[duration,number.format(stats.deaths||0),
-        number.format(stats.mobKills||0),number.format(stats.blocksMined||0)];
-      ids.forEach((id,index)=>{$(id).textContent=values[index];});
+      [duration,number.format(stats.deaths||0),number.format(stats.mobKills||0),
+        number.format(stats.blocksMined||0)].forEach((v,i)=>{$(ids[i]).textContent=v;});
       const timestamp=Date.parse(stats.updatedAt||'');
-      $('player-stats-sync-status').textContent=Number.isFinite(timestamp)
-        ?'Sinkron terakhir: '+new Date(timestamp).toLocaleString('id-ID')
-        :'Data berasal dari server Minecraft SSCircle';
-      $('player-stats-tag').textContent='Tersinkron';
+      const missing=chosen==='all'?Math.max(0,accounts.length-matching.length):0;
+      $('player-stats-sync-status').textContent=(chosen==='legacy'
+        ?'Arsip statistik anggota sebelum pemisahan multi-akun. Tidak ditambahkan ke total gabungan. '
+        :missing?'Data '+missing+' akun belum ada pada Season ini. ':'')+
+        (Number.isFinite(timestamp)?'Sinkron terakhir: '+new Date(timestamp).toLocaleString('id-ID')
+        :'Statistik berasal dari server Minecraft SSCircle');
+      $('player-stats-tag').textContent=chosen==='legacy'?'Riwayat lama':'Tersinkron';
     }
-    selector.onchange=showCurrentStats;
+    accountSelect.onchange=showCurrentStats;selector.onchange=showCurrentStats;
     showCurrentStats();
   }
   async function loadProfile() {
