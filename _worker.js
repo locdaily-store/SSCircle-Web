@@ -3156,7 +3156,12 @@ async function minecraftStatsIngest(req,env){
     FROM minecraft_account_stat_progress WHERE provider=? AND provider_id=?
       AND application_id<>? LIMIT 1`)
     .bind(payload.provider,payload.providerId,account.application_id).first();
-  const transaction=sscAccountStatStatements(env,account,payload,seasonId,capturedAt,receivedAt,!!previousOwner);
+  const unassignedHistory=await env.DB.prepare(`SELECT 1 AS pending_history
+    FROM minecraft_stat_legacy WHERE application_id=? AND season_id=''
+      AND (playtime_seconds>0 OR deaths>0 OR mob_kills>0 OR blocks_mined>0)
+    LIMIT 1`).bind(account.application_id).first();
+  const transaction=sscAccountStatStatements(env,account,payload,seasonId,capturedAt,receivedAt,
+    !!previousOwner||!!unassignedHistory);
   const results=await env.DB.batch(transaction);
   // Old receipt rows may be purged safely: cumulative MAX prevents inflation
   // if an old event is ever retried after receipt expiry.
