@@ -98,7 +98,8 @@
     }
     const main=allAccounts.find(a=>a.isPrimary)||allAccounts[0];
     chooser.value=hasLoaded&&allAccounts.some(a=>a.id===previousAccount)?previousAccount:
-      hasLoaded&&previousAccount==='all'?'all':main?.id||'all';
+      hasLoaded&&previousAccount==='all'?'all':
+      payload.historicalUnassigned?'all':main?.id||'all';
     chooser.dataset.loaded='yes';
     const selector=$('player-season-select');
     const previous=selector.value;
@@ -137,9 +138,11 @@
         number.format(stats.mobKills||0),number.format(stats.blocksMined||0)];
       ids.forEach((id,index)=>{$(id).textContent=values[index];});
       const timestamp=Date.parse(stats.updatedAt||'');
-      $('player-stats-sync-status').textContent=Number.isFinite(timestamp)
+      $('player-stats-sync-status').textContent=(Number.isFinite(timestamp)
         ?'Sinkron terakhir: '+new Date(timestamp).toLocaleString('id-ID')
-        :'Data berasal dari server Minecraft SSCircle';
+        :'Data berasal dari server Minecraft SSCircle')+
+        (payload.historicalUnassigned&&chooser.value==='all'
+          ?' · Sebagian riwayat lama tidak bisa dipisahkan per akun dan hanya termasuk angka gabungan.':'');
       $('player-stats-tag').textContent='Tersinkron';
     }
     selector.onchange=showCurrentStats;
