@@ -27,7 +27,7 @@ class PaperSkinSyncTest {
         assertNotNull(snapshot);
         assertEquals("java_offline",snapshot.provider());
         assertEquals("slim",snapshot.model());
-        assertTrue(snapshot.json().contains("\\\"authSource\\\":\\\"fastlogin-cracked\\\""));
+        assertTrue(snapshot.json().contains("\"authSource\":\"fastlogin-cracked\""));
         assertFalse(snapshot.json().contains("java_premium"));
     }
 }
