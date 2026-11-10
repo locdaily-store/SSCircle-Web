@@ -2721,9 +2721,25 @@ function sscPublicAccount(a){
 }
 
 async function minecraftLinkAPI(req,env,path,method){
+  if(path==='/api/admin/minecraft/multi-account'){
+    if(!await admin(req,env))return bad('Masuk ke Admin Control.',401);
+    const settings=await sscMultiSettings(env);
+    if(method==='GET')return J(settings);
+    if(method!=='PUT')return bad('Metode tidak tersedia.',405);
+    if(!await rateLimit(env,req,'minecraft-multi-admin',10,600))
+      return bad('Terlalu banyak perubahan. Coba lagi nanti.',429);
+    const value=await body(req,500);
+    if(typeof value?.enabled!=='boolean'||!Number.isInteger(value?.maxAccounts)
+       ||value.maxAccounts<1||value.maxAccounts>5)
+      return bad('Pengaturan Multi-Account tidak valid (batas 1 sampai 5).',400);
+    await env.DB.prepare(`UPDATE minecraft_multi_settings
+      SET enabled=?,max_accounts=?,updated_at=? WHERE id=1`)
+      .bind(value.enabled?1:0,value.maxAccounts,new Date().toISOString()).run();
+    return J({ok:true,enabled:value.enabled,maxAccounts:value.maxAccounts});
+  }
   if(path==='/api/admin/minecraft/links' && method==='GET'){
     if(!await admin(req,env))return bad('Masuk ke Admin Control.',401);
-    await ensureMemberCenter(env);
+    await sscEnsureMulti(env);
     const rows=await env.DB.prepare(
       `SELECT a.application_id,a.provider,a.username,a.verified_at,e.auth_source,e.observed_at
        FROM minecraft_accounts a LEFT JOIN minecraft_identity_evidence e
@@ -2732,7 +2748,8 @@ async function minecraftLinkAPI(req,env,path,method){
        ORDER BY a.verified_at DESC LIMIT 100`
     ).all();
     return J({links:(rows.results||[]).map(r=>({
-      memberId:r.application_id,provider:r.provider,edition:minecraftLinkedEdition(r.provider,r.auth_source,r.observed_at),
+      memberId:r.application_id,provider:r.provider,
+      edition:minecraftLinkedEdition(r.provider,r.auth_source,r.observed_at),
       username:r.username,linkedAt:r.verified_at
     }))});
   }
@@ -2742,14 +2759,9 @@ async function minecraftLinkAPI(req,env,path,method){
   await ensureMemberSecurity(env);
   const active=await memberStrongSession(req,env,app);
   if(!active)return bad('Buka Profile dengan password dashboard sebelum menghubungkan akun Minecraft.',403);
-  await ensureMemberCenter(env);
-  const linked=await env.DB.prepare(
-    `SELECT a.provider,a.provider_id,a.username,a.verified_at,e.auth_source,e.observed_at
-       FROM minecraft_accounts a LEFT JOIN minecraft_identity_evidence e
-       ON e.provider=a.provider AND e.provider_id=a.provider_id
-       AND e.application_id=a.application_id
-       WHERE a.application_id=? ORDER BY a.verified_at DESC LIMIT 1`
-  ).bind(app.id).first();
+  const settings=await sscMultiSettings(env);
+  const accounts=await sscAccounts(env,app.id);
+  const linked=accounts[0]||null;
   if(path==='/api/player/minecraft/link/state' && method==='GET'){
     const challenge=await env.DB.prepare(
       'SELECT id,expires_at,claimed_at,created_at FROM minecraft_link_challenges WHERE application_id=? ORDER BY created_at DESC LIMIT 1'
@@ -2764,14 +2776,16 @@ async function minecraftLinkAPI(req,env,path,method){
         identity:claim?{provider:claim.provider,username:claim.username,
           edition:minecraftEdition(claim.provider,claim.auth_source)}:null};
     }
-    return J({linked:linked?{
-      provider:linked.provider,edition:minecraftLinkedEdition(linked.provider,linked.auth_source,linked.observed_at),
-      username:linked.username,verifiedAt:linked.verified_at,identityProofAt:linked.observed_at||null
-    }:null,pending,serverReady:typeof env.SSCIRCLE_LINK_SERVER_SECRET==='string'&&
-      env.SSCIRCLE_LINK_SERVER_SECRET.length>=32});
+    return J({linked:linked?sscPublicAccount(linked):null,
+      accounts:accounts.map(sscPublicAccount),
+      pending,enabled:settings.enabled,maxAccounts:settings.maxAccounts,
+      serverReady:typeof env.SSCIRCLE_LINK_SERVER_SECRET==='string'&&
+       env.SSCIRCLE_LINK_SERVER_SECRET.length>=32});
   }
   if(path==='/api/player/minecraft/link/create' && method==='POST'){
-    if(linked)return bad('Akun Minecraft sudah terhubung. Putuskan tautan terlebih dahulu.',409);
+    if(!settings.enabled)return bad('Penambahan akun sementara dinonaktifkan pengurus.',403);
+    if(accounts.length>=settings.maxAccounts)
+      return bad('Batas akun Minecraft sudah tercapai. Putuskan satu tautan terlebih dahulu.',409);
     if(!env.SSCIRCLE_LINK_SERVER_SECRET||env.SSCIRCLE_LINK_SERVER_SECRET.length<32)
       return bad('Penghubung Minecraft belum diaktifkan oleh pengelola server.',503);
     if(!await rateLimit(env,req,'minecraft-link-create',5,900))
@@ -2780,27 +2794,23 @@ async function minecraftLinkAPI(req,env,path,method){
     const timestamp=new Date().toISOString();
     const expires=new Date(Date.now()+MINECRAFT_LINK_TTL*1000).toISOString();
     await env.DB.batch([
-      env.DB.prepare(
-        'DELETE FROM minecraft_link_claims WHERE challenge_id IN (SELECT id FROM minecraft_link_challenges WHERE application_id=?)'
-      ).bind(app.id),
+      env.DB.prepare('DELETE FROM minecraft_link_claims WHERE challenge_id IN (SELECT id FROM minecraft_link_challenges WHERE application_id=?)').bind(app.id),
       env.DB.prepare('DELETE FROM minecraft_link_challenges WHERE application_id=?').bind(app.id),
-      env.DB.prepare(
-        'INSERT INTO minecraft_link_challenges(id,application_id,code_hash,expires_at,claimed_at,created_at) VALUES(?,?,?,?,NULL,?)'
-      ).bind(uid(),app.id,await mcCodeHash(env,code),expires,timestamp)
+      env.DB.prepare('INSERT INTO minecraft_link_challenges(id,application_id,code_hash,expires_at,claimed_at,created_at) VALUES(?,?,?,?,NULL,?)')
+        .bind(uid(),app.id,await mcCodeHash(env,code),expires,timestamp)
     ]);
     return J({ok:true,code,expiresAt:expires,command:'/sscircle link '+code});
   }
   if(path==='/api/player/minecraft/link/cancel' && method==='POST'){
     await env.DB.batch([
-      env.DB.prepare(
-        'DELETE FROM minecraft_link_claims WHERE challenge_id IN (SELECT id FROM minecraft_link_challenges WHERE application_id=?)'
-      ).bind(app.id),
+      env.DB.prepare('DELETE FROM minecraft_link_claims WHERE challenge_id IN (SELECT id FROM minecraft_link_challenges WHERE application_id=?)').bind(app.id),
       env.DB.prepare('DELETE FROM minecraft_link_challenges WHERE application_id=?').bind(app.id)
     ]);
     return J({ok:true});
   }
   if(path==='/api/player/minecraft/link/confirm' && method==='POST'){
-    if(linked)return bad('Akun Minecraft ini sudah memiliki tautan.',409);
+    if(!settings.enabled)return bad('Penambahan akun sementara dinonaktifkan pengurus.',403);
+    if(accounts.length>=settings.maxAccounts)return bad('Batas akun Minecraft sudah tercapai.',409);
     const challenge=await env.DB.prepare(
       'SELECT id,expires_at FROM minecraft_link_challenges WHERE application_id=? ORDER BY created_at DESC LIMIT 1'
     ).bind(app.id).first();
@@ -2810,36 +2820,60 @@ async function minecraftLinkAPI(req,env,path,method){
       'SELECT provider,provider_id,username,auth_source FROM minecraft_link_claims WHERE challenge_id=?'
     ).bind(challenge.id).first();
     if(!claim)return bad('Masukkan kode melalui Minecraft dan tunggu verifikasi server.',409);
-    const timestamp=new Date().toISOString();
+    const timestamp=new Date().toISOString(),accountId=uid();
     try{
       const results=await env.DB.batch([
-        env.DB.prepare(
-          'INSERT INTO minecraft_accounts(id,application_id,provider,provider_id,username,verified_at) '+
-          'SELECT ?,?,?,?,?,? WHERE NOT EXISTS(SELECT 1 FROM minecraft_accounts WHERE application_id=?)'
-        ).bind(uid(),app.id,claim.provider,claim.provider_id,claim.username,timestamp,app.id),
+        env.DB.prepare(`INSERT INTO minecraft_accounts(id,application_id,provider,provider_id,username,verified_at)
+          SELECT ?,?,?,?,?,? WHERE
+          (SELECT COUNT(*) FROM minecraft_accounts WHERE application_id=?) <
+          (SELECT max_accounts FROM minecraft_multi_settings WHERE id=1)
+          AND (SELECT enabled FROM minecraft_multi_settings WHERE id=1)=1`)
+          .bind(accountId,app.id,claim.provider,claim.provider_id,claim.username,timestamp,app.id),
+        env.DB.prepare(`INSERT INTO minecraft_account_preferences(account_id,application_id,is_primary)
+          SELECT ?,?,CASE WHEN (SELECT COUNT(*) FROM minecraft_accounts WHERE application_id=?)=1
+            THEN 1 ELSE 0 END WHERE EXISTS(SELECT 1 FROM minecraft_accounts WHERE id=? AND application_id=?)`)
+          .bind(accountId,app.id,app.id,accountId,app.id),
         env.DB.prepare(`INSERT INTO minecraft_identity_evidence
           (application_id,provider,provider_id,auth_source,observed_at)
           SELECT ?,?,?,?,? WHERE EXISTS(SELECT 1 FROM minecraft_accounts
-            WHERE application_id=? AND provider=? AND provider_id=?)
+            WHERE id=? AND application_id=? AND provider=? AND provider_id=?)
           ON CONFLICT(provider,provider_id) DO UPDATE SET
           application_id=excluded.application_id,
           auth_source=excluded.auth_source,observed_at=excluded.observed_at
           WHERE excluded.observed_at>=minecraft_identity_evidence.observed_at`)
           .bind(app.id,claim.provider,claim.provider_id,claim.auth_source,timestamp,
-            app.id,claim.provider,claim.provider_id),
-        env.DB.prepare(
-          'DELETE FROM minecraft_link_claims WHERE challenge_id IN (SELECT id FROM minecraft_link_challenges WHERE application_id=?)'
-        ).bind(app.id),
-        env.DB.prepare('DELETE FROM minecraft_link_challenges WHERE application_id=?').bind(app.id)
+            accountId,app.id,claim.provider,claim.provider_id),
+        env.DB.prepare(`INSERT INTO minecraft_account_audit(id,application_id,account_id,action,at)
+          SELECT ?,?,?,?,? WHERE EXISTS(SELECT 1 FROM minecraft_accounts WHERE id=? AND application_id=?)`)
+          .bind(uid(),app.id,accountId,'linked',timestamp,accountId,app.id),
+        env.DB.prepare('DELETE FROM minecraft_link_claims WHERE challenge_id=?').bind(challenge.id),
+        env.DB.prepare('DELETE FROM minecraft_link_challenges WHERE id=?').bind(challenge.id)
       ]);
       if(!(results?.[0]?.meta?.changes>0))
-        return bad('Akun sudah terhubung atau sedang diproses. Perbarui Profile.',409);
+        return bad('Batas akun tercapai atau akun sedang diproses. Perbarui Profile.',409);
     }catch{
       return bad('Identitas Minecraft sudah digunakan oleh anggota lain atau sedang diproses.',409);
     }
-    return J({ok:true,linked:{provider:claim.provider,
+    return J({ok:true,linked:{id:accountId,provider:claim.provider,
       edition:minecraftEdition(claim.provider,claim.auth_source),
       username:claim.username,verifiedAt:timestamp}});
+  }
+  if(path==='/api/player/minecraft/link/primary' && method==='POST'){
+    if(!await rateLimit(env,req,'minecraft-link-primary',8,600))
+      return bad('Terlalu banyak perubahan akun utama.',429);
+    const value=await body(req,400);
+    const target=accounts.find(a=>a.id===value?.accountId);
+    if(!target)return bad('Akun tidak ditemukan pada Profile milikmu.',404);
+    await env.DB.batch([
+      env.DB.prepare('UPDATE minecraft_account_preferences SET is_primary=0 WHERE application_id=?').bind(app.id),
+      env.DB.prepare(`INSERT INTO minecraft_account_preferences(account_id,application_id,is_primary)
+        VALUES(?,?,1) ON CONFLICT(account_id) DO UPDATE SET is_primary=1
+        WHERE minecraft_account_preferences.application_id=excluded.application_id`)
+        .bind(target.id,app.id),
+      env.DB.prepare('INSERT INTO minecraft_account_audit(id,application_id,account_id,action,at) VALUES(?,?,?,?,?)')
+        .bind(uid(),app.id,target.id,'primary_changed',new Date().toISOString())
+    ]);
+    return J({ok:true,primaryId:target.id});
   }
   if(path==='/api/player/minecraft/link/unlink' && method==='POST'){
     if(!await rateLimit(env,req,'minecraft-link-unlink',5,600))
@@ -2854,15 +2888,30 @@ async function minecraftLinkAPI(req,env,path,method){
       ?safeEq(stored,'v2.'+await memberVerifier(value.currentProof))
       :safeEq(stored,value.currentProof);
     if(!valid)return bad('Password tidak sesuai.',403);
-    await env.DB.batch([
-      env.DB.prepare(
-        'DELETE FROM minecraft_link_claims WHERE challenge_id IN (SELECT id FROM minecraft_link_challenges WHERE application_id=?)'
-      ).bind(app.id),
+    const target=accounts.find(a=>a.id===value.accountId)||
+      (accounts.length===1&&!value.accountId?accounts[0]:null);
+    if(!target)return bad('Pilih akun Minecraft yang ingin diputuskan.',404);
+    const nextPrimary=accounts.find(a=>a.id!==target.id);
+    const statements=[
+      env.DB.prepare('DELETE FROM minecraft_link_claims WHERE challenge_id IN (SELECT id FROM minecraft_link_challenges WHERE application_id=?)').bind(app.id),
       env.DB.prepare('DELETE FROM minecraft_link_challenges WHERE application_id=?').bind(app.id),
-      env.DB.prepare('DELETE FROM minecraft_identity_evidence WHERE application_id=?').bind(app.id),
-      env.DB.prepare('DELETE FROM minecraft_accounts WHERE application_id=?').bind(app.id)
-    ]);
-    return J({ok:true});
+      env.DB.prepare('DELETE FROM minecraft_identity_evidence WHERE application_id=? AND provider=? AND provider_id=?')
+        .bind(app.id,target.provider,target.provider_id),
+      env.DB.prepare('DELETE FROM minecraft_account_preferences WHERE account_id=? AND application_id=?')
+        .bind(target.id,app.id),
+      env.DB.prepare('DELETE FROM minecraft_accounts WHERE id=? AND application_id=?')
+        .bind(target.id,app.id),
+      env.DB.prepare('INSERT INTO minecraft_account_audit(id,application_id,account_id,action,at) VALUES(?,?,?,?,?)')
+        .bind(uid(),app.id,target.id,'unlinked',new Date().toISOString())
+    ];
+    if(target.is_primary===1&&nextPrimary){
+      statements.push(env.DB.prepare(`INSERT INTO minecraft_account_preferences(account_id,application_id,is_primary)
+        VALUES(?,?,1) ON CONFLICT(account_id) DO UPDATE SET is_primary=1
+        WHERE minecraft_account_preferences.application_id=excluded.application_id`)
+        .bind(nextPrimary.id,app.id));
+    }
+    await env.DB.batch(statements);
+    return J({ok:true,unlinkedId:target.id});
   }
   return bad('Endpoint Minecraft tidak ditemukan.',404);
 }
@@ -3899,8 +3948,9 @@ async function route(req, env) {
   if ((path.startsWith('/api/admin/minecraft/sync')) &&
       ['GET','POST'].includes(method))
     return await minecraftSyncAdmin(req,env,path,method);
-  if ((path.startsWith('/api/player/minecraft/link/') || path==='/api/admin/minecraft/links') &&
-      ['GET','POST'].includes(method))
+  if ((path.startsWith('/api/player/minecraft/link/') || path==='/api/admin/minecraft/links' ||
+       path==='/api/admin/minecraft/multi-account') &&
+      ['GET','POST','PUT'].includes(method))
     return await minecraftLinkAPI(req,env,path,method);
   if ((path.startsWith('/api/player/mailbox') || path==='/api/admin/mailbox/approve') &&
       ['GET','POST'].includes(method))
