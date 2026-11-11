@@ -1,0 +1,23 @@
+
+/* V10.51 Member Directory, uses existing dark/light profile tokens. */
+.ssc-social-controls{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}
+.ssc-social-controls input{flex:1 1 190px;min-width:0;background:var(--ssc-input-bg,#211d30);color:var(--ssc-text,#f5f4ff);border:1px solid var(--ssc-border,#68617a);border-radius:12px;padding:11px 12px}
+.ssc-social-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.ssc-social-panel{min-width:0}
+.ssc-social-result,.ssc-social-friend{border:1px solid var(--ssc-border,rgba(150,144,180,.35));border-radius:13px;padding:11px;margin:8px 0;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.ssc-social-result>div,.ssc-social-friend>div:first-child{display:grid;gap:2px;min-width:0;overflow-wrap:anywhere}
+.ssc-social-result small,.ssc-social-friend small,.ssc-social-account small{display:block;opacity:.7}
+.ssc-social-subtitle{font-size:1rem;margin:18px 0 8px}
+.ssc-social-detail{margin-top:18px;border:1px solid var(--ssc-border,rgba(150,144,180,.35));padding:16px;border-radius:16px;min-width:0}
+.ssc-social-detail-head,.ssc-social-relationship{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.ssc-social-detail-head h3{margin:5px 0}
+.ssc-social-actions{display:flex;gap:8px;flex-wrap:wrap}
+.ssc-social-accounts{display:flex;flex-wrap:wrap;gap:12px}
+.ssc-social-account{border:1px solid var(--ssc-border,rgba(150,144,180,.35));border-radius:12px;padding:12px;min-width:145px;display:flex;flex-direction:column;gap:7px;align-items:flex-start}
+.ssc-social-avatar{width:52px;height:52px;border-radius:8px;image-rendering:pixelated}
+.ssc-social-stats{display:grid;gap:10px}
+.ssc-social-stat{padding:12px;border:1px solid var(--ssc-border,rgba(150,144,180,.3));border-radius:12px;display:flex;gap:12px;flex-wrap:wrap}
+.ssc-social-stat>strong{flex-basis:100%}
+.ssc-social-stat span{display:grid;gap:3px;min-width:80px}
+#ssc-social-feedback[data-error=true]{color:#ff9a9a}
+@media(max-width:780px){.ssc-social-grid{grid-template-columns:1fr}.ssc-social-result,.ssc-social-friend{align-items:flex-start}.ssc-social-detail{padding:12px}}
