@@ -1,7 +1,7 @@
 /* SSCircle V10.43: validated Profile Studio presentation on member and preview. */
 'use strict';
 window.SSCircleProfileLayout=(()=>{
-  const ids=['welcome','security','preferences','achievements','linking','stats','explore'];
+  const ids=['welcome','security','preferences','achievements','linking','stats','social','explore'];
   function apply(settings={}){
     const main=document.querySelector('.player-main');
     if(!main)return;
@@ -25,7 +25,10 @@ window.SSCircleProfileLayout=(()=>{
     if(!dashboard)return;
     const order=Array.isArray(settings.profilePageSections)?settings.profilePageSections:ids;
     const arranged=[...new Set(order)].filter(id=>ids.includes(id));
-    for(const id of ids)if(!arranged.includes(id))arranged.push(id);
+    for(const id of ids)if(!arranged.includes(id)){
+      if(id==='social'&&arranged.includes('explore'))arranged.splice(arranged.indexOf('explore'),0,id);
+      else arranged.push(id);
+    }
     const hidden=Array.isArray(settings.profilePageHidden)?settings.profilePageHidden:[];
     for(const id of arranged){
       const block=dashboard.querySelector('[data-profile-section="'+id+'"]');

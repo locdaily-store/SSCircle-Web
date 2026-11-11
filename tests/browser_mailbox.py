@@ -214,7 +214,8 @@ with sync_playwright() as p:
       profilePageSections:['welcome','security','preferences','achievements','linking','stats','explore'],
       profilePageHidden:[]
     }},()=>{})""")
-    assert studio.locator('.ssc-profile-admin-card').count()==7
+    assert studio.locator('.ssc-profile-admin-card').count()==8
+    assert studio.locator('[data-section-id="social"]').count()==1
     assert studio.locator('[data-section-id="security"] input[type=checkbox]').is_disabled()
     studio.locator('[data-profile-device="mobile"]').click()
     assert studio.locator('#profile-preview-stage').get_attribute('data-device')=='mobile'

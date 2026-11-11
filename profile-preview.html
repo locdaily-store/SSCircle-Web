@@ -8,8 +8,9 @@
   <link rel="stylesheet" href="style.css?v=10.49.1.6">
   <link rel="stylesheet" href="player-dashboard.css?v=10.43.0">
   <link rel="stylesheet" href="profile-ui.css?v=10.43.0">
+  <link rel="stylesheet" href="member-social.css?v=10.51.1">
   <script src="color-theme.js?v=10.41.0" defer></script>
-  <script src="profile-page-layout.js?v=10.43.0" defer></script>
+  <script src="profile-page-layout.js?v=10.51.2" defer></script>
 </head>
 <body class="home-page player-page theme-v3">
   <main class="player-main home-container">
@@ -27,12 +28,26 @@
         <section class="player-card player-profile">
           <div class="player-avatar"><img src="assets/sscircle-logo.png" width="72" height="72" alt=""></div>
           <div class="player-profile-info"><span class="player-overline">PROFIL ANGGOTA</span><h2>Nama contoh</h2><span class="player-verified">✓ Pendaftaran diterima</span></div>
-          <div class="player-profile-meta"><div><span>ID Anggota</span><strong>SSC-••••1234</strong></div><div><span>Bergabung sejak</span><strong>Contoh tanggal</strong></div></div>
+          <div class="player-profile-meta"><div><span>ID Anggota</span><strong>SSC-M123456789ABC</strong></div><div><span>Bergabung sejak</span><strong>Contoh tanggal</strong></div></div>
         </section>
         <section class="player-card player-help"><h2>Akun &amp; bantuan</h2><p>Pengaturan akun hanya tersedia pada Profile sebenarnya.</p></section>
       </aside>
       <div class="player-dashboard">
         <section data-profile-section="welcome" class="player-card player-welcome"><div><span class="player-overline">MEMBER DASHBOARD</span><h2>Selamat datang di SSCircle!</h2><p>Ikuti perjalanan dan perkembangan komunitas.</p></div><span class="player-tag">Anggota aktif</span></section>
+        <section data-profile-section="social" class="player-card ssc-social-card">
+          <div class="player-section-head"><div><span class="player-overline">COMMUNITY CONNECTIONS</span><h2>Member Directory &amp; Manage Friends</h2></div></div>
+          <p class="player-helper">Pratinjau contoh. Tidak mengambil data anggota sungguhan.</p>
+          <div class="ssc-social-grid">
+            <div class="ssc-social-panel"><h3 class="ssc-social-subtitle">Semua member</h3>
+              <div class="ssc-social-result"><div><strong>Member contoh</strong><small>SSC-M123456789ABC</small></div><span class="ssc-social-view">Lihat Profile</span></div>
+              <div class="ssc-social-result"><div><strong>Builder contoh</strong><small>Minecraft: ExamplePlayer</small></div></div>
+            </div>
+            <div class="ssc-social-panel"><h3 class="ssc-social-subtitle">Manage Friends</h3>
+              <div class="ssc-social-tabs"><button type="button" aria-selected="true" disabled>Teman 2</button><button type="button" disabled>Permintaan 1</button></div>
+              <div class="ssc-social-friend"><strong>Friend contoh</strong><span>Sudah berteman</span></div>
+            </div>
+          </div>
+        </section>
         <section data-profile-section="security" class="player-card player-security"><span class="player-overline">ACCOUNT &amp; SECURITY</span><h2>Keamanan akun</h2><p>Aktivasi, password, perangkat, dan sesi anggota. Bagian ini selalu tersedia.</p></section>
         <section data-profile-section="preferences" class="player-card player-preferences"><span class="player-overline">YOUR PROFILE</span><h2>Pengaturan profil</h2><p>Nama tampilan, bio, dan preferensi privasi.</p></section>
         <section data-profile-section="achievements" class="player-card player-achievements"><span class="player-overline">HALL OF FAME</span><h2>Penghargaan saya</h2><p>Prestasi anggota yang tercatat di Season Archive.</p></section>

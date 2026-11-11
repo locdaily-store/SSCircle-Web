@@ -222,3 +222,20 @@ test('V10.49.1.3: linked skins automatically poll for PNG delivery and update Pr
  assert.match(avatar,/Boolean\(a\.skinImageStored\)/);
  assert.match(ui,/Gambar akan muncul otomatis setelah login/);
 });
+
+test('social card participates in admin layout and private preview without fetching members',()=>{
+ const worker=source('_worker.js');
+ const editor=source('profile-admin.js');
+ const layout=source('profile-page-layout.js');
+ const preview=source('profile-preview.html');
+ const actual=source('my-sscircle.html');
+ assert.match(worker,/profilePageSections: \['welcome','security','preferences','achievements','linking','stats','social','explore'\]/);
+ assert.match(worker,/isLegacyOrder/);
+ assert.match(editor,/\['social','Member Directory & Manage Friends'\]/);
+ assert.match(editor,/profilePageSections\.splice/);
+ assert.match(layout,/'social'/);
+ assert.match(preview,/data-profile-section="social"/);
+ assert.match(actual,/data-profile-section="social"/);
+ assert.doesNotMatch(preview,/member-social\.js|\/api\/player\/social\/directory/);
+ assert.match(preview,/Member contoh/);
+});

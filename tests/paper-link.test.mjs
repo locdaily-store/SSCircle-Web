@@ -274,7 +274,11 @@ test('V10.48.4.3: Profile/Admin refresh their actual script URLs after Premium f
  const profileHtml=readFileSync(new URL('../my-sscircle.html',import.meta.url),'utf8');
  const adminHtml=readFileSync(new URL('../admin.html',import.meta.url),'utf8');
  const headers=readFileSync(new URL('../_headers',import.meta.url),'utf8');
- assert.match(profileHtml,/player-dashboard\.js\?v=10\.49\.1/);
+ const dashboardTag=profileHtml.match(/player-dashboard\.js\?v=(\d+)\.(\d+)\.(\d+)/);
+ assert.ok(dashboardTag,'Profile harus memuat Player Dashboard dengan versi cache yang jelas');
+ const [major,minor,patch]=dashboardTag.slice(1).map(Number);
+ assert.ok(major>10||(major===10&&(minor>49||(minor===49&&patch>=1))),
+   'Jangan memuat script Dashboard versi lama');
  assert.match(adminHtml,/minecraft-sync-admin\.js\?v=10\.49\.1\.7/);
  assert.match(adminHtml,/minecraft-sync-admin\.css\?v=10\.49\.1\.7/);
  assert.match(headers,/\/my-sscircle\.html\s+Cache-Control: no-store/);

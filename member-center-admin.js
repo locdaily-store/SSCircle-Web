@@ -142,9 +142,9 @@ window.SSCircleMemberCenterAdmin = (() => {
         document.querySelector('[data-tab="seasons-admin"]')?.click();
       },'button primary'));
     }else if(current==='policy'){
-      content.append(heading('Profile Settings','Atur fitur yang boleh digunakan pemain. Pengaturan tersimpan untuk semua anggota.'));
+      content.append(heading('Profile Settings','Izin pencarian antaranggota dan profil publik diatur terpisah. Profil baru tetap Pribadi sampai pemilik mengubahnya.'));
       const form=el('form','member-admin-policy');
-      const fields=[['allowBio','Izinkan pemain mengedit bio'],['allowPublic','Izinkan opsi profil publik'],['allowStats','Izinkan statistik ditampilkan'],['allowEventAlerts','Izinkan pengingat event']];
+      const fields=[['allowBio','Izinkan pemain mengedit bio'],['allowMembers','Izinkan profil ditemukan sesama anggota'],['allowPublic','Izinkan opsi profil publik'],['allowStats','Izinkan statistik ditampilkan'],['allowEventAlerts','Izinkan pengingat event']];
       const controls={};
       for(const [key,label] of fields){
         const row=el('label','member-admin-switch'),input=el('input');

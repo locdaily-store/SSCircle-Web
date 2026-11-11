@@ -1,4 +1,4 @@
-name: SSCircle V10.51.1 Quick Cloudflare ZIP
+name: Paket Cloudflare cepat
 on:
   pull_request:
     paths:
@@ -7,6 +7,13 @@ on:
       - 'member-social.css'
       - 'mailbox-widget.js'
       - 'my-sscircle.html'
+      - 'member-center-admin.js'
+      - 'player-dashboard.js'
+      - 'profile-admin.js'
+      - 'profile-page-layout.js'
+      - 'profile-preview.html'
+      - 'tests/member-center.test.mjs'
+      - 'tests/profile-ui.test.mjs'
       - 'minecraft-avatars.js'
       - 'tests/member-social.test.mjs'
       - '.github/workflows/quick-cloudflare-zip.yml'
@@ -22,12 +29,16 @@ jobs:
         with:
           node-version: '24'
       - name: Run social and security smoke tests
-        run: node --test tests/member-social.test.mjs tests/mailbox.test.mjs tests/runtime-health.test.mjs
+        run: node --test tests/member-social.test.mjs tests/member-center.test.mjs tests/profile-ui.test.mjs tests/mailbox.test.mjs tests/runtime-health.test.mjs
       - name: Check source syntax and exclude secrets
         shell: bash
         run: |
           node --check _worker.js
           node --check member-social.js
+          node --check member-center-admin.js
+          node --check player-dashboard.js
+          node --check profile-admin.js
+          node --check profile-page-layout.js
           node --check mailbox-widget.js
           python - <<'PY'
           from pathlib import Path
@@ -60,12 +71,12 @@ jobs:
           names={name for _,name in site}
           for essential in ('index.html','_worker.js','_routes.json','member-social.js','member-social.css'):
               if essential not in names:sys.exit('Missing: '+essential)
-          with ZipFile('SSCircle-Cloudflare-Upload-V10.51.1.zip','w',ZIP_DEFLATED,compresslevel=6) as z:
+          with ZipFile('SSCircle-Cloudflare-Upload-V10.51.2.zip','w',ZIP_DEFLATED,compresslevel=6) as z:
               for p,name in site:z.write(p,arcname=name)
           print('Cloudflare files:',len(site))
           PY
       - uses: actions/upload-artifact@v4
         with:
-          name: SSCircle-Cloudflare-Upload-V10.51.1
-          path: SSCircle-Cloudflare-Upload-V10.51.1.zip
+          name: SSCircle-Cloudflare-Upload-V10.51.2
+          path: SSCircle-Cloudflare-Upload-V10.51.2.zip
           retention-days: 14
