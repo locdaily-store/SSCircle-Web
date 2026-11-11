@@ -1,0 +1,37 @@
+/* SSCircle V10.49.3 | community cards share the existing Profile theme tokens. */
+.ssc-member-community{min-width:0}
+.ssc-member-community .ssc-community-search-form{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
+.ssc-community-search-form label{display:grid;gap:6px;flex:1 1 230px;font-size:13px}
+.ssc-community-search-form input{width:100%;box-sizing:border-box;border:1px solid var(--player-border,rgba(165,143,219,.35));border-radius:11px;padding:12px 14px;background:var(--ssc-card,#241b37);color:var(--ssc-text,#f9f5ff);font:inherit}
+.ssc-community-search-form input:focus-visible{outline:2px solid var(--ssc-primary,#ab86d9)}
+.ssc-community-notice{margin:10px 0;color:var(--ssc-text,#f9f5ff);opacity:.85;font-size:13px}
+.ssc-community-notice[data-warning="true"]{color:#f3a6b5;opacity:1}
+.ssc-community-layout{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);gap:14px;margin-top:18px}
+.ssc-member-section{min-width:0;border:1px solid var(--player-border,rgba(165,143,219,.3));border-radius:14px;padding:14px;background:color-mix(in srgb,var(--ssc-primary,#ab86d9) 5%,transparent)}
+.ssc-member-section h3{font-size:15px;margin:0 0 12px}
+.ssc-member-section h4{font-size:14px;margin:15px 0 8px}
+.ssc-member-results,.ssc-member-connections{display:grid;gap:10px;min-width:0;max-height:400px;overflow:auto}
+.ssc-member-result{display:flex;justify-content:space-between;align-items:center;gap:10px;min-width:0;padding:11px;border:1px solid var(--player-border,rgba(165,143,219,.25));border-radius:12px;background:color-mix(in srgb,var(--ssc-primary,#ab86d9) 5%,transparent)}
+.ssc-member-result-info{display:grid;gap:4px;min-width:0;overflow-wrap:anywhere}
+.ssc-member-result-info small,.ssc-member-profile-head small,.ssc-member-skin small{font-size:11px;opacity:.76}
+.ssc-member-result .player-action,.ssc-member-actions .player-action,.ssc-member-skin .player-action{font-size:12px;padding:9px 12px;flex-shrink:0}
+.ssc-member-profile-head{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.ssc-member-profile-head h3{font-size:19px;overflow-wrap:anywhere}
+.ssc-member-profile-head>div{display:grid;gap:5px;min-width:0}
+.ssc-member-profile-head .ssc-minecraft-avatar{flex-shrink:0}
+.ssc-member-bio{white-space:pre-line;overflow-wrap:anywhere;font-size:13px;line-height:1.6}
+.ssc-member-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.ssc-member-skins{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:10px}
+.ssc-member-skin{min-width:0;display:grid;gap:7px;padding:12px;border:1px solid var(--player-border,rgba(165,143,219,.25));border-radius:12px}
+.ssc-member-stats{display:grid;gap:9px}
+.ssc-member-stat-row{display:flex;align-items:center;flex-wrap:wrap;gap:6px 12px;padding:10px;border-radius:10px;background:color-mix(in srgb,var(--ssc-primary,#ab86d9) 8%,transparent);font-size:12px}
+.ssc-member-stat-row strong{flex-basis:100%}
+.ssc-member-award{font-size:13px}
+.ssc-member-friend-groups{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-top:14px}
+.ssc-member-friend-groups .ssc-member-connections{max-height:260px}
+.ssc-mailbox-friend-actions{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+.ssc-mailbox-friend-actions[hidden]{display:none!important}
+.ssc-mailbox-friend-actions button{padding:9px 14px;border-radius:9px;border:1px solid var(--player-border,rgba(165,143,219,.35));background:var(--ssc-primary,#8154bd);color:#fff;cursor:pointer}
+.ssc-mailbox-friend-actions button+button{background:transparent;color:inherit}
+@media(max-width:760px){.ssc-community-layout{grid-template-columns:minmax(0,1fr)}.ssc-member-result{flex-wrap:wrap}.ssc-member-result-info{flex:1 1 145px}}
+@media(max-width:420px){.ssc-member-community .ssc-member-section{padding:10px}.ssc-member-friend-groups{grid-template-columns:minmax(0,1fr)}}
