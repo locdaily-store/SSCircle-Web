@@ -240,7 +240,7 @@ test('social card participates in admin layout and private preview without fetch
  assert.match(preview,/Member contoh/);
 });
 
-test('Profile workspace separates sections, shows search on demand, and keeps member data private',()=>{
+test('Profile workspace has three tabs with all cards visible per category',()=>{
  const html=source('my-sscircle.html');
  const nav=source('profile-workspace.js');
  const css=source('profile-workspace.css');
@@ -249,20 +249,27 @@ test('Profile workspace separates sections, shows search on demand, and keeps me
  const preview=source('profile-preview.html');
  const layout=source('profile-page-layout.js');
  assert.match(html,/id="player-workspace-nav"/);
- assert.match(html,/profile-workspace\.js\?v=10\.51\.3/);
+ assert.match(html,/profile-workspace\.js\?v=10\.51\.4/);
  assert.match(html,/id="ssc-social-search-toggle"/);
  assert.match(html,/id="ssc-social-search-box"[^>]*hidden/);
  assert.match(html,/id="ssc-social-directory-panel"/);
  assert.match(html,/id="ssc-social-friends-panel"[^>]*hidden/);
+ assert.doesNotMatch(html,/player-workspace-sub/);
+ assert.doesNotMatch(preview,/player-workspace-sub/);
  assert.match(nav,/section\.dataset\.workspaceActive/);
- for(const part of ['overview','settings','minecraft','community'])
-   assert.match(nav,new RegExp("id:'"+part+"'"));
+ assert.match(nav,/\{id:'overview',label:'Profile',parts:\['welcome','achievements','stats'\]\}/);
+ assert.match(nav,/\{id:'settings',label:'Pengaturan Akun',parts:\['linking','security','preferences'\]\}/);
+ assert.match(nav,/\{id:'community',label:'Komunitas',parts:\['social','explore'\]\}/);
+ assert.doesNotMatch(nav,/sub\.replaceChildren|player-workspace-sub/);
+ assert.match(nav,/hasContent/);
+ assert.match(nav,/ssc-profile-layout-change/);
  assert.match(css,/padding-top:clamp\(112px/);
+ assert.match(css,/repeat\(3,minmax\(0,1fr\)\)/);
  assert.match(css,/data-workspace-active="true"/);
  assert.match(social,/aria-expanded/);
  assert.match(social,/showPanel\('friends'\)/);
  assert.match(socialCss,/ssc-social-results,#ssc-social-friends/);
- assert.match(preview,/profile-workspace\.js/);
+ assert.match(preview,/profile-workspace\.js\?v=10\.51\.4/);
  assert.doesNotMatch(preview,/member-social\.js|\/api\/player\/social\/directory/);
  assert.match(layout,/ssc-profile-layout-change/);
 });
