@@ -1,0 +1,39 @@
+/* Profile: keep a clear gap below the absolute site header on desktop and mobile. */
+.player-page #player-main{padding-top:clamp(112px,9.5vw,128px)}
+.player-page .player-workspace-nav{
+  grid-column:1/-1;display:grid;gap:10px;min-width:0;
+  padding:15px;border:1px solid var(--player-border);border-radius:17px;
+  background:color-mix(in srgb,var(--player-paper) 94%,var(--ssc-primary,#ab86d9) 6%);
+  scroll-margin-top:105px;
+}
+.player-page .player-workspace-main,.player-page .player-workspace-sub{
+  display:flex;flex-wrap:wrap;gap:8px;min-width:0;
+}
+.player-page .player-workspace-sub{
+  border-top:1px solid var(--player-border);padding-top:10px;
+}
+.player-page .player-workspace-button{
+  appearance:none;font:inherit;font-size:12px;font-weight:650;
+  min-height:42px;padding:10px 16px;border-radius:12px;cursor:pointer;
+  border:1px solid var(--player-border);color:var(--ssc-text,#fff);
+  background:var(--player-tint);transition:background .18s ease,border-color .18s ease;
+}
+.player-page .player-workspace-sub .player-workspace-button{min-height:37px;font-size:11px}
+.player-page .player-workspace-button[aria-pressed="true"]{
+  border-color:var(--ssc-primary,#b69ae8);
+  background:color-mix(in srgb,var(--ssc-primary,#b69ae8) 25%,var(--player-paper));
+}
+.player-page .player-workspace-button:hover{border-color:var(--ssc-primary,#b69ae8)}
+.player-page .player-workspace-button:focus-visible{outline:2px solid var(--ssc-primary,#b69ae8);outline-offset:2px}
+.player-page .player-dashboard[data-workspace-ready="true"]>[data-profile-section]:not([data-workspace-active="true"]){
+  display:none!important;
+}
+@media(max-width:800px){
+ .player-page #player-main{padding-top:96px}
+ .player-page .player-workspace-nav{padding:12px;scroll-margin-top:84px}
+ .player-page .player-workspace-main{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+ .player-page .player-workspace-main .player-workspace-button{width:100%;padding:10px 7px}
+ .player-page .player-workspace-sub{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin;padding-bottom:4px}
+ .player-page .player-workspace-sub .player-workspace-button{flex:0 0 auto;white-space:nowrap}
+}
+@media(prefers-reduced-motion:reduce){.player-page .player-workspace-button{transition:none}}
