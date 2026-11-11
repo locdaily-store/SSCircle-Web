@@ -275,8 +275,8 @@ test('V10.48.4.3: Profile/Admin refresh their actual script URLs after Premium f
  const adminHtml=readFileSync(new URL('../admin.html',import.meta.url),'utf8');
  const headers=readFileSync(new URL('../_headers',import.meta.url),'utf8');
  assert.match(profileHtml,/player-dashboard\.js\?v=10\.49\.1/);
- assert.match(adminHtml,/minecraft-sync-admin\.js\?v=10\.48\.4\.2/);
- assert.match(adminHtml,/minecraft-sync-admin\.css\?v=10\.48\.4\.2/);
+ assert.match(adminHtml,/minecraft-sync-admin\.js\?v=10\.49\.1\.7/);
+ assert.match(adminHtml,/minecraft-sync-admin\.css\?v=10\.49\.1\.7/);
  assert.match(headers,/\/my-sscircle\.html\s+Cache-Control: no-store/);
  assert.match(headers,/\/my-sscircle\s+Cache-Control: no-store/);
  assert.match(headers,/\/admin\.html\s+Cache-Control: no-store/);
