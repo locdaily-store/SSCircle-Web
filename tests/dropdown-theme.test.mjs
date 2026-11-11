@@ -33,7 +33,7 @@ test('native dropdown controls and options get opaque theme backgrounds and expl
 });
 
 test('runtime release is at least V10.51.1 while the local D1/dropdown baseline remains compatible',()=>{
-  const match=/const SSC_RUNTIME_RELEASE='(\\d+(?:\\.\\d+){2,3})'/.exec(read('_worker.js'));
+  const match=/const SSC_RUNTIME_RELEASE='(\d+(?:\.\d+){2,3})'/.exec(read('_worker.js'));
   assert.ok(match,'Worker must declare its runtime release');
   const release=match[1].split('.').map(Number);
   const minimum=[10,51,1];
