@@ -53,7 +53,7 @@ public final class SSCircleSkinBridge extends JavaPlugin implements Listener, Co
             getLogger().warning("Endpoint/secret core belum tersedia. Skin Bridge tetap aktif; perbaiki lalu /ssskin reload.");
         }
         publisher=new SkinPublisher(this,HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(6)).build(),
-            this::authenticatedIdentity,()->endpoint,()->secret);
+            this::authenticatedIdentity,()->endpoint,this::activeCoreSecret,this::activeCoreId);
         publisher.start();
         Bukkit.getPluginManager().registerEvents(this,this);
         Objects.requireNonNull(getCommand("ssskin")).setExecutor(this);
@@ -81,12 +81,25 @@ public final class SSCircleSkinBridge extends JavaPlugin implements Listener, Co
                 value=Files.readString(file,StandardCharsets.UTF_8).strip();
             }else value=System.getenv("SSCIRCLE_LINK_SERVER_SECRET");
             if(value==null||value.length()<32||value.length()>256
-                ||value.chars().anyMatch(ch->ch<33||ch>126))return false;
+                ||value.chars().anyMatch(ch->ch<33||ch>126)){
+                endpoint=url.toString().replaceAll("/+$","");
+                return true; // Await automatic approval from the core plugin.
+            }
             endpoint=url.toString().replaceAll("/+$","");secret=value;
             return true;
         }catch(Exception ignored){return false;}
     }
 
+    private String activeCoreSecret(){
+        if(core==null)return secret;
+        try{return String.valueOf(core.getClass().getMethod("activeSigningSecret").invoke(core));}
+        catch(ReflectiveOperationException | SecurityException e){return secret;}
+    }
+    private String activeCoreId(){
+        if(core==null)return "";
+        try{return String.valueOf(core.getClass().getMethod("pairingServerId").invoke(core));}
+        catch(ReflectiveOperationException | SecurityException e){return "";}
+    }
     private SkinPublisher.Identity authenticatedIdentity(Player player){
         if(core==null||!core.isEnabled()||coreIdentity==null)return null;
         try{

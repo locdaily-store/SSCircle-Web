@@ -57,7 +57,7 @@ test('Paper Direct: no insecure default endpoint or secrets in shipped config',(
 });
 
 test('V10.45.2: safe tab-completion shows matching commands and hides admin-only reload',()=>{
- assert.match(manifest,/version: '10\.49\.1\.6'/);
+ assert.match(manifest,/version: '10\.49\.1\.7'/);
  assert.match(paper,/implements CommandExecutor, TabCompleter, Listener/);
  assert.match(paper,/public List<String> onTabComplete\(CommandSender sender, Command command, String alias, String\[\] args\)/);
  assert.match(paper,/if \(args\.length != 1\) return List\.of\(\)/);
@@ -82,7 +82,7 @@ test('V10.45.2: explain both independent failures without exposing shared secret
 });
 
 test('V10.45.3: operator-only signed diagnostic and safe error presentation',()=>{
- assert.match(manifest,/version: '10\.49\.1\.6'/);
+ assert.match(manifest,/version: '10\.49\.1\.7'/);
  assert.match(paper,/private static final String DIAGNOSE_PATH = "\/api\/minecraft\/link\/diagnose"/);
  assert.match(paper,/options\.add\("diagnose"\)/);
  assert.match(paper,/private void runDiagnostic\(CommandSender sender\)/);
@@ -104,7 +104,7 @@ test('V10.45.4: private file overrides stale environment without leaking secret'
  assert.match(local,/return new ResolvedSecret\(loadOrCreate\(directory\), "file privat plugin", false\)/);
  assert.match(local,/SecureRandom/);
  assert.match(paper,/SecretFileStore\.resolve\(/);
- assert.match(paper,/statusItem\(sender,"Sumber kunci",secretSource/);
+ assert.match(paper,/statusItem\(sender,"Sumber kunci",pairing==null\?secretSource:/);
  assert.doesNotMatch(paper,/sender\.sendMessage\([^\n]*signingSecret\)/);
 });
 
@@ -275,8 +275,8 @@ test('V10.48.4.3: Profile/Admin refresh their actual script URLs after Premium f
  const adminHtml=readFileSync(new URL('../admin.html',import.meta.url),'utf8');
  const headers=readFileSync(new URL('../_headers',import.meta.url),'utf8');
  assert.match(profileHtml,/player-dashboard\.js\?v=10\.49\.1/);
- assert.match(adminHtml,/minecraft-sync-admin\.js\?v=10\.48\.4\.2/);
- assert.match(adminHtml,/minecraft-sync-admin\.css\?v=10\.48\.4\.2/);
+ assert.match(adminHtml,/minecraft-sync-admin\.js\?v=10\.49\.1\.7/);
+ assert.match(adminHtml,/minecraft-sync-admin\.css\?v=10\.49\.1\.7/);
  assert.match(headers,/\/my-sscircle\.html\s+Cache-Control: no-store/);
  assert.match(headers,/\/my-sscircle\s+Cache-Control: no-store/);
  assert.match(headers,/\/admin\.html\s+Cache-Control: no-store/);
@@ -354,4 +354,24 @@ test('V10.49.1.3: addon sends PNG only after CDN validation, retries automatic f
  assert.match(source,/imageStored/);
  assert.match(source,/WORKER_BELUM_SUPPORT_SIMPAN_PNG/);
  assert.match(addon,/10\.49\.1\.3/);
+});
+
+
+test('V10.49.1.7: Paper and SkinBridge use server-scoped HMAC headers',()=>{
+ const core=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/SSCirclePaperLinkPlugin.java',import.meta.url),'utf8');
+ const agent=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/ServerPairing.java',import.meta.url),'utf8');
+ assert.match(config,/auto-pairing:\s*\n  enabled: true/);
+ assert.match(core,/startPairingIfNeeded\(\)/);
+ assert.match(core,/pairingServerId\(\)/);
+ assert.match(agent,/runTaskTimerAsynchronously/);
+ assert.match(agent,/server-pair\/register/);
+ assert.match(agent,/server-pair\/poll/);
+ for(const file of ['PaperStatsSync.java','PaperIdentitySync.java','PaperSyncTelemetry.java','PaperSkinSync.java']){
+  const content=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/'+file,import.meta.url),'utf8');
+  assert.match(content,/X-SSC-Server-Id/,file);
+ }
+ const bridge=readFileSync(new URL('../minecraft-skin-bridge-paper/src/main/java/id/sscircle/skin/SSCircleSkinBridge.java',import.meta.url),'utf8');
+ const skin=readFileSync(new URL('../minecraft-skin-bridge-paper/src/main/java/id/sscircle/skin/SkinPublisher.java',import.meta.url),'utf8');
+ assert.match(bridge,/activeCoreSecret/);assert.match(bridge,/activeCoreId/);
+ assert.match(skin,/X-SSC-Server-Id/);
 });

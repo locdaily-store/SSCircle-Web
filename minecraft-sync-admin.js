@@ -21,7 +21,7 @@ window.SSCircleMinecraftSyncAdmin=(()=>{
   const eventText={IDLE:'Menunggu pengiriman',SYNC_OK:'Berhasil',
     QUEUE_PENDING:'Menunggu pengiriman',NETWORK_ERROR:'Gangguan jaringan',
     HTTP_ERROR:'Permintaan gagal',AUTH_ERROR:'Masalah autentikasi'};
-  let state=null,policy=null,loading=false,offset=0,term='',filter='all',searchTimer=null;
+  let state=null,policy=null,servers=[],loading=false,offset=0,term='',filter='all',searchTimer=null;
   async function api(path,options={}){
     const res=await fetch(path,{credentials:'same-origin',cache:'no-store',
       headers:{Accept:'application/json',...(options.body?{'Content-Type':'application/json'}:{})},...options});
@@ -81,6 +81,64 @@ window.SSCircleMinecraftSyncAdmin=(()=>{
     }
     const notice=el('div','ssc-sync-notice');notice.id='ssc-sync-notice';notice.setAttribute('role','status');
     root.append(notice);
+    const pairedPanel=el('section','panel ssc-pair-panel');
+    pairedPanel.append(el('h2','','Server Terhubung & Auto Pairing'),
+      el('p','ssc-sync-subtitle',
+      'Server baru membuat kode sendiri. Cocokkan kode dari /sscircle pair di konsol Minecraft sebelum menyetujui. Secret tidak ditampilkan di website.'));
+    const serverRows=el('div','ssc-pair-list');
+    for(const server of servers){
+      const item=el('article','ssc-pair-server');
+      const details=el('div','ssc-pair-description');
+      const heading=el('div','ssc-pair-heading');
+      const shortId=String(server.id||'').slice(0,8);
+      const label=el('strong','',server.label||'Server');
+      const statusMap={pending:'Menunggu persetujuan',active:'Aktif',revoked:'Dicabut'};
+      const pill=el('span','ssc-pair-badge',statusMap[server.status]||'Tidak diketahui');
+      pill.dataset.status=server.status;
+      heading.append(label,pill);
+      details.append(heading,el('small','','ID: '+shortId+' • Didaftarkan: '+stamp(server.requestedAt)));
+      if(server.status==='active')details.append(
+        el('small','','Heartbeat: '+stamp(server.lastSeenAt)));
+      item.append(details);
+      const actions=el('div','ssc-pair-actions');
+      if(server.status==='pending'){
+        const expired=Date.parse(server.expiresAt||'')<=Date.now();
+        const code=el('input');
+        code.type='text';code.placeholder='Kode 12 karakter dari Paper';
+        code.maxLength=12;code.autocomplete='off';
+        code.setAttribute('aria-label','Kode pairing '+server.label);
+        const approve=button('Setujui server',async()=>{
+          if(!/^[A-Za-z0-9_-]{12}$/.test(code.value.trim())){
+            status('Masukkan kode pairing 12 karakter dari konsol Minecraft.',true);return;
+          }
+          approve.disabled=true;
+          try{
+            await api('/api/admin/minecraft/servers/action',{method:'POST',
+              body:JSON.stringify({serverId:server.id,action:'approve',code:code.value.trim()})});
+            await load();status('Server disetujui. Plugin akan mengambil kredensial secara otomatis.');
+          }catch(error){status('Persetujuan gagal: '+error.message,true);approve.disabled=false;}
+        },'button primary');
+        approve.disabled=expired;code.disabled=expired;
+        if(expired)details.append(el('small','','Kode kedaluwarsa. Jalankan /sscircle pair reset CONFIRM di server.'));
+        actions.append(code,approve);
+      }
+      if(server.status==='active'){
+        const revoke=button('Cabut akses',async()=>{
+          if(!window.confirm('Cabut akses server '+server.label+'? Statistik dan akun pemain tidak dihapus.'))return;
+          revoke.disabled=true;
+          try{
+            await api('/api/admin/minecraft/servers/action',{method:'POST',
+              body:JSON.stringify({serverId:server.id,action:'revoke'})});
+            await load();status('Akses server dicabut. Sinkronisasi dari server tersebut akan ditolak.');
+          }catch(error){status('Pencabutan gagal: '+error.message,true);revoke.disabled=false;}
+        });
+        actions.append(revoke);
+      }
+      item.append(actions);serverRows.append(item);
+    }
+    if(!servers.length)serverRows.append(el('p','ssc-sync-empty',
+      'Belum ada server terdaftar. Pasang SSCircle Player Sync dan atur URL website pada config.yml.'));
+    pairedPanel.append(serverRows);root.append(pairedPanel);
     const telemetry=state.telemetry,live=state.connection;
     const labels={no_data:'Belum ada laporan plugin',recent:'Laporan baru diterima',
       delayed:'Laporan terlambat',unknown:'Status belum diketahui'};
@@ -202,8 +260,9 @@ window.SSCircleMinecraftSyncAdmin=(()=>{
       const params=new URLSearchParams({offset:String(offset),filter,q:term.trim().slice(0,64)});
       const results=await Promise.all([
         api('/api/admin/minecraft/sync?'+params.toString()),
-        api('/api/admin/minecraft/multi-settings')]);
-      state=results[0];policy=results[1];
+        api('/api/admin/minecraft/multi-settings'),
+        api('/api/admin/minecraft/servers')]);
+      state=results[0];policy=results[1];servers=results[2].servers||[];
       render();
       if(focusSearch){
         const input=root.querySelector('input[type=search]');

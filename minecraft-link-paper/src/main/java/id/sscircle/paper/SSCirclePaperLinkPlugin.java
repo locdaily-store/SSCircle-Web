@@ -60,6 +60,7 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
     private PaperIdentitySync identitySync;
     private PaperSyncTelemetry syncTelemetry;
     private PaperSkinSync skinSync;
+    private ServerPairing pairing;
 
     @Override
     public void onEnable() {
@@ -80,16 +81,17 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
         for (Player online : Bukkit.getOnlinePlayers())
             identitySessions.joined(online.getUniqueId(), online.getName());
         readSettings();
-        statsSync = new PaperStatsSync(this,http,this::identityFor,()->endpoint,()->signingSecret);
+        startPairingIfNeeded();
+        statsSync = new PaperStatsSync(this,http,this::identityFor,()->endpoint,this::activeSigningSecret);
         statsSync.start();
         // Refresh session proof without waiting for the next expensive stat
         // sampling round. This also replaces stale CRACKED labels after login.
         identitySync=new PaperIdentitySync(this,http,this::identityFor,
-            ()->endpoint,()->signingSecret);
+            ()->endpoint,this::activeSigningSecret);
         identitySync.start();
-        syncTelemetry=new PaperSyncTelemetry(this,statsSync,http,()->endpoint,()->signingSecret);
+        syncTelemetry=new PaperSyncTelemetry(this,statsSync,http,()->endpoint,this::activeSigningSecret);
         syncTelemetry.start();
-        skinSync=new PaperSkinSync(this,http,this::identityFor,()->endpoint,()->signingSecret);
+        skinSync=new PaperSkinSync(this,http,this::identityFor,()->endpoint,this::activeSigningSecret);
         skinSync.start();
         if (!Bukkit.getOnlineMode()) {
             if (mixedModeReady()) {
@@ -112,6 +114,7 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
         if (statsSync != null) statsSync.stop();
         if (identitySync != null) identitySync.stop();
         if (skinSync != null) skinSync.stop();
+        if (pairing != null) pairing.stop();
         identitySessions.clear();
         lastRequestAt.clear();
     }
@@ -120,7 +123,9 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
         endpoint = "";
         signingSecret = "";
         secretSource = "tidak tersedia";
-        try {
+        boolean hasSecretFile=java.nio.file.Files.exists(getDataFolder().toPath().resolve("server-secret.txt"),java.nio.file.LinkOption.NOFOLLOW_LINKS);
+        boolean legacyEnv=SecretFileStore.isValidSecret(System.getenv(SECRET_ENV));
+        if(hasSecretFile||legacyEnv||!getConfig().getBoolean("auto-pairing.enabled",true)) try {
             SecretFileStore.ResolvedSecret resolved = SecretFileStore.resolve(
                 getDataFolder().toPath(), System.getenv(SECRET_ENV));
             signingSecret = resolved.value();
@@ -134,6 +139,7 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
         } catch (java.io.IOException ex) {
             getLogger().warning("File secret lokal tidak dapat dibaca. Periksa isinya dan izin folder.");
         }
+        else secretSource="Auto Server Pairing (tanpa secret manual)";
         String configuredUrl = getConfig().getString("endpoint", "").trim();
         try {
             URI uri = URI.create(configuredUrl);
@@ -168,6 +174,7 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
         if (sender.hasPermission("sscircle.admin")) {
             options.add("diagnose");
             options.add("sync");
+            options.add("pair");
             options.add("reload");
         }
         return options.stream().filter(option -> option.startsWith(prefix)).sorted().toList();
@@ -183,6 +190,7 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
         if (sender.hasPermission("sscircle.admin")) {
             sender.sendMessage("/sscircle diagnose - Periksa koneksi HTTPS dan kecocokan secret tanpa kode");
             sender.sendMessage("/sscircle sync - Kirim statistik pemain online sekarang (OP)");
+            sender.sendMessage("/sscircle pair - Lihat kode persetujuan server");
             sender.sendMessage("/sscircle reload - Muat ulang pengaturan website");
         }
         sender.sendMessage("Tekan Tab setelah /sscircle untuk memilih subperintah.");
@@ -192,6 +200,23 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (args.length == 0 || (args.length == 1 && args[0].equalsIgnoreCase("help"))) {
             showHelp(sender);
+            return true;
+        }
+        if(args.length>=1&&args[0].equalsIgnoreCase("pair")){
+            if(!sender.hasPermission("sscircle.admin")){
+                sender.sendMessage("Hanya OP dapat melihat pairing server.");return true;
+            }
+            if(pairing==null){
+                sender.sendMessage("Server menggunakan kunci lama, bukan Auto Server Pairing.");return true;
+            }
+            if(args.length==3&&args[1].equalsIgnoreCase("reset")&&args[2].equals("CONFIRM")){
+                try{pairing.reset();sender.sendMessage("Pairing lokal direset. Cabut server lama di Admin Control.");}
+                catch(IllegalStateException e){sender.sendMessage("Reset gagal: "+e.getMessage());}
+                return true;
+            }
+            sender.sendMessage("Auto Pairing: "+pairing.status());
+            if(!pairing.code().isBlank())sender.sendMessage("Kode persetujuan: "+pairing.code());
+            sender.sendMessage("Admin Control > Minecraft Sync > Server Terhubung");
             return true;
         }
         if (args.length == 1 && args[0].equalsIgnoreCase("diagnose")) {
@@ -231,7 +256,8 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
             }
             reloadConfig();
             readSettings();
-            sender.sendMessage("Konfigurasi dan file secret SSCircle sudah diperiksa ulang.");
+            startPairingIfNeeded();
+            sender.sendMessage("Konfigurasi SSCircle dan pairing diperiksa ulang.");
             sender.sendMessage("Environment Windows yang berubah tetap membutuhkan restart proses Paper.");
             return true;
         }
@@ -282,7 +308,7 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
         try {
             String signedText = "POST\n" + CLAIM_PATH + "\n"
                 + timestamp + "\n" + nonce + "\n" + json;
-            String signature = hmac(signingSecret, signedText);
+            String signature = hmac(activeSigningSecret(), signedText);
             HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(endpoint + CLAIM_PATH))
                 .timeout(Duration.ofSeconds(REQUEST_TIMEOUT_SECONDS))
@@ -290,6 +316,7 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
                 .header("X-SSC-Timestamp", Long.toString(timestamp))
                 .header("X-SSC-Nonce", nonce)
                 .header("X-SSC-Signature", signature)
+                .header("X-SSC-Server-Id", pairingServerId())
                 .POST(HttpRequest.BodyPublishers.ofString(json, StandardCharsets.UTF_8))
                 .build();
 
@@ -325,7 +352,7 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
             long timestamp = System.currentTimeMillis() / 1000L;
             String nonce = UUID.randomUUID().toString();
             String signedText = "POST\n" + DIAGNOSE_PATH + "\n" + timestamp + "\n" + nonce + "\n" + json;
-            String signature = hmac(signingSecret, signedText);
+            String signature = hmac(activeSigningSecret(), signedText);
             HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(endpoint + DIAGNOSE_PATH))
                 .timeout(Duration.ofSeconds(REQUEST_TIMEOUT_SECONDS))
@@ -333,6 +360,7 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
                 .header("X-SSC-Timestamp", Long.toString(timestamp))
                 .header("X-SSC-Nonce", nonce)
                 .header("X-SSC-Signature", signature)
+                .header("X-SSC-Server-Id", pairingServerId())
                 .POST(HttpRequest.BodyPublishers.ofString(json, StandardCharsets.UTF_8))
                 .build();
             sender.sendMessage("SSCircle: memeriksa jalur HTTPS dan signature dari website...");
@@ -450,9 +478,9 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
         statusItem(sender,"Web SSCircle",endpoint.isBlank()?"URL belum benar":
             "URL HTTPS terisi (belum tentu online)",
             endpoint.isBlank()?NamedTextColor.RED:NamedTextColor.GREEN);
-        statusItem(sender,"Kunci aman",SecretFileStore.isValidSecret(signingSecret)
+        statusItem(sender,"Kunci aman",SecretFileStore.isValidSecret(activeSigningSecret())
             ?"Ada (nilai disembunyikan)":"Belum valid",
-            SecretFileStore.isValidSecret(signingSecret)
+            SecretFileStore.isValidSecret(activeSigningSecret())
                 ?NamedTextColor.GREEN:NamedTextColor.RED);
         if(!Bukkit.getOnlineMode()){
             statusItem(sender,"AuthMe",authMePlugin()==null?"Tidak aktif":"Terpasang",
@@ -527,7 +555,8 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
                 identitySync.deliveryStatus(),NamedTextColor.GRAY);
             if(syncTelemetry!=null)
                 statusItem(sender,"Monitoring",syncTelemetry.status(),NamedTextColor.GRAY);
-            statusItem(sender,"Sumber kunci",secretSource,NamedTextColor.GRAY);
+            statusItem(sender,"Sumber kunci",pairing==null?secretSource:"Auto Server Pairing",NamedTextColor.GRAY);
+            if(pairing!=null)statusItem(sender,"Persetujuan server",pairing.status(),NamedTextColor.YELLOW);
             Plugin adapter=fastLoginPlugin();
             if(adapter instanceof JavaPlugin javaAdapter&&!Bukkit.getOnlineMode()){
                 statusItem(sender,"FLP autoLogin",
@@ -711,9 +740,24 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
     }
 
     private boolean hasConnectionSettings() {
-        return !endpoint.isEmpty() && SecretFileStore.isValidSecret(signingSecret);
+        return !endpoint.isEmpty() && SecretFileStore.isValidSecret(activeSigningSecret());
     }
 
+    public String activeSigningSecret(){
+        return pairing==null?signingSecret:pairing.activeSecret(endpoint);
+    }
+    public String pairingServerId(){
+        return pairing==null?"":pairing.activeServerId(endpoint);
+    }
+    private void startPairingIfNeeded(){
+        if(pairing!=null){pairing.stop();pairing=null;}
+        if(!SecretFileStore.isValidSecret(signingSecret)
+            &&getConfig().getBoolean("auto-pairing.enabled",true)
+            &&!endpoint.isBlank()){
+            pairing=new ServerPairing(this,http,()->endpoint);
+            pairing.start();
+        }
+    }
     private static String hmac(String secret, String message) throws Exception {
         Mac mac = Mac.getInstance("HmacSHA256");
         mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));

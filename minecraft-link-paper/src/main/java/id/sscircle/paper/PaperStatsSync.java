@@ -325,6 +325,7 @@ final class PaperStatsSync implements Listener {
                 .header("X-SSC-Timestamp",Long.toString(timestamp))
                 .header("X-SSC-Nonce",nonce)
                 .header("X-SSC-Signature",signature)
+                .header("X-SSC-Server-Id",plugin.pairingServerId())
                 .POST(HttpRequest.BodyPublishers.ofString(json,StandardCharsets.UTF_8))
                 .build();
             inFlight=true;
