@@ -4333,7 +4333,7 @@ async function socialAPI(req,env,path,method){
   return bad('Endpoint sosial tidak ditemukan.',404);
 }
 
-const SSC_RUNTIME_RELEASE='10.51.3';
+const SSC_RUNTIME_RELEASE='10.51.4';
 const SSC_RUNTIME_ISSUES=new Set();
 function sscRuntimeBindings(env){
   return {
