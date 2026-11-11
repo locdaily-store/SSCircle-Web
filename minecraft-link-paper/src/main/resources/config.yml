@@ -2,7 +2,14 @@
 # Contoh: https://sscircle-testing.pages.dev
 endpoint: "https://example.pages.dev"
 
-# Kunci SSCIRCLE_LINK_SERVER_SECRET harus sama dengan secret Cloudflare.
+# V10.49.1.7: instalasi baru memakai Auto Server Pairing.
+# Setujui kode server satu kali di Admin Control, tanpa menyalin secret.
+auto-pairing:
+  enabled: true
+  server-name: "SSCircle Paper"
+
+# Kunci lama SSCIRCLE_LINK_SERVER_SECRET tetap didukung.
+# Jika server-secret.txt sudah ada, mekanisme lama tetap dipakai.
 # Jika ada, file privat plugins/SSCirclePlayerSync/server-secret.txt diprioritaskan
 # di atas environment proses Paper. Jika tidak ada keduanya, token acak dibuat
 # dan HARUS disamakan secara privat dengan Cloudflare.

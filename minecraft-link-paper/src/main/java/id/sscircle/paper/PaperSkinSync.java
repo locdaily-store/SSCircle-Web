@@ -188,6 +188,7 @@ final class PaperSkinSync {
                 .header("X-SSC-Timestamp",Long.toString(timestamp))
                 .header("X-SSC-Nonce",nonce)
                 .header("X-SSC-Signature",signature)
+                .header("X-SSC-Server-Id",plugin.pairingServerId())
                 .POST(HttpRequest.BodyPublishers.ofString(body,StandardCharsets.UTF_8)).build();
             http.sendAsync(request,HttpResponse.BodyHandlers.discarding())
                 .whenComplete((res,err)->{

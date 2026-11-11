@@ -55,7 +55,7 @@ final class SkinPublisher {
     private final JavaPlugin plugin;
     private final HttpClient http;
     private final Function<Player, Identity> identity;
-    private final Supplier<String> endpoint,secret;
+    private final Supplier<String> endpoint,secret,serverId;
     private final Map<UUID,Confirmation> confirmed=new ConcurrentHashMap<>();
     private final Set<UUID> inFlight=ConcurrentHashMap.newKeySet();
     private final Map<UUID,State> states=new ConcurrentHashMap<>();
@@ -65,9 +65,9 @@ final class SkinPublisher {
     private int task=-1;
 
     SkinPublisher(JavaPlugin plugin,HttpClient http,Function<Player,Identity> identity,
-                  Supplier<String> endpoint,Supplier<String> secret){
+                  Supplier<String> endpoint,Supplier<String> secret,Supplier<String> serverId){
         this.plugin=plugin;this.http=http;this.identity=identity;
-        this.endpoint=endpoint;this.secret=secret;
+        this.endpoint=endpoint;this.secret=secret;this.serverId=serverId;
     }
 
     void start(){
@@ -282,6 +282,7 @@ final class SkinPublisher {
                 .timeout(Duration.ofSeconds(12)).header("Content-Type","application/json")
                 .header("X-SSC-Timestamp",Long.toString(timestamp))
                 .header("X-SSC-Nonce",nonce).header("X-SSC-Signature",signature)
+                .header("X-SSC-Server-Id",serverId.get())
                 .POST(HttpRequest.BodyPublishers.ofString(body)).build();
             HttpResponse<String> response=http.send(request,HttpResponse.BodyHandlers.ofString());
             int statusCode=response.statusCode();
