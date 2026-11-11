@@ -51,6 +51,9 @@ jobs:
       - name: Uji Member Center, kebijakan profil, awards dan pencabutan sesi
         run: node --test tests/member-center.test.mjs
 
+      - name: Uji izin pencarian anggota dan pertemanan
+        run: node --test tests/member-social.test.mjs
+
       - name: Uji keamanan akun, derivasi password dan Mail Box
         run: node --test tests/security.test.mjs tests/mailbox.test.mjs tests/password-client.test.mjs
 

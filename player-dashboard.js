@@ -68,11 +68,17 @@
     const profile=payload.profile||{},policy=payload.policy||{};
     $('player-display-name').value=profile.displayName||'';
     $('player-bio').value=profile.bio||'';
-    $('player-visibility').value=profile.visibility||'private';
+    const visibility=$('player-visibility');
+    const membersOption=visibility.querySelector('option[value="members"]');
+    const publicOption=visibility.querySelector('option[value="public"]');
+    if(membersOption)membersOption.disabled=policy.allowMembers===false;
+    if(publicOption)publicOption.disabled=policy.allowPublic!==true;
+    visibility.value=profile.visibility||'private';
+    if(visibility.selectedOptions[0]?.disabled)visibility.value='private';
     $('player-show-stats').checked=profile.showStats===true;
     $('player-event-alerts').checked=profile.eventAlerts!==false;
     $('player-bio').disabled=policy.allowBio===false;
-    $('player-visibility').disabled=policy.allowPublic===false;
+    $('player-visibility').disabled=false; // Private is always selectable.
     $('player-show-stats').disabled=policy.allowStats===false;
     $('player-event-alerts').disabled=policy.allowEventAlerts===false;
     $('player-profile-title').textContent=profile.displayName||'Anggota SSCircle';

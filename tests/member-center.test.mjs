@@ -103,3 +103,18 @@ test('status pending/rejected tidak dapat mengakses data anggota',async()=>{
     assert.equal(result.status,403,status);
   }
 });
+
+test('saved seven-section Profile layout preserves its order after adding Social',async()=>{
+ const t=fixture();
+ const previous=['explore','stats','achievements','linking','security','welcome','preferences'];
+ const row=t.db.prepare('SELECT settings FROM form_config WHERE id=1').get();
+ t.db.prepare('UPDATE form_config SET settings=? WHERE id=1')
+   .run(JSON.stringify({...JSON.parse(row.settings),profilePageSections:previous}));
+ const response=await t.req('/api/form',{cookie:''});
+ assert.equal(response.status,200,JSON.stringify(response.data));
+ const current=response.data.settings.profilePageSections;
+ assert.equal(current.length,8);
+ assert.ok(current.includes('social'));
+ assert.deepEqual(current.filter(x=>x!=='social'),previous);
+ assert.ok(current.indexOf('social')<current.indexOf('explore'));
+});

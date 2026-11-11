@@ -708,7 +708,7 @@ const DEFAULTS = {
   profilePageLayout: 'sidebar',
   profilePageHeroStyle: 'default',
   profilePageCardStyle: 'soft',
-  profilePageSections: ['welcome','security','preferences','achievements','linking','stats','explore'],
+  profilePageSections: ['welcome','security','preferences','achievements','linking','stats','social','explore'],
   profilePageHidden: [],
   introEnabled: true,
   introTitle: 'SSCircle Server',
@@ -1140,7 +1140,18 @@ function settingsValid(input) {
   out.profilePageHeroStyle = input.profilePageHeroStyle === 'compact' ? 'compact' : 'default';
   out.profilePageCardStyle = input.profilePageCardStyle === 'outlined' ? 'outlined' : 'soft';
   const profileSections = DEFAULTS.profilePageSections;
-  const order = input.profilePageSections === undefined ? profileSections : input.profilePageSections;
+  // Upgrade seven-card custom layouts without changing their relative order.
+  const incomingOrder = input.profilePageSections === undefined ? profileSections : input.profilePageSections;
+  const isLegacyOrder = Array.isArray(incomingOrder) &&
+    incomingOrder.length===profileSections.length-1 &&
+    !incomingOrder.includes('social') &&
+    new Set(incomingOrder).size===incomingOrder.length &&
+    incomingOrder.every(id=>profileSections.includes(id));
+  const order=isLegacyOrder?incomingOrder.slice():incomingOrder;
+  if(isLegacyOrder){
+    const before=order.indexOf('explore');
+    order.splice(before<0?order.length:before,0,'social');
+  }
   if (!Array.isArray(order) || order.length !== profileSections.length ||
       new Set(order).size !== profileSections.length ||
       order.some(id => !profileSections.includes(id)))
@@ -1942,7 +1953,8 @@ async function ensureMemberCenter(env) {
       FOREIGN KEY(application_id) REFERENCES submissions(id) ON DELETE CASCADE)`,
     `CREATE TABLE IF NOT EXISTS member_policy (
       id INTEGER PRIMARY KEY CHECK(id=1), allow_bio INTEGER NOT NULL DEFAULT 1,
-      allow_public INTEGER NOT NULL DEFAULT 0, allow_stats INTEGER NOT NULL DEFAULT 1,
+      allow_public INTEGER NOT NULL DEFAULT 0, allow_members INTEGER NOT NULL DEFAULT 1,
+      allow_stats INTEGER NOT NULL DEFAULT 1,
       allow_event_alerts INTEGER NOT NULL DEFAULT 1,
       updated_at TEXT NOT NULL DEFAULT '')`,
     `CREATE TABLE IF NOT EXISTS minecraft_multi_settings (
@@ -2032,6 +2044,16 @@ async function ensureMemberCenter(env) {
   ];
   for (const sql of statements) await env.DB.prepare(sql).run();
 
+  // Existing D1 databases need the new permission without dropping any rows.
+  const policyCols=await env.DB.prepare('PRAGMA table_info(member_policy)').all();
+  if(!(policyCols.results||[]).some(col=>col.name==='allow_members')){
+    try{
+      await env.DB.prepare('ALTER TABLE member_policy ADD COLUMN allow_members INTEGER NOT NULL DEFAULT 1').run();
+    }catch(error){
+      if(!/duplicate column name/i.test(String(error?.message||'')))throw error;
+    }
+  }
+
   // Non-destructive reconciliation of the 1.1 texture_url and 1.3 texture_hash
   // variants. Import once per Worker instance; never rewrite the legacy table.
   const legacyColumns=await env.DB.prepare('PRAGMA table_info(minecraft_account_skins)').all();
@@ -2065,6 +2087,7 @@ async function memberEpoch(env, id) {
 const memberPolicy = row => ({
   allowBio: row?.allow_bio !== 0,
   allowPublic: row?.allow_public === 1,
+  allowMembers: row?.allow_members !== 0,
   allowStats: row?.allow_stats !== 0,
   allowEventAlerts: row?.allow_event_alerts !== 0
 });
@@ -2517,14 +2540,20 @@ async function memberCenterAPI(req,env,path,method) {
     if (path==='/api/admin/member-policy' && method==='PUT') {
       const value=await body(req,1500);
       const keys=['allowBio','allowPublic','allowStats','allowEventAlerts'];
-      if(keys.some(k=>typeof value[k]!=='boolean')) return bad('Pengaturan kebijakan tidak valid.',400);
-      await env.DB.prepare(`UPDATE member_policy SET allow_bio=?,allow_public=?,allow_stats=?,
-        allow_event_alerts=?,updated_at=? WHERE id=1`).bind(
-          Number(value.allowBio),Number(value.allowPublic),Number(value.allowStats),
-          Number(value.allowEventAlerts),new Date().toISOString()).run();
+      if(keys.some(k=>typeof value[k]!=='boolean') ||
+        (value.allowMembers!==undefined&&typeof value.allowMembers!=='boolean'))
+        return bad('Pengaturan kebijakan tidak valid.',400);
+      const current=await env.DB.prepare('SELECT allow_members FROM member_policy WHERE id=1').first();
+      // Stale admin clients that omit this field must preserve the current value.
+      const members=value.allowMembers===undefined?(current?.allow_members!==0):value.allowMembers;
+      await env.DB.prepare(`UPDATE member_policy SET allow_bio=?,allow_public=?,allow_members=?,
+        allow_stats=?,allow_event_alerts=?,updated_at=? WHERE id=1`).bind(
+          Number(value.allowBio),Number(value.allowPublic),Number(members),
+          Number(value.allowStats),Number(value.allowEventAlerts),new Date().toISOString()).run();
       return J({ok:true,policy:memberPolicy({
         allow_bio:Number(value.allowBio),allow_public:Number(value.allowPublic),
-        allow_stats:Number(value.allowStats),allow_event_alerts:Number(value.allowEventAlerts)
+        allow_members:Number(members),allow_stats:Number(value.allowStats),
+        allow_event_alerts:Number(value.allowEventAlerts)
       })});
     }
     if (path==='/api/admin/member-revoke' && method==='POST') {
@@ -2591,7 +2620,11 @@ async function memberCenterAPI(req,env,path,method) {
       typeof value.showStats!=='boolean'||typeof value.eventAlerts!=='boolean')
       return bad('Pilihan privasi profil tidak valid.',400);
     const policy=memberPolicy(await env.DB.prepare('SELECT * FROM member_policy WHERE id=1').first());
-    const visibility=policy.allowPublic?value.visibility:'private';
+    if(value.visibility==='members'&&!policy.allowMembers)
+      return bad('Admin menonaktifkan profil untuk sesama anggota.',403);
+    if(value.visibility==='public'&&!policy.allowPublic)
+      return bad('Admin menonaktifkan pilihan profil publik.',403);
+    const visibility=value.visibility;
     const existing=await env.DB.prepare('SELECT * FROM member_profiles WHERE application_id=?').bind(application.id).first();
     const result={
       displayName:display,
@@ -4074,8 +4107,9 @@ async function socialVisibility(env,viewer,target){
   const policy=memberPolicy(await env.DB.prepare('SELECT * FROM member_policy WHERE id=1').first());
   const friendship=viewer===target?null:await socialFriendship(env,viewer,target);
   const friend=friendship?.status==='accepted';
-  const visible=viewer===target||friend||member.visibility==='members'
-    ||(policy.allowPublic&&member.visibility==='public');
+  const visible=viewer===target||friend||
+    (policy.allowMembers&&member.visibility==='members')||
+    (policy.allowPublic&&member.visibility==='public');
   return {member,policy,friend,visible,friendship};
 }
 function socialRelationship(row,viewer){
@@ -4111,7 +4145,8 @@ async function socialAPI(req,env,path,method){
         WHERE a.application_id=s.id ORDER BY a.verified_at ASC LIMIT 1) AS avatar_account_id
       FROM submissions s LEFT JOIN member_profiles p ON p.application_id=s.id
       WHERE s.status='accepted' AND s.id<>? AND
-       (p.visibility='members' OR (p.visibility='public' AND
+       ((p.visibility='members' AND (SELECT allow_members FROM member_policy WHERE id=1)=1)
+         OR (p.visibility='public' AND
           (SELECT allow_public FROM member_policy WHERE id=1)=1)
         OR EXISTS(SELECT 1 FROM member_friendships f WHERE f.status='accepted'
           AND ((f.member_a=s.id AND f.member_b=?) OR
@@ -4143,7 +4178,8 @@ async function socialAPI(req,env,path,method){
          WHERE a.application_id=s.id ORDER BY a.verified_at ASC LIMIT 1) AS avatar_account_id
        FROM submissions s LEFT JOIN member_profiles p ON p.application_id=s.id
        WHERE s.status='accepted' AND s.id<>? AND
-        (p.visibility='members' OR (p.visibility='public' AND
+        ((p.visibility='members' AND (SELECT allow_members FROM member_policy WHERE id=1)=1)
+         OR (p.visibility='public' AND
          (SELECT allow_public FROM member_policy WHERE id=1)=1)
          OR EXISTS(SELECT 1 FROM member_friendships f WHERE f.status='accepted'
            AND ((f.member_a=s.id AND f.member_b=?) OR
@@ -4287,7 +4323,7 @@ async function socialAPI(req,env,path,method){
   return bad('Endpoint sosial tidak ditemukan.',404);
 }
 
-const SSC_RUNTIME_RELEASE='10.51.1';
+const SSC_RUNTIME_RELEASE='10.51.2';
 const SSC_RUNTIME_ISSUES=new Set();
 function sscRuntimeBindings(env){
   return {

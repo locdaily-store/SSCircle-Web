@@ -176,3 +176,65 @@ test('member social interface has an accessible real dialog and friend managemen
  assert.match(html,/SSC-M/);
  assert.doesNotMatch(js,/tracking_code|player\.code/);
 });
+
+test('member-only discovery can be disabled independently of public profiles',async()=>{
+ const x=fixture();await x.initialize();
+ const admin=signed('ssc_s6_admin',{exp:now()+3600},SECRET+'|test-admin-password');
+ const defaultProfile=await x.call(B,'/api/player/profile');
+ assert.equal(defaultProfile.status,200,JSON.stringify(defaultProfile.data));
+ assert.equal(defaultProfile.data.policy.allowMembers,true);
+ assert.equal(defaultProfile.data.policy.allowPublic,false);
+ assert.equal((await x.call(A,'/api/player/social/search?q=Beta')).data.items.length,1);
+ const flags={allowBio:true,allowMembers:false,allowPublic:false,allowStats:true,allowEventAlerts:true};
+ let response=await x.call(A,'/api/admin/member-policy',{method:'PUT',cookie:admin,body:flags});
+ assert.equal(response.status,200,JSON.stringify(response.data));
+ assert.equal(response.data.policy.allowMembers,false);
+ assert.equal(response.data.policy.allowPublic,false);
+ assert.equal((await x.call(A,'/api/player/social/directory')).data.items.length,0);
+ assert.equal((await x.call(A,'/api/player/social/search?q=Beta')).data.items.length,0);
+ assert.equal((await x.call(A,'/api/player/social/profile?id='+B)).status,404);
+ assert.equal((await x.call(B,'/api/player/profile',{method:'PUT',body:{
+   displayName:'Beta Explorer',bio:'Tes',visibility:'members',showStats:false,eventAlerts:true
+ }})).status,403);
+ response=await x.call(A,'/api/admin/member-policy',{method:'PUT',cookie:admin,
+   body:{...flags,allowMembers:true}});
+ assert.equal(response.status,200,JSON.stringify(response.data));
+ assert.equal((await x.call(A,'/api/player/social/search?q=Beta')).data.items.length,1);
+ assert.equal((await x.call(B,'/api/player/profile',{method:'PUT',body:{
+   displayName:'Beta Explorer',bio:'Tes',visibility:'members',showStats:false,eventAlerts:true
+ }})).status,200);
+ // Older admin clients must not silently reset the independently saved flag.
+ response=await x.call(A,'/api/admin/member-policy',{method:'PUT',cookie:admin,
+   body:{allowBio:true,allowPublic:false,allowStats:true,allowEventAlerts:true}});
+ assert.equal(response.status,200);
+ assert.equal(response.data.policy.allowMembers,true);
+ // Enabling public profiles alone never changes private profiles.
+ response=await x.call(A,'/api/admin/member-policy',{method:'PUT',cookie:admin,
+   body:{...flags,allowMembers:false,allowPublic:true}});
+ assert.equal(response.status,200);
+ assert.equal((await x.call(A,'/api/player/social/search?q=Beta')).data.items.length,0);
+ assert.equal((await x.call(B,'/api/player/profile',{method:'PUT',body:{
+   displayName:'Beta Explorer',bio:'Tes',visibility:'public',showStats:false,eventAlerts:true
+ }})).status,200);
+ assert.equal((await x.call(A,'/api/player/social/search?q=Beta')).data.items.length,1);
+ assert.equal((await x.call(A,'/api/player/social/profile?id='+C)).status,404);
+});
+
+test('an old D1 member_policy table upgrades without changing its saved permissions',async()=>{
+ const x=fixture();
+ x.db.exec(`CREATE TABLE member_policy (
+   id INTEGER PRIMARY KEY CHECK(id=1),
+   allow_bio INTEGER NOT NULL DEFAULT 1,
+   allow_public INTEGER NOT NULL DEFAULT 0,
+   allow_stats INTEGER NOT NULL DEFAULT 1,
+   allow_event_alerts INTEGER NOT NULL DEFAULT 1,
+   updated_at TEXT NOT NULL DEFAULT '')`);
+ x.db.prepare('INSERT INTO member_policy(id,allow_bio,allow_public,allow_stats,allow_event_alerts,updated_at) VALUES(1,0,0,1,1,?)').run('old');
+ await x.initialize();
+ const migrated=x.db.prepare('SELECT * FROM member_policy WHERE id=1').get();
+ assert.equal(migrated.allow_bio,0);
+ assert.equal(migrated.allow_public,0);
+ assert.equal(migrated.allow_members,1);
+ assert.equal(migrated.updated_at,'old');
+ assert.equal((await x.call(A,'/api/player/social/search?q=Beta')).data.items.length,1);
+});
