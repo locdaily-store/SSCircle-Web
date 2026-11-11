@@ -14,7 +14,7 @@
   // Any server-linked account can request its own private skin. The Worker
   // enforces password session, ownership and data availability, not the UI.
   const eligible=a=>Boolean(a&&UUID.test(a.id||''));
-  const urlForAccount=a=>eligible(a)?'/api/player/minecraft/skin/'+encodeURIComponent(a.id):null;
+  const urlForAccount=a=>eligible(a)?(a.communitySkin===true?'/api/player/community/skin/':'/api/player/minecraft/skin/')+encodeURIComponent(a.id):null;
   const errorHint=(status,code)=>{
     if(status===404)return 'Skin belum diterima Cloudflare. Setelah login Minecraft, website akan memeriksa otomatis. Jika masih kosong, minta OP melihat /ssskin inspect <pemain>.';
     if(status===403)return 'Sesi Profile perlu login ulang dengan password Dashboard.';
