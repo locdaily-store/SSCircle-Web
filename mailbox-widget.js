@@ -1,5 +1,4 @@
-/* SSCircle V10.43: safe multi-select Notification Center. Server text is textContent only.
-   V10.50: pesan status pendaftaran, filter Status, tombol aktivasi hanya untuk pendaftar yang diterima. */
+/* SSCircle V10.43: safe multi-select Notification Center. Server text is textContent only. */
 'use strict';
 (() => {
   if (window.SSCircleMailbox) return;
@@ -13,8 +12,7 @@
     '<div class="ssc-mailbox-content">',
     '<section class="mailbox-request mailbox-surface"><div class="mailbox-request-copy"><h3>Kode aktivasi akun</h3>',
     '<p>Minta kode aktivasi di sini. Setelah identitas diverifikasi pengurus, kode tersedia di kotak masuk.</p>',
-    '<small id="ssc-mailbox-request-hint" hidden>Kode aktivasi baru tersedia setelah pendaftaranmu diterima.</small>',
-    '</div><button type="button" id="ssc-mailbox-request" class="mailbox-primary" disabled>Minta kode</button></section>',
+    '</div><button type="button" id="ssc-mailbox-request" class="mailbox-primary">Minta kode</button></section>',
     '<div class="ssc-mailbox-feedback"><p class="mailbox-message" id="ssc-mailbox-message" role="status" aria-live="polite"></p>',
     '<a id="ssc-mailbox-signin" href="/status.html#kode-milikku" hidden>Masuk melalui Cek Status</a></div>',
     '<div class="mailbox-grid">',
@@ -24,7 +22,6 @@
     '<div role="group" class="mailbox-filters" aria-label="Filter pesan">',
     '<button type="button" class="mailbox-filter is-current" data-ssc-filter="all" aria-pressed="true">Semua</button>',
     '<button type="button" class="mailbox-filter" data-ssc-filter="unread" aria-pressed="false">Belum dibaca</button>',
-    '<button type="button" class="mailbox-filter" data-ssc-filter="status" aria-pressed="false">Status</button>',
     '<button type="button" class="mailbox-filter" data-ssc-filter="activation" aria-pressed="false">Aktivasi</button></div>',
     '<div class="ssc-mailbox-selection-bar">',
     '<button type="button" class="mailbox-secondary" id="ssc-mailbox-select-mode" aria-pressed="false">Pilih pesan</button>',
@@ -52,15 +49,7 @@
   document.body.append(dialog);
   const $=id=>dialog.querySelector('#'+id);
   let items=[],current=null,filter='all',lastTrigger=null,refreshTask=null,loaded=false,loadFailed=false,deleting=false,
-    selecting=false,selected=new Set(),managing=false,appStatus='none';
-  const kindLabel=type=>type==='activation'?'AKTIVASI AKUN':type==='status'?'STATUS PENDAFTARAN':'PEMBERITAHUAN';
-  const kindIcon=type=>type==='activation'?'✦':type==='status'?'◆':'✉';
-  // Kode aktivasi hanya untuk pendaftar yang diterima; selain itu tombolnya dikunci.
-  function applyAccess(){
-    const ok=appStatus==='accepted';
-    $('ssc-mailbox-request').disabled=!ok;
-    $('ssc-mailbox-request-hint').hidden=ok;
-  }
+    selecting=false,selected=new Set(),managing=false;
   const fmt=date=>{
     const value=new Date(date);
     return Number.isFinite(value.getTime())?value.toLocaleString('id-ID',{
@@ -101,7 +90,6 @@
   }
   function shownItems(){
     return items.filter(item=>filter==='all'||(filter==='unread'&&!item.read)||
-      (filter==='status'&&item.type==='status')||
       (filter==='activation'&&['activation','information'].includes(item.type)));
   }
   function updateSelection(){
@@ -132,7 +120,7 @@
       button.type='button';button.className='mailbox-item'+(!item.read?' is-unread':'')+
         (current?.id===item.id?' is-selected':'');
       const glyph=document.createElement('span');
-      glyph.className='mailbox-item-icon';glyph.textContent=kindIcon(item.type);
+      glyph.className='mailbox-item-icon';glyph.textContent=item.type==='activation'?'✦':'✉';
       const label=document.createElement('span');label.className='mailbox-item-text';
       const title=document.createElement('strong');title.textContent=item.title;
       const timestamp=document.createElement('small');timestamp.textContent=fmt(item.createdAt);
@@ -164,7 +152,7 @@
     current=item;
     $('ssc-mailbox-empty').hidden=true;
     $('ssc-mailbox-detail').hidden=false;
-    $('ssc-mailbox-category').textContent=kindLabel(item.type);
+    $('ssc-mailbox-category').textContent=item.type==='activation'?'AKTIVASI AKUN':'PEMBERITAHUAN';
     $('ssc-mailbox-subject').textContent=item.title;
     $('ssc-mailbox-time').textContent=fmt(item.createdAt);
     $('ssc-mailbox-body').textContent=item.content;
@@ -193,7 +181,6 @@
       try{
         const value=await api('/api/player/mailbox');
         items=Array.isArray(value.items)?value.items:[];
-        appStatus=value.applicationStatus||'accepted';applyAccess();
         selected.clear();loaded=true;loadFailed=false;
         $('ssc-mailbox-signin').hidden=true;
         if(current){
@@ -201,17 +188,14 @@
           if(next)await read(next);else emptyDetail();
         }
         draw();
-        if(!silent)notify(appStatus==='pending'?'Pendaftaranmu masih menunggu pemeriksaan pengurus SSCircle.':
-          appStatus==='rejected'?'Pendaftaranmu belum dapat diterima. Baca pesan terbaru di kotak masuk.':
-          value.activationRequest==='pending'?
+        if(!silent)notify(value.activationRequest==='pending'?
           'Permintaan kode menunggu verifikasi pengurus.':'Notifikasi sudah diperbarui.');
       }catch(error){
         // Never retain a previous account's messages after an auth or network failure.
         items=[];selected.clear();selecting=false;emptyDetail();loaded=true;loadFailed=true;draw();
-        appStatus='none';applyAccess();
         $('ssc-mailbox-signin').hidden=![401,403].includes(error.status);
         if(!silent||dialog.open)notify([401,403].includes(error.status)?
-          'Masuk dengan kode pendaftaranmu melalui Cek Status untuk membuka Mail Box.':
+          'Masuk dengan akun berstatus Diterima melalui Cek Status untuk membuka Mail Box.':
           'Notifikasi belum bisa dimuat. Periksa koneksi, lalu tekan Perbarui.',true);
       }finally{
         $('ssc-mailbox-list').removeAttribute('aria-busy');
@@ -289,7 +273,7 @@
       const result=await api('/api/player/mailbox/request-activation','POST',{});
       await refresh(true);notify(result.message);
     }catch(error){notify(error.message,true)}
-    finally{applyAccess();}
+    finally{button.disabled=false;}
   });
   $('ssc-mailbox-reveal').addEventListener('click',async()=>{
     if(!current?.canReveal)return;

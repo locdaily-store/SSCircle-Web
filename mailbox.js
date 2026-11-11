@@ -1,18 +1,8 @@
-/* SSCircle 10.38 - Private Mail Box, no HTML injection from messages.
-   10.50 - pendaftar pending/ditolak ikut bisa membaca pemberitahuan status. */
+/* SSCircle 10.38 - Private Mail Box, no HTML injection from messages. */
 'use strict';
 (() => {
   const $=id=>document.getElementById(id);
-  let items=[],current=null,filter='all',loading=false,appStatus='accepted';
-  const kindLabel=type=>type==='activation'?'AKTIVASI AKUN':type==='status'?'STATUS PENDAFTARAN':'PEMBERITAHUAN';
-  const kindIcon=type=>type==='activation'?'✦':type==='status'?'◆':'✉';
-  // Kode aktivasi hanya untuk pendaftar yang diterima; selain itu tombolnya dikunci.
-  function applyAccess(){
-    const ok=appStatus==='accepted';
-    $('mailbox-request-button').disabled=!ok;
-    const hint=$('mailbox-request-hint');
-    if(hint)hint.hidden=ok;
-  }
+  let items=[],current=null,filter='all',loading=false;
   const fmt=date=>{
     const d=new Date(date);
     return Number.isFinite(d.getTime())?d.toLocaleString('id-ID',{
@@ -34,20 +24,19 @@
   function renderList(){
     const root=$('mailbox-list');root.replaceChildren();
     const shown=items.filter(p=>filter==='all'||(filter==='unread'&&!p.read)||
-      (filter==='status'&&p.type==='status')||
       (filter==='activation'&&(p.type==='activation'||p.type==='information')));
     const unread=items.filter(x=>!x.read).length;
     $('mailbox-unread').hidden=!unread;
     $('mailbox-unread').textContent=String(unread);
     if(!shown.length){
       const empty=document.createElement('p');empty.className='mailbox-empty';
-      empty.textContent=items.length?'Tidak ada pesan dalam kategori ini.':'Belum ada pesan.'+(appStatus==='accepted'?' Kamu dapat meminta kode aktivasi dari bagian atas.':'');
+      empty.textContent=items.length?'Tidak ada pesan dalam kategori ini.':'Belum ada pesan. Kamu dapat meminta kode aktivasi dari bagian atas.';
       root.append(empty);return;
     }
     for(const item of shown){
       const button=document.createElement('button');button.type='button';
       button.className='mailbox-item'+(!item.read?' is-unread':'')+(item.id===current?.id?' is-selected':'');
-      const icon=document.createElement('span');icon.className='mailbox-item-icon';icon.textContent=kindIcon(item.type);
+      const icon=document.createElement('span');icon.className='mailbox-item-icon';icon.textContent=item.type==='activation'?'✦':'✉';
       const body=document.createElement('span');body.className='mailbox-item-text';
       const title=document.createElement('strong');title.textContent=item.title;
       const date=document.createElement('small');date.textContent=fmt(item.createdAt);
@@ -62,7 +51,7 @@
     current=item;
     $('mailbox-detail-empty').hidden=true;
     $('mailbox-detail-content').hidden=false;
-    $('mailbox-detail-category').textContent=kindLabel(item.type);
+    $('mailbox-detail-category').textContent=item.type==='activation'?'AKTIVASI AKUN':'PEMBERITAHUAN';
     $('mailbox-detail-title').textContent=item.title;
     $('mailbox-detail-time').textContent=fmt(item.createdAt);
     $('mailbox-detail-body').textContent=item.content;
@@ -82,10 +71,7 @@
     loading=true;$('mailbox-refresh').disabled=true;
     try{
       const data=await call('/api/player/mailbox');items=data.items||[];
-      appStatus=data.applicationStatus||'accepted';applyAccess();
-      note(appStatus==='pending'?'Pendaftaranmu masih menunggu pemeriksaan pengurus SSCircle.':
-        appStatus==='rejected'?'Pendaftaranmu belum dapat diterima. Baca pesan terbaru di kotak masuk.':
-        data.activationRequest==='pending'?'Permintaan kode sedang diperiksa oleh pengurus SSCircle.':
+      note(data.activationRequest==='pending'?'Permintaan kode sedang diperiksa oleh pengurus SSCircle.':
         'Pesanmu sudah diperbarui.');
       if(current){current=items.find(x=>x.id===current.id)||null;if(current)await openMessage(current);}
       renderList();
@@ -100,7 +86,7 @@
     try{
       const response=await call('/api/player/mailbox/request-activation','POST',{});
       await load();note(response.message); // No automatic page redirect; already inside Mail Box.
-    }catch(error){note(error.message,true)}finally{applyAccess();}
+    }catch(error){note(error.message,true)}finally{b.disabled=false;}
   });
   $('mailbox-refresh').addEventListener('click',()=>void load());
   document.querySelectorAll('.mailbox-filter').forEach(button=>button.addEventListener('click',()=>{
