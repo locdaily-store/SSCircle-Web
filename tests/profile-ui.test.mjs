@@ -239,3 +239,30 @@ test('social card participates in admin layout and private preview without fetch
  assert.doesNotMatch(preview,/member-social\.js|\/api\/player\/social\/directory/);
  assert.match(preview,/Member contoh/);
 });
+
+test('Profile workspace separates sections, shows search on demand, and keeps member data private',()=>{
+ const html=source('my-sscircle.html');
+ const nav=source('profile-workspace.js');
+ const css=source('profile-workspace.css');
+ const social=source('member-social.js');
+ const socialCss=source('member-social.css');
+ const preview=source('profile-preview.html');
+ const layout=source('profile-page-layout.js');
+ assert.match(html,/id="player-workspace-nav"/);
+ assert.match(html,/profile-workspace\.js\?v=10\.51\.3/);
+ assert.match(html,/id="ssc-social-search-toggle"/);
+ assert.match(html,/id="ssc-social-search-box"[^>]*hidden/);
+ assert.match(html,/id="ssc-social-directory-panel"/);
+ assert.match(html,/id="ssc-social-friends-panel"[^>]*hidden/);
+ assert.match(nav,/data\.workspaceActive/);
+ for(const part of ['overview','settings','minecraft','community'])
+   assert.match(nav,new RegExp("id:'"+part+"'"));
+ assert.match(css,/padding-top:clamp\(112px/);
+ assert.match(css,/data-workspace-active="true"/);
+ assert.match(social,/aria-expanded/);
+ assert.match(social,/showPanel\('friends'\)/);
+ assert.match(socialCss,/ssc-social-results,#ssc-social-friends/);
+ assert.match(preview,/profile-workspace\.js/);
+ assert.doesNotMatch(preview,/member-social\.js|\/api\/player\/social\/directory/);
+ assert.match(layout,/ssc-profile-layout-change/);
+});
