@@ -8,9 +8,11 @@
   <link rel="stylesheet" href="style.css?v=10.49.1.6">
   <link rel="stylesheet" href="player-dashboard.css?v=10.43.0">
   <link rel="stylesheet" href="profile-ui.css?v=10.43.0">
-  <link rel="stylesheet" href="member-social.css?v=10.51.1">
+  <link rel="stylesheet" href="member-social.css?v=10.51.3">
+  <link rel="stylesheet" href="profile-workspace.css?v=10.51.3">
   <script src="color-theme.js?v=10.41.0" defer></script>
-  <script src="profile-page-layout.js?v=10.51.2" defer></script>
+  <script src="profile-page-layout.js?v=10.51.3" defer></script>
+  <script src="profile-workspace.js?v=10.51.3" defer></script>
 </head>
 <body class="home-page player-page theme-v3">
   <main class="player-main home-container">
@@ -24,6 +26,10 @@
     </section>
     <p class="player-helper ssc-profile-preview-disclaimer">Pratinjau tampilan. Identitas dan angka di bawah hanya contoh, bukan data anggota.</p>
     <div class="player-layout" id="player-content">
+      <nav class="player-workspace-nav" id="player-workspace-nav" aria-label="Navigasi bagian Profile">
+        <div class="player-workspace-main"></div>
+        <div class="player-workspace-sub"></div>
+      </nav>
       <aside class="player-side">
         <section class="player-card player-profile">
           <div class="player-avatar"><img src="assets/sscircle-logo.png" width="72" height="72" alt=""></div>
@@ -37,14 +43,17 @@
         <section data-profile-section="social" class="player-card ssc-social-card">
           <div class="player-section-head"><div><span class="player-overline">COMMUNITY CONNECTIONS</span><h2>Member Directory &amp; Manage Friends</h2></div></div>
           <p class="player-helper">Pratinjau contoh. Tidak mengambil data anggota sungguhan.</p>
+          <div class="ssc-social-toolbar-actions">
+            <span class="player-action player-action-secondary">⌕ Cari member</span>
+            <span class="player-action player-action-primary">Semua member</span>
+            <span class="player-action player-action-secondary">Manage Friends</span>
+          </div>
           <div class="ssc-social-grid">
-            <div class="ssc-social-panel"><h3 class="ssc-social-subtitle">Semua member</h3>
-              <div class="ssc-social-result"><div><strong>Member contoh</strong><small>SSC-M123456789ABC</small></div><span class="ssc-social-view">Lihat Profile</span></div>
-              <div class="ssc-social-result"><div><strong>Builder contoh</strong><small>Minecraft: ExamplePlayer</small></div></div>
-            </div>
-            <div class="ssc-social-panel"><h3 class="ssc-social-subtitle">Manage Friends</h3>
-              <div class="ssc-social-tabs"><button type="button" aria-selected="true" disabled>Teman 2</button><button type="button" disabled>Permintaan 1</button></div>
-              <div class="ssc-social-friend"><strong>Friend contoh</strong><span>Sudah berteman</span></div>
+            <div class="ssc-social-panel"><div class="ssc-social-panel-head"><h3 class="ssc-social-subtitle">Semua member</h3><span class="player-tag">2 contoh</span></div>
+              <div class="ssc-social-results">
+                <div class="ssc-social-result"><div><strong>Member contoh</strong><small>SSC-M123456789ABC</small></div><span class="ssc-social-view">Lihat Profile</span></div>
+                <div class="ssc-social-result"><div><strong>Builder contoh</strong><small>Minecraft: ExamplePlayer</small></div></div>
+              </div>
             </div>
           </div>
         </section>
