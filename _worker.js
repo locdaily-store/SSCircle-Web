@@ -4016,7 +4016,7 @@ async function mailboxAPI(req,env,path,method){
 
 // SSCircle runtime check: observe what the deployment actually receives.
 // Only public readiness categories. Never expose secret values or private data.
-const SSC_RUNTIME_RELEASE='10.49.1.7';
+const SSC_RUNTIME_RELEASE='10.49.1.8';
 const SSC_RUNTIME_ISSUES=new Set();
 function sscRuntimeBindings(env){
   return {
@@ -4205,18 +4205,33 @@ async function route(req, env) {
     headers.set('X-Robots-Tag','noindex, nofollow');
     return new Response(response.body,{status:response.status,statusText:response.statusText,headers});
   }
-  // Guard Mail Box HTML in addition to its private API.
+  // Applicants can read only their own Mail Box status notifications.
+  // Account activation and secret reveal remain server-side accepted-only actions.
   if ((path==='/mailbox' || path==='/mailbox.html') && ['GET','HEAD'].includes(method)) {
     if(!env.DB || !env.SESSION_SECRET) return new Response('Halaman belum tersedia.',{status:503});
     const account=await playerSession(req,env);
-    if(!account || account.status!=='accepted')return new Response(null,{status:302,headers:{
+    if(!account)return new Response(null,{status:302,headers:{
       Location:'/status.html?akses-mailbox=perlu-masuk#kode-milikku',
       'Cache-Control':'private, no-store',Vary:'Cookie'
     }});
-    // Legacy Mail Box URLs now open the private dialog inside Profile.
-    return new Response(null,{status:302,headers:{
+    // Accepted members keep the Mail Box popup inside their private Profile.
+    if(account.status==='accepted')return new Response(null,{status:302,headers:{
       Location:'/my-sscircle?mailbox=1','Cache-Control':'private, no-store',Vary:'Cookie'
     }});
+    // Pending and rejected applicants cannot enter the members-only Profile.
+    // Serve the existing standalone Mail Box instead, through the same session guard.
+    if(path==='/mailbox.html')return new Response(null,{status:302,headers:{
+      Location:'/mailbox','Cache-Control':'private, no-store',Vary:'Cookie'
+    }});
+    const response=await env.ASSETS.fetch(req);
+    if(response.status>=300&&response.status<400)
+      return new Response('Mail Box sementara tidak dapat dimuat.',{
+        status:502,headers:{'Cache-Control':'private, no-store'}});
+    const headers=new Headers(response.headers);
+    headers.set('Cache-Control','private, no-store');
+    headers.set('Vary','Cookie');
+    headers.set('X-Robots-Tag','noindex, nofollow');
+    return new Response(response.body,{status:response.status,statusText:response.statusText,headers});
   }
   // Proteksi juga dokumen HTML, bukan hanya tombol UI: URL voting langsung tidak bisa dibuka oleh kode Pending/Rejected.
   if ((path === '/voting.html' || path === '/voting') && (method === 'GET' || method === 'HEAD')) {
