@@ -90,3 +90,89 @@ test('declined requests cannot spam and private members cannot be invited',async
  assert.equal((await x.call(A,'/api/player/social/action',{method:'POST',body:{id:B,action:'request'}})).status,429);
  assert.equal((await x.call(C,'/api/player/mailbox')).data.items.length,0);
 });
+
+
+test('shareable member ID is distinct from the registration login code',async()=>{
+ const x=fixture();await x.initialize();
+ const own=await x.call(A,'/api/player/me');
+ assert.equal(own.status,200);
+ assert.equal(own.data.memberId,'SSC-M'+A.slice(-12).toUpperCase());
+ assert.notEqual(own.data.memberId,own.data.code);
+ const result=await x.call(A,'/api/player/social/search?q=SSC-M'+B.slice(-12));
+ assert.equal(result.status,200,JSON.stringify(result.data));
+ assert.equal(result.data.items.length,1);
+ assert.equal(result.data.items[0].id,B);
+ assert.equal(result.data.items[0].memberId,'SSC-M'+B.slice(-12).toUpperCase());
+ assert.equal((await x.call(A,'/api/player/social/search?q=BBBBBBBBBBBBBBBBBBBB')).data.items.length,0,
+   'Registration tracking code must not be searchable');
+ assert.equal((await x.call(B,'/api/player/social/search?q=SSC-M'+A.slice(-12))).data.items.length,0,
+   'Private member ID must not bypass visibility');
+ const profile=await x.call(A,'/api/player/social/profile?id='+B);
+ assert.equal(profile.data.memberId,'SSC-M'+B.slice(-12).toUpperCase());
+ assert.equal(profile.data.avatarAccountId,null);
+ assert.equal(JSON.stringify(profile.data).includes('BBBBBBBBBBBBBBBBBBBB'),false);
+});
+
+test('directory lists accepted discoverable members, with pagination and private friend exceptions',async()=>{
+ const x=fixture();await x.initialize();
+ const D='44444444-4444-4444-8444-444444444444';
+ x.db.prepare('INSERT INTO submissions VALUES(?,?,?,?)').run(D,'pending','DDDDDDDDDDDDDDDDDDDD','2026-11-11');
+ x.db.prepare('INSERT INTO member_profiles(application_id,display_name,visibility) VALUES(?,?,?)')
+   .run(D,'Pending Applicant','members');
+ let listing=await x.call(A,'/api/player/social/directory?offset=0');
+ assert.equal(listing.status,200,JSON.stringify(listing.data));
+ assert.deepEqual(listing.data.items.map(p=>p.id),[B]);
+ assert.equal(listing.data.hasMore,false);
+ assert.equal(JSON.stringify(listing.data).includes('DDDDDDDDDDDDDDDDDDDD'),false);
+ assert.equal((await x.call(A,'/api/player/social/directory',{cookie:''})).status,403);
+ assert.equal((await x.call(A,'/api/player/social/directory?offset=-1')).status,400);
+
+ // A private member is discoverable to their accepted friend, but not a stranger.
+ assert.equal((await x.call(B,'/api/player/social/directory')).data.items.length,0);
+ assert.equal((await x.call(A,'/api/player/social/action',{method:'POST',body:{id:B,action:'request'}})).status,200);
+ assert.equal((await x.call(B,'/api/player/social/action',{method:'POST',body:{id:A,action:'accept'}})).status,200);
+ listing=await x.call(B,'/api/player/social/directory');
+ assert.deepEqual(listing.data.items.map(p=>p.id),[A]);
+ assert.equal((await x.call(B,'/api/player/social/search?q=SSC-M'+A.slice(-12))).data.items.length,1);
+ assert.equal((await x.call(B,'/api/player/social/action',{method:'POST',body:{id:A,action:'remove'}})).status,200);
+ assert.equal((await x.call(B,'/api/player/social/directory')).data.items.length,0);
+});
+
+test('member directory pages results without including a hidden or pending member',async()=>{
+ const x=fixture();await x.initialize();
+ for(let n=0;n<30;n++){
+   const id=randomUUID();
+   x.db.prepare('INSERT INTO submissions VALUES(?,?,?,?)')
+     .run(id,'accepted','M'+String(n).padStart(19,'0'),'2026-11-11');
+   x.db.prepare('INSERT INTO member_profiles(application_id,display_name,visibility) VALUES(?,?,?)')
+     .run(id,'Member Test '+String(n).padStart(2,'0'),'members');
+ }
+ const first=await x.call(A,'/api/player/social/directory?offset=0');
+ assert.equal(first.status,200,JSON.stringify(first.data));
+ assert.equal(first.data.items.length,24);
+ assert.equal(first.data.hasMore,true);
+ assert.equal(first.data.nextOffset,24);
+ const next=await x.call(A,'/api/player/social/directory?offset=24');
+ assert.equal(next.status,200,JSON.stringify(next.data));
+ assert.equal(next.data.hasMore,false);
+ assert.equal(next.data.items.length,7);
+ const ids=[...first.data.items,...next.data.items].map(p=>p.id);
+ assert.equal(new Set(ids).size,31);
+ assert.equal(ids.includes(A),false);
+ assert.equal(ids.includes(C),false);
+});
+
+test('member social interface has an accessible real dialog and friend management controls',()=>{
+ const html=readFileSync(new URL('../my-sscircle.html',import.meta.url),'utf8');
+ const js=readFileSync(new URL('../member-social.js',import.meta.url),'utf8');
+ assert.match(html,/<dialog id="ssc-social-modal"/);
+ assert.match(html,/id="ssc-social-directory"/);
+ assert.match(html,/id="ssc-social-more"/);
+ for(const tab of ['friends','incoming','outgoing'])
+   assert.match(html,new RegExp('data-ssc-friends-tab="'+tab+'"'));
+ assert.match(js,/modal\.showModal\(\)/);
+ assert.match(js,/createImageBitmap\(blob\)/);
+ assert.match(js,/profileRequest\+\+/);
+ assert.match(html,/SSC-M/);
+ assert.doesNotMatch(js,/tracking_code|player\.code/);
+});
