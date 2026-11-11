@@ -10,16 +10,18 @@
   <link rel="icon" href="assets/sscircle-logo.png" type="image/png">
   <link rel="stylesheet" href="style.css?v=10.49.1.6">
   <link rel="stylesheet" href="player-dashboard.css?v=10.49.1.5">
+  <link rel="stylesheet" href="member-community.css?v=10.49.3">
   <link rel="stylesheet" href="mailbox.css?v=10.41.0">
   <link rel="stylesheet" href="profile-ui.css?v=10.43.0">
   <script src="color-theme.js?v=10.35.0" defer></script>
   <script src="site-shell.js?v=10.35.0" defer></script>
   <script src="member-password-client.js?v=10.40.0" defer></script>
   <script src="profile-page-layout.js?v=10.43.0" defer></script>
-  <script src="mailbox-widget.js?v=10.43.0" defer></script>
+  <script src="mailbox-widget.js?v=10.49.3" defer></script>
   <script src="minecraft-skin-3d.js?v=10.49.1.5" defer></script>
-  <script src="minecraft-avatars.js?v=10.49.1.5" defer></script>
-  <script src="player-dashboard.js?v=10.49.1.3" defer></script>
+  <script src="minecraft-avatars.js?v=10.49.3" defer></script>
+  <script src="player-dashboard.js?v=10.49.3" defer></script>
+  <script src="member-community.js?v=10.49.3" defer></script>
   <link rel="stylesheet" href="password-visibility.css?v=10.39.0">
   <script src="password-visibility.js?v=10.39.0" defer></script>
 </head>
@@ -192,10 +194,10 @@
                 <option value="members">Anggota — hanya anggota SSCircle</option>
                 <option value="public">Publik — dapat dilihat pengunjung</option>
               </select>
-              <small>Pengaturan publik disimpan sekarang; direktori profil publik belum diaktifkan.</small>
+              <small>Pribadi tidak muncul di pencarian. Pilih Anggota agar sesama member bisa melihat profilmu. Publik hanya tersedia jika diizinkan admin.</small>
             </label>
             <div class="player-setting-switches">
-              <label class="player-setting-switch"><input type="checkbox" id="player-show-stats"><span>Tampilkan statistik saat profil publik tersedia</span></label>
+              <label class="player-setting-switch"><input type="checkbox" id="player-show-stats"><span>Izinkan statistik permainan terlihat di profil yang dibagikan</span></label>
               <label class="player-setting-switch"><input type="checkbox" id="player-event-alerts"><span>Pengingat event di dashboard</span></label>
             </div>
             <div class="player-setting-actions">
@@ -322,6 +324,32 @@
             </div>
           </div>
           <p class="player-helper" id="player-stats-sync-status" role="status">Belum ada data resmi dari server. Statistik akan muncul setelah sinkronisasi pertama berhasil.</p>
+        </section>
+
+
+        <section data-profile-section="community" class="player-card ssc-member-community" aria-labelledby="ssc-community-heading" id="ssc-member-community">
+          <div class="player-section-head">
+            <div><span class="player-overline">SSCIRCLE MEMBERS</span>
+              <h2 id="ssc-community-heading">Cari Member & Teman</h2></div>
+            <span class="player-tag">Khusus anggota</span>
+          </div>
+          <p class="player-helper">Temukan anggota SSCircle melalui nama profil atau akun Minecraft. Hanya profil yang dibagikan untuk anggota yang dapat ditemukan. Permintaan teman dikirim lewat Mail Box.</p>
+          <form class="ssc-community-search-form" id="ssc-community-search-form">
+            <label>Nama member / Minecraft
+              <input id="ssc-community-query" type="search" maxlength="40" placeholder="Cari nama anggota..." autocomplete="off" disabled></label>
+            <button class="player-action player-action-primary" type="submit" id="ssc-community-search" disabled>Cari Member</button>
+            <button class="player-action player-action-secondary" type="button" id="ssc-community-reload" disabled>Perbarui</button>
+          </form>
+          <p id="ssc-community-notice" class="ssc-community-notice" role="status" aria-live="polite"></p>
+          <div class="ssc-community-layout">
+            <div class="ssc-member-section"><h3>Profil anggota</h3><div id="ssc-community-results" class="ssc-member-results"></div></div>
+            <div class="ssc-member-section"><h3>Detail profil</h3><div id="ssc-community-profile"><p class="player-helper">Pilih member untuk melihat profil, skin, dan statistik yang dibagikan.</p></div></div>
+          </div>
+          <div class="ssc-member-friend-groups">
+            <div class="ssc-member-section"><h3>Permintaan masuk <span id="ssc-community-incoming-count" class="player-tag">0</span></h3><div id="ssc-community-incoming" class="ssc-member-connections"></div></div>
+            <div class="ssc-member-section"><h3>Permintaan terkirim</h3><div id="ssc-community-outgoing" class="ssc-member-connections"></div></div>
+            <div class="ssc-member-section"><h3>Teman saya <span id="ssc-community-friends-count" class="player-tag">0</span></h3><div id="ssc-community-friends" class="ssc-member-connections"></div></div>
+          </div>
         </section>
 
         <section data-profile-section="explore" class="player-card player-explore" aria-labelledby="player-explore-title">
