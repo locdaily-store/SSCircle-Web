@@ -104,7 +104,7 @@ test('V10.45.4: private file overrides stale environment without leaking secret'
  assert.match(local,/return new ResolvedSecret\(loadOrCreate\(directory\), "file privat plugin", false\)/);
  assert.match(local,/SecureRandom/);
  assert.match(paper,/SecretFileStore\.resolve\(/);
- assert.match(paper,/statusItem\(sender,"Sumber kunci",secretSource/);
+ assert.match(paper,/statusItem\(sender,"Sumber kunci",pairing==null\?secretSource:/);
  assert.doesNotMatch(paper,/sender\.sendMessage\([^\n]*signingSecret\)/);
 });
 
