@@ -1,4 +1,4 @@
-name: SSCircle V10.51 Quick Cloudflare ZIP
+name: SSCircle V10.51.1 Quick Cloudflare ZIP
 on:
   pull_request:
     paths:
@@ -60,12 +60,12 @@ jobs:
           names={name for _,name in site}
           for essential in ('index.html','_worker.js','_routes.json','member-social.js','member-social.css'):
               if essential not in names:sys.exit('Missing: '+essential)
-          with ZipFile('SSCircle-Cloudflare-Upload-V10.51.0.zip','w',ZIP_DEFLATED,compresslevel=6) as z:
+          with ZipFile('SSCircle-Cloudflare-Upload-V10.51.1.zip','w',ZIP_DEFLATED,compresslevel=6) as z:
               for p,name in site:z.write(p,arcname=name)
           print('Cloudflare files:',len(site))
           PY
       - uses: actions/upload-artifact@v4
         with:
-          name: SSCircle-Cloudflare-Upload-V10.51.0
-          path: SSCircle-Cloudflare-Upload-V10.51.0.zip
+          name: SSCircle-Cloudflare-Upload-V10.51.1
+          path: SSCircle-Cloudflare-Upload-V10.51.1.zip
           retention-days: 14
