@@ -3,7 +3,7 @@
 window.SSCircleProfileAdmin=(()=>{
   const labels=[['welcome','Sambutan anggota'],['security','Keamanan akun'],
     ['preferences','Pengaturan profil'],['achievements','Penghargaan'],
-    ['linking','Akun Minecraft'],['stats','Statistik permainan'],['explore','Jelajahi komunitas']];
+    ['linking','Akun Minecraft'],['stats','Statistik permainan'],['community','Cari Member & Teman'],['explore','Jelajahi komunitas']];
   const known=labels.map(row=>row[0]);
   const root=document.getElementById('profile-admin-root');
   const frame=document.getElementById('profile-admin-preview-frame');
@@ -16,6 +16,13 @@ window.SSCircleProfileAdmin=(()=>{
   let state=null,changed=()=>{},timer=null,previewDevice='desktop';
   function defaults(){
     const s=state.settings;
+    // Existing 7-section saved layouts must retain their custom order on upgrade.
+    if(Array.isArray(s.profilePageSections)&&s.profilePageSections.length===known.length-1&&
+      !s.profilePageSections.includes('community')&&new Set(s.profilePageSections).size===known.length-1&&
+      s.profilePageSections.every(id=>known.includes(id))){
+      const i=s.profilePageSections.indexOf('explore');
+      s.profilePageSections.splice(i<0?s.profilePageSections.length:i,0,'community');
+    }
     if(!Array.isArray(s.profilePageSections)||s.profilePageSections.length!==known.length||
       new Set(s.profilePageSections).size!==known.length ||
       s.profilePageSections.some(id=>!known.includes(id)))s.profilePageSections=known.slice();
