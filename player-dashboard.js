@@ -72,7 +72,10 @@
     $('player-show-stats').checked=profile.showStats===true;
     $('player-event-alerts').checked=profile.eventAlerts!==false;
     $('player-bio').disabled=policy.allowBio===false;
-    $('player-visibility').disabled=policy.allowPublic===false;
+    // Member-only visibility stays available even if admin disables public profiles.
+    $('player-visibility').disabled=false;
+    const publicOption=$('player-visibility').querySelector('option[value="public"]');
+    if(publicOption)publicOption.disabled=policy.allowPublic===false;
     $('player-show-stats').disabled=policy.allowStats===false;
     $('player-event-alerts').disabled=policy.allowEventAlerts===false;
     $('player-profile-title').textContent=profile.displayName||'Anggota SSCircle';
@@ -209,6 +212,7 @@
     $('player-link-panel').hidden=mode!=='active';
     if(mode!=='active')$('player-link-notice').textContent='Masuk menggunakan password dashboard untuk menghubungkan Minecraft.';
     lockPrivateControls(mode!=='active');
+    window.SSCircleMemberSocial?.setAvailable(mode==='active');
   }
   const securityMessage=(message)=>{$('player-security-message').textContent=message;};
   async function listDevices() {
