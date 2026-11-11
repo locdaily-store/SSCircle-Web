@@ -1085,3 +1085,61 @@ test('V10.49.1.6: signed Paper 1.1 legacy skin route retains HMAC, nonce and own
   assert.equal(x.db.prepare('SELECT texture_hash FROM minecraft_account_skin_state WHERE account_id=?')
     .get(account.id).texture_hash,'c'.repeat(64));
 });
+
+
+test('V10.49.1.7: pairing requires server approval and revocation invalidates HMAC',async()=>{
+ const x=fixture(),serverId=randomUUID(),token='A'.repeat(64),label='SSCircle Paper Test';
+ async function pair(kind,data){
+   const res=await worker.fetch(new Request('https://sscircle.test/api/minecraft/server-pair/'+kind,{
+     method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)
+   }),x.env);
+   return {status:res.status,json:await res.json()};
+ }
+ async function action(v){
+   return x.call('/api/admin/minecraft/servers/action',{method:'POST',cookie:x.admin,data:v});
+ }
+ const registered=await pair('register',{serverId,token,label});
+ assert.equal(registered.status,200,JSON.stringify(registered.json));
+ assert.match(registered.json.pairCode,/^[A-Za-z0-9_-]{12}$/);
+ assert.equal(registered.json.serverSecret,undefined);
+ assert.equal((await pair('poll',{serverId,token})).json.status,'pending');
+ assert.equal((await x.call('/api/admin/minecraft/servers',{cookie:''})).status,401);
+ const listing=await x.call('/api/admin/minecraft/servers',{cookie:x.admin});
+ assert.equal(listing.status,200);
+ assert.equal(listing.json.servers[0].serverSecret,undefined);
+ assert.equal(listing.json.servers[0].pairCode,undefined);
+ assert.equal((await action({serverId,action:'approve',code:'x'.repeat(12)})).status,403);
+ assert.equal((await action({serverId,action:'approve',code:registered.json.pairCode})).status,200);
+ const authorized=await pair('poll',{serverId,token});
+ assert.equal(authorized.status,200);
+ assert.match(authorized.json.serverSecret,/^[A-Za-z0-9_-]{64}$/);
+ assert.equal((await pair('poll',{serverId,token:'B'.repeat(64)})).status,403);
+ x.env.SSCIRCLE_LINK_SERVER_SECRET='';
+ async function diagnose(key,id=serverId){
+   const raw='{}',ts=Math.floor(Date.now()/1000),nonce=randomUUID();
+   const signature=createHmac('sha256',key).update(
+     'POST\n/api/minecraft/link/diagnose\n'+ts+'\n'+nonce+'\n'+raw).digest('base64url');
+   return worker.fetch(new Request('https://sscircle.test/api/minecraft/link/diagnose',{
+     method:'POST',headers:{'Content-Type':'application/json','X-SSC-Timestamp':String(ts),
+       'X-SSC-Nonce':nonce,'X-SSC-Signature':signature,'X-SSC-Server-Id':id},body:raw
+   }),x.env);
+ }
+ assert.equal((await diagnose(authorized.json.serverSecret)).status,200);
+ assert.equal((await diagnose('wrong-key')).status,401);
+ assert.equal((await diagnose(authorized.json.serverSecret,randomUUID())).status,503);
+ const cookie=await x.active();
+ assert.equal((await x.call('/api/player/minecraft/link/create',{method:'POST',cookie,data:{}})).status,200);
+ assert.equal((await action({serverId,action:'revoke'})).status,200);
+ assert.equal((await diagnose(authorized.json.serverSecret)).status,503);
+ assert.equal((await pair('poll',{serverId,token})).status,403);
+});
+test('V10.49.1.7: legacy secret is still supported with no server-id header',async()=>{
+ const x=fixture(),raw='{}',ts=Math.floor(Date.now()/1000),nonce=randomUUID();
+ const signature=createHmac('sha256',SERVER).update(
+   'POST\n/api/minecraft/link/diagnose\n'+ts+'\n'+nonce+'\n'+raw).digest('base64url');
+ const res=await worker.fetch(new Request('https://sscircle.test/api/minecraft/link/diagnose',{
+   method:'POST',headers:{'Content-Type':'application/json','X-SSC-Timestamp':String(ts),
+     'X-SSC-Nonce':nonce,'X-SSC-Signature':signature},body:raw
+ }),x.env);
+ assert.equal(res.status,200);
+});
