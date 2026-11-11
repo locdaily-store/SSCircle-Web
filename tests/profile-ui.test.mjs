@@ -254,7 +254,7 @@ test('Profile workspace separates sections, shows search on demand, and keeps me
  assert.match(html,/id="ssc-social-search-box"[^>]*hidden/);
  assert.match(html,/id="ssc-social-directory-panel"/);
  assert.match(html,/id="ssc-social-friends-panel"[^>]*hidden/);
- assert.match(nav,/data\.workspaceActive/);
+ assert.match(nav,/section\.dataset\.workspaceActive/);
  for(const part of ['overview','settings','minecraft','community'])
    assert.match(nav,new RegExp("id:'"+part+"'"));
  assert.match(css,/padding-top:clamp\(112px/);
