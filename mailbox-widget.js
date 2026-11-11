@@ -104,6 +104,7 @@
     $('ssc-mailbox-detail').hidden=true;
     $('ssc-mailbox-code').textContent='';
     $('ssc-mailbox-secret-row').hidden=true;
+    $('ssc-mailbox-friend-actions').hidden=true;
   }
   function shownItems(){
     return items.filter(item=>filter==='all'||(filter==='unread'&&!item.read)||
@@ -178,7 +179,6 @@
     $('ssc-mailbox-secret').hidden=item.type!=='activation';
     $('ssc-mailbox-friend-actions').hidden=!(item.type==='friend_request'&&item.friendRequestId);
     $('ssc-mailbox-secret-row').hidden=true;
-    $('ssc-mailbox-friend-actions').hidden=true;
     $('ssc-mailbox-code').textContent='';
     $('ssc-mailbox-reveal').disabled=!item.canReveal;
     $('ssc-mailbox-secret-status').textContent=item.canReveal?
