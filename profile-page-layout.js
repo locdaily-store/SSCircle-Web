@@ -36,6 +36,7 @@ window.SSCircleProfileLayout=(()=>{
       block.hidden=id!=='security'&&hidden.includes(id);
       dashboard.append(block);
     }
+    window.dispatchEvent(new Event('ssc-profile-layout-change'));
   }
   const preview=new URLSearchParams(location.search).has('ssc_theme_preview');
   if(preview){
