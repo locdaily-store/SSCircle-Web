@@ -6,6 +6,20 @@
  let current=null,results=[],friends=[],loading=false,activeTab='friends',directoryOffset=0,directoryMode=false,directoryHasMore=false,profileRequest=0;
  const escapeId=id=>/^[0-9a-f-]{36}$/.test(id||'');
  const output=$('ssc-social-feedback');
+ function showPanel(panel){
+   const isFriends=panel==='friends';
+   $('ssc-social-directory-panel').hidden=isFriends;
+   $('ssc-social-friends-panel').hidden=!isFriends;
+   $('ssc-social-directory').setAttribute('aria-pressed',String(!isFriends));
+   $('ssc-social-friends-open').setAttribute('aria-pressed',String(isFriends));
+ }
+ function toggleSearch(){
+   const box=$('ssc-social-search-box'),button=$('ssc-social-search-toggle');
+   box.hidden=!box.hidden;
+   button.setAttribute('aria-expanded',String(!box.hidden));
+   if(!box.hidden){showPanel('directory');$('ssc-social-search').focus();}
+   else button.focus();
+ }
  function message(text,bad=false){output.textContent=text;output.dataset.error=String(bad)}
  async function api(path,options={}){
    const res=await fetch(path,{credentials:'same-origin',cache:'no-store',headers:{
@@ -100,6 +114,7 @@
    }
  }
  async function search(){
+    showPanel('directory');
    const q=$('ssc-social-search').value.trim();
    if(q.length<2){message('Ketik minimal 2 karakter untuk mencari anggota.',true);return;}
    if(loading)return;
@@ -115,6 +130,7 @@
    }finally{loading=false;$('ssc-social-search-button').disabled=false;}
  }
  async function loadDirectory(reset=true){
+    showPanel('directory');
    if(loading)return;
    loading=true;$('ssc-social-directory').disabled=true;$('ssc-social-more').disabled=true;
    if(reset){directoryOffset=0;results=[];directoryMode=true;$('ssc-social-search').value='';}
@@ -244,11 +260,19 @@
        button('Tutup',()=>$('ssc-social-modal').close()));
    }
  }
- $('ssc-social-search-button').addEventListener('click',()=>void search());
+ $('ssc-social-search-toggle').addEventListener('click',toggleSearch);
+ $('ssc-social-search-box').addEventListener('submit',e=>{
+   e.preventDefault();void search();
+ });
  $('ssc-social-search').addEventListener('keydown',e=>{
-   if(e.key==='Enter'){e.preventDefault();void search();}
+   if(e.key==='Escape'&&!$('ssc-social-modal').open){
+     e.preventDefault();toggleSearch();
+   }
  });
  $('ssc-social-directory').addEventListener('click',()=>void loadDirectory(true));
+ $('ssc-social-friends-open').addEventListener('click',()=>{
+   showPanel('friends');void refreshFriends();
+ });
  $('ssc-social-more').addEventListener('click',()=>void loadDirectory(false));
  $('ssc-social-refresh').addEventListener('click',()=>void refreshFriends());
  for(const tab of document.querySelectorAll('[data-ssc-friends-tab]')){

@@ -86,6 +86,9 @@ jobs:
       - name: Uji direktori dan popup Member Social pada desktop dan HP
         run: python tests/browser_member_social.py
 
+      - name: Uji navigasi Profile desktop tablet dan HP
+        run: python tests/browser_profile_workspace.py
+
       - name: Uji warna CSP dan tampilan HP
         run: python tests/browser_smoke.py
 
@@ -99,7 +102,16 @@ jobs:
         run: python tests/browser_dropdown_theme.py
 
       - name: Uji tema dropdown, seluruh kontrak Worker, dan lingkungan localhost
-        run: node --test tests/*.test.mjs
+        shell: bash
+        run: |
+          # Run test files sequentially to avoid overloading isolated SQLite and PBKDF2 fixtures.
+          if node --test --test-concurrency=1 tests/*.test.mjs > /tmp/sscircle-tests.log 2>&1; then
+            tail -n 14 /tmp/sscircle-tests.log
+          else
+            echo "Gagal menjalankan semua tes. Ringkasan kegagalan:"
+            grep -E 'not ok|# (test|failureType|error|expected|actual|fail|pass)|ERR_|AssertionError' /tmp/sscircle-tests.log | cut -c 1-350 | tail -n 65 || true
+            exit 1
+          fi
 
       - name: Periksa file sensitif (pemeriksaan dasar)
         shell: bash

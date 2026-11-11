@@ -10,18 +10,20 @@
   <link rel="icon" href="assets/sscircle-logo.png" type="image/png">
   <link rel="stylesheet" href="style.css?v=10.49.1.6">
   <link rel="stylesheet" href="player-dashboard.css?v=10.49.1.5">
-  <link rel="stylesheet" href="member-social.css?v=10.51.1">
+  <link rel="stylesheet" href="member-social.css?v=10.51.3">
+  <link rel="stylesheet" href="profile-workspace.css?v=10.51.3">
   <link rel="stylesheet" href="mailbox.css?v=10.41.0">
   <link rel="stylesheet" href="profile-ui.css?v=10.43.0">
   <script src="color-theme.js?v=10.35.0" defer></script>
   <script src="site-shell.js?v=10.35.0" defer></script>
   <script src="member-password-client.js?v=10.40.0" defer></script>
-  <script src="profile-page-layout.js?v=10.51.2" defer></script>
+  <script src="profile-page-layout.js?v=10.51.3" defer></script>
   <script src="mailbox-widget.js?v=10.43.0" defer></script>
   <script src="minecraft-skin-3d.js?v=10.49.1.5" defer></script>
   <script src="minecraft-avatars.js?v=10.49.1.5" defer></script>
   <script src="player-dashboard.js?v=10.51.2" defer></script>
-  <script src="member-social.js?v=10.51.1" defer></script>
+  <script src="member-social.js?v=10.51.3" defer></script>
+  <script src="profile-workspace.js?v=10.51.3" defer></script>
   <link rel="stylesheet" href="password-visibility.css?v=10.39.0">
   <script src="password-visibility.js?v=10.39.0" defer></script>
 </head>
@@ -63,6 +65,10 @@
     </section>
 
     <div class="player-layout" id="player-content" hidden>
+      <nav class="player-workspace-nav" id="player-workspace-nav" aria-label="Navigasi bagian Profile">
+        <div class="player-workspace-main" aria-label="Kategori Profile"></div>
+        <div class="player-workspace-sub" aria-label="Halaman kategori"></div>
+      </nav>
       <aside class="player-side">
         <section class="player-card player-profile" aria-labelledby="player-profile-title">
           <div class="player-avatar" aria-hidden="true">
@@ -103,19 +109,34 @@
             <div><span class="player-overline">COMMUNITY CONNECTIONS</span><h2 id="ssc-social-title">Member Directory &amp; Manage Friends</h2></div>
           </div>
           <p class="player-helper">Cari berdasarkan ID Anggota publik (SSC-M...), nama profil, atau username Minecraft. Daftar hanya berisi anggota Diterima yang mengizinkan ditemukan. Member dengan profil privat hanya terlihat oleh teman yang sudah disetujui.</p>
-          <div class="ssc-social-controls" role="search">
-            <input type="search" id="ssc-social-search" maxlength="40" placeholder="ID Anggota, nama Profile, atau username Minecraft..." aria-label="Cari ID Anggota, nama profil, atau Minecraft">
-            <button type="button" id="ssc-social-search-button" class="player-action player-action-primary">Cari member</button>
-            <button type="button" id="ssc-social-directory" class="player-action player-action-secondary">Semua member</button>
+          <div class="ssc-social-toolbar">
+            <div class="ssc-social-toolbar-actions">
+              <button type="button" id="ssc-social-search-toggle" class="player-action player-action-secondary ssc-social-search-toggle"
+                aria-expanded="false" aria-controls="ssc-social-search-box">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+                  stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m16 16 5 5"></path></svg>
+                <span>Cari member</span>
+              </button>
+              <button type="button" id="ssc-social-directory" class="player-action player-action-primary" aria-pressed="true" aria-controls="ssc-social-directory-panel">Semua member</button>
+              <button type="button" id="ssc-social-friends-open" class="player-action player-action-secondary" aria-pressed="false" aria-controls="ssc-social-friends-panel">Manage Friends</button>
+            </div>
+            <form id="ssc-social-search-box" class="ssc-social-search-box" role="search" hidden>
+              <label for="ssc-social-search">Cari dengan ID Anggota, nama atau username Minecraft</label>
+              <div class="ssc-social-search-row">
+                <input type="search" id="ssc-social-search" maxlength="40" autocomplete="off"
+                  placeholder="Contoh: SSC-M123456789ABC" aria-label="Cari ID Anggota, nama profil, atau Minecraft">
+                <button type="submit" id="ssc-social-search-button" class="player-action player-action-primary">Cari</button>
+              </div>
+            </form>
           </div>
           <p class="player-helper" id="ssc-social-feedback" role="status" aria-live="polite">Fitur ini memerlukan login dengan password Dashboard.</p>
           <div class="ssc-social-grid">
-            <div class="ssc-social-panel">
-              <div class="ssc-social-panel-head"><h3 class="ssc-social-subtitle" id="ssc-social-result-title">Direktori anggota</h3><span class="player-tag" id="ssc-social-count">0 member</span></div>
+            <div class="ssc-social-panel" id="ssc-social-directory-panel" role="region" aria-label="Daftar semua member">
+              <div class="ssc-social-panel-head"><h3 class="ssc-social-subtitle" id="ssc-social-result-title">Semua member</h3><span class="player-tag" id="ssc-social-count">0 member</span></div>
               <div id="ssc-social-results" class="ssc-social-results"></div>
               <button type="button" id="ssc-social-more" class="player-action player-action-secondary" hidden>Tampilkan lebih banyak</button>
             </div>
-            <div class="ssc-social-panel">
+            <div class="ssc-social-panel" id="ssc-social-friends-panel" role="region" aria-label="Daftar pertemanan" hidden>
               <div class="ssc-social-panel-head"><h3 class="ssc-social-subtitle">Manage Friends</h3><button type="button" id="ssc-social-refresh" class="player-action player-action-secondary">Perbarui</button></div>
               <div class="ssc-social-tabs" role="tablist" aria-label="Kelola pertemanan">
                 <button type="button" role="tab" aria-selected="true" data-ssc-friends-tab="friends">Teman <span data-ssc-friends-count="friends">0</span></button>

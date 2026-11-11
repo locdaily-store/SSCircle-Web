@@ -65,6 +65,10 @@ def check(viewport):
         page.goto("https://sscircle.test/social-browser-fixture", wait_until="domcontentloaded")
         page.add_style_tag(content=(ROOT / "member-social.css").read_text(encoding="utf-8"))
         page.add_script_tag(content=(ROOT / "member-social.js").read_text(encoding="utf-8"))
+        assert page.locator("#ssc-social-search-box").is_hidden()
+        page.locator("#ssc-social-search-toggle").click()
+        assert page.locator("#ssc-social-search-box").is_visible()
+        assert page.locator("#ssc-social-search-toggle").get_attribute("aria-expanded") == "true"
         page.locator("#ssc-social-directory").click()
         page.locator(".ssc-social-result-button").first.wait_for()
         assert PUBLIC_ID in page.locator(".ssc-social-result-button").inner_text()
@@ -81,9 +85,15 @@ def check(viewport):
         page.wait_for_function("document.getElementById('ssc-social-result-title').textContent === 'Hasil pencarian'")
         assert PUBLIC_ID in page.locator(".ssc-social-result-button").first.inner_text()
         assert "/api/player/social/search" in requests
+        page.locator("#ssc-social-friends-open").click()
+        assert page.locator("#ssc-social-directory-panel").is_hidden()
+        assert page.locator("#ssc-social-friends-panel").is_visible()
         page.locator('[data-ssc-friends-tab="outgoing"]').click()
         page.locator(".ssc-social-friend").first.wait_for()
         assert "Beta Explorer" in page.locator("#ssc-social-friends").inner_text()
+        page.locator("#ssc-social-directory").click()
+        assert page.locator("#ssc-social-friends-panel").is_hidden()
+        assert page.locator("#ssc-social-directory-panel").is_visible()
         if viewport["width"] <= 420:
             assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")
         assert "/api/player/social/directory" in requests
