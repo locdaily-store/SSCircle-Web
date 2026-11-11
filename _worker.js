@@ -4089,7 +4089,7 @@ async function socialAPI(req,env,path,method){
     if(query.length<2||query.length>40)return J({items:[]});
     if(!await rateLimit(env,req,'social-search',60,900))
       return bad('Pencarian terlalu sering. Coba lagi nanti.',429);
-    const safe=query.replace(/[\\%_]/g,'\\const SSC_RUNTIME_RELEASE='10.49.1.8';');
+    const safe=query.replace(/[\\%_]/g,match=>'\\'+match);
     const rows=await env.DB.prepare(`SELECT s.id,COALESCE(p.display_name,'') AS name,
        (SELECT username FROM minecraft_accounts a WHERE a.application_id=s.id
          ORDER BY a.verified_at ASC LIMIT 1) AS minecraft_name
