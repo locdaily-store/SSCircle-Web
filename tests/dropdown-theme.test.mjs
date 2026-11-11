@@ -41,7 +41,7 @@ test('runtime release is at least V10.51.1 while the local D1/dropdown baseline 
     release.slice(0,i).every((prior,j)=>prior===(minimum[j]||0)));
   assert.ok(greater||minimum.every((value,i)=>(release[i]||0)===value),
     'Worker release is older than V10.51.1: '+match[1]);
-  assert.match(read('package.json'),/"version":\s*"10\.49\.1\.6-local\.4"/);
+  assert.equal(JSON.parse(read("package.json")).version,match[1],"Package and Worker must use the same release");
   const changelog=read('docs/V10.49.1.6-STABILIZATION-AND-DROPDOWNS.md');
   assert.match(changelog,/tidak perlu migrasi D1/i);
 });

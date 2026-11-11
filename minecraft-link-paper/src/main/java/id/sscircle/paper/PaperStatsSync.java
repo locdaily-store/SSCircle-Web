@@ -34,6 +34,7 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -68,6 +69,8 @@ final class PaperStatsSync implements Listener {
     private final ArrayDeque<UUID> playersToSample=new ArrayDeque<>();
     private final Set<UUID> enqueuedPlayers=new HashSet<>();
     private final List<Material> blockMaterials=new ArrayList<>();
+    // Cache categories that Bukkit rejects to avoid repeated exceptions on every player's scan.
+    private final Set<Material> rejectedMaterials=EnumSet.noneOf(Material.class);
     private final Path queueFile;
     private final ExecutorService diskWriter=Executors.newSingleThreadExecutor(task->{
         Thread thread=new Thread(task,"SSCircle-Stats-Queue-IO");
@@ -229,7 +232,8 @@ final class PaperStatsSync implements Listener {
             try{
                 activeJob.blocks+=Math.max(0,player.getStatistic(Statistic.MINE_BLOCK,material));
             }catch(IllegalArgumentException ignored){
-                // Material not accepted by this Vanilla statistic.
+                // Never repeatedly probe an unsupported material for every online player.
+                rejectedMaterials.add(material);
             }
             if(activeJob.blocks>=Integer.MAX_VALUE){
                 activeJob.blocks=Integer.MAX_VALUE;
@@ -242,6 +246,11 @@ final class PaperStatsSync implements Listener {
             captureFinished(id,activeJob.playtime,activeJob.deaths,activeJob.mobs,
                 (int)activeJob.blocks);
             activeJob=null;
+            // Only compact after the current player's scan finishes; the index stays stable.
+            if(!rejectedMaterials.isEmpty()){
+                blockMaterials.removeAll(rejectedMaterials);
+                rejectedMaterials.clear();
+            }
         }
     }
 

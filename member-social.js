@@ -45,7 +45,7 @@
    const canvas=node('canvas');canvas.width=64;canvas.height=64;canvas.hidden=true;
    wrap.append(fallback,canvas);
    if(!escapeId(accountId)||typeof createImageBitmap!=='function')return wrap;
-   fetch('/api/player/social/skin?account='+encodeURIComponent(accountId),{
+   const loadSkin=()=>fetch('/api/player/social/skin?account='+encodeURIComponent(accountId),{
      credentials:'same-origin',cache:'no-store'
    }).then(r=>r.ok?r.blob():null).then(async blob=>{
      if(!blob||!wrap.isConnected)return;
@@ -59,6 +59,16 @@
        canvas.hidden=false;fallback.hidden=true;
      }finally{image.close?.()}
    }).catch(()=>{});
+   // Do not request skin images for members far outside the visible directory.
+   if(typeof IntersectionObserver==='function'){
+     const observer=new IntersectionObserver(entries=>{
+       if(entries.some(entry=>entry.isIntersecting)){
+         observer.disconnect();
+         loadSkin();
+       }
+     },{rootMargin:'160px'});
+     observer.observe(wrap);
+   }else loadSkin();
    return wrap;
  }
  const statusLabel={friends:'Berteman',incoming:'Permintaan masuk',outgoing:'Menunggu jawaban',none:'Belum berteman'};

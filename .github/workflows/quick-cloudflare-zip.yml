@@ -51,36 +51,14 @@ jobs:
               if p.is_file() and p.name in secret and '.git' not in p.parts:
                   raise SystemExit('Forbidden private file: '+str(p))
           PY
+      - name: Check package contents
+        run: python3 -m unittest discover -s tests -p test_cloudflare_package.py
       - name: Create Cloudflare Direct Upload ZIP
-        run: |
-          python - <<'PY'
-          from pathlib import Path,PurePosixPath
-          from zipfile import ZipFile,ZIP_DEFLATED
-          import subprocess,sys
-          tracked=sorted(PurePosixPath(x.decode('utf-8')) for x in subprocess.check_output(['git','ls-files','-z']).split(b'\0') if x)
-          root_ext={'.html','.js','.css','.json','.txt','.xml','.webmanifest','.svg','.png','.jpg','.jpeg','.webp','.gif','.ico','.woff','.woff2','.mp3','.mp4','.webm'}
-          asset_ext=root_ext|{'.ogg','.ttf','.otf','.avif','.wasm'}
-          extra={'_headers','_redirects','_version.txt','robots.txt','favicon.ico'}
-          exclude={'.github','docs','scripts','tests','migrations','.vscode','minecraft-link-velocity','minecraft-link-paper','minecraft-skin-bridge-paper','dev'}
-          root_exclude={'.gitignore','.gitattributes','README.md','CONTRIBUTING.md','SECURITY.md','PANDUAN-GITHUB.md','rules-defaults.json','wrangler.local.toml','.dev.vars.example','MULAI-LOCALHOST.bat','package.json'}
-          site=[]
-          for rel in tracked:
-              p=Path(rel)
-              if not p.exists() or p.is_symlink():sys.exit('Invalid file: '+str(rel))
-              parts=rel.parts
-              if parts[0] in exclude or (len(parts)==1 and (rel.name in root_exclude or rel.suffix.lower()=='.md')):continue
-              if len(parts)==1 and (rel.name in extra or rel.suffix.lower() in root_ext):site.append((p,str(rel)))
-              elif parts[0]=='assets' and len(parts)>1 and rel.suffix.lower() in asset_ext:site.append((p,str(rel)))
-              else:sys.exit('Unexpected file for Cloudflare: '+str(rel))
-          names={name for _,name in site}
-          for essential in ('index.html','_worker.js','_routes.json','member-social.js','member-social.css','profile-workspace.js','profile-workspace.css'):
-              if essential not in names:sys.exit('Missing: '+essential)
-          with ZipFile('SSCircle-Cloudflare-Upload-V10.51.4.zip','w',ZIP_DEFLATED,compresslevel=6) as z:
-              for p,name in site:z.write(p,arcname=name)
-          print('Cloudflare files:',len(site))
-          PY
+        id: cloudflare_zip
+        run: python3 scripts/package-cloudflare.py
       - uses: actions/upload-artifact@v4
         with:
-          name: SSCircle-Cloudflare-Upload-V10.51.4
-          path: SSCircle-Cloudflare-Upload-V10.51.4.zip
+          name: ${{ steps.cloudflare_zip.outputs.artifact_name }}
+          path: ${{ steps.cloudflare_zip.outputs.zip_path }}
+          if-no-files-found: error
           retention-days: 14

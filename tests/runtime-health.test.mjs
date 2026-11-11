@@ -21,7 +21,7 @@ test('runtime readiness from live binding and existing schema',async()=>{
   const r=await call(ready(),'/api/health');
   assert.equal(r.status,200);
   const x=await r.json();
-  assert.equal(x.release,'10.51.4');
+  assert.equal(x.release,JSON.parse(readFileSync(new URL("../package.json",import.meta.url),"utf8")).version);
   assert.equal(x.status,'ready');
   assert.equal(x.services.profile,'ready');
   assert.equal(x.services.admin,'ready');

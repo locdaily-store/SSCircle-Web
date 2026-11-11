@@ -159,52 +159,18 @@ jobs:
           print(f'Pemeriksaan dasar secret lolos pada {checked} file teks; ini bukan audit keamanan menyeluruh.')
           PY
 
-      - name: Kemas ZIP Cloudflare dari root repository
-        shell: bash
-        run: |
-          python - <<'PY'
-          from pathlib import Path, PurePosixPath
-          from zipfile import ZipFile, ZIP_DEFLATED
-          import subprocess, sys
+      - name: Uji kontrak paket Cloudflare
+        run: python3 -m unittest discover -s tests -p test_cloudflare_package.py
 
-          tracked = sorted([PurePosixPath(p.decode('utf-8')) for p in subprocess.check_output(['git','ls-files','-z']).split(b'\0') if p])
-          root_ext = {'.html','.js','.css','.json','.txt','.xml','.webmanifest','.svg','.png','.jpg','.jpeg','.webp','.gif','.ico','.woff','.woff2','.mp3','.mp4','.webm'}
-          asset_ext = root_ext | {'.ogg','.ttf','.otf','.avif','.wasm'}
-          required = {'index.html','admin.html','registration.html','status.html','voting.html','_worker.js','_routes.json'}
-          extra_root = {'_headers','_redirects','_version.txt','robots.txt','favicon.ico'}
-          excluded_dirs = {'.github','docs','scripts','tests','migrations','.vscode','minecraft-link-velocity','minecraft-link-paper','minecraft-skin-bridge-paper','dev'}
-          excluded_root = {'.gitignore','.gitattributes','README.md','CONTRIBUTING.md','SECURITY.md','PANDUAN-GITHUB.md','rules-defaults.json','wrangler.local.toml','.dev.vars.example','MULAI-LOCALHOST.bat','package.json'}
-          site = []
-          for rel in tracked:
-              path = Path(rel)
-              if not path.exists():
-                  sys.exit(f'File terlacak hilang: {rel}')
-              if path.is_symlink():
-                  sys.exit(f'Symlink tidak diizinkan dalam ZIP: {rel}')
-              parts = rel.parts
-              if parts[0] in excluded_dirs or (len(parts) == 1 and (rel.name in excluded_root or rel.suffix.lower() == '.md')):
-                  continue
-              if len(parts) == 1 and (rel.name in extra_root or rel.suffix.lower() in root_ext):
-                  site.append((path, str(rel)))
-              elif parts[0] == 'assets' and len(parts) > 1 and rel.suffix.lower() in asset_ext:
-                  site.append((path, str(rel)))
-              else:
-                  sys.exit(f'File/folder tak dikenal: {rel}. Tinjau sebelum menambahnya ke paket Cloudflare.')
-          missing = required - {name for _,name in site}
-          if missing:
-              sys.exit(f'File penting Cloudflare tidak ditemukan: {sorted(missing)}')
-          output = Path('SSCircle-Cloudflare-Upload.zip')
-          with ZipFile(output, 'w', compression=ZIP_DEFLATED, compresslevel=6) as z:
-              for path, name in site:
-                  z.write(path, arcname=name)
-          print(f'Paket dibuat: {output} ({len(site)} file; root ZIP langsung berisi index.html dan _worker.js).')
-          PY
+      - name: Kemas ZIP Cloudflare dari file publik
+        id: cloudflare_zip
+        run: python3 scripts/package-cloudflare.py
 
       - name: Simpan ZIP Cloudflare sebagai artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SSCircle-Cloudflare-Upload
-          path: SSCircle-Cloudflare-Upload.zip
+          name: ${{ steps.cloudflare_zip.outputs.artifact_name }}
+          path: ${{ steps.cloudflare_zip.outputs.zip_path }}
           if-no-files-found: error
           retention-days: 14
 

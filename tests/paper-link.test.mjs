@@ -379,3 +379,12 @@ test('V10.49.1.7: Paper and SkinBridge use server-scoped HMAC headers',()=>{
  assert.match(bridge,/activeCoreSecret/);assert.match(bridge,/activeCoreId/);
  assert.match(skin,/X-SSC-Server-Id/);
 });
+
+
+test('statistics collection stops retrying unsupported material categories on future scans',()=>{
+ const stats=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/PaperStatsSync.java',import.meta.url),'utf8');
+ assert.match(stats,/rejectedMaterials\.add\(material\)/);
+ assert.match(stats,/blockMaterials\.removeAll\(rejectedMaterials\)/);
+ assert.match(stats,/activeJob=null;\s*\/\/ Only compact after/);
+ assert.match(stats,/http\.sendAsync\(/);
+});
