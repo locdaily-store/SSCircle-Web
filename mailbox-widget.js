@@ -25,6 +25,7 @@
     '<button type="button" class="mailbox-filter is-current" data-ssc-filter="all" aria-pressed="true">Semua</button>',
     '<button type="button" class="mailbox-filter" data-ssc-filter="unread" aria-pressed="false">Belum dibaca</button>',
     '<button type="button" class="mailbox-filter" data-ssc-filter="status" aria-pressed="false">Status</button>',
+    '<button type="button" class="mailbox-filter" data-ssc-filter="friends" aria-pressed="false">Teman</button>',
     '<button type="button" class="mailbox-filter" data-ssc-filter="activation" aria-pressed="false">Aktivasi</button></div>',
     '<div class="ssc-mailbox-selection-bar">',
     '<button type="button" class="mailbox-secondary" id="ssc-mailbox-select-mode" aria-pressed="false">Pilih pesan</button>',
@@ -41,6 +42,9 @@
     '<p>Tekan pesan untuk membaca isinya.</p></div>',
     '<div id="ssc-mailbox-detail" hidden><span class="mailbox-eyebrow" id="ssc-mailbox-category"></span>',
     '<h3 id="ssc-mailbox-subject"></h3><time id="ssc-mailbox-time"></time><p id="ssc-mailbox-body"></p>',
+    '<div class="ssc-mailbox-friend-actions" id="ssc-mailbox-friend-actions" hidden>',
+    '<button type="button" id="ssc-mailbox-friend-accept">Terima teman</button>',
+    '<button type="button" id="ssc-mailbox-friend-decline">Tolak</button></div>',
     '<div class="mailbox-secret-panel" id="ssc-mailbox-secret" hidden><p>Kode bersifat pribadi, jangan dibagikan.</p>',
     '<button type="button" class="mailbox-secondary" id="ssc-mailbox-reveal">Tampilkan kode</button>',
     '<div class="mailbox-secret-row" id="ssc-mailbox-secret-row" hidden><code id="ssc-mailbox-code"></code>',
@@ -53,8 +57,10 @@
   const $=id=>dialog.querySelector('#'+id);
   let items=[],current=null,filter='all',lastTrigger=null,refreshTask=null,loaded=false,loadFailed=false,deleting=false,
     selecting=false,selected=new Set(),managing=false,appStatus='none';
-  const kindLabel=type=>type==='activation'?'AKTIVASI AKUN':type==='status'?'STATUS PENDAFTARAN':'PEMBERITAHUAN';
-  const kindIcon=type=>type==='activation'?'✦':type==='status'?'◆':'✉';
+  const kindLabel=type=>type==='activation'?'AKTIVASI AKUN':type==='status'?'STATUS PENDAFTARAN':
+    type==='friend_request'?'PERMINTAAN PERTEMANAN':type==='friend_accepted'?'PERTEMANAN':'PEMBERITAHUAN';
+  const kindIcon=type=>type==='activation'?'✦':type==='status'?'◆':
+    ['friend_request','friend_accepted'].includes(type)?'♡':'✉';
   // Kode aktivasi hanya untuk pendaftar yang diterima; selain itu tombolnya dikunci.
   function applyAccess(){
     const ok=appStatus==='accepted';
@@ -102,6 +108,7 @@
   function shownItems(){
     return items.filter(item=>filter==='all'||(filter==='unread'&&!item.read)||
       (filter==='status'&&item.type==='status')||
+      (filter==='friends'&&['friend_request','friend_accepted'].includes(item.type))||
       (filter==='activation'&&['activation','information'].includes(item.type)));
   }
   function updateSelection(){
@@ -169,7 +176,9 @@
     $('ssc-mailbox-time').textContent=fmt(item.createdAt);
     $('ssc-mailbox-body').textContent=item.content;
     $('ssc-mailbox-secret').hidden=item.type!=='activation';
+    $('ssc-mailbox-friend-actions').hidden=!(item.type==='friend_request'&&item.friendRequestId);
     $('ssc-mailbox-secret-row').hidden=true;
+    $('ssc-mailbox-friend-actions').hidden=true;
     $('ssc-mailbox-code').textContent='';
     $('ssc-mailbox-reveal').disabled=!item.canReveal;
     $('ssc-mailbox-secret-status').textContent=item.canReveal?
@@ -183,6 +192,25 @@
       catch(error){item.read=false;draw();notify(error.message,true);}
     }
   }
+  async function respondFriend(action){
+    const id=current?.friendRequestId;
+    if(!id)return;
+    for(const el of ['ssc-mailbox-friend-accept','ssc-mailbox-friend-decline'])
+      $(el).disabled=true;
+    try{
+      await api('/api/player/community/respond','POST',{id,action});
+      notify(action==='accept'?'Permintaan pertemanan diterima.':'Permintaan ditolak.');
+      await refresh(true);
+      window.SSCircleMemberSocial?.refresh?.();
+    }catch(error){
+      notify(error.status===403?'Masuk dengan password Dashboard untuk menjawab permintaan teman.':error.message,true);
+    }finally{
+      for(const el of ['ssc-mailbox-friend-accept','ssc-mailbox-friend-decline'])
+        $(el).disabled=false;
+    }
+  }
+  $('ssc-mailbox-friend-accept').addEventListener('click',()=>void respondFriend('accept'));
+  $('ssc-mailbox-friend-decline').addEventListener('click',()=>void respondFriend('decline'));
   async function refresh(silent=false){
     if(refreshTask){await refreshTask;return;}
     refreshTask=(async()=>{
