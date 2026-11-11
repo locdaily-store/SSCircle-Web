@@ -80,6 +80,9 @@ jobs:
           python -m pip install 'playwright>=1.50,<2'
           python -m playwright install --with-deps chromium
 
+      - name: Uji direktori dan popup Member Social pada desktop dan HP
+        run: python tests/browser_member_social.py
+
       - name: Uji warna CSP dan tampilan HP
         run: python tests/browser_smoke.py
 
