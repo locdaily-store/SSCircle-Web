@@ -1,7 +1,7 @@
 /* SSCircle V10.43: validated Profile Studio presentation on member and preview. */
 'use strict';
 window.SSCircleProfileLayout=(()=>{
-  const ids=['welcome','security','preferences','achievements','linking','stats','explore'];
+  const ids=['welcome','security','preferences','achievements','linking','stats','community','explore'];
   function apply(settings={}){
     const main=document.querySelector('.player-main');
     if(!main)return;
