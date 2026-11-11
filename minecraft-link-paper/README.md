@@ -220,3 +220,8 @@ Tidak ada perubahan migrasi D1, secret, metode pembuktian Premium, kontrak API, 
 ## V10.49.1.1 — Server-applied skin sync dan viewer 3D
 
 `PaperSkinSync` mengirim URL skin aktif dari Paper/SkinsRestorer secara asinkron menggunakan HMAC dan nonce. Profile kini mendukung avatar utama, semua identitas (termasuk AuthMe offline), serta popup 3D interaktif. Tidak mengubah data login, UUID, statistik, atau antrean. Lihat `docs/V10.49.1.1-SERVER-SKIN-3D.md` pada repositori.
+
+
+## V10.49.1.7: Auto Server Pairing
+
+Instalasi baru cukup menetapkan URL HTTPS website pada config.yml dan menyetujui kode lewat Admin Control -> Minecraft Sync. Server lama tetap mempertahankan server-secret.txt dan tidak wajib migrasi. Detail: [panduan V10.49.1.7](../docs/V10.49.1.7-AUTO-SERVER-PAIRING.md).
