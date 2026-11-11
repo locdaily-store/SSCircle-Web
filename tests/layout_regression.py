@@ -221,6 +221,7 @@ window.fetch=async url => {
   assert vals['hiddenError'],('Dashboard error visible',w,vals)
   assert vals['hasUnverifiedStats']==5,('Dashboard status cards missing',w,vals)
   assert page.locator('#player-member-id').inner_text()=='SSC-••••EEEE',('Member label must not reveal login code',w)
+  page.locator('[data-workspace-group="settings"]').click()
   assert page.locator('#player-link-title').is_visible()
   assert page.locator('#player-profile-title').inner_text()=='Anggota Uji',('Profile name failed',w)
   assert page.locator('#player-achievements-list .player-award').count()==1,('Hall of Fame award missing',w)
