@@ -32,8 +32,15 @@ test('native dropdown controls and options get opaque theme backgrounds and expl
     /appearance:\s*none/,'native keyboard and OS behavior remains available');
 });
 
-test('hotfix runtime is V10.49.1.8 while local D1 and stable dropdown baseline are preserved',()=>{
-  assert.match(read('_worker.js'),/const SSC_RUNTIME_RELEASE='10\.49\.1\.8'/);
+test('runtime release is at least V10.51.1 while the local D1/dropdown baseline remains compatible',()=>{
+  const match=/const SSC_RUNTIME_RELEASE='(\\d+(?:\\.\\d+){2,3})'/.exec(read('_worker.js'));
+  assert.ok(match,'Worker must declare its runtime release');
+  const release=match[1].split('.').map(Number);
+  const minimum=[10,51,1];
+  const greater=release.some((value,i)=>value>(minimum[i]||0) &&
+    release.slice(0,i).every((prior,j)=>prior===(minimum[j]||0)));
+  assert.ok(greater||minimum.every((value,i)=>(release[i]||0)===value),
+    'Worker release is older than V10.51.1: '+match[1]);
   assert.match(read('package.json'),/"version":\s*"10\.49\.1\.6-local\.4"/);
   const changelog=read('docs/V10.49.1.6-STABILIZATION-AND-DROPDOWNS.md');
   assert.match(changelog,/tidak perlu migrasi D1/i);
