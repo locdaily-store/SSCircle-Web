@@ -57,7 +57,7 @@ window.fetch=async url => {
  if(path==='/api/player/security/sessions') return new Response(JSON.stringify({sessions:[]}),{status:200,headers:{'Content-Type':'application/json'}});
  if(path==='/api/player/profile') return new Response(JSON.stringify({
   profile:{displayName:'Anggota Uji',bio:'Saya builder',visibility:'private',showStats:false,eventAlerts:true},
-  policy:{allowBio:true,allowPublic:false,allowStats:true,allowEventAlerts:true},
+  policy:{allowBio:true,allowMembers:true,allowPublic:false,allowStats:true,allowEventAlerts:true},
   accounts:[],statistics:[],achievements:[{title:'Best Builder',seasonTitle:'Season 6',description:'Kastil'}]
  }),{status:200,headers:{'Content-Type':'application/json'}});
  if(path==='/api/form') return new Response(JSON.stringify({settings:{seasonArchiveEnabled:true}}),{status:200,headers:{'Content-Type':'application/json'}});
@@ -192,7 +192,7 @@ window.fetch=async url => {
   assert layout['scroll']<=layout['width']+2,('Member Control overflow',w,layout)
   assert layout['memberCount']>=1,('Member list missing',w,layout)
   page.locator('.member-admin-tab').nth(4).click()
-  assert page.locator('.member-admin-switch').count()==4,('Member policy options missing',w)
+  assert page.locator('.member-admin-switch').count()==5,('Member policy options missing',w)
 
   if w<=390:
     page.locator('#admin-nav-toggle').click()
