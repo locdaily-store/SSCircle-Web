@@ -34,8 +34,8 @@
      cancel:'Batalkan permintaan',remove:'Hapus pertemanan'};
    if(['remove','decline'].includes(action)&&!confirm(wording[action]+'?'))return;
    try{
-     await api('/api/player/social/action',{method:'POST',body:JSON.stringify({id,action})});
-     message((wording[action]||'Tindakan')+' berhasil.');
+     const response=await api('/api/player/social/action',{method:'POST',body:JSON.stringify({id,action})});
+     message((wording[action]||'Tindakan')+' berhasil.'+(response.noticeDelivered===false?' Namun notifikasi Mail Box belum terkirim.':''));
      await refreshFriends();
      if(current?.id===id)await openProfile(id);
      else renderResults();
@@ -122,13 +122,19 @@
          const avatar=node('canvas',undefined,'ssc-social-avatar');avatar.width=64;avatar.height=64;
          card.prepend(avatar);
          const src='/api/player/social/skin?account='+encodeURIComponent(a.id);
-         fetch(src,{credentials:'same-origin',cache:'no-store'}).then(r=>r.ok?r.blob():null).then(blob=>{
-           if(!blob)return;const url=URL.createObjectURL(blob),img=new Image();
-           img.onload=()=>{const ctx=avatar.getContext('2d');if(ctx){
-             ctx.imageSmoothingEnabled=false;ctx.drawImage(img,8,8,8,8,0,0,64,64);
-             if(img.naturalHeight===64)ctx.drawImage(img,40,8,8,8,0,0,64,64);
-           }URL.revokeObjectURL(url);};
-           img.onerror=()=>URL.revokeObjectURL(url);img.src=url;
+         fetch(src,{credentials:'same-origin',cache:'no-store'}).then(r=>r.ok?r.blob():null).then(async blob=>{
+           if(!blob)return;
+           const dataUrl=await new Promise(resolve=>{
+             const reader=new FileReader();reader.onload=()=>resolve(reader.result);
+             reader.onerror=()=>resolve(null);reader.readAsDataURL(blob);
+           });
+           if(typeof dataUrl!=='string')return;
+           const img=new Image();img.onload=()=>{if(img.naturalWidth!==64||![32,64].includes(img.naturalHeight))return;
+             const ctx=avatar.getContext('2d');if(ctx){
+               ctx.imageSmoothingEnabled=false;ctx.drawImage(img,8,8,8,8,0,0,64,64);
+               if(img.naturalHeight===64)ctx.drawImage(img,40,8,8,8,0,0,64,64);
+             }};
+           img.src=dataUrl;
          }).catch(()=>{});
          card.append(button('Lihat skin 3D',()=>window.SSCircleMinecraftAvatars?.openPreview({
            ...a,socialSkinUrl:src
