@@ -22,7 +22,7 @@ messages=[
  {'id':'11111111-1111-4111-8111-111111111111','title':'Kode aktivasi akun tersedia','content':'Rahasiakan kode aktivasi.','type':'activation','read':False,'canReveal':True,'expiresAt':'2026-11-08T12:00:00Z','createdAt':'2026-11-07T12:00:00Z'},
  {'id':'22222222-2222-4222-8222-222222222222','title':'Permintaan aktivasi diterima','content':'Menunggu pemeriksaan identitas.','type':'information','read':True,'canReveal':False,'createdAt':'2026-11-07T10:00:00Z'}
 ]
-mailbox_data={'items':messages,'activationRequest':'sent'}
+mailbox_data={'items':messages,'activationRequest':'sent','applicationStatus':'accepted'}
 mailbox_mock='''window.fetch=async (url,opts={})=>{
  const p=String(url); let o={};
  if(p==='/api/player/mailbox')o=__MAILBOX__;
@@ -157,7 +157,7 @@ with sync_playwright() as p:
     # V10.42: a transient error must clear private mail from the previous load.
     recovery=browser.new_page(viewport={'width':390,'height':820})
     widget_js=(ROOT/'mailbox-widget.js').read_text(encoding='utf-8')
-    mock_data=json.dumps({'items':messages,'activationRequest':'sent'})
+    mock_data=json.dumps({'items':messages,'activationRequest':'sent','applicationStatus':'accepted'})
     recovery_mock="""window.__mailboxFailure=0;
     window.fetch=async()=>{
       let code=window.__mailboxFailure;

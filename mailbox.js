@@ -3,7 +3,7 @@
 'use strict';
 (() => {
   const $=id=>document.getElementById(id);
-  let items=[],current=null,filter='all',loading=false,appStatus='accepted';
+  let items=[],current=null,filter='all',loading=false,appStatus='none';
   const kindLabel=type=>type==='activation'?'AKTIVASI AKUN':type==='status'?'STATUS PENDAFTARAN':'PEMBERITAHUAN';
   const kindIcon=type=>type==='activation'?'✦':type==='status'?'◆':'✉';
   // Kode aktivasi hanya untuk pendaftar yang diterima; selain itu tombolnya dikunci.
@@ -82,18 +82,23 @@
     loading=true;$('mailbox-refresh').disabled=true;
     try{
       const data=await call('/api/player/mailbox');items=data.items||[];
-      appStatus=data.applicationStatus||'accepted';applyAccess();
+      appStatus=['pending','accepted','rejected'].includes(data.applicationStatus)?data.applicationStatus:'none';applyAccess();
       note(appStatus==='pending'?'Pendaftaranmu masih menunggu pemeriksaan pengurus SSCircle.':
         appStatus==='rejected'?'Pendaftaranmu belum dapat diterima. Baca pesan terbaru di kotak masuk.':
         data.activationRequest==='pending'?'Permintaan kode sedang diperiksa oleh pengurus SSCircle.':
         'Pesanmu sudah diperbarui.');
       if(current){current=items.find(x=>x.id===current.id)||null;if(current)await openMessage(current);}
       renderList();
-    }catch(error){note(error.message,true);if(items.length===0){
-      $('mailbox-list').replaceChildren();
-      const msg=document.createElement('p');msg.className='mailbox-empty';msg.textContent='Pesan belum dapat ditampilkan.';
-      $('mailbox-list').append(msg);
-    }}finally{$('mailbox-refresh').disabled=false;loading=false;}
+    }catch(error){
+      // Never retain a different applicant's private message after logout or network failure.
+      items=[];current=null;appStatus='none';applyAccess();
+      $('mailbox-detail-content').hidden=true;
+      $('mailbox-detail-empty').hidden=false;
+      $('mailbox-secret-value').textContent='';
+      $('mailbox-secret-row').hidden=true;
+      renderList();
+      note(error.message,true);
+    }finally{$('mailbox-refresh').disabled=false;loading=false;}
   }
   $('mailbox-request-button').addEventListener('click',async()=>{
     const b=$('mailbox-request-button');b.disabled=true;note('Mengajukan permintaan aktivasi...');

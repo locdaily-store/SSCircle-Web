@@ -138,13 +138,31 @@ test('Voting yang dimatikan tidak dapat dibuka melalui URL ataupun API',async()=
  assert.equal((await x.request('/api/voting')).status,200);
 });
 
-test('pendaftar pending dan rejected tidak berhak melihat Mail Box',async()=>{
+test('pendaftar pending/rejected dapat membaca notifikasi sendiri, tidak bisa meminta/membuka kode aktivasi',async()=>{
  const x=fixture();
+ // Membuat satu pesan privat melalui alur lama, lalu mengubah status pendaftar.
+ await x.request('/api/player/mailbox/request-activation',{method:'POST',body:{}});
+ const message=(await x.request('/api/player/mailbox')).data.items[0];
  for(const status of ['pending','rejected']){
   x.db.prepare('UPDATE submissions SET status=? WHERE id=?').run(status,ID);
-  assert.equal((await x.request('/api/player/mailbox')).status,403);
+  const list=await x.request('/api/player/mailbox');
+  assert.equal(list.status,200);
+  assert.equal(list.data.applicationStatus,status);
+  assert.equal(list.data.items.length,1);
+  assert.equal(list.data.items[0].canReveal,false);
+  assert.equal((await x.request('/mailbox')).status,200);
+  const legacy=await x.request('/mailbox.html');
+  assert.equal(legacy.status,302);
+  assert.equal(legacy.response.headers.get('Location'),'/mailbox');
+  assert.match((await x.request('/mailbox')).response.headers.get('Cache-Control'),/no-store/);
   assert.equal((await x.request('/api/player/mailbox/request-activation',{method:'POST',body:{}})).status,403);
-  assert.equal((await x.request('/mailbox')).status,302);
+  assert.equal((await x.request('/api/player/mailbox/reveal',{
+    method:'POST',body:{id:message.id}})).status,403);
+  assert.equal((await x.request('/api/player/mailbox',{cookie:''})).status,403);
+  assert.equal((await x.request('/mailbox',{cookie:''})).status,302);
+  const outsider=await x.request('/api/player/mailbox',{cookie:x.another});
+  assert.equal(outsider.status,200);
+  assert.equal(outsider.data.items.some(m=>m.id===message.id),false);
  }
 });
 
@@ -243,11 +261,17 @@ test('Mail Box batch actions reject other members and never delete a live code',
  assert.equal(after.some(item=>item.id===code.id&&item.canReveal),true);
 });
 
-test('Mail Box batch operations require an accepted member session',async()=>{
+test('Mail Box batch operations require a valid owner session, including status-only applicants',async()=>{
  const x=fixture();
+ await x.request('/api/player/mailbox/request-activation',{method:'POST',body:{}});
+ const message=(await x.request('/api/player/mailbox')).data.items[0];
  assert.equal((await x.request('/api/player/mailbox/manage',{
-   method:'POST',cookie:'',body:{action:'read',ids:[ID]}})).status,403);
+   method:'POST',cookie:'',body:{action:'read',ids:[message.id]}})).status,403);
  x.db.prepare('UPDATE submissions SET status=? WHERE id=?').run('rejected',ID);
  assert.equal((await x.request('/api/player/mailbox/manage',{
-   method:'POST',body:{action:'delete',ids:[ID]}})).status,403);
+   method:'POST',body:{action:'read',ids:[message.id]}})).status,200);
+ assert.equal((await x.request('/api/player/mailbox/manage',{
+   method:'POST',cookie:x.another,body:{action:'delete',ids:[message.id]}})).status,404);
+ assert.equal((await x.request('/api/player/mailbox/manage',{
+   method:'POST',body:{action:'delete',ids:[message.id]}})).status,200);
 });

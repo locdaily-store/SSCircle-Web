@@ -193,7 +193,7 @@
       try{
         const value=await api('/api/player/mailbox');
         items=Array.isArray(value.items)?value.items:[];
-        appStatus=value.applicationStatus||'accepted';applyAccess();
+        appStatus=['pending','accepted','rejected'].includes(value.applicationStatus)?value.applicationStatus:'none';applyAccess();
         selected.clear();loaded=true;loadFailed=false;
         $('ssc-mailbox-signin').hidden=true;
         if(current){
