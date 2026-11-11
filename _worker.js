@@ -3866,9 +3866,17 @@ async function mailboxAPI(req,env,path,method){
   const accepted=account.status==='accepted';
   await ensureMailbox(env);
   if(path==='/api/player/mailbox' && method==='GET'){
+    await ensureSocial(env);
     const rows=await env.DB.prepare(`SELECT id,type,title,content,created_at,read_at,
       expires_at,encrypted_secret FROM member_mailbox WHERE application_id=?
       ORDER BY created_at DESC LIMIT 60`).bind(account.id).all();
+    const socialNotices=await env.DB.prepare(`SELECT n.message_id,n.requester_id
+      FROM member_social_notices n JOIN member_friendships f
+        ON f.member_a=CASE WHEN n.requester_id<n.recipient_id THEN n.requester_id ELSE n.recipient_id END
+       AND f.member_b=CASE WHEN n.requester_id>n.recipient_id THEN n.requester_id ELSE n.recipient_id END
+      WHERE n.recipient_id=? AND f.status='pending' AND f.requested_by=n.requester_id
+      ORDER BY n.created_at DESC LIMIT 60`).bind(account.id).all();
+    const friendNoticeIds=new Map((socialNotices.results||[]).map(n=>[n.message_id,n.requester_id]));
     const request=await env.DB.prepare('SELECT status FROM member_activation_requests WHERE application_id=?')
       .bind(account.id).first();
     const invite=await env.DB.prepare('SELECT expires_at,used_at FROM member_activation_invites WHERE application_id=?')
@@ -3878,6 +3886,7 @@ async function mailboxAPI(req,env,path,method){
     return J({items:(rows.results||[]).map(row=>({id:row.id,type:row.type,
       title:row.title,content:row.content,createdAt:row.created_at,
       read:!!row.read_at,expiresAt:row.expires_at?new Date(row.expires_at*1000).toISOString():null,
+      friendSenderId:accepted&&row.type==='friend_request'?friendNoticeIds.get(row.id)||null:null,
       canReveal:accepted && !!row.encrypted_secret && row.id===newest?.id &&
         row.expires_at>Math.floor(Date.now()/1000) &&
         invite?.used_at===null && invite?.expires_at===row.expires_at})),
@@ -4016,7 +4025,212 @@ async function mailboxAPI(req,env,path,method){
 
 // SSCircle runtime check: observe what the deployment actually receives.
 // Only public readiness categories. Never expose secret values or private data.
-const SSC_RUNTIME_RELEASE='10.49.1.8';
+
+/* V10.51: member-only directory and consent-based friendships.
+   Every lookup uses the authenticated member ID; tracking codes and credentials
+   are never searchable. All social writes require a strong Dashboard session. */
+const SSC_SOCIAL_ID=/^[0-9a-f-]{36}$/;
+const socialReady=new WeakSet();
+async function ensureSocial(env){
+  if(socialReady.has(env.DB))return;
+  await ensureMailbox(env);
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS member_friendships(
+    member_a TEXT NOT NULL,member_b TEXT NOT NULL,requested_by TEXT NOT NULL,
+    status TEXT NOT NULL,updated_at TEXT NOT NULL,
+    PRIMARY KEY(member_a,member_b),
+    CHECK(member_a<member_b),
+    CHECK(status IN ('pending','accepted','declined')),
+    FOREIGN KEY(member_a) REFERENCES submissions(id) ON DELETE CASCADE,
+    FOREIGN KEY(member_b) REFERENCES submissions(id) ON DELETE CASCADE)`).run();
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_ssc_friends_b ON member_friendships(member_b,status)').run();
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS member_social_notices(
+    message_id TEXT PRIMARY KEY,recipient_id TEXT NOT NULL,requester_id TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(message_id) REFERENCES member_mailbox(id) ON DELETE CASCADE)`).run();
+  socialReady.add(env.DB);
+}
+function socialPair(a,b){return a<b?[a,b]:[b,a];}
+async function socialFriendship(env,a,b){
+  const pair=socialPair(a,b);
+  return await env.DB.prepare('SELECT * FROM member_friendships WHERE member_a=? AND member_b=?')
+    .bind(...pair).first();
+}
+async function socialVisibility(env,viewer,target){
+  const member=await env.DB.prepare(`SELECT s.id,s.submitted_at,
+    COALESCE(p.display_name,'') AS display_name,COALESCE(p.bio,'') AS bio,
+    COALESCE(p.visibility,'private') AS visibility,
+    COALESCE(p.show_stats,0) AS show_stats
+    FROM submissions s LEFT JOIN member_profiles p ON p.application_id=s.id
+    WHERE s.id=? AND s.status='accepted' LIMIT 1`).bind(target).first();
+  if(!member)return null;
+  const policy=memberPolicy(await env.DB.prepare('SELECT * FROM member_policy WHERE id=1').first());
+  const friendship=viewer===target?null:await socialFriendship(env,viewer,target);
+  const friend=friendship?.status==='accepted';
+  const visible=viewer===target||friend||member.visibility==='members'
+    ||(policy.allowPublic&&member.visibility==='public');
+  return {member,policy,friend,visible,friendship};
+}
+function socialRelationship(row,viewer){
+  if(!row)return 'none';
+  if(row.status==='accepted')return 'friends';
+  if(row.status==='pending')return row.requested_by===viewer?'outgoing':'incoming';
+  return 'none';
+}
+async function socialAPI(req,env,path,method){
+  if(!env.DB||!env.SESSION_SECRET)return bad('Layanan sosial belum tersedia.',503);
+  const me=await playerSession(req,env);
+  if(!me||me.status!=='accepted')return bad('Masuk sebagai anggota SSCircle terlebih dahulu.',403);
+  if(!await memberStrongSession(req,env,me))
+    return bad('Buka Dashboard menggunakan password untuk mengakses fitur pertemanan.',403);
+  await ensureSocial(env);
+  const url=new URL(req.url);
+  if(path==='/api/player/social/search'&&method==='GET'){
+    const query=(url.searchParams.get('q')||'').trim();
+    if(query.length<2||query.length>40)return J({items:[]});
+    if(!await rateLimit(env,req,'social-search',60,900))
+      return bad('Pencarian terlalu sering. Coba lagi nanti.',429);
+    const safe=query.replace(/[\\%_]/g,match=>'\\'+match);
+    const rows=await env.DB.prepare(`SELECT s.id,COALESCE(p.display_name,'') AS name,
+       (SELECT username FROM minecraft_accounts a WHERE a.application_id=s.id
+         ORDER BY a.verified_at ASC LIMIT 1) AS minecraft_name
+       FROM submissions s JOIN member_profiles p ON p.application_id=s.id
+       WHERE s.status='accepted' AND s.id<>? AND
+        (p.visibility='members' OR (p.visibility='public' AND
+         (SELECT allow_public FROM member_policy WHERE id=1)=1))
+         AND (p.display_name LIKE ? ESCAPE '\\' COLLATE NOCASE
+           OR EXISTS(SELECT 1 FROM minecraft_accounts a WHERE a.application_id=s.id
+            AND a.username LIKE ? ESCAPE '\\' COLLATE NOCASE))
+       ORDER BY p.display_name COLLATE NOCASE LIMIT 20`)
+       .bind(me.id,'%'+safe+'%','%'+safe+'%').all();
+    return J({items:(rows.results||[]).map(r=>({id:r.id,displayName:r.name||r.minecraft_name||'Anggota SSCircle',
+      minecraftName:r.minecraft_name||null}))});
+  }
+  if(path==='/api/player/social/profile'&&method==='GET'){
+    const id=url.searchParams.get('id')||'';
+    if(!SSC_SOCIAL_ID.test(id))return bad('Profil tidak ditemukan.',404);
+    const access=await socialVisibility(env,me.id,id);
+    if(!access?.visible)return bad('Profil tidak tersedia atau bersifat privat.',404);
+    const {member,policy}=access;
+    const accounts=await sscAccountList(env,id);
+    const allowStats=policy.allowStats&&member.show_stats===1;
+    const stats=allowStats?await sscAccountStatistics(env,id):[];
+    const form=formFrom(await readSettingsRow(env));
+    const titles=new Map((form.settings.homeLeaderboardSeasons||[]).map(s=>[s.id,s.title]));
+    return J({id,displayName:member.display_name||accounts[0]?.username||'Anggota SSCircle',
+      bio:policy.allowBio?member.bio:'',
+      joinedAt:member.submitted_at,
+      relationship:socialRelationship(access.friendship,me.id),
+      accounts:accounts.map(a=>({id:a.id,username:a.username,edition:a.edition,
+        isPrimary:a.isPrimary,skinImageStored:a.skinImageStored,skinModel:a.skinModel,
+        skinUpdatedAt:a.skinUpdatedAt})),
+      statistics:stats.map(a=>({...a,seasonTitle:a.seasonId.startsWith('season:')
+        ?titles.get(a.seasonId.split(':')[1])||'Season SSCircle':'Sepanjang masa'})),
+      statsVisible:allowStats,
+      achievements:memberAwards(form.settings,id)},200,{'Cache-Control':'private, no-store','Vary':'Cookie'});
+  }
+  if(path==='/api/player/social/skin'&&method==='GET'){
+    const id=url.searchParams.get('account')||'';
+    if(!SSC_SOCIAL_ID.test(id))return bad('Skin tidak tersedia.',404);
+    const owner=await env.DB.prepare('SELECT application_id FROM minecraft_accounts WHERE id=?').bind(id).first();
+    if(!owner)return bad('Skin tidak tersedia.',404);
+    const access=await socialVisibility(env,me.id,owner.application_id);
+    if(!access?.visible)return bad('Skin tidak tersedia.',404);
+    const skin=await env.DB.prepare(`SELECT p.png_base64,p.texture_hash,s.model
+      FROM minecraft_account_skin_images p
+      JOIN minecraft_account_skin_state s ON s.account_id=p.account_id
+        AND s.texture_hash=p.texture_hash WHERE p.account_id=? LIMIT 1`).bind(id).first();
+    const png=skin?mcSkinPng(skin.png_base64):null;
+    if(!png)return bad('Skin aktif belum dikirim server.',404);
+    return new Response(png,{status:200,headers:{'Content-Type':'image/png',
+      'Cache-Control':'private, no-store','Vary':'Cookie',
+      'X-SSC-Skin-Model':skin.model==='slim'?'slim':'classic',
+      'X-SSC-Skin-Source':'server-d1',
+      'X-Content-Type-Options':'nosniff',
+      'Content-Security-Policy':"default-src 'none'"}});
+  }
+  if(path==='/api/player/social/friends'&&method==='GET'){
+    const rows=await env.DB.prepare(`SELECT f.member_a,f.member_b,f.requested_by,
+      f.status,f.updated_at,COALESCE(p.display_name,'') AS name
+      FROM member_friendships f
+      JOIN submissions s ON s.id=CASE WHEN f.member_a=? THEN f.member_b ELSE f.member_a END
+      LEFT JOIN member_profiles p ON p.application_id=s.id
+      WHERE (f.member_a=? OR f.member_b=?) AND s.status='accepted'
+       AND f.status IN ('pending','accepted')
+      ORDER BY f.updated_at DESC LIMIT 150`).bind(me.id,me.id,me.id).all();
+    return J({items:(rows.results||[]).map(r=>({
+      id:r.member_a===me.id?r.member_b:r.member_a,
+      displayName:r.name||'Anggota SSCircle',
+      relationship:socialRelationship(r,me.id),updatedAt:r.updated_at}))});
+  }
+  if(path==='/api/player/social/action'&&method==='POST'){
+    if(!await rateLimit(env,req,'social-action',15,900))
+      return bad('Terlalu banyak permintaan. Coba lagi nanti.',429);
+    const input=await body(req,500),target=input?.id,action=input?.action;
+    if(!SSC_SOCIAL_ID.test(target||'')||target===me.id||
+      !['request','accept','decline','cancel','remove'].includes(action))
+      return bad('Tindakan pertemanan tidak valid.',400);
+    const pair=socialPair(me.id,target),existing=await socialFriendship(env,me.id,target),
+      now=new Date().toISOString();
+    if(action==='request'){
+      const access=await socialVisibility(env,me.id,target);
+      if(!access?.visible)return bad('Anggota tidak ditemukan atau tidak menerima pencarian.',404);
+      if(existing?.status==='accepted')return bad('Kalian sudah berteman.',409);
+      if(existing?.status==='pending')return bad('Permintaan sudah ada.',409);
+      if(existing?.status==='declined' && Date.now()-Date.parse(existing.updated_at)<7*86400000)
+        return bad('Permintaan baru dapat dikirim setelah tujuh hari.',429);
+      const result=await env.DB.prepare(`INSERT INTO member_friendships
+        (member_a,member_b,requested_by,status,updated_at) VALUES(?,?,?,'pending',?)
+        ON CONFLICT(member_a,member_b) DO UPDATE SET requested_by=excluded.requested_by,
+          status='pending',updated_at=excluded.updated_at
+        WHERE member_friendships.status='declined'
+          AND member_friendships.updated_at<=?`).bind(...pair,me.id,now,
+            new Date(Date.now()-7*86400000).toISOString()).run();
+      if(!result.meta?.changes)return bad('Permintaan sudah diperbarui di perangkat lain.',409);
+      const mine=await env.DB.prepare('SELECT display_name FROM member_profiles WHERE application_id=?')
+        .bind(me.id).first();
+      let noticeDelivered=true;
+      try{
+        const mailId=await mailboxNote(env,target,'friend_request','Permintaan pertemanan baru',
+          (mine?.display_name||'Seorang anggota SSCircle')+
+          ' ingin berteman denganmu. Kamu dapat menerima atau menolaknya langsung dari Mail Box.');
+        await env.DB.prepare('INSERT INTO member_social_notices(message_id,recipient_id,requester_id,created_at) VALUES(?,?,?,?)')
+          .bind(mailId,target,me.id,now).run();
+      }catch(e){noticeDelivered=false;console.error('[SSCircle Social] friend notice failed');}
+      return J({ok:true,relationship:'outgoing',noticeDelivered});
+    }
+    if(!existing)return bad('Permintaan tidak ditemukan.',404);
+    if(action==='accept'||action==='decline'){
+      if(existing.status!=='pending'||existing.requested_by===me.id)
+        return bad('Hanya penerima permintaan yang dapat merespons.',403);
+      const status=action==='accept'?'accepted':'declined';
+      const result=await env.DB.prepare(`UPDATE member_friendships SET status=?,updated_at=?
+        WHERE member_a=? AND member_b=? AND status='pending' AND requested_by<>?`)
+        .bind(status,now,...pair,me.id).run();
+      if(!result.meta?.changes)return bad('Permintaan sudah diproses.',409);
+      const mine=await env.DB.prepare('SELECT display_name FROM member_profiles WHERE application_id=?')
+        .bind(me.id).first();
+      let noticeDelivered=true;
+      try{
+        await mailboxNote(env,existing.requested_by,'friend_response',
+          action==='accept'?'Permintaan pertemanan diterima':'Permintaan pertemanan ditolak',
+          (mine?.display_name||'Anggota SSCircle')+
+          (action==='accept'?' menerima':' menolak')+' permintaan pertemananmu.');
+      }catch(e){noticeDelivered=false;console.error('[SSCircle Social] response notice failed');}
+      return J({ok:true,relationship:status==='accepted'?'friends':'none',noticeDelivered});
+    }
+    if(action==='cancel'&&!(existing.status==='pending'&&existing.requested_by===me.id))
+      return bad('Hanya pengirim yang dapat membatalkan permintaan.',403);
+    if(action==='remove'&&existing.status!=='accepted')
+      return bad('Kalian belum berteman.',409);
+    const result=await env.DB.prepare('DELETE FROM member_friendships WHERE member_a=? AND member_b=? AND status=?')
+      .bind(...pair,action==='cancel'?'pending':'accepted').run();
+    if(!result.meta?.changes)return bad('Status pertemanan sudah berubah.',409);
+    return J({ok:true,relationship:'none'});
+  }
+  return bad('Endpoint sosial tidak ditemukan.',404);
+}
+
+const SSC_RUNTIME_RELEASE='10.51.0';
 const SSC_RUNTIME_ISSUES=new Set();
 function sscRuntimeBindings(env){
   return {
@@ -4335,6 +4549,8 @@ async function route(req, env) {
   if ((path.startsWith('/api/player/minecraft/link/') || (path==='/api/admin/minecraft/links' || path==='/api/admin/minecraft/multi-settings')) &&
       ['GET','POST'].includes(method))
     return await minecraftLinkAPI(req,env,path,method);
+  if (path.startsWith('/api/player/social/') && ['GET','POST'].includes(method))
+    return await socialAPI(req,env,path,method);
   if ((path.startsWith('/api/player/mailbox') || path==='/api/admin/mailbox/approve') &&
       ['GET','POST'].includes(method))
     return await mailboxAPI(req,env,path,method);
