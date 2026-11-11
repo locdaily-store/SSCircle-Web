@@ -5,14 +5,14 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#120b20">
   <meta name="robots" content="noindex,nofollow">
-  <meta name="description" content="Mail Box pribadi anggota SSCircle Server: notifikasi keanggotaan dan kode aktivasi.">
+  <meta name="description" content="Mail Box pribadi anggota SSCircle Server: notifikasi status pendaftaran, keanggotaan, dan kode aktivasi.">
   <title>Mail Box | SSCircle Server</title>
   <link rel="icon" href="assets/sscircle-logo.png" type="image/png">
   <link rel="stylesheet" href="style.css?v=10.38.0">
   <link rel="stylesheet" href="mailbox.css?v=10.38.0">
   <script src="color-theme.js?v=10.38.0" defer></script>
   <script src="site-shell.js?v=10.38.0" defer></script>
-  <script src="mailbox.js?v=10.38.0" defer></script>
+  <script src="mailbox.js?v=10.50.0" defer></script>
 </head>
 <body class="home-page mailbox-page theme-v3">
   <header class="home-header" id="top">
@@ -33,7 +33,7 @@
       <div>
         <span class="mailbox-eyebrow">SSCIRCLE / MEMBER MAIL BOX</span>
         <h1>Mail <em>Box.</em></h1>
-        <p>Semua pemberitahuan keanggotaanmu berada di satu tempat. Pesan pribadi hanya tersedia saat kamu masuk sebagai pendaftar yang telah diterima.</p>
+        <p>Semua pemberitahuan keanggotaanmu berada di satu tempat. Pesan pribadi tersedia saat kamu masuk dengan kode pendaftaranmu, baik pendaftaranmu masih diproses, sudah diterima, maupun belum diterima.</p>
       </div>
       <span class="mailbox-hero-icon" aria-hidden="true">✉</span>
     </section>
@@ -43,8 +43,9 @@
         <h2 id="mailbox-request-heading">Kode aktivasi akun</h2>
         <p>Ajukan kode aktivasi. Permintaan langsung masuk ke Mail Box. Jika identitasmu sudah diperiksa admin, kode dikirim otomatis. Jika belum, pesan akan memberi tahu bahwa verifikasi diperlukan.</p>
         <small>Persetujuan pendaftaran tidak otomatis membuktikan kepemilikan akun. Kode bersifat pribadi dan berlaku 24 jam.</small>
+        <small id="mailbox-request-hint" hidden>Kode aktivasi baru tersedia setelah pendaftaranmu diterima.</small>
       </div>
-      <button type="button" id="mailbox-request-button" class="mailbox-primary">Minta kode aktivasi</button>
+      <button type="button" id="mailbox-request-button" class="mailbox-primary" disabled>Minta kode aktivasi</button>
     </section>
     <p id="mailbox-message" class="mailbox-message" role="status" aria-live="polite">Memuat pesan...</p>
     <section class="mailbox-grid" aria-label="Pesan pribadi">
@@ -53,6 +54,7 @@
         <div role="group" class="mailbox-filters" aria-label="Filter pesan">
           <button type="button" class="mailbox-filter is-current" data-filter="all" aria-pressed="true">Semua</button>
           <button type="button" class="mailbox-filter" data-filter="unread" aria-pressed="false">Belum dibaca</button>
+          <button type="button" class="mailbox-filter" data-filter="status" aria-pressed="false">Status</button>
           <button type="button" class="mailbox-filter" data-filter="activation" aria-pressed="false">Aktivasi</button>
         </div>
         <div id="mailbox-list" class="mailbox-list" aria-live="polite"></div>
