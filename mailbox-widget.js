@@ -41,6 +41,9 @@
     '<p>Tekan pesan untuk membaca isinya.</p></div>',
     '<div id="ssc-mailbox-detail" hidden><span class="mailbox-eyebrow" id="ssc-mailbox-category"></span>',
     '<h3 id="ssc-mailbox-subject"></h3><time id="ssc-mailbox-time"></time><p id="ssc-mailbox-body"></p>',
+    '<div class="ssc-mailbox-friend-actions player-actions" id="ssc-mailbox-friend-actions" hidden>',
+    '<button type="button" id="ssc-mailbox-friend-accept" class="mailbox-primary">Terima pertemanan</button>',
+    '<button type="button" id="ssc-mailbox-friend-decline" class="mailbox-secondary">Tolak</button></div>',
     '<div class="mailbox-secret-panel" id="ssc-mailbox-secret" hidden><p>Kode bersifat pribadi, jangan dibagikan.</p>',
     '<button type="button" class="mailbox-secondary" id="ssc-mailbox-reveal">Tampilkan kode</button>',
     '<div class="mailbox-secret-row" id="ssc-mailbox-secret-row" hidden><code id="ssc-mailbox-code"></code>',
@@ -168,6 +171,7 @@
     $('ssc-mailbox-subject').textContent=item.title;
     $('ssc-mailbox-time').textContent=fmt(item.createdAt);
     $('ssc-mailbox-body').textContent=item.content;
+    $('ssc-mailbox-friend-actions').hidden=!(item.type==='friend_request'&&item.friendSenderId);
     $('ssc-mailbox-secret').hidden=item.type!=='activation';
     $('ssc-mailbox-secret-row').hidden=true;
     $('ssc-mailbox-code').textContent='';
@@ -291,6 +295,23 @@
     }catch(error){notify(error.message,true)}
     finally{applyAccess();}
   });
+  async function respondFriend(action){
+    const id=current?.friendSenderId;
+    if(!id||!['accept','decline'].includes(action))return;
+    const buttons=[$('ssc-mailbox-friend-accept'),$('ssc-mailbox-friend-decline')];
+    buttons.forEach(b=>b.disabled=true);
+    try{
+      await api('/api/player/social/action','POST',{id,action});
+      notify(action==='accept'?'Permintaan teman diterima.':'Permintaan teman ditolak.');
+      current.friendSenderId=null;
+      $('ssc-mailbox-friend-actions').hidden=true;
+      window.SSCircleSocial?.refresh?.();
+      await refresh(true);
+    }catch(error){notify(error.message,true)}
+    finally{buttons.forEach(b=>b.disabled=false);}
+  }
+  $('ssc-mailbox-friend-accept').addEventListener('click',()=>void respondFriend('accept'));
+  $('ssc-mailbox-friend-decline').addEventListener('click',()=>void respondFriend('decline'));
   $('ssc-mailbox-reveal').addEventListener('click',async()=>{
     if(!current?.canReveal)return;
     const id=current.id,button=$('ssc-mailbox-reveal');
