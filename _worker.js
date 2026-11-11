@@ -1447,6 +1447,16 @@ function normalSettings(raw) {
   }
   if (input.homeProcessTitle === 'Bergabung dalam lingkaran.')
     input.homeProcessTitle = 'Join our Circle';
+  // Normalize saved seven-card layouts on reads as well as admin writes.
+  // This also keeps the old card order when the form is fetched by the Profile.
+  const sections=DEFAULTS.profilePageSections,older=input.profilePageSections;
+  if(Array.isArray(older)&&older.length===sections.length-1&&
+    !older.includes('social')&&new Set(older).size===older.length&&
+    older.every(id=>sections.includes(id))){
+    const order=older.slice(),index=order.indexOf('explore');
+    order.splice(index<0?order.length:index,0,'social');
+    input.profilePageSections=order;
+  }
   if (!Array.isArray(input.homeProfileItems)) {
     // Migrasi otomatis konfigurasi satu foto pada versi sebelumnya.
     input.homeProfileItems = [{
