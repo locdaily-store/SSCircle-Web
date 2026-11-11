@@ -3867,6 +3867,7 @@ async function mailboxAPI(req,env,path,method){
   await ensureMailbox(env);
   if(path==='/api/player/mailbox' && method==='GET'){
     await ensureMemberFriends(env);
+    const canManageFriends=accepted&&!!(await memberStrongSession(req,env,account));
     const rows=await env.DB.prepare(`SELECT m.id,m.type,m.title,m.content,m.created_at,m.read_at,
       m.expires_at,m.encrypted_secret,
       CASE WHEN f.status='pending' AND f.requester_id<>m.application_id
@@ -3881,7 +3882,7 @@ async function mailboxAPI(req,env,path,method){
       "WHERE application_id=? AND type='activation' ORDER BY rowid DESC LIMIT 1").bind(account.id).first();
     return J({items:(rows.results||[]).map(row=>({id:row.id,type:row.type,
       title:row.title,content:row.content,createdAt:row.created_at,
-      friendRequestId:accepted?(row.friend_request_id||null):null,
+      friendRequestId:canManageFriends?(row.friend_request_id||null):null,
       read:!!row.read_at,expiresAt:row.expires_at?new Date(row.expires_at*1000).toISOString():null,
       canReveal:accepted && !!row.encrypted_secret && row.id===newest?.id &&
         row.expires_at>Math.floor(Date.now()/1000) &&
