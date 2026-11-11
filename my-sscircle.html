@@ -10,6 +10,7 @@
   <link rel="icon" href="assets/sscircle-logo.png" type="image/png">
   <link rel="stylesheet" href="style.css?v=10.49.1.6">
   <link rel="stylesheet" href="player-dashboard.css?v=10.49.1.5">
+  <link rel="stylesheet" href="member-social.css?v=10.51.0">
   <link rel="stylesheet" href="mailbox.css?v=10.41.0">
   <link rel="stylesheet" href="profile-ui.css?v=10.43.0">
   <script src="color-theme.js?v=10.35.0" defer></script>
@@ -20,6 +21,7 @@
   <script src="minecraft-skin-3d.js?v=10.49.1.5" defer></script>
   <script src="minecraft-avatars.js?v=10.49.1.5" defer></script>
   <script src="player-dashboard.js?v=10.49.1.3" defer></script>
+  <script src="member-social.js?v=10.51.0" defer></script>
   <link rel="stylesheet" href="password-visibility.css?v=10.39.0">
   <script src="password-visibility.js?v=10.39.0" defer></script>
 </head>
@@ -96,6 +98,24 @@
           <span class="player-state"><span aria-hidden="true">●</span> Anggota aktif</span>
         </section>
 
+        <section data-profile-section="social" class="player-card ssc-social-card" id="ssc-social-root" aria-labelledby="ssc-social-title">
+          <div class="player-section-head"><div>
+            <span class="player-overline">COMMUNITY CONNECTIONS</span>
+            <h2 id="ssc-social-title">Cari Member &amp; Teman</h2>
+          </div></div>
+          <p class="player-helper">Cari anggota SSCircle yang mengizinkan profilnya dilihat oleh member lain. Permintaan teman muncul di Mail Box penerima. Akun dengan profil privat tidak ditampilkan kepada anggota lain, kecuali mereka sudah berteman.</p>
+          <div class="ssc-social-controls">
+            <input type="search" id="ssc-social-search" maxlength="40" placeholder="Nama Profile atau username Minecraft..." aria-label="Cari anggota SSCircle">
+            <button type="button" id="ssc-social-search-button" class="player-action player-action-primary">Cari member</button>
+            <button type="button" id="ssc-social-refresh" class="player-action player-action-secondary">Perbarui teman</button>
+          </div>
+          <p class="player-helper" id="ssc-social-feedback" role="status" aria-live="polite">Pencarian dan pertemanan memerlukan login password Dashboard.</p>
+          <div class="ssc-social-grid">
+            <div class="ssc-social-panel"><h3 class="ssc-social-subtitle">Hasil pencarian</h3><div id="ssc-social-results"></div></div>
+            <div class="ssc-social-panel"><h3 class="ssc-social-subtitle">Teman dan permintaan</h3><div id="ssc-social-friends"></div></div>
+          </div>
+          <div id="ssc-social-detail" class="ssc-social-detail" hidden></div>
+        </section>
         <section data-profile-section="security" class="player-card player-security" aria-labelledby="player-security-title">
           <div class="player-section-head">
             <div><span class="player-overline">ACCOUNT &amp; SECURITY</span>
