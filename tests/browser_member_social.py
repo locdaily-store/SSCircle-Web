@@ -70,6 +70,7 @@ def check(viewport):
         assert PUBLIC_ID in page.locator(".ssc-social-result-button").inner_text()
         page.locator(".ssc-social-result-button").first.click()
         page.locator("#ssc-social-modal[open]").wait_for()
+        page.locator("#ssc-social-modal h3").wait_for()
         assert "Pemain SSCircle" in page.locator("#ssc-social-modal").inner_text()
         assert "Builder" in page.locator("#ssc-social-modal").inner_text()
         assert page.locator("#ssc-social-modal img").count() > 0
