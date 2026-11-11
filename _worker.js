@@ -3866,9 +3866,17 @@ async function mailboxAPI(req,env,path,method){
   const accepted=account.status==='accepted';
   await ensureMailbox(env);
   if(path==='/api/player/mailbox' && method==='GET'){
+    await ensureSocial(env);
     const rows=await env.DB.prepare(`SELECT id,type,title,content,created_at,read_at,
       expires_at,encrypted_secret FROM member_mailbox WHERE application_id=?
       ORDER BY created_at DESC LIMIT 60`).bind(account.id).all();
+    const socialNotices=await env.DB.prepare(`SELECT n.message_id,n.requester_id
+      FROM member_social_notices n JOIN member_friendships f
+        ON f.member_a=CASE WHEN n.requester_id<n.recipient_id THEN n.requester_id ELSE n.recipient_id END
+       AND f.member_b=CASE WHEN n.requester_id>n.recipient_id THEN n.requester_id ELSE n.recipient_id END
+      WHERE n.recipient_id=? AND f.status='pending' AND f.requested_by=n.requester_id
+      ORDER BY n.created_at DESC LIMIT 60`).bind(account.id).all();
+    const friendNoticeIds=new Map((socialNotices.results||[]).map(n=>[n.message_id,n.requester_id]));
     const request=await env.DB.prepare('SELECT status FROM member_activation_requests WHERE application_id=?')
       .bind(account.id).first();
     const invite=await env.DB.prepare('SELECT expires_at,used_at FROM member_activation_invites WHERE application_id=?')
@@ -3878,6 +3886,7 @@ async function mailboxAPI(req,env,path,method){
     return J({items:(rows.results||[]).map(row=>({id:row.id,type:row.type,
       title:row.title,content:row.content,createdAt:row.created_at,
       read:!!row.read_at,expiresAt:row.expires_at?new Date(row.expires_at*1000).toISOString():null,
+      friendSenderId:accepted&&row.type==='friend_request'?friendNoticeIds.get(row.id)||null:null,
       canReveal:accepted && !!row.encrypted_secret && row.id===newest?.id &&
         row.expires_at>Math.floor(Date.now()/1000) &&
         invite?.used_at===null && invite?.expires_at===row.expires_at})),
@@ -4034,6 +4043,10 @@ async function ensureSocial(env){
     FOREIGN KEY(member_a) REFERENCES submissions(id) ON DELETE CASCADE,
     FOREIGN KEY(member_b) REFERENCES submissions(id) ON DELETE CASCADE)`).run();
   await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_ssc_friends_b ON member_friendships(member_b,status)').run();
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS member_social_notices(
+    message_id TEXT PRIMARY KEY,recipient_id TEXT NOT NULL,requester_id TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(message_id) REFERENCES member_mailbox(id) ON DELETE CASCADE)`).run();
   socialReady.add(env.DB);
 }
 function socialPair(a,b){return a<b?[a,b]:[b,a];}
@@ -4175,10 +4188,15 @@ async function socialAPI(req,env,path,method){
       if(!result.meta?.changes)return bad('Permintaan sudah diperbarui di perangkat lain.',409);
       const mine=await env.DB.prepare('SELECT display_name FROM member_profiles WHERE application_id=?')
         .bind(me.id).first();
-      await mailboxNote(env,target,'friend_request','Permintaan pertemanan baru',
-        (mine?.display_name||'Seorang anggota SSCircle')+
-        ' ingin berteman denganmu. Buka Profile → Cari Member & Teman untuk menerima atau menolaknya.');
-      return J({ok:true,relationship:'outgoing'});
+      let noticeDelivered=true;
+      try{
+        const mailId=await mailboxNote(env,target,'friend_request','Permintaan pertemanan baru',
+          (mine?.display_name||'Seorang anggota SSCircle')+
+          ' ingin berteman denganmu. Kamu dapat menerima atau menolaknya langsung dari Mail Box.');
+        await env.DB.prepare('INSERT INTO member_social_notices(message_id,recipient_id,requester_id,created_at) VALUES(?,?,?,?)')
+          .bind(mailId,target,me.id,now).run();
+      }catch(e){noticeDelivered=false;console.error('[SSCircle Social] friend notice failed');}
+      return J({ok:true,relationship:'outgoing',noticeDelivered});
     }
     if(!existing)return bad('Permintaan tidak ditemukan.',404);
     if(action==='accept'||action==='decline'){
@@ -4191,11 +4209,14 @@ async function socialAPI(req,env,path,method){
       if(!result.meta?.changes)return bad('Permintaan sudah diproses.',409);
       const mine=await env.DB.prepare('SELECT display_name FROM member_profiles WHERE application_id=?')
         .bind(me.id).first();
-      await mailboxNote(env,existing.requested_by,'friend_response',
-        action==='accept'?'Permintaan pertemanan diterima':'Permintaan pertemanan ditolak',
-        (mine?.display_name||'Anggota SSCircle')+
-        (action==='accept'?' menerima':' menolak')+' permintaan pertemananmu.');
-      return J({ok:true,relationship:status==='accepted'?'friends':'none'});
+      let noticeDelivered=true;
+      try{
+        await mailboxNote(env,existing.requested_by,'friend_response',
+          action==='accept'?'Permintaan pertemanan diterima':'Permintaan pertemanan ditolak',
+          (mine?.display_name||'Anggota SSCircle')+
+          (action==='accept'?' menerima':' menolak')+' permintaan pertemananmu.');
+      }catch(e){noticeDelivered=false;console.error('[SSCircle Social] response notice failed');}
+      return J({ok:true,relationship:status==='accepted'?'friends':'none',noticeDelivered});
     }
     if(action==='cancel'&&!(existing.status==='pending'&&existing.requested_by===me.id))
       return bad('Hanya pengirim yang dapat membatalkan permintaan.',403);
