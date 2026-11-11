@@ -2732,7 +2732,7 @@ function mcSkinPng(raw){
 // Verify its original path-bound signature, then reuse the new storage protocol.
 const MC_SKIN_LEGACY_ROUTE='/api/minecraft/skin/refresh';
 async function minecraftSkinLegacyRefresh(req,env){
-  const secret=env.SSCIRCLE_LINK_SERVER_SECRET;
+  const secret=await minecraftRequestSigningSecret(req,env);
   if(typeof secret!=='string'||secret.length<32)
     return minecraftLinkError('SERVER_SECRET_MISSING','Sinkronisasi skin belum aktif.',503);
   if(!String(req.headers.get('Content-Type')||'').toLowerCase().startsWith('application/json'))
@@ -2765,7 +2765,7 @@ async function minecraftSkinLegacyRefresh(req,env){
 }
 
 async function minecraftSkinSync(req,env){
-  const secret=env.SSCIRCLE_LINK_SERVER_SECRET;
+  const secret=await minecraftRequestSigningSecret(req,env);
   if(typeof secret!=='string'||secret.length<32)
     return minecraftLinkError('SERVER_SECRET_MISSING','Sinkronisasi skin belum aktif.',503);
   if(!String(req.headers.get('Content-Type')||'').toLowerCase().startsWith('application/json'))
@@ -2933,6 +2933,124 @@ async function minecraftMemberSkin(req,env,accountId){
   }catch{return bad('Tekstur skin belum dapat dimuat.',503);}
 }
 
+
+/* V10.49.1.7: pending pairing cannot submit player data. Admin approval
+   requires the code shown only on the Paper server. Existing HMAC stays valid. */
+const MC_PAIR_ID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const MC_PAIR_TOKEN=/^[A-Za-z0-9_-]{43,86}$/;
+const mcPairReady=new WeakSet();
+async function ensureMinecraftPairs(env){
+  if(mcPairReady.has(env.DB))return;
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS minecraft_pair_servers(
+    id TEXT PRIMARY KEY,label TEXT NOT NULL,bootstrap_hash TEXT NOT NULL,
+    approval_hash TEXT NOT NULL,state TEXT NOT NULL DEFAULT 'pending',
+    server_secret TEXT,requested_at TEXT NOT NULL,expires_at TEXT NOT NULL,
+    approved_at TEXT,revoked_at TEXT,last_seen_at TEXT)`).run();
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_mc_pair_state ON minecraft_pair_servers(state,requested_at)').run();
+  mcPairReady.add(env.DB);
+}
+const pairHash=(env,id,token)=>hmac(env.SESSION_SECRET+'|server-pair-token',id+'|'+token);
+const pairCodeHash=(env,id,code)=>hmac(env.SESSION_SECRET+'|server-pair-code',id+'|'+code);
+const pairReply=(data,status=200)=>J(data,status,{'Cache-Control':'private, no-store'});
+async function minecraftPairPublic(req,env,path){
+  if(typeof env.SESSION_SECRET!=='string'||env.SESSION_SECRET.length<16)
+    return pairReply({error:'Website belum siap.'},503);
+  if(!String(req.headers.get('Content-Type')||'').toLowerCase().startsWith('application/json'))
+    return pairReply({error:'JSON diperlukan.'},415);
+  const v=await body(req,900),id=v.serverId,token=v.token;
+  if(!MC_PAIR_ID.test(id||'')||!MC_PAIR_TOKEN.test(token||''))
+    return pairReply({error:'Identitas instalasi tidak valid.'},400);
+  await ensureMinecraftPairs(env);
+  const hash=await pairHash(env,id,token),now=new Date().toISOString();
+  if(path.endsWith('/register')){
+    if(typeof v.label!=='string'||!/^[-a-zA-Z0-9 _.]{3,48}$/.test(v.label))
+      return pairReply({error:'Nama server tidak valid.'},400);
+    if(!await rateLimit(env,req,'pair-register',6,3600))
+      return pairReply({error:'Terlalu banyak pendaftaran.'},429);
+    const old=await env.DB.prepare('SELECT * FROM minecraft_pair_servers WHERE id=?').bind(id).first();
+    if(old&&!safeEq(hash,old.bootstrap_hash))return pairReply({error:'Identitas sudah digunakan.'},403);
+    if(old&&old.state==='revoked')return pairReply({status:'revoked'},403);
+    if(old&&old.state==='active')return pairReply({status:'active',serverId:id});
+    if(old&&old.expires_at<now)return pairReply({status:'expired'},410);
+    if(!old){
+      const count=await env.DB.prepare("SELECT COUNT(*) AS n FROM minecraft_pair_servers WHERE state='pending' AND expires_at>?").bind(now).first();
+      if(Number(count?.n||0)>=100)return pairReply({error:'Antrean sedang penuh.'},429);
+    }
+    const pairCode=b64(crypto.getRandomValues(new Uint8Array(9)));
+    const codeHash=await pairCodeHash(env,id,pairCode);
+    const expiresAt=new Date(Date.now()+86400000).toISOString();
+    if(old)await env.DB.prepare(`UPDATE minecraft_pair_servers SET approval_hash=?,label=?,expires_at=?
+       WHERE id=? AND state='pending'`).bind(codeHash,v.label,expiresAt,id).run();
+    else await env.DB.prepare(`INSERT INTO minecraft_pair_servers
+      (id,label,bootstrap_hash,approval_hash,state,requested_at,expires_at)
+      VALUES(?,?,?,?,'pending',?,?)`).bind(id,v.label,hash,codeHash,now,expiresAt).run();
+    return pairReply({status:'pending',serverId:id,pairCode,expiresAt});
+  }
+  if(!await rateLimit(env,req,'pair-poll',500,3600))
+    return pairReply({error:'Terlalu banyak pemeriksaan.'},429);
+  const row=await env.DB.prepare('SELECT * FROM minecraft_pair_servers WHERE id=?').bind(id).first();
+  if(!row||!safeEq(hash,row.bootstrap_hash))return pairReply({error:'Identitas tidak cocok.'},403);
+  if(row.state==='revoked')return pairReply({status:'revoked'},403);
+  if(row.expires_at<now)return pairReply({status:'expired'},410);
+  if(row.state!=='active')return pairReply({status:'pending',serverId:id});
+  if(typeof row.server_secret!=='string'||row.server_secret.length<32)
+    return pairReply({error:'Kredensial belum siap.'},503);
+  return pairReply({status:'active',serverId:id,serverSecret:row.server_secret});
+}
+async function minecraftPairAdmin(req,env,path,method){
+  if(!await admin(req,env))return bad('Masuk ke Admin Control.',401);
+  await ensureMinecraftPairs(env);
+  if(method==='GET'&&path==='/api/admin/minecraft/servers'){
+    const rows=await env.DB.prepare(`SELECT id,label,state,requested_at,expires_at,approved_at,revoked_at,last_seen_at
+      FROM minecraft_pair_servers ORDER BY requested_at DESC LIMIT 100`).all();
+    return pairReply({servers:(rows.results||[]).map(x=>({id:x.id,label:x.label,
+      status:x.state,requestedAt:x.requested_at,expiresAt:x.expires_at,
+      approvedAt:x.approved_at,revokedAt:x.revoked_at,lastSeenAt:x.last_seen_at}))});
+  }
+  if(method!=='POST'||path!=='/api/admin/minecraft/servers/action')
+    return bad('Metode tidak tersedia.',405);
+  if(!await rateLimit(env,req,'pair-admin',12,3600))
+    return bad('Terlalu banyak perubahan server.',429);
+  const v=await body(req,500);
+  if(!MC_PAIR_ID.test(v.serverId||'')||!['approve','revoke'].includes(v.action))
+    return bad('Permintaan server tidak valid.',400);
+  const old=await env.DB.prepare('SELECT * FROM minecraft_pair_servers WHERE id=?')
+    .bind(v.serverId).first();
+  if(!old)return bad('Server tidak ditemukan.',404);
+  const now=new Date().toISOString();
+  if(v.action==='revoke'){
+    const done=await env.DB.prepare(`UPDATE minecraft_pair_servers
+       SET state='revoked',server_secret=NULL,bootstrap_hash='',revoked_at=?
+       WHERE id=? AND state<>'revoked'`).bind(now,v.serverId).run();
+    return pairReply({ok:true,revoked:done.meta?.changes>0});
+  }
+  if(old.state!=='pending'||old.expires_at<=now)
+    return bad('Pairing tidak aktif atau sudah kedaluwarsa.',409);
+  if(typeof v.code!=='string'||!/^[A-Za-z0-9_-]{12}$/.test(v.code))
+    return bad('Masukkan kode 12 karakter dari server Minecraft.',400);
+  if(!safeEq(await pairCodeHash(env,v.serverId,v.code),old.approval_hash))
+    return bad('Kode pairing tidak cocok.',403);
+  const key=b64(crypto.getRandomValues(new Uint8Array(48)));
+  const done=await env.DB.prepare(`UPDATE minecraft_pair_servers SET
+    state='active',server_secret=?,approved_at=? WHERE id=? AND state='pending' AND expires_at>?`)
+    .bind(key,now,v.serverId,now).run();
+  if(!(done.meta?.changes>0))return bad('Status berubah; muat ulang.',409);
+  return pairReply({ok:true,approved:true});
+}
+async function minecraftRequestSigningSecret(req,env){
+  const id=req.headers.get('X-SSC-Server-Id');
+  if(!id){
+    const legacy=env.SSCIRCLE_LINK_SERVER_SECRET;
+    return typeof legacy==='string'&&legacy.length>=32?legacy:null;
+  }
+  if(!MC_PAIR_ID.test(id))return null; // Never downgrade a bad server ID to legacy.
+  await ensureMinecraftPairs(env);
+  const row=await env.DB.prepare(`SELECT server_secret FROM minecraft_pair_servers
+    WHERE id=? AND state='active'`).bind(id).first();
+  return typeof row?.server_secret==='string'&&row.server_secret.length>=32
+    ?row.server_secret:null;
+}
+
 const mcCodeHash=(env,code)=>hmac(env.SESSION_SECRET+'|minecraft-link-code',code);
 async function minecraftLinkAPI(req,env,path,method){
   if(path==='/api/admin/minecraft/multi-settings'){
@@ -2991,16 +3109,17 @@ async function minecraftLinkAPI(req,env,path,method){
     return J({linked,accounts:linkedAccounts,pending,
       multiAccount:{enabled:settings.enabled,maxAccounts:settings.maxAccounts,
         availableSlots:Math.max(0,settings.maxAccounts-linkedAccounts.length)},
-      serverReady:typeof env.SSCIRCLE_LINK_SERVER_SECRET==='string'&&
-        env.SSCIRCLE_LINK_SERVER_SECRET.length>=32});
+      serverReady:(typeof env.SSCIRCLE_LINK_SERVER_SECRET==='string'&&env.SSCIRCLE_LINK_SERVER_SECRET.length>=32)||!!(await env.DB.prepare("SELECT id FROM minecraft_pair_servers WHERE state='active' LIMIT 1").first().catch(()=>null))});
   }
   if(path==='/api/player/minecraft/link/create' && method==='POST'){
     if(linkedAccounts.length>0&&!settings.enabled)
       return bad('Penambahan akun Minecraft sementara dinonaktifkan.',403);
     if(linkedAccounts.length>=settings.maxAccounts)
       return bad('Batas akun Minecraft sudah tercapai.',409);
-    if(!env.SSCIRCLE_LINK_SERVER_SECRET||env.SSCIRCLE_LINK_SERVER_SECRET.length<32)
-      return bad('Penghubung Minecraft belum diaktifkan oleh pengelola server.',503);
+    const legacyReady=typeof env.SSCIRCLE_LINK_SERVER_SECRET==='string'&&env.SSCIRCLE_LINK_SERVER_SECRET.length>=32;
+    await ensureMinecraftPairs(env);
+    const paired=await env.DB.prepare("SELECT id FROM minecraft_pair_servers WHERE state='active' LIMIT 1").first();
+    if(!legacyReady&&!paired)return bad('Belum ada server Minecraft disetujui pengurus.',503);
     if(!await rateLimit(env,req,'minecraft-link-create',5,900))
       return bad('Terlalu banyak kode dibuat. Coba lagi nanti.',429);
     const code='SC-'+b64(crypto.getRandomValues(new Uint8Array(18)));
@@ -3157,7 +3276,7 @@ const mcStatIdentityValid=(value)=>{
 };
 // Separate authenticated channel for current-session evidence. No stats reset.
 async function minecraftIdentityRefresh(req,env){
-  const secret=env.SSCIRCLE_LINK_SERVER_SECRET;
+  const secret=await minecraftRequestSigningSecret(req,env);
   if(typeof secret!=='string'||secret.length<32)
     return minecraftLinkError('SERVER_SECRET_MISSING','Sinkronisasi identitas belum aktif.',503);
   if(!String(req.headers.get('Content-Type')||'').toLowerCase().startsWith('application/json'))
@@ -3210,7 +3329,7 @@ async function minecraftIdentityRefresh(req,env){
 }
 
 async function minecraftStatsIngest(req,env){
-  const secret=env.SSCIRCLE_LINK_SERVER_SECRET;
+  const secret=await minecraftRequestSigningSecret(req,env);
   if(typeof secret!=='string'||secret.length<32)
     return minecraftLinkError('SERVER_SECRET_MISSING','Layanan sinkronisasi belum diaktifkan.',503);
   if(!String(req.headers.get('Content-Type')||'').toLowerCase().startsWith('application/json'))
@@ -3346,7 +3465,7 @@ const MC_DELIVERY_CODES=new Set([
   'IDLE','SYNC_OK','QUEUE_PENDING','NETWORK_ERROR','HTTP_ERROR','AUTH_ERROR'
 ]);
 async function minecraftSyncHeartbeat(req,env){
-  const secret=env.SSCIRCLE_LINK_SERVER_SECRET;
+  const secret=await minecraftRequestSigningSecret(req,env);
   if(typeof secret!=='string'||secret.length<32)
     return minecraftLinkError('SERVER_SECRET_MISSING','Pemantauan server belum diaktifkan.',503);
   if(!String(req.headers.get('Content-Type')||'').toLowerCase().startsWith('application/json'))
@@ -3520,7 +3639,7 @@ async function minecraftSyncAdmin(req,env,path,method){
 }
 
 async function minecraftLinkDiagnose(req,env){
-  const secret=env.SSCIRCLE_LINK_SERVER_SECRET;
+  const secret=await minecraftRequestSigningSecret(req,env);
   if(typeof secret!=='string'||secret.length<32)
     return minecraftLinkError('SERVER_SECRET_MISSING','Penghubung Minecraft website belum diaktifkan.',503);
   if(!String(req.headers.get('Content-Type')||'').toLowerCase().startsWith('application/json'))
@@ -3542,7 +3661,7 @@ async function minecraftLinkDiagnose(req,env){
 }
 
 async function minecraftLinkClaim(req,env){
-  const secret=env.SSCIRCLE_LINK_SERVER_SECRET;
+  const secret=await minecraftRequestSigningSecret(req,env);
   if(typeof secret!=='string'||secret.length<32)
     return minecraftLinkError('SERVER_SECRET_MISSING','Penghubung Minecraft belum aktif.',503);
   if(!String(req.headers.get('Content-Type')||'').toLowerCase().startsWith('application/json'))
@@ -3852,14 +3971,14 @@ async function mailboxAPI(req,env,path,method){
 
 // SSCircle runtime check: observe what the deployment actually receives.
 // Only public readiness categories. Never expose secret values or private data.
-const SSC_RUNTIME_RELEASE='10.49.1.6';
+const SSC_RUNTIME_RELEASE='10.49.1.7';
 const SSC_RUNTIME_ISSUES=new Set();
 function sscRuntimeBindings(env){
   return {
     data: !!env?.DB && typeof env.DB.prepare==='function',
     session: typeof env?.SESSION_SECRET==='string' && env.SESSION_SECRET.length>0,
     admin: typeof env?.ADMIN_PASSWORD==='string' && env.ADMIN_PASSWORD.length>0,
-    minecraft: typeof env?.SSCIRCLE_LINK_SERVER_SECRET==='string' && env.SSCIRCLE_LINK_SERVER_SECRET.length>=32
+    minecraft: (typeof env?.SSCIRCLE_LINK_SERVER_SECRET==='string'&&env.SSCIRCLE_LINK_SERVER_SECRET.length>=32)|| (!!env?.DB&&typeof env?.SESSION_SECRET==='string'&&env.SESSION_SECRET.length>=16)
   };
 }
 function sscRuntimeLog(scope,flags){
@@ -4116,6 +4235,8 @@ async function route(req, env) {
     return env.ASSETS.fetch(req);
   if (!env.DB)
     return bad('Layanan pendaftaran sedang tidak tersedia. Silakan coba lagi nanti.', 503);
+  if((path==='/api/minecraft/server-pair/register'||path==='/api/minecraft/server-pair/poll')&&method==='POST')
+    return await minecraftPairPublic(req,env,path);
   // Minecraft claim has a dedicated HMAC + nonce protocol, never browser cookies.
   if(path==='/api/minecraft/link/claim' && method==='POST')
     return await minecraftLinkClaim(req,env);
@@ -4142,6 +4263,8 @@ async function route(req, env) {
     'DELETE'
   ].includes(method))
     return bad('Metode tidak tersedia.', 405);
+  if((path==='/api/admin/minecraft/servers'||path==='/api/admin/minecraft/servers/action')&&['GET','POST'].includes(method))
+    return await minecraftPairAdmin(req,env,path,method);
   if ((path.startsWith('/api/admin/minecraft/sync')) &&
       ['GET','POST'].includes(method))
     return await minecraftSyncAdmin(req,env,path,method);
