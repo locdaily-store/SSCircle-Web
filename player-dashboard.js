@@ -743,7 +743,7 @@
         location.replace('/status.html?akses-dashboard=' + reason + '#kode-milikku');
         return;
       }
-      $('player-member-id').textContent = memberLabel(player.code);
+      $('player-member-id').textContent = player.memberId || memberLabel(player.code);
       $('player-joined-at').textContent = formatJoined(player.submittedAt);
       playerCodeForSecureLogin = player.code || '';
       pending.hidden = true;

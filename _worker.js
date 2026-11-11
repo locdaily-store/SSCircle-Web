@@ -187,7 +187,15 @@ async function applicationByCode(env, raw) {
   const r = await env.DB.prepare('SELECT id,tracking_code,submitted_at,status FROM submissions WHERE UPPER(SUBSTR(id,1,8))=? AND tracking_code IS NULL LIMIT 2').bind(code).all();
   return (r.results || []).length === 1 ? r.results[0] : null;
 }
-const playerPublicInfo = app => ({ code: app.tracking_code || app.id.slice(0, 8).toUpperCase(), status: app.status, submittedAt: app.submitted_at });
+// A shareable member ID is NOT a registration/login code. The final 12 UUID hex
+// characters avoid the legacy 8-character UUID-prefix login fallback.
+const memberPublicId = id => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id||''))
+  ? 'SSC-M'+id.slice(-12).toUpperCase() : '';
+const playerPublicInfo = app => ({
+  code:app.tracking_code || app.id.slice(0,8).toUpperCase(),
+  memberId:app.status==='accepted'?memberPublicId(app.id):null,
+  status:app.status,submittedAt:app.submitted_at
+});
 const sameOrigin = req => !req.headers.get('Origin') || req.headers.get('Origin') === new URL(req.url).origin;
 async function body(req, limit = 250000) {
   if (Number(req.headers.get('Content-Length') || 0) > limit)
@@ -4084,26 +4092,73 @@ async function socialAPI(req,env,path,method){
     return bad('Buka Dashboard menggunakan password untuk mengakses fitur pertemanan.',403);
   await ensureSocial(env);
   const url=new URL(req.url);
+  // Browse only accepted members who opted into discovery; private friends
+  // remain visible to each other. Pending/rejected, registration codes and
+  // private profiles of strangers are never enumerated.
+  if(path==='/api/player/social/directory'&&method==='GET'){
+    if(!await rateLimit(env,req,'social-directory',40,900))
+      return bad('Daftar anggota terlalu sering dimuat. Coba lagi nanti.',429);
+    const rawOffset=Number(url.searchParams.get('offset')||0);
+    if(!Number.isSafeInteger(rawOffset)||rawOffset<0||rawOffset>1000)
+      return bad('Halaman daftar anggota tidak valid.',400);
+    const rows=await env.DB.prepare(`SELECT s.id,COALESCE(p.display_name,'') AS name,
+      (SELECT a.username FROM minecraft_accounts a WHERE a.application_id=s.id
+        ORDER BY a.verified_at ASC LIMIT 1) AS minecraft_name,
+      (SELECT a.id FROM minecraft_accounts a
+        JOIN minecraft_account_skin_state sk ON sk.account_id=a.id
+        JOIN minecraft_account_skin_images img ON img.account_id=a.id
+          AND img.texture_hash=sk.texture_hash
+        WHERE a.application_id=s.id ORDER BY a.verified_at ASC LIMIT 1) AS avatar_account_id
+      FROM submissions s LEFT JOIN member_profiles p ON p.application_id=s.id
+      WHERE s.status='accepted' AND s.id<>? AND
+       (p.visibility='members' OR (p.visibility='public' AND
+          (SELECT allow_public FROM member_policy WHERE id=1)=1)
+        OR EXISTS(SELECT 1 FROM member_friendships f WHERE f.status='accepted'
+          AND ((f.member_a=s.id AND f.member_b=?) OR
+               (f.member_b=s.id AND f.member_a=?))))
+      ORDER BY p.display_name COLLATE NOCASE,s.id LIMIT 25 OFFSET ?`)
+      .bind(me.id,me.id,me.id,rawOffset).all();
+    const all=rows.results||[],items=all.slice(0,24);
+    return J({items:items.map(r=>({
+      id:r.id,memberId:memberPublicId(r.id),
+      displayName:r.name||r.minecraft_name||'Anggota SSCircle',
+      minecraftName:r.minecraft_name||null,avatarAccountId:r.avatar_account_id||null
+    })),hasMore:all.length>24,nextOffset:rawOffset+items.length},200,
+      {'Cache-Control':'private, no-store','Vary':'Cookie'});
+  }
   if(path==='/api/player/social/search'&&method==='GET'){
     const query=(url.searchParams.get('q')||'').trim();
     if(query.length<2||query.length>40)return J({items:[]});
     if(!await rateLimit(env,req,'social-search',60,900))
       return bad('Pencarian terlalu sering. Coba lagi nanti.',429);
     const safe=query.replace(/[\\%_]/g,match=>'\\'+match);
+    const publicSuffix=/^SSC-M[0-9A-F]{12}$/i.test(query)?query.slice(5).toLowerCase():null;
     const rows=await env.DB.prepare(`SELECT s.id,COALESCE(p.display_name,'') AS name,
-       (SELECT username FROM minecraft_accounts a WHERE a.application_id=s.id
-         ORDER BY a.verified_at ASC LIMIT 1) AS minecraft_name
-       FROM submissions s JOIN member_profiles p ON p.application_id=s.id
+       (SELECT a.username FROM minecraft_accounts a WHERE a.application_id=s.id
+         ORDER BY a.verified_at ASC LIMIT 1) AS minecraft_name,
+       (SELECT a.id FROM minecraft_accounts a
+         JOIN minecraft_account_skin_state sk ON sk.account_id=a.id
+         JOIN minecraft_account_skin_images img ON img.account_id=a.id
+           AND img.texture_hash=sk.texture_hash
+         WHERE a.application_id=s.id ORDER BY a.verified_at ASC LIMIT 1) AS avatar_account_id
+       FROM submissions s LEFT JOIN member_profiles p ON p.application_id=s.id
        WHERE s.status='accepted' AND s.id<>? AND
         (p.visibility='members' OR (p.visibility='public' AND
-         (SELECT allow_public FROM member_policy WHERE id=1)=1))
+         (SELECT allow_public FROM member_policy WHERE id=1)=1)
+         OR EXISTS(SELECT 1 FROM member_friendships f WHERE f.status='accepted'
+           AND ((f.member_a=s.id AND f.member_b=?) OR
+                (f.member_b=s.id AND f.member_a=?))))
          AND (p.display_name LIKE ? ESCAPE '\\' COLLATE NOCASE
            OR EXISTS(SELECT 1 FROM minecraft_accounts a WHERE a.application_id=s.id
-            AND a.username LIKE ? ESCAPE '\\' COLLATE NOCASE))
-       ORDER BY p.display_name COLLATE NOCASE LIMIT 20`)
-       .bind(me.id,'%'+safe+'%','%'+safe+'%').all();
-    return J({items:(rows.results||[]).map(r=>({id:r.id,displayName:r.name||r.minecraft_name||'Anggota SSCircle',
-      minecraftName:r.minecraft_name||null}))});
+            AND a.username LIKE ? ESCAPE '\\' COLLATE NOCASE)
+           OR (? IS NOT NULL AND LOWER(SUBSTR(s.id,25,12))=?))
+       ORDER BY p.display_name COLLATE NOCASE,s.id LIMIT 20`)
+       .bind(me.id,me.id,me.id,'%'+safe+'%','%'+safe+'%',publicSuffix,publicSuffix).all();
+    return J({items:(rows.results||[]).map(r=>({
+      id:r.id,memberId:memberPublicId(r.id),
+      displayName:r.name||r.minecraft_name||'Anggota SSCircle',
+      minecraftName:r.minecraft_name||null,avatarAccountId:r.avatar_account_id||null
+    }))},200,{'Cache-Control':'private, no-store','Vary':'Cookie'});
   }
   if(path==='/api/player/social/profile'&&method==='GET'){
     const id=url.searchParams.get('id')||'';
@@ -4116,10 +4171,11 @@ async function socialAPI(req,env,path,method){
     const stats=allowStats?await sscAccountStatistics(env,id):[];
     const form=formFrom(await readSettingsRow(env));
     const titles=new Map((form.settings.homeLeaderboardSeasons||[]).map(s=>[s.id,s.title]));
-    return J({id,displayName:member.display_name||accounts[0]?.username||'Anggota SSCircle',
+    return J({id,memberId:memberPublicId(id),displayName:member.display_name||accounts[0]?.username||'Anggota SSCircle',
       bio:policy.allowBio?member.bio:'',
       joinedAt:member.submitted_at,
       relationship:socialRelationship(access.friendship,me.id),
+      avatarAccountId:(accounts.find(a=>a.isPrimary&&a.skinImageStored)||accounts.find(a=>a.skinImageStored))?.id||null,
       accounts:accounts.map(a=>({id:a.id,username:a.username,edition:a.edition,
         isPrimary:a.isPrimary,skinImageStored:a.skinImageStored,skinModel:a.skinModel,
         skinUpdatedAt:a.skinUpdatedAt})),
@@ -4159,6 +4215,7 @@ async function socialAPI(req,env,path,method){
       ORDER BY f.updated_at DESC LIMIT 150`).bind(me.id,me.id,me.id).all();
     return J({items:(rows.results||[]).map(r=>({
       id:r.member_a===me.id?r.member_b:r.member_a,
+      memberId:memberPublicId(r.member_a===me.id?r.member_b:r.member_a),
       displayName:r.name||'Anggota SSCircle',
       relationship:socialRelationship(r,me.id),updatedAt:r.updated_at}))});
   }
@@ -4230,7 +4287,7 @@ async function socialAPI(req,env,path,method){
   return bad('Endpoint sosial tidak ditemukan.',404);
 }
 
-const SSC_RUNTIME_RELEASE='10.51.0';
+const SSC_RUNTIME_RELEASE='10.51.1';
 const SSC_RUNTIME_ISSUES=new Set();
 function sscRuntimeBindings(env){
   return {
