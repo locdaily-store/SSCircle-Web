@@ -2656,6 +2656,37 @@ async function mailboxNote(env,memberId,type,title,content,extras={}){
       extras.encrypted||null,extras.nonce||null,extras.expires||null,now).run();
   return id;
 }
+/* SSCircle V10.50 - notifikasi status pendaftaran ke Mail Box.
+   Pesan ditulis untuk application_id pendaftar (submissions.id), jadi pendaftar
+   yang belum menjadi anggota pun sudah dikenali. Pengiriman bersifat best-effort:
+   kegagalan notifikasi tidak boleh menggagalkan pendaftaran atau perubahan status. */
+function mailboxStatusMessage(status,reason=''){
+  if(status==='accepted')return {
+    title:'Selamat, pendaftaranmu diterima',
+    content:'Pendaftaranmu telah diterima. Untuk mengaktifkan akun, minta kode aktivasi dari bagian atas halaman Mail Box ini. Kode dikirim setelah identitasmu diverifikasi oleh pengurus.'
+  };
+  if(status==='rejected')return {
+    title:'Pendaftaranmu belum dapat diterima',
+    content:'Pendaftaranmu belum dapat diterima.'+
+      (reason?' Alasan dari pengurus: '+reason:'')+
+      ' Kamu dapat mengajukan pendaftaran ulang melalui halaman pendaftaran selama pendaftaran sedang dibuka.'
+  };
+  return {
+    title:'Pendaftaran menunggu pemeriksaan',
+    content:'Pendaftaranmu sudah masuk dan sedang menunggu pemeriksaan pengurus SSCircle. Pemberitahuan baru akan dikirim ke Mail Box ini setiap kali statusnya berubah. Kamu juga dapat mengecek status kapan saja di halaman Cek Status.'
+  };
+}
+async function mailboxStatusNote(env,applicationId,status,reason=''){
+  try{
+    await ensureMailbox(env);
+    const message=mailboxStatusMessage(status,reason);
+    await mailboxNote(env,applicationId,'status',message.title,message.content);
+    return true;
+  }catch(error){
+    console.error('[SSCircle] Mail Box status notification:',error);
+    return false;
+  }
+}
 
 /* SSCircle V10.45: a browser session cannot assert a Minecraft identity.
    The server claim is signed, short-lived, nonce-protected and only *pending*
@@ -3702,8 +3733,11 @@ async function mailboxAPI(req,env,path,method){
       'Identitas telah dikonfirmasi. Kode akan dikirim saat anggota memintanya.'});
   }
   const account=await playerSession(req,env);
-  if(!account || account.status!=='accepted')
-    return bad('Mail Box hanya tersedia untuk anggota yang diterima.',403);
+  // V10.50: semua pendaftar (menunggu, diterima, ditolak) boleh membaca pemberitahuan.
+  // Aksi yang menyangkut kode aktivasi tetap khusus pendaftar yang diterima.
+  if(!account)
+    return bad('Masuk dengan kode pendaftaranmu untuk membuka Mail Box.',403);
+  const accepted=account.status==='accepted';
   await ensureMailbox(env);
   if(path==='/api/player/mailbox' && method==='GET'){
     const rows=await env.DB.prepare(`SELECT id,type,title,content,created_at,read_at,
@@ -3718,12 +3752,14 @@ async function mailboxAPI(req,env,path,method){
     return J({items:(rows.results||[]).map(row=>({id:row.id,type:row.type,
       title:row.title,content:row.content,createdAt:row.created_at,
       read:!!row.read_at,expiresAt:row.expires_at?new Date(row.expires_at*1000).toISOString():null,
-      canReveal:!!row.encrypted_secret && row.id===newest?.id &&
+      canReveal:accepted && !!row.encrypted_secret && row.id===newest?.id &&
         row.expires_at>Math.floor(Date.now()/1000) &&
         invite?.used_at===null && invite?.expires_at===row.expires_at})),
-      activationRequest:request?.status||'none'});
+      activationRequest:request?.status||'none',applicationStatus:account.status});
   }
   if(path==='/api/player/mailbox/request-activation' && method==='POST'){
+    if(!accepted)
+      return bad('Kode aktivasi hanya tersedia setelah pendaftaranmu diterima.',403);
     if(!await rateLimit(env,req,'mailbox-activation',4,300))
       return bad('Terlalu banyak permintaan kode. Coba lagi dalam 5 menit.',429);
     const pending=await env.DB.prepare('SELECT status FROM member_activation_requests WHERE application_id=?')
@@ -3754,6 +3790,8 @@ async function mailboxAPI(req,env,path,method){
       'Permintaan sudah masuk ke Mail Box dan menunggu pemeriksaan identitas.'});
   }
   if(path==='/api/player/mailbox/reveal' && method==='POST'){
+    if(!accepted)
+      return bad('Kode aktivasi hanya tersedia setelah pendaftaranmu diterima.',403);
     if(!await rateLimit(env,req,'mailbox-reveal',15,900))return bad('Terlalu banyak percobaan.',429);
     const payload=await body(req,250);
     if(!/^[0-9a-f-]{36}$/.test(payload?.id||''))return bad('Pesan tidak tersedia.',404);
@@ -4355,6 +4393,9 @@ async function route(req, env) {
       await releaseCooldown(env, cooldownClaim);
       throw e;
     }
+    // V10.50: pesan pertama di Mail Box. Ditulis setelah pendaftaran tersimpan dan di luar
+    // blok try di atas, supaya kegagalannya tidak ikut menghapus media yang sudah diunggah.
+    await mailboxStatusNote(env, id, 'pending');
     return J({ ok: true, reference: trackingCode, remainingSeconds: cooldownSeconds }, 201, { 'Set-Cookie': playerCookie(await signPlayer(env, id), PLAYER_SESSION_SECONDS) });
   }
   if (path === '/api/admin/login' && method === 'POST') {
@@ -4743,9 +4784,13 @@ async function route(req, env) {
       const reason = v.status === 'rejected' ? s(v.reason, 1000) : '';
       if (v.status === 'rejected' && !reason)
         throw Error('Alasan penolakan wajib diisi.');
+      const before = await env.DB.prepare('SELECT status FROM submissions WHERE id=?').bind(v.id).first();
       const r = await env.DB.prepare('UPDATE submissions SET status=?,rejection_reason=? WHERE id=?').bind(v.status, reason, v.id).run();
       if (!(r.meta?.changes > 0))
         return bad('Pendaftaran tidak ditemukan.', 404);
+      // V10.50: beri tahu pendaftar lewat Mail Box, hanya bila statusnya benar-benar berubah.
+      if (before && before.status !== v.status)
+        await mailboxStatusNote(env, v.id, v.status, reason);
       return J({ ok: true });
     }
   }
