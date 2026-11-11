@@ -5,6 +5,9 @@ on:
       - '_worker.js'
       - 'member-social.js'
       - 'member-social.css'
+      - 'profile-workspace.js'
+      - 'profile-workspace.css'
+      - 'tests/browser_profile_workspace.py'
       - 'mailbox-widget.js'
       - 'my-sscircle.html'
       - 'member-center-admin.js'
@@ -35,6 +38,7 @@ jobs:
         run: |
           node --check _worker.js
           node --check member-social.js
+          node --check profile-workspace.js
           node --check member-center-admin.js
           node --check player-dashboard.js
           node --check profile-admin.js
@@ -69,14 +73,14 @@ jobs:
               elif parts[0]=='assets' and len(parts)>1 and rel.suffix.lower() in asset_ext:site.append((p,str(rel)))
               else:sys.exit('Unexpected file for Cloudflare: '+str(rel))
           names={name for _,name in site}
-          for essential in ('index.html','_worker.js','_routes.json','member-social.js','member-social.css'):
+          for essential in ('index.html','_worker.js','_routes.json','member-social.js','member-social.css','profile-workspace.js','profile-workspace.css'):
               if essential not in names:sys.exit('Missing: '+essential)
-          with ZipFile('SSCircle-Cloudflare-Upload-V10.51.2.zip','w',ZIP_DEFLATED,compresslevel=6) as z:
+          with ZipFile('SSCircle-Cloudflare-Upload-V10.51.3.zip','w',ZIP_DEFLATED,compresslevel=6) as z:
               for p,name in site:z.write(p,arcname=name)
           print('Cloudflare files:',len(site))
           PY
       - uses: actions/upload-artifact@v4
         with:
-          name: SSCircle-Cloudflare-Upload-V10.51.2
-          path: SSCircle-Cloudflare-Upload-V10.51.2.zip
+          name: SSCircle-Cloudflare-Upload-V10.51.3
+          path: SSCircle-Cloudflare-Upload-V10.51.3.zip
           retention-days: 14
