@@ -700,7 +700,7 @@ const DEFAULTS = {
   profilePageLayout: 'sidebar',
   profilePageHeroStyle: 'default',
   profilePageCardStyle: 'soft',
-  profilePageSections: ['welcome','security','preferences','achievements','linking','stats','explore'],
+  profilePageSections: ['welcome','security','preferences','achievements','linking','stats','community','explore'],
   profilePageHidden: [],
   introEnabled: true,
   introTitle: 'SSCircle Server',
@@ -1132,7 +1132,13 @@ function settingsValid(input) {
   out.profilePageHeroStyle = input.profilePageHeroStyle === 'compact' ? 'compact' : 'default';
   out.profilePageCardStyle = input.profilePageCardStyle === 'outlined' ? 'outlined' : 'soft';
   const profileSections = DEFAULTS.profilePageSections;
-  const order = input.profilePageSections === undefined ? profileSections : input.profilePageSections;
+  // V10.49.3: preserve existing seven-section admin order when introducing community.
+  const legacyOrder = input.profilePageSections === undefined ? profileSections : input.profilePageSections;
+  const order = Array.isArray(legacyOrder) && legacyOrder.length===profileSections.length-1 &&
+    !legacyOrder.includes('community') && new Set(legacyOrder).size===legacyOrder.length &&
+    legacyOrder.every(id=>profileSections.includes(id))
+    ? [...legacyOrder.slice(0,legacyOrder.indexOf('explore')),'community',...legacyOrder.slice(legacyOrder.indexOf('explore'))]
+    : legacyOrder;
   if (!Array.isArray(order) || order.length !== profileSections.length ||
       new Set(order).size !== profileSections.length ||
       order.some(id => !profileSections.includes(id)))
