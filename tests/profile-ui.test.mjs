@@ -168,7 +168,7 @@ test('V10.49.1: avatar client never infers a Mojang skin from nickname or offlin
  const html=source('my-sscircle.html');
  const profile=source('player-dashboard.js');
  const css=source('player-dashboard.css');
- assert.match(html,/minecraft-avatars\.js\?v=10\.49\.1\.5/);
+ assert.match(html,/minecraft-avatars\.js\?v=10\.49\.3/);
  assert.match(profile,/SSCircleMinecraftAvatars\?\.renderPrimary\(accounts\)/);
  assert.match(profile,/SSCircleMinecraftAvatars\?\.cardAvatar\(account\)/);
  assert.match(css,/\.ssc-skin-dialog/);
@@ -194,7 +194,7 @@ test('V10.49.1.1: 3D skin viewer uses local CSS faces and supports offline-linke
  assert.doesNotMatch(code,/https?:\/\//);
  const html=source('my-sscircle.html');
  assert.match(html,/player-dashboard\.css\?v=10\.49\.1\.5/);
- assert.match(html,/minecraft-avatars\.js\?v=10\.49\.1\.5/);
+ assert.match(html,/minecraft-avatars\.js\?v=10\.49\.3/);
 });
 
 
