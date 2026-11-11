@@ -82,6 +82,7 @@
  border-color:var(--ssc-primary,#a790fa);
  background:color-mix(in srgb,var(--ssc-primary,#a790fa) 23%,var(--ssc-panel,#21172f));
 }
+ .ssc-social-search-box[hidden],.ssc-social-panel[hidden]{display:none!important}
 .ssc-social-search-box{display:grid;gap:9px;padding:15px;border-radius:14px;
  border:1px solid var(--ssc-border,rgba(150,144,180,.35));
  background:color-mix(in srgb,var(--ssc-input,#211d30) 88%,transparent)}
