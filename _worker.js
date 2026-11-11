@@ -3109,7 +3109,10 @@ async function minecraftLinkAPI(req,env,path,method){
     return J({linked,accounts:linkedAccounts,pending,
       multiAccount:{enabled:settings.enabled,maxAccounts:settings.maxAccounts,
         availableSlots:Math.max(0,settings.maxAccounts-linkedAccounts.length)},
-      serverReady:(typeof env.SSCIRCLE_LINK_SERVER_SECRET==='string'&&env.SSCIRCLE_LINK_SERVER_SECRET.length>=32)||!!(await env.DB.prepare("SELECT id FROM minecraft_pair_servers WHERE state='active' LIMIT 1").first().catch(()=>null))});
+      serverReady:(typeof env.SSCIRCLE_LINK_SERVER_SECRET==='string'&&env.SSCIRCLE_LINK_SERVER_SECRET.length>=32)||await (async()=>{
+          await ensureMinecraftPairs(env);
+          return !!(await env.DB.prepare("SELECT id FROM minecraft_pair_servers WHERE state='active' LIMIT 1").first());
+        })()});
   }
   if(path==='/api/player/minecraft/link/create' && method==='POST'){
     if(linkedAccounts.length>0&&!settings.enabled)
@@ -3507,6 +3510,10 @@ async function minecraftSyncHeartbeat(req,env){
     .bind(nonce,now).run();
   if(!(inserted.meta?.changes>0))
     return minecraftLinkError('TELEMETRY_REPLAY','Laporan yang sama sudah diterima.',409);
+  const serverId=req.headers.get('X-SSC-Server-Id');
+  if(serverId&&MC_PAIR_ID.test(serverId))await env.DB.prepare(
+    "UPDATE minecraft_pair_servers SET last_seen_at=? WHERE id=? AND state='active'"
+  ).bind(new Date().toISOString(),serverId).run();
   const old=await env.DB.prepare('SELECT seen_at,delivery_code FROM minecraft_sync_status WHERE id=1').first();
   const at=new Date().toISOString();
   await env.DB.prepare(`INSERT INTO minecraft_sync_status
