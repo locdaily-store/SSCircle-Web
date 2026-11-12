@@ -2626,7 +2626,7 @@ async function memberCenterAPI(req,env,path,method) {
     if(display.length>32||bio.length>350||/[<>\x00-\x1f]/.test(display+bio))
       return bad('Nama atau bio terlalu panjang atau mengandung karakter terlarang.',400);
     if(display&&display.length<2) return bad('Nama tampilan minimal 2 karakter.',400);
-    if(!['public','members','private'].includes(value.visibility) ||
+    if(!['public','members','friends','private'].includes(value.visibility) ||
       typeof value.showStats!=='boolean'||typeof value.eventAlerts!=='boolean')
       return bad('Pilihan privasi profil tidak valid.',400);
     const policy=memberPolicy(await env.DB.prepare('SELECT * FROM member_policy WHERE id=1').first());
@@ -4094,11 +4094,45 @@ async function ensureSocial(env){
     FOREIGN KEY(member_a) REFERENCES submissions(id) ON DELETE CASCADE,
     FOREIGN KEY(member_b) REFERENCES submissions(id) ON DELETE CASCADE)`).run();
   await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_ssc_friends_b ON member_friendships(member_b,status)').run();
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_ssc_friends_sender ON member_friendships(requested_by,status)').run();
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS member_social_settings(
+    application_id TEXT PRIMARY KEY,allow_requests INTEGER NOT NULL DEFAULT 1,
+    show_friends INTEGER NOT NULL DEFAULT 0,show_mutual INTEGER NOT NULL DEFAULT 0,
+    show_badges INTEGER NOT NULL DEFAULT 1,updated_at TEXT NOT NULL DEFAULT '',
+    FOREIGN KEY(application_id) REFERENCES submissions(id) ON DELETE CASCADE)`).run();
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS member_social_policy(
+    id INTEGER PRIMARY KEY CHECK(id=1),requests_enabled INTEGER NOT NULL DEFAULT 1,
+    max_pending INTEGER NOT NULL DEFAULT 25,badges_enabled INTEGER NOT NULL DEFAULT 1,
+    updated_at TEXT NOT NULL DEFAULT '')`).run();
+  await env.DB.prepare('INSERT OR IGNORE INTO member_social_policy(id) VALUES(1)').run();
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS member_community_badges(
+    id TEXT PRIMARY KEY,application_id TEXT NOT NULL,title TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',granted_at TEXT NOT NULL,
+    FOREIGN KEY(application_id) REFERENCES submissions(id) ON DELETE CASCADE)`).run();
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_ssc_badges_member ON member_community_badges(application_id,granted_at DESC)').run();
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS member_social_notices(
     message_id TEXT PRIMARY KEY,recipient_id TEXT NOT NULL,requester_id TEXT NOT NULL,
     created_at TEXT NOT NULL,
     FOREIGN KEY(message_id) REFERENCES member_mailbox(id) ON DELETE CASCADE)`).run();
   socialReady.add(env.DB);
+}
+async function socialSettings(env,id){
+  const row=await env.DB.prepare('SELECT * FROM member_social_settings WHERE application_id=?').bind(id).first();
+  return {allowRequests:row?.allow_requests!==0,showFriends:row?.show_friends===1,
+    showMutual:row?.show_mutual===1,showBadges:row?.show_badges!==0};
+}
+async function socialPolicy(env){
+  const row=await env.DB.prepare('SELECT * FROM member_social_policy WHERE id=1').first();
+  return {requestsEnabled:row?.requests_enabled!==0,
+    maxPending:Math.max(1,Math.min(100,Number(row?.max_pending)||25)),
+    badgesEnabled:row?.badges_enabled!==0};
+}
+async function socialBadges(env,id){
+  const rows=await env.DB.prepare(`SELECT id,title,description,granted_at
+    FROM member_community_badges WHERE application_id=? ORDER BY granted_at DESC LIMIT 30`)
+    .bind(id).all();
+  return (rows.results||[]).map(r=>({id:r.id,title:r.title,description:r.description,
+    grantedAt:r.granted_at}));
 }
 function socialPair(a,b){return a<b?[a,b]:[b,a];}
 async function socialFriendship(env,a,b){
@@ -4117,7 +4151,7 @@ async function socialVisibility(env,viewer,target){
   const policy=memberPolicy(await env.DB.prepare('SELECT * FROM member_policy WHERE id=1').first());
   const friendship=viewer===target?null:await socialFriendship(env,viewer,target);
   const friend=friendship?.status==='accepted';
-  const visible=viewer===target||friend||
+  const visible=viewer===target||(friend&&member.visibility==='friends')||
     (policy.allowMembers&&member.visibility==='members')||
     (policy.allowPublic&&member.visibility==='public');
   return {member,policy,friend,visible,friendship};
@@ -4136,6 +4170,26 @@ async function socialAPI(req,env,path,method){
     return bad('Buka Dashboard menggunakan password untuk mengakses fitur pertemanan.',403);
   await ensureSocial(env);
   const url=new URL(req.url);
+  const socialFlags=await socialPolicy(env);
+  if(path==='/api/player/social/settings'&&method==='GET')
+    return J({settings:await socialSettings(env,me.id),policy:socialFlags},
+      200,{'Cache-Control':'private, no-store','Vary':'Cookie'});
+  if(path==='/api/player/social/settings'&&method==='PUT'){
+    if(!await rateLimit(env,req,'social-settings',12,900))
+      return bad('Terlalu banyak perubahan pengaturan. Coba lagi nanti.',429);
+    const input=await body(req,500),keys=['allowRequests','showFriends','showMutual','showBadges'];
+    if(!input||keys.some(key=>typeof input[key]!=='boolean'))
+      return bad('Pengaturan privasi tidak valid.',400);
+    const now=new Date().toISOString();
+    await env.DB.prepare(`INSERT INTO member_social_settings
+      (application_id,allow_requests,show_friends,show_mutual,show_badges,updated_at)
+      VALUES(?,?,?,?,?,?) ON CONFLICT(application_id) DO UPDATE SET
+      allow_requests=excluded.allow_requests,show_friends=excluded.show_friends,
+      show_mutual=excluded.show_mutual,show_badges=excluded.show_badges,
+      updated_at=excluded.updated_at`).bind(me.id,Number(input.allowRequests),
+        Number(input.showFriends),Number(input.showMutual),Number(input.showBadges),now).run();
+    return J({ok:true,settings:await socialSettings(env,me.id)});
+  }
   // Browse only accepted members who opted into discovery; private friends
   // remain visible to each other. Pending/rejected, registration codes and
   // private profiles of strangers are never enumerated.
@@ -4158,9 +4212,9 @@ async function socialAPI(req,env,path,method){
        ((p.visibility='members' AND (SELECT allow_members FROM member_policy WHERE id=1)=1)
          OR (p.visibility='public' AND
           (SELECT allow_public FROM member_policy WHERE id=1)=1)
-        OR EXISTS(SELECT 1 FROM member_friendships f WHERE f.status='accepted'
+        OR (p.visibility='friends' AND EXISTS(SELECT 1 FROM member_friendships f WHERE f.status='accepted'
           AND ((f.member_a=s.id AND f.member_b=?) OR
-               (f.member_b=s.id AND f.member_a=?))))
+               (f.member_b=s.id AND f.member_a=?)))))
       ORDER BY p.display_name COLLATE NOCASE,s.id LIMIT 25 OFFSET ?`)
       .bind(me.id,me.id,me.id,rawOffset).all();
     const all=rows.results||[],items=all.slice(0,24);
@@ -4191,9 +4245,9 @@ async function socialAPI(req,env,path,method){
         ((p.visibility='members' AND (SELECT allow_members FROM member_policy WHERE id=1)=1)
          OR (p.visibility='public' AND
          (SELECT allow_public FROM member_policy WHERE id=1)=1)
-         OR EXISTS(SELECT 1 FROM member_friendships f WHERE f.status='accepted'
+         OR (p.visibility='friends' AND EXISTS(SELECT 1 FROM member_friendships f WHERE f.status='accepted'
            AND ((f.member_a=s.id AND f.member_b=?) OR
-                (f.member_b=s.id AND f.member_a=?))))
+                (f.member_b=s.id AND f.member_a=?)))))
          AND (p.display_name LIKE ? ESCAPE '\\' COLLATE NOCASE
            OR EXISTS(SELECT 1 FROM minecraft_accounts a WHERE a.application_id=s.id
             AND a.username LIKE ? ESCAPE '\\' COLLATE NOCASE)
@@ -4212,15 +4266,37 @@ async function socialAPI(req,env,path,method){
     const access=await socialVisibility(env,me.id,id);
     if(!access?.visible)return bad('Profil tidak tersedia atau bersifat privat.',404);
     const {member,policy}=access;
+    const settings=await socialSettings(env,id);
     const accounts=await sscAccountList(env,id);
     const allowStats=policy.allowStats&&member.show_stats===1;
     const stats=allowStats?await sscAccountStatistics(env,id):[];
     const form=formFrom(await readSettingsRow(env));
     const titles=new Map((form.settings.homeLeaderboardSeasons||[]).map(s=>[s.id,s.title]));
+    let mutualFriends=[];
+    if(settings.showMutual&&access.friend){
+      const common=await env.DB.prepare(`SELECT s.id,COALESCE(p.display_name,'') AS name
+        FROM member_friendships a JOIN member_friendships b ON
+        (CASE WHEN a.member_a=? THEN a.member_b ELSE a.member_a END)=
+        (CASE WHEN b.member_a=? THEN b.member_b ELSE b.member_a END)
+        JOIN submissions s ON s.id=(CASE WHEN a.member_a=? THEN a.member_b ELSE a.member_a END)
+        LEFT JOIN member_profiles p ON p.application_id=s.id
+        WHERE a.status='accepted' AND b.status='accepted'
+        AND (a.member_a=? OR a.member_b=?)
+        AND (b.member_a=? OR b.member_b=?) AND s.status='accepted' LIMIT 8`)
+        .bind(me.id,id,me.id,me.id,me.id,id,id).all();
+      mutualFriends=(common.results||[]).map(x=>({id:x.id,
+        memberId:memberPublicId(x.id),displayName:x.name||'Anggota SSCircle'}));
+    }
+    const friendCount=settings.showFriends?(await env.DB.prepare(`SELECT COUNT(*) AS n
+      FROM member_friendships WHERE status='accepted' AND (member_a=? OR member_b=?)`)
+      .bind(id,id).first())?.n:null;
+    const badges=(settings.showBadges&&socialFlags.badgesEnabled)?await socialBadges(env,id):[];
     return J({id,memberId:memberPublicId(id),displayName:member.display_name||accounts[0]?.username||'Anggota SSCircle',
       bio:policy.allowBio?member.bio:'',
       joinedAt:member.submitted_at,
       relationship:socialRelationship(access.friendship,me.id),
+      allowRequests:settings.allowRequests&&socialFlags.requestsEnabled,
+      friendCount,mutualFriends,communityBadges:badges,
       avatarAccountId:(accounts.find(a=>a.isPrimary&&a.skinImageStored)||accounts.find(a=>a.skinImageStored))?.id||null,
       accounts:accounts.map(a=>({id:a.id,username:a.username,edition:a.edition,
         isPrimary:a.isPrimary,skinImageStored:a.skinImageStored,skinModel:a.skinModel,
@@ -4275,12 +4351,19 @@ async function socialAPI(req,env,path,method){
     const pair=socialPair(me.id,target),existing=await socialFriendship(env,me.id,target),
       now=new Date().toISOString();
     if(action==='request'){
+      if(!socialFlags.requestsEnabled)return bad('Permintaan pertemanan sedang dinonaktifkan.',403);
+      const receiver=await socialSettings(env,target);
+      if(!receiver.allowRequests)return bad('Anggota ini tidak menerima permintaan pertemanan.',403);
       const access=await socialVisibility(env,me.id,target);
       if(!access?.visible)return bad('Anggota tidak ditemukan atau tidak menerima pencarian.',404);
       if(existing?.status==='accepted')return bad('Kalian sudah berteman.',409);
       if(existing?.status==='pending')return bad('Permintaan sudah ada.',409);
       if(existing?.status==='declined' && Date.now()-Date.parse(existing.updated_at)<7*86400000)
         return bad('Permintaan baru dapat dikirim setelah tujuh hari.',429);
+      const pending=(await env.DB.prepare(`SELECT COUNT(*) AS n FROM member_friendships
+        WHERE requested_by=? AND status='pending'`).bind(me.id).first())?.n||0;
+      if(pending>=socialFlags.maxPending)
+        return bad('Batas permintaan pertemanan tercapai. Periksa daftar terkirim.',429);
       const result=await env.DB.prepare(`INSERT INTO member_friendships
         (member_a,member_b,requested_by,status,updated_at) VALUES(?,?,?,'pending',?)
         ON CONFLICT(member_a,member_b) DO UPDATE SET requested_by=excluded.requested_by,
