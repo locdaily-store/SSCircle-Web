@@ -167,7 +167,8 @@ window.fetch=async url => {
   assert page.locator('.season-admin-rank-fields').count()>=3,('Ranking fields missing',w)
   assert page.locator('.season-admin-rank-top > .ssc-sort-handle').count()>=2,('Ranking drag handles missing',w)
   assert page.locator('.sidebar-group').count()==4,('Sidebar groups missing',w)
-  assert page.locator('.dashboard-sidebar [data-tab]').count()==16,('Sidebar links missing',w)
+  assert page.locator('.dashboard-sidebar [data-tab]').count()==17,('Sidebar links missing',w)
+  assert page.locator('.dashboard-sidebar [data-tab="notifications-admin"]').count()==1,('Notification Center navigation missing',w)
   assert page.locator('.dashboard-sidebar [data-tab="minecraft-sync-admin"]').count()==1,('Minecraft Sync navigation missing',w)
   assert page.locator('.dashboard-sidebar [data-tab="profile-admin"]').count()==1,('Profile editor missing',w)
   # Member Control: verify all seven tabs and policy controls at each panel width.
