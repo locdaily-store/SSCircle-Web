@@ -299,8 +299,29 @@
       }
     }, 'primary');
 
+    const optionalDefaults = [
+      {id: 'executor', label: 'Nama pelaksana / staff event', type: 'text',
+        required: true, placeholder: 'Nama pelaksana atau tim', options: []},
+      {id: 'technical', label: 'Teknis / Sistem pelaksanaan', type: 'textarea',
+        required: true, placeholder: 'Aturan pelaksanaan event', options: []},
+      {id: 'prizes', label: 'Hadiah untuk para pemenang', type: 'prizes',
+        required: true, placeholder: 'Hadiah Juara', options: []}
+    ];
+
     const actions = element('div', 'c55-admin-actions');
-    actions.append(add, save);
+    actions.append(add);
+    for (const preset of optionalDefaults) {
+      if (formPolicy.fields.some(field => field.id === preset.id)) continue;
+      const restore = button('+ Pulihkan ' + preset.label, () => {
+        if (formPolicy.fields.length >= 20)
+          return notify('Maksimal 20 pertanyaan.', true);
+        formPolicy.fields.push({...preset});
+        pendingEdits = true;
+        renderFormEditor();
+      });
+      actions.append(restore);
+    }
+    actions.append(save);
     formEditor.append(actions);
     formEditor.append(element('p', 'c55-note',
       'Pertanyaan baru dipakai pada pengajuan berikutnya. Jawaban dari pengajuan lama tetap tersimpan.'));
