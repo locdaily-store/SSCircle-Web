@@ -69,6 +69,7 @@ test('directory respects privacy and secure dashboard sessions',async()=>{
 });
 test('incoming friendship can be accepted through private Mail Box',async()=>{
  const x=fixture();await x.initialize();
+ x.db.prepare("UPDATE member_profiles SET visibility='friends' WHERE application_id=?").run(A);
  const result=await x.call(A,'/api/player/social/action',{method:'POST',body:{id:B,action:'request'}});
  assert.equal(result.status,200,JSON.stringify(result.data));
  const mail=await x.call(B,'/api/player/mailbox');assert.equal(mail.status,200);
@@ -127,7 +128,8 @@ test('directory lists accepted discoverable members, with pagination and private
  assert.equal((await x.call(A,'/api/player/social/directory',{cookie:''})).status,403);
  assert.equal((await x.call(A,'/api/player/social/directory?offset=-1')).status,400);
 
- // A private member is discoverable to their accepted friend, but not a stranger.
+ // A friends-only member becomes visible after friendship approval.
+ x.db.prepare("UPDATE member_profiles SET visibility='friends' WHERE application_id=?").run(A);
  assert.equal((await x.call(B,'/api/player/social/directory')).data.items.length,0);
  assert.equal((await x.call(A,'/api/player/social/action',{method:'POST',body:{id:B,action:'request'}})).status,200);
  assert.equal((await x.call(B,'/api/player/social/action',{method:'POST',body:{id:A,action:'accept'}})).status,200);
@@ -237,4 +239,41 @@ test('an old D1 member_policy table upgrades without changing its saved permissi
  assert.equal(migrated.allow_members,1);
  assert.equal(migrated.updated_at,'old');
  assert.equal((await x.call(A,'/api/player/social/search?q=Beta')).data.items.length,1);
+});
+
+test('V10.52: member privacy and invitation controls',async()=>{
+ const x=fixture();await x.initialize();
+ const first=await x.call(B,'/api/player/social/settings');
+ assert.equal(first.status,200,JSON.stringify(first.data));
+ assert.equal(first.data.settings.showFriends,false);
+ const hidden={allowRequests:false,showFriends:true,showMutual:true,showBadges:false};
+ assert.equal((await x.call(B,'/api/player/social/settings',{method:'PUT',body:hidden})).status,200);
+ assert.equal((await x.call(A,'/api/player/social/action',{method:'POST',body:{id:B,action:'request'}})).status,403);
+ assert.equal((await x.call(B,'/api/player/social/settings',{method:'PUT',body:{...hidden,allowRequests:true,showBadges:true}})).status,200);
+ assert.equal((await x.call(A,'/api/player/social/action',{method:'POST',body:{id:B,action:'request'}})).status,200);
+ assert.equal((await x.call(B,'/api/player/social/action',{method:'POST',body:{id:A,action:'accept'}})).status,200);
+ assert.equal((await x.call(B,'/api/player/social/profile?id='+A)).status,404,'Private profile must stay private');
+ assert.equal((await x.call(A,'/api/player/profile',{method:'PUT',body:{displayName:'Alpha Builder',bio:'Profile',visibility:'friends',showStats:false,eventAlerts:true}})).status,200);
+ assert.equal((await x.call(B,'/api/player/social/profile?id='+A)).status,200);
+ assert.equal((await x.call(C,'/api/player/social/profile?id='+A)).status,404);
+ const detail=await x.call(A,'/api/player/social/profile?id='+B);
+ assert.equal(detail.status,200,JSON.stringify(detail.data));
+ assert.equal(detail.data.friendCount,1);
+ assert.ok(Array.isArray(detail.data.mutualFriends));
+ assert.equal((await x.call(A,'/api/player/social/settings',{method:'PUT',body:{allowRequests:true}})).status,400);
+});
+test('V10.52: badges and social policy require admin access',async()=>{
+ const x=fixture();await x.initialize();
+ const admin=signed('ssc_s6_admin',{exp:now()+3600},SECRET+'|test-admin-password');
+ assert.equal((await x.call(A,'/api/admin/social-settings')).status,401);
+ assert.equal((await x.call(A,'/api/admin/social-settings',{cookie:admin})).data.settings.maxPending,25);
+ assert.equal((await x.call(A,'/api/admin/social-settings',{method:'PUT',cookie:admin,body:{requestsEnabled:false,maxPending:4,badgesEnabled:true}})).status,200);
+ assert.equal((await x.call(A,'/api/player/social/action',{method:'POST',body:{id:B,action:'request'}})).status,403);
+ assert.equal((await x.call(A,'/api/admin/social-settings',{method:'PUT',cookie:admin,body:{requestsEnabled:true,maxPending:4,badgesEnabled:true}})).status,200);
+ const badge=await x.call(A,'/api/admin/member-badges',{method:'POST',cookie:admin,body:{memberId:B,title:'Season Builder',description:'Kontribusi spawn'}});
+ assert.equal(badge.status,200,JSON.stringify(badge.data));
+ assert.equal((await x.call(A,'/api/admin/member-badges',{cookie:admin})).data.items.length,1);
+ assert.equal((await x.call(A,'/api/player/social/profile?id='+B)).data.communityBadges[0].title,'Season Builder');
+ assert.equal((await x.call(A,'/api/admin/member-badges',{method:'DELETE',cookie:admin,body:{id:badge.data.id}})).status,200);
+ assert.equal((await x.call(A,'/api/admin/member-badges',{cookie:admin})).data.items.length,0);
 });
