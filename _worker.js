@@ -4800,16 +4800,18 @@ async function route(req, env) {
   if ((path.startsWith('/api/player/minecraft/link/') || (path==='/api/admin/minecraft/links' || path==='/api/admin/minecraft/multi-settings')) &&
       ['GET','POST'].includes(method))
     return await minecraftLinkAPI(req,env,path,method);
-  if (path.startsWith('/api/player/social/') && ['GET','POST'].includes(method))
+  if (path.startsWith('/api/player/social/') && ['GET','POST','PUT'].includes(method))
     return await socialAPI(req,env,path,method);
   if ((path.startsWith('/api/player/mailbox') || path==='/api/admin/mailbox/approve') &&
       ['GET','POST'].includes(method))
     return await mailboxAPI(req,env,path,method);
   if ((path.startsWith('/api/player/security/') || path==='/api/admin/member-invite') && ['GET','POST'].includes(method))
     return await memberSecurityAPI(req,env,path,method);
-  if ((path==='/api/player/profile' || path.startsWith('/api/admin/member-')) &&
+  if ((path==='/api/player/profile' || path.startsWith('/api/admin/member-') ||
+        path==='/api/admin/social-settings') &&
       ((path==='/api/player/profile' && ['GET','PUT'].includes(method)) ||
-       (path.startsWith('/api/admin/member-') && ['GET','PUT','POST'].includes(method))))
+       (path==='/api/admin/social-settings' && ['GET','PUT'].includes(method)) ||
+       (path.startsWith('/api/admin/member-') && ['GET','PUT','POST','DELETE'].includes(method))))
     return await memberCenterAPI(req,env,path,method);
   if (path === '/api/events' && method === 'GET') {
     const settings = formFrom(await readSettingsRow(env)).settings;
