@@ -24,7 +24,7 @@ window.SSCircleVoteAdmin = (() => {
     s.homeVotingRequireCode ??= true;
     s.homeVotingSessionId ??= 'voting-1';
     s.homeVotingImages = Array.isArray(s.homeVotingImages) ? s.homeVotingImages : (s.homeVotingImage ? [s.homeVotingImage] : []);
-    s.homeVotingOptions = Array.isArray(s.homeVotingOptions) && s.homeVotingOptions.length ? s.homeVotingOptions : [{ id: 'opsi-1', label: 'Pilihan 1' }, { id: 'opsi-2', label: 'Pilihan 2' }];
+    s.homeVotingOptions = Array.isArray(s.homeVotingOptions) && s.homeVotingOptions.length ? s.homeVotingOptions : [{ id: 'opsi-1', label: 'Pilihan 1' }, { id: 'opsi-2', label: 'Pilihan 2' }, { id: 'opsi-3', label: 'Pilihan 3' }];
     s.homeVotingResultsMode ??= 'after_end';
     s.homeVotingPermanent ??= false;
     s.homeVotingEnabled ??= false;
@@ -500,7 +500,8 @@ window.SSCircleVoteAdmin = (() => {
       const id='question-'+crypto.randomUUID().replace(/-/g,'').slice(0,12);
       data.settings.homeVotingQuestions.push({id,title:'Pertanyaan baru',description:'',images:[],
         options:[{id:'option-'+crypto.randomUUID().slice(0,8),label:'Pilihan 1',images:[],description:''},
-          {id:'option-'+crypto.randomUUID().slice(0,8),label:'Pilihan 2',images:[],description:''}]});
+          {id:'option-'+crypto.randomUUID().slice(0,8),label:'Pilihan 2',images:[],description:''},
+           {id:'option-'+crypto.randomUUID().slice(0,8),label:'Pilihan 3',images:[],description:''}]});
       openQuestion=id;dirty();render(data,dirtyMark);
     };
     heading.append(add);questionCard.append(heading);
