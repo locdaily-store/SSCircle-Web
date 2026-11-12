@@ -3997,14 +3997,19 @@ async function mailboxAPI(req,env,path,method){
       .bind(account.id).first();
     const newest=await env.DB.prepare('SELECT id FROM member_mailbox '+
       "WHERE application_id=? AND type='activation' ORDER BY rowid DESC LIMIT 1").bind(account.id).first();
-    return J({items:(rows.results||[]).map(row=>({id:row.id,type:row.type,
+    const prefs=await noticePrefs(env,account.id);
+    const virtual=await noticeVirtual(env,account,prefs);
+    const inbox=(rows.results||[]).filter(row=>
+      (!['friend_request','friend_response'].includes(row.type)||prefs.community)&&
+      (row.type!=='badge'||prefs.awards)).map(row=>({id:row.id,type:row.type,
       title:row.title,content:row.content,createdAt:row.created_at,
       read:!!row.read_at,expiresAt:row.expires_at?new Date(row.expires_at*1000).toISOString():null,
       friendSenderId:accepted&&row.type==='friend_request'?friendNoticeIds.get(row.id)||null:null,
       canReveal:accepted && !!row.encrypted_secret && row.id===newest?.id &&
         row.expires_at>Math.floor(Date.now()/1000) &&
-        invite?.used_at===null && invite?.expires_at===row.expires_at})),
-      activationRequest:request?.status||'none',applicationStatus:account.status});
+        invite?.used_at===null && invite?.expires_at===row.expires_at}));
+    const items=[...inbox,...virtual].sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt))).slice(0,80);
+    return J({items,activationRequest:request?.status||'none',applicationStatus:account.status});
   }
   if(path==='/api/player/mailbox/request-activation' && method==='POST'){
     if(!accepted)
@@ -4493,7 +4498,147 @@ async function socialAPI(req,env,path,method){
   return bad('Endpoint sosial tidak ditemukan.',404);
 }
 
-const SSC_RUNTIME_RELEASE='10.52.5';
+
+/* One inbox for official announcements and event reminders.
+   Published announcements are not copied into every member's mailbox. */
+const noticeSchemaReady=new WeakSet();
+async function noticeSchema(env){
+ if(noticeSchemaReady.has(env.DB))return;
+ await ensureMailbox(env);
+ for(const sql of [
+  "CREATE TABLE IF NOT EXISTS notice_preferences(application_id TEXT PRIMARY KEY, announcements INTEGER NOT NULL DEFAULT 1, events INTEGER NOT NULL DEFAULT 1, community INTEGER NOT NULL DEFAULT 1, awards INTEGER NOT NULL DEFAULT 1, reminder_mode TEXT NOT NULL DEFAULT 'both', updated_at TEXT NOT NULL DEFAULT '', FOREIGN KEY(application_id) REFERENCES submissions(id) ON DELETE CASCADE)",
+  "CREATE TABLE IF NOT EXISTS notice_announcements(id TEXT PRIMARY KEY,title TEXT NOT NULL,content TEXT NOT NULL,priority TEXT NOT NULL DEFAULT 'normal',audience TEXT NOT NULL DEFAULT 'accepted',target_id TEXT,link TEXT NOT NULL DEFAULT '',publish_at TEXT NOT NULL,expires_at TEXT,archived_at TEXT,created_at TEXT NOT NULL)",
+  "CREATE INDEX IF NOT EXISTS idx_notice_publish ON notice_announcements(publish_at,expires_at)",
+  "CREATE TABLE IF NOT EXISTS notice_receipts(application_id TEXT NOT NULL,notice_id TEXT NOT NULL,read_at TEXT,hidden_at TEXT,PRIMARY KEY(application_id,notice_id),FOREIGN KEY(application_id) REFERENCES submissions(id) ON DELETE CASCADE)"
+ ])await env.DB.prepare(sql).run();
+ noticeSchemaReady.add(env.DB);
+}
+async function noticePrefs(env,id){
+ await noticeSchema(env);
+ const row=await env.DB.prepare('SELECT * FROM notice_preferences WHERE application_id=?').bind(id).first();
+ return {announcements:row?.announcements!==0,events:row?.events!==0,
+  community:row?.community!==0,awards:row?.awards!==0,
+  reminderMode:['24h','1h','both','off'].includes(row?.reminder_mode)?row.reminder_mode:'both'};
+}
+async function noticeEventId(value){
+ const bytes=new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode('ssc-event-v1|'+value))).slice(0,16);
+ bytes[6]=(bytes[6]&15)|64;bytes[8]=(bytes[8]&63)|128;
+ const hex=Array.from(bytes,x=>x.toString(16).padStart(2,'0')).join('');
+ return hex.slice(0,8)+'-'+hex.slice(8,12)+'-'+hex.slice(12,16)+'-'+hex.slice(16,20)+'-'+hex.slice(20);
+}
+async function noticeVirtual(env,account,prefs){
+ await noticeSchema(env);
+ const now=new Date().toISOString(),raw=[];
+ const rows=await env.DB.prepare("SELECT id,title,content,priority,link,publish_at FROM notice_announcements WHERE archived_at IS NULL AND publish_at<=? AND (expires_at IS NULL OR expires_at>?) AND (audience='all' OR (audience='accepted' AND ?='accepted') OR (audience='member' AND target_id=?)) ORDER BY publish_at DESC LIMIT 40").bind(now,now,account.status,account.id).all();
+ for(const row of rows.results||[]){
+  if(!prefs.announcements&&row.priority!=='urgent')continue;
+  raw.push({id:row.id,type:'announcement',title:row.title,content:row.content,
+   priority:row.priority,link:row.link||'',createdAt:row.publish_at,canReveal:false});
+ }
+ if(account.status==='accepted'&&prefs.events&&prefs.reminderMode!=='off'){
+  const profile=await env.DB.prepare('SELECT event_alerts FROM member_profiles WHERE application_id=?').bind(account.id).first();
+  if(profile?.event_alerts!==0){
+   const settings=formFrom(await readSettingsRow(env)).settings;
+   if(settings.eventsEnabled!==false){
+    const current=Date.now();
+    for(const event of (settings.eventsItems||[]).slice(0,40)){
+     const start=Date.parse(event.startAt),remaining=start-current;
+     if(!Number.isFinite(start)||remaining<=0||remaining>86400000)continue;
+     const window=remaining<=3600000?'1h':'24h';
+     if(prefs.reminderMode!=='both'&&prefs.reminderMode!==window)continue;
+     raw.push({id:await noticeEventId(event.id+'|'+event.startAt+'|'+window),
+      type:'event',title:'Event segera dimulai: '+event.title,
+      content:window==='1h'?'Event SSCircle akan dimulai kurang dari satu jam lagi.':
+       'Event SSCircle akan berlangsung dalam 24 jam.',
+      createdAt:new Date(start-(window==='1h'?3600000:86400000)).toISOString(),
+      priority:'normal',link:'/events.html',canReveal:false});
+    }
+   }
+  }
+ }
+ if(!raw.length)return [];
+ const ids=raw.map(x=>x.id);
+ const sql='SELECT notice_id,read_at,hidden_at FROM notice_receipts WHERE application_id=? AND notice_id IN ('+ids.map(()=>'?').join(',')+')';
+ const receipts=await env.DB.prepare(sql).bind(account.id,...ids).all();
+ const states=new Map((receipts.results||[]).map(x=>[x.notice_id,x]));
+ return raw.filter(x=>!states.get(x.id)?.hidden_at).map(x=>({...x,read:!!states.get(x.id)?.read_at}));
+}
+async function noticeMark(env,account,ids,action){
+ const available=new Set((await noticeVirtual(env,account,await noticePrefs(env,account.id))).map(x=>x.id));
+ if(ids.some(id=>!available.has(id)))return false;
+ const now=new Date().toISOString();
+ for(const id of ids){
+  if(action==='read')await env.DB.prepare("INSERT INTO notice_receipts(application_id,notice_id,read_at) VALUES(?,?,?) ON CONFLICT(application_id,notice_id) DO UPDATE SET read_at=COALESCE(notice_receipts.read_at,excluded.read_at)").bind(account.id,id,now).run();
+  else await env.DB.prepare("INSERT INTO notice_receipts(application_id,notice_id,hidden_at) VALUES(?,?,?) ON CONFLICT(application_id,notice_id) DO UPDATE SET hidden_at=excluded.hidden_at").bind(account.id,id,now).run();
+ }
+ return true;
+}
+const noticeLinks=new Set(['','/','/events','/events.html','/rules','/rules.html','/seasons','/seasons.html','/mailbox','/my-sscircle']);
+async function noticeAPI(req,env,path,method){
+ if(!env.DB||!env.SESSION_SECRET)return bad('Pemberitahuan belum tersedia.',503);
+ if(path.startsWith('/api/admin/')){
+  if(!await admin(req,env))return bad('Masuk sebagai pengurus terlebih dahulu.',401);
+  await noticeSchema(env);
+  if(method==='GET'){
+   const rows=await env.DB.prepare('SELECT * FROM notice_announcements ORDER BY created_at DESC LIMIT 80').all();
+   return J({items:(rows.results||[]).map(x=>({id:x.id,title:x.title,content:x.content,
+    priority:x.priority,audience:x.audience,targetId:x.target_id,link:x.link,
+    publishAt:x.publish_at,expiresAt:x.expires_at,archivedAt:x.archived_at}))},
+    200,{'Cache-Control':'private, no-store','Vary':'Cookie'});
+  }
+  if(!await rateLimit(env,req,'admin-notification',30,900))return bad('Terlalu banyak perubahan.',429);
+  const data=await body(req,4000);
+  if(method==='DELETE'){
+   if(!SSC_SOCIAL_ID.test(data?.id||''))return bad('Pengumuman tidak ditemukan.',404);
+   const result=await env.DB.prepare('UPDATE notice_announcements SET archived_at=? WHERE id=? AND archived_at IS NULL').bind(new Date().toISOString(),data.id).run();
+   if(!result.meta?.changes)return bad('Pengumuman sudah diarsipkan.',404);
+   return J({ok:true});
+  }
+  if(method==='POST'){
+   const title=s(data?.title,120).trim(),content=s(data?.content,1500).trim();
+   const priority=['normal','important','urgent'].includes(data?.priority)?data.priority:'normal';
+   const audience=['all','accepted','member'].includes(data?.audience)?data.audience:'accepted';
+   const link=String(data?.link||'');
+   if(title.length<3||content.length<5||!noticeLinks.has(link))
+    return bad('Periksa judul, isi, dan tujuan pengumuman.',400);
+   const targetId=audience==='member'?String(data?.targetId||''):null;
+   if(audience==='member'){
+    if(!SSC_SOCIAL_ID.test(targetId))return bad('Pilih ID penerima yang valid.',400);
+    if(!await env.DB.prepare('SELECT id FROM submissions WHERE id=?').bind(targetId).first())
+     return bad('Penerima tidak ditemukan.',404);
+   }
+   const published=data?.publishAt?Date.parse(data.publishAt):Date.now();
+   const expires=data?.expiresAt?Date.parse(data.expiresAt):null;
+   if(!Number.isFinite(published)||published<Date.now()-600000||published>Date.now()+365*86400000||
+      expires!==null&&(!Number.isFinite(expires)||expires<=published||expires>published+90*86400000))
+    return bad('Tanggal publikasi tidak sesuai.',400);
+   const id=uid(),now=new Date().toISOString();
+   await env.DB.prepare('INSERT INTO notice_announcements(id,title,content,priority,audience,target_id,link,publish_at,expires_at,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)')
+    .bind(id,title,content,priority,audience,targetId,link,new Date(published).toISOString(),
+      expires===null?null:new Date(expires).toISOString(),now).run();
+   return J({ok:true,id},201);
+  }
+  return bad('Tindakan tidak tersedia.',405);
+ }
+ const member=await playerSession(req,env);
+ if(!member||member.status!=='accepted')return bad('Masuk sebagai anggota SSCircle terlebih dahulu.',403);
+ if(!await memberStrongSession(req,env,member))return bad('Masuk ke Profile terlebih dahulu.',403);
+ if(method==='GET')return J({preferences:await noticePrefs(env,member.id)},200,{'Cache-Control':'private, no-store','Vary':'Cookie'});
+ if(method==='PUT'){
+  if(!await rateLimit(env,req,'notice-settings',12,900))return bad('Terlalu banyak perubahan.',429);
+  const data=await body(req,800);
+  if(!data||['announcements','events','community','awards'].some(k=>typeof data[k]!=='boolean')||
+      !['24h','1h','both','off'].includes(data.reminderMode))return bad('Pengaturan tidak valid.',400);
+  await noticeSchema(env);
+  await env.DB.prepare('INSERT INTO notice_preferences(application_id,announcements,events,community,awards,reminder_mode,updated_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(application_id) DO UPDATE SET announcements=excluded.announcements,events=excluded.events,community=excluded.community,awards=excluded.awards,reminder_mode=excluded.reminder_mode,updated_at=excluded.updated_at')
+   .bind(member.id,Number(data.announcements),Number(data.events),Number(data.community),Number(data.awards),
+     data.reminderMode,new Date().toISOString()).run();
+  return J({ok:true,preferences:await noticePrefs(env,member.id)});
+ }
+ return bad('Tindakan tidak tersedia.',405);
+}
+
+const SSC_RUNTIME_RELEASE='10.53.0';
 const SSC_RUNTIME_ISSUES=new Set();
 function sscRuntimeBindings(env){
   return {
@@ -4812,6 +4957,9 @@ async function route(req, env) {
   if ((path.startsWith('/api/player/minecraft/link/') || (path==='/api/admin/minecraft/links' || path==='/api/admin/minecraft/multi-settings')) &&
       ['GET','POST'].includes(method))
     return await minecraftLinkAPI(req,env,path,method);
+  if((path==='/api/admin/notifications'&&['GET','POST','DELETE'].includes(method))||
+     (path==='/api/player/notifications/preferences'&&['GET','PUT'].includes(method)))
+    return await noticeAPI(req,env,path,method);
   if (path.startsWith('/api/player/social/') && ['GET','POST','PUT'].includes(method))
     return await socialAPI(req,env,path,method);
   if ((path.startsWith('/api/player/mailbox') || path==='/api/admin/mailbox/approve') &&
