@@ -4607,6 +4607,12 @@ async function community55API(req,env,path,method){
     const settings=formFrom(await readSettingsRow(env)).settings;
     const data=await community55PublicEvents(env,settings);
     return J(data,200,{'Cache-Control':'private, no-store','Vary':'Cookie'});
+  }else if(path==='/api/community/hall-of-fame'&&method==='GET'){
+    await ensureMemberCenter(env);
+    const winners=(await env.DB.prepare("SELECT a.event_id,a.rank,a.label,a.created_at,e.title AS event_title,e.start_at,p.display_name,p.visibility FROM community_event_awards a JOIN community_event_proposals e ON e.id=a.event_id LEFT JOIN member_profiles p ON p.application_id=a.member_id WHERE e.status='approved' ORDER BY a.created_at DESC,a.rank ASC LIMIT 80").all()).results||[];
+    return J({items:winners.map(w=>({eventId:w.event_id,eventTitle:w.event_title,rank:w.rank,label:w.label,
+      at:w.created_at,startAt:w.start_at,winner:w.visibility==='public'&&w.display_name?w.display_name:'Anggota SSCircle'}))},
+      200,{'Cache-Control':'public, max-age=60'});
   }else if(!member||member.status!=='accepted')return bad('Hanya anggota berstatus Diterima dapat menggunakan fitur ini.',403);
   if(!isAdmin && method!=='GET' && !(await memberStrongSession(req,env,member)))
     return bad('Buka Profile dengan password Dashboard sebelum mengirim permintaan.',403);
@@ -4744,7 +4750,8 @@ async function noticeVirtual(env,account,prefs){
    const settings=formFrom(await readSettingsRow(env)).settings;
    if(settings.eventsEnabled!==false){
     const current=Date.now();
-    for(const event of (settings.eventsItems||[]).slice(0,40)){
+    const calendar=await community55PublicEvents(env,settings);
+    for(const event of (calendar.events||[]).slice(0,80)){
      const start=Date.parse(event.startAt),remaining=start-current;
      if(!Number.isFinite(start)||remaining<=0||remaining>86400000)continue;
      const window=remaining<=3600000?'1h':'24h';
@@ -4759,8 +4766,32 @@ async function noticeVirtual(env,account,prefs){
    }
   }
  }
- if(!raw.length)return [];
- const ids=raw.map(x=>x.id);
+ if(account.status==='accepted'){
+    try{
+      await community55Schema(env);
+      if(prefs.events){
+        const changes=(await env.DB.prepare("SELECT id,title,status,reason,reviewed_at FROM community_event_proposals WHERE member_id=? AND status IN ('approved','rejected') AND reviewed_at IS NOT NULL ORDER BY reviewed_at DESC LIMIT 15")
+          .bind(account.id).all()).results||[];
+        for(const proposal of changes){
+          raw.push({id:await noticeEventId('proposal-review|'+proposal.id+'|'+proposal.status),
+            type:'event',title:proposal.status==='approved'?'Event disetujui: '+proposal.title:'Event ditolak: '+proposal.title,
+            content:proposal.status==='approved'?'Event kamu sudah disetujui dan dapat dilihat pada kalender.':proposal.reason||'Pengajuan belum memenuhi persyaratan.',
+            createdAt:proposal.reviewed_at,priority:'normal',link:'/events.html',canReveal:false});
+        }
+      }
+      if(prefs.awards){
+        const wins=(await env.DB.prepare("SELECT a.id,a.rank,a.label,a.created_at,e.title FROM community_event_awards a JOIN community_event_proposals e ON e.id=a.event_id WHERE a.member_id=? ORDER BY a.created_at DESC LIMIT 15")
+          .bind(account.id).all()).results||[];
+        for(const award of wins)raw.push({id:await noticeEventId('event-award|'+award.id),type:'award',
+          title:'Penghargaan event: Juara '+award.rank+' · '+award.title,
+          content:award.label,createdAt:award.created_at,priority:'normal',link:'/my-sscircle.html',canReveal:false});
+      }
+    }catch(error){
+      console.error('[SSCircle community] Award/event notices unavailable:',String(error?.message||error));
+    }
+  }
+  if(!raw.length)return [];
+  const ids=raw.map(x=>x.id);
  const sql='SELECT notice_id,read_at,hidden_at FROM notice_receipts WHERE application_id=? AND notice_id IN ('+ids.map(()=>'?').join(',')+')';
  const receipts=await env.DB.prepare(sql).bind(account.id,...ids).all();
  const states=new Map((receipts.results||[]).map(x=>[x.notice_id,x]));
