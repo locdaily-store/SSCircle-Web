@@ -1,4 +1,4 @@
-/* SSCircle Voting: one verified registration session per vote. */
+/* SSCircle Voting: three distinct choices for each accepted member and question. */
 
 // Halaman voting: pemeriksaan sesi, pilihan, dan hasil.
 
@@ -80,10 +80,13 @@
     $('vote-results-section').hidden=true;
     const host=$('vote-questions');host.replaceChildren();
     const voted=new Set(payload.votedQuestionIds||[]);
+    const usedOptions=payload.usedOptions||{};
+    const remaining=payload.remainingTokens||{};
     for(const [index,question] of (payload.questions||[]).entries()){
       const card=make('section','vote-poll-card');card.id='poll-'+question.id;
       card.append(make('span','vote-poll-index','PERTANYAAN '+String(index+1).padStart(2,'0')),
         make('h2','',question.title));
+      card.append(make('p','vote-option-description','Token tersisa: '+Number(remaining[question.id]??3)+' / 3. Setiap token wajib memilih jawaban berbeda.'));
       if(question.description)card.append(make('p','vote-option-description',question.description));
       if(question.images?.length)card.append(imageGallery(question.images,'vote-image-gallery'));
       const form=make('form','vote-form vote-question-form');
@@ -91,15 +94,18 @@
       for(const [i,option] of (question.options||[]).entries()){
         const row=make('label','vote-option vote-option-rich'),top=make('div','vote-option-top');
         const radio=make('input');radio.type='radio';radio.name='choice-'+question.id;
-        radio.value=option.id;radio.required=true;radio.disabled=voted.has(question.id)||!payload.active;
-        if(i===0&&!voted.has(question.id))radio.checked=true;
-        top.append(radio,make('strong','',option.label));row.append(top);
+        const used=(usedOptions[question.id]||[]).includes(option.id);
+        radio.value=option.id;radio.required=true;radio.disabled=used||voted.has(question.id)||!payload.active;
+        if(!used&&!voted.has(question.id)&&!choices.querySelector('input:checked'))radio.checked=true;
+        top.append(radio,make('strong','',option.label));
+        if(used)top.append(make('span','vote-option-description','✓ Sudah dipilih'));
+        row.append(top);
         if(option.description)row.append(make('p','vote-option-description',option.description));
         if(option.images?.length)row.append(imageGallery(option.images,'vote-choice-gallery'));
         choices.append(row);
       }
       form.append(choices);
-      const submit=make('button','home-button home-button-primary vote-question-submit',voted.has(question.id)?'✓ Sudah memilih':'Kirim jawaban');
+      const submit=make('button','home-button home-button-primary vote-question-submit',voted.has(question.id)?'✓ Token habis':'Gunakan 1 token');
       submit.type='submit';submit.dataset.voted=voted.has(question.id)?'1':'0';
       submit.disabled=voted.has(question.id)||!payload.active||account?.status!=='accepted';
       form.append(submit);
