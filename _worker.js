@@ -4998,14 +4998,13 @@ async function noticeAPI(req,env,path,method){
     const mode=['archive','delete','delete-archived'].includes(data?.mode)?data.mode:'archive';
     if(mode==='delete-archived'){
       if(data.confirmation!=='HAPUS RIWAYAT')return bad('Konfirmasi hapus riwayat tidak sesuai.',400);
-      const result=await env.DB.prepare("SELECT id FROM notice_announcements WHERE archived_at IS NOT NULL LIMIT 200").all();
-      const ids=(result.results||[]).map(row=>row.id);
-      if(!ids.length)return J({ok:true,deleted:0});
-      await env.DB.batch([
-        ...ids.map(id=>env.DB.prepare('DELETE FROM notice_receipts WHERE notice_id=?').bind(id)),
-        ...ids.map(id=>env.DB.prepare('DELETE FROM notice_announcements WHERE id=? AND archived_at IS NOT NULL').bind(id))
+      const count=await env.DB.prepare("SELECT COUNT(*) AS n FROM notice_announcements WHERE archived_at IS NOT NULL LIMIT 200").first();
+      if(!Number(count?.n))return J({ok:true,deleted:0});
+      const [receipts,announcements]=await env.DB.batch([
+        env.DB.prepare("DELETE FROM notice_receipts WHERE notice_id IN (SELECT id FROM notice_announcements WHERE archived_at IS NOT NULL ORDER BY created_at LIMIT 200)"),
+        env.DB.prepare("DELETE FROM notice_announcements WHERE id IN (SELECT id FROM notice_announcements WHERE archived_at IS NOT NULL ORDER BY created_at LIMIT 200)")
       ]);
-      return J({ok:true,deleted:ids.length});
+      return J({ok:true,deleted:Number(announcements?.meta?.changes||0)});
     }
     if(!SSC_SOCIAL_ID.test(data?.id||''))return bad('Pengumuman tidak ditemukan.',404);
     if(mode==='delete'){
