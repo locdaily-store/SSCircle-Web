@@ -90,3 +90,59 @@ test('old single-question votes belong to question-1, even if questions reordere
  assert.equal(r.data.questions[0].totalVotes,1);
  assert.ok(r.data.votedQuestionIds.includes('question-1'));
 });
+
+
+test('admin can set global and per-question token limits without duplicate votes',async()=>{
+  const t=setup();
+  assert.equal((await seed(t)).status,200);
+  let current=await t.call('/api/admin/form',{cookie:t.admin});
+  current.data.settings.homeVotingTokenMode='per-question';
+  current.data.settings.homeVotingTokens=3;
+  current.data.settings.homeVotingQuestions[0].tokens=1;
+  current.data.settings.homeVotingQuestions[1].tokens=2;
+  let saved=await t.call('/api/admin/form',{
+    cookie:t.admin,method:'PUT',
+    payload:{settings:current.data.settings,pages:current.data.pages,revision:current.data.revision}
+  });
+  assert.equal(saved.status,200,JSON.stringify(saved.data));
+
+  let status=await t.call('/api/voting',{cookie:t.p1});
+  assert.equal(status.data.questionTokens['question-1'],1);
+  assert.equal(status.data.questionTokens['question-2'],2);
+  assert.equal((await t.call('/api/voting/vote',{cookie:t.p1,method:'POST',
+    payload:{questionId:'question-1',optionId:'option-a'}})).status,200);
+  assert.equal((await t.call('/api/voting/vote',{cookie:t.p1,method:'POST',
+    payload:{questionId:'question-1',optionId:'option-b'}})).status,409);
+  assert.equal((await t.call('/api/voting/vote',{cookie:t.p1,method:'POST',
+    payload:{questionId:'question-2',optionId:'option-c'}})).status,200);
+  assert.equal((await t.call('/api/voting/vote',{cookie:t.p1,method:'POST',
+    payload:{questionId:'question-2',optionId:'option-c'}})).status,409);
+  assert.equal((await t.call('/api/voting/vote',{cookie:t.p1,method:'POST',
+    payload:{questionId:'question-2',optionId:'option-d'}})).status,200);
+  assert.equal((await t.call('/api/voting/vote',{cookie:t.p1,method:'POST',
+    payload:{questionId:'question-2',optionId:'option-f'}})).status,409);
+
+  status=await t.call('/api/voting',{cookie:t.p1});
+  assert.equal(status.data.remainingTokens['question-1'],0);
+  assert.equal(status.data.remainingTokens['question-2'],0);
+  current=await t.call('/api/admin/form',{cookie:t.admin});
+  current.data.settings.homeVotingQuestions[1].tokens=1;
+  saved=await t.call('/api/admin/form',{
+    cookie:t.admin,method:'PUT',
+    payload:{settings:current.data.settings,pages:current.data.pages,revision:current.data.revision}
+  });
+  assert.equal(saved.status,409,'Must reset voting before reducing below already used tokens');
+});
+
+test('global token count must not exceed the number of unique options',async()=>{
+  const t=setup();
+  assert.equal((await seed(t)).status,200);
+  const current=await t.call('/api/admin/form',{cookie:t.admin});
+  current.data.settings.homeVotingTokenMode='global';
+  current.data.settings.homeVotingTokens=4;
+  const saved=await t.call('/api/admin/form',{
+    cookie:t.admin,method:'PUT',
+    payload:{settings:current.data.settings,pages:current.data.pages,revision:current.data.revision}
+  });
+  assert.equal(saved.status,400);
+});
