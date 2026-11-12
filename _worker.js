@@ -4558,11 +4558,116 @@ async function socialAPI(req,env,path,method){
 
 
 
+/* The event proposal form is configurable without changing existing proposals. */
+const COMMUNITY_FORM_DEFAULT = {
+  enabled: true,
+  maxPending: 3,
+  defaultCapacity: 40,
+  minNoticeHours: 1,
+  maxPrizes: 20,
+  fields: [
+    {id:'executor',label:'Nama Pelaksana / Pembuat / Staff Event',type:'text',required:true,placeholder:'Nama pelaksana atau tim'},
+    {id:'title',label:'Nama event yang dibuat',type:'text',required:true,placeholder:'Judul kegiatan'},
+    {id:'technical',label:'Teknis / Sistem pelaksanaan',type:'textarea',required:true,placeholder:'Jelaskan aturan dan alur acara'},
+    {id:'startAt',label:'Kapan event dimulai?',type:'datetime-local',required:true,placeholder:''},
+    {id:'prizes',label:'Hadiah untuk para pemenang',type:'prizes',required:true,placeholder:'Hadiah Juara'}
+  ]
+};
+const COMMUNITY_CORE_TYPES = {
+  executor:'text',title:'text',technical:'textarea',startAt:'datetime-local',prizes:'prizes'
+};
+const COMMUNITY_FIELD_TYPES = new Set(['text','textarea','datetime-local','prizes','number','date','select']);
+function validCommunityForm(input) {
+  if(!input || typeof input!=='object' || Array.isArray(input))
+    throw Error('Pengaturan formulir event tidak valid.');
+  const number=(value,min,max,label)=>{
+    if(!Number.isSafeInteger(Number(value)) || Number(value)<min || Number(value)>max)
+      throw Error(label+' harus '+min+' sampai '+max+'.');
+    return Number(value);
+  };
+  const fields=input.fields;
+  if(!Array.isArray(fields) || fields.length<2 || fields.length>20)
+    throw Error('Formulir event membutuhkan 2 sampai 20 pertanyaan.');
+  const ids=new Set();
+  const normalized=fields.map((f,index)=>{
+    const id=s(f?.id,64),label=s(f?.label,160),type=s(f?.type,24);
+    if(!/^[a-zA-Z][a-zA-Z0-9_-]{1,63}$/.test(id) || ids.has(id) || !label ||
+       !COMMUNITY_FIELD_TYPES.has(type) || (Object.hasOwn(COMMUNITY_CORE_TYPES,id) && COMMUNITY_CORE_TYPES[id]!==type))
+      throw Error('Pertanyaan event nomor '+(index+1)+' tidak valid atau duplikat.');
+    ids.add(id);
+    const options=type==='select' ? (Array.isArray(f.options)?f.options:[]) : [];
+    if(type==='select' && (options.length<2 || options.length>15 ||
+       options.some(x=>!s(x,100)) || new Set(options.map(x=>s(x,100))).size!==options.length))
+      throw Error('Pilihan dropdown event harus 2 sampai 15 pilihan berbeda.');
+    return {id,label,type,required:['title','startAt'].includes(id)||f.required===true,
+      placeholder:s(f.placeholder,180),options:options.map(v=>s(v,100))};
+  });
+  if(!ids.has('title') || !ids.has('startAt'))
+    throw Error('Nama event dan tanggal mulai tidak boleh dihapus dari formulir.');
+  return {
+    enabled:input.enabled!==false,
+    maxPending:number(input.maxPending,1,10,'Batas pengajuan aktif'),
+    defaultCapacity:number(input.defaultCapacity,1,500,'Kuota awal peserta'),
+    minNoticeHours:number(input.minNoticeHours,1,168,'Jeda sebelum event'),
+    maxPrizes:number(input.maxPrizes,1,20,'Batas peringkat hadiah'),
+    fields:normalized
+  };
+}
+async function communityFormConfig(env){
+  const row=await env.DB.prepare('SELECT settings,revision FROM community_event_form_policy WHERE id=1').first();
+  if(!row)return {settings:COMMUNITY_FORM_DEFAULT,revision:''};
+  try {
+    return {settings:validCommunityForm(parse(row.settings)),revision:row.revision||''};
+  }catch(error){
+    console.error('[SSCircle event form] Invalid policy:',String(error?.message||error));
+    throw Error('Konfigurasi event perlu diperiksa oleh Admin.');
+  }
+}
+function communityFormAnswers(input,settings) {
+  const raw=input?.answers && typeof input.answers==='object' && !Array.isArray(input.answers)
+    ? input.answers : input;
+  const answers={};
+  for(const field of settings.fields) {
+    const value=raw?.[field.id];
+    if(field.type==='prizes'){
+      const prizes=Array.isArray(value)?value:[];
+      if(prizes.length>settings.maxPrizes || (field.required && !prizes.length) ||
+         prizes.some(p=>typeof p!=='string' || !p.trim() || p.trim().length>180))
+        throw Error('Hadiah Juara harus diisi sesuai batas yang ditentukan Admin.');
+      answers[field.id]=prizes.map(v=>v.trim());
+    }else if(field.type==='number'){
+      if(value===''||value===null||value===undefined){
+        if(field.required)throw Error(field.label+' wajib diisi.');
+        answers[field.id]='';
+      }else{
+        const n=Number(value);
+        if(!Number.isFinite(n) || Math.abs(n)>1000000000)throw Error('Angka pada '+field.label+' tidak valid.');
+        answers[field.id]=n;
+      }
+    }else{
+      const limit=field.id==='technical'?1800:field.id==='title'?140:field.id==='executor'?120:
+        field.type==='textarea'?1800:field.type==='select'?100:200;
+      const text=s(value,limit);
+      if(field.required && !text)throw Error(field.label+' wajib diisi.');
+      if(field.id==='technical' && field.required && text.length<20)
+        throw Error('Teknis pelaksanaan membutuhkan minimal 20 karakter.');
+      if(field.type==='select' && text && !field.options.includes(text))
+        throw Error('Pilihan '+field.label+' tidak tersedia.');
+      if(field.type==='date' && text && !/^\d{4}-\d{2}-\d{2}$/.test(text))
+        throw Error('Tanggal '+field.label+' tidak valid.');
+      answers[field.id]=text;
+    }
+  }
+  return answers;
+}
+
 /* Community Events & Achievements V10.55: separate tables, never rewrite legacy events. */
 const community55Ready=new WeakSet();
 async function community55Schema(env){
   if(community55Ready.has(env.DB))return;
   for(const sql of [
+    "CREATE TABLE IF NOT EXISTS community_event_form_policy(id INTEGER PRIMARY KEY CHECK(id=1),settings TEXT NOT NULL,revision TEXT NOT NULL)",
+    "CREATE TABLE IF NOT EXISTS community_event_form_answers(proposal_id TEXT PRIMARY KEY,payload TEXT NOT NULL,FOREIGN KEY(proposal_id) REFERENCES community_event_proposals(id) ON DELETE CASCADE)",
     "CREATE TABLE IF NOT EXISTS community_event_proposals(id TEXT PRIMARY KEY,member_id TEXT NOT NULL,executor TEXT NOT NULL,title TEXT NOT NULL,technical TEXT NOT NULL,start_at TEXT NOT NULL,end_at TEXT NOT NULL,prizes_json TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'pending',reason TEXT NOT NULL DEFAULT '',capacity INTEGER NOT NULL DEFAULT 40,created_at TEXT NOT NULL,reviewed_at TEXT,FOREIGN KEY(member_id) REFERENCES submissions(id) ON DELETE CASCADE)",
     "CREATE INDEX IF NOT EXISTS idx_c55_proposals_status ON community_event_proposals(status,start_at)",
     "CREATE TABLE IF NOT EXISTS community_event_signups(event_id TEXT NOT NULL,member_id TEXT NOT NULL,state TEXT NOT NULL DEFAULT 'registered',joined_at TEXT NOT NULL,checked_in_at TEXT,PRIMARY KEY(event_id,member_id),FOREIGN KEY(member_id) REFERENCES submissions(id) ON DELETE CASCADE)",
@@ -4578,6 +4683,8 @@ async function community55Schema(env){
     ['event-explorer','Event Explorer','Menghadiri tiga event komunitas','events_attended',3]
   ])await env.DB.prepare("INSERT OR IGNORE INTO community_achievement_rules(id,title,description,metric,target,enabled) VALUES(?,?,?,?,?,1)")
     .bind(id,title,description,metric,target).run();
+  await env.DB.prepare("INSERT OR IGNORE INTO community_event_form_policy(id,settings,revision) VALUES(1,?,'')")
+    .bind(JSON.stringify(COMMUNITY_FORM_DEFAULT)).run();
   community55Ready.add(env.DB);
 }
 async function community55Event(env,id){
@@ -4645,7 +4752,25 @@ async function community55API(req,env,path,method){
   }else if(!member||member.status!=='accepted')return bad('Hanya anggota berstatus Diterima dapat menggunakan fitur ini.',403);
   if(!isAdmin && method!=='GET' && !(await memberStrongSession(req,env,member)))
     return bad('Buka Profile dengan password Dashboard sebelum mengirim permintaan.',403);
-  if(method==='POST' && !(await rateLimit(env,req,'community55',30,900)))return bad('Terlalu banyak permintaan. Coba nanti.',429);
+  if(['POST','PUT'].includes(method) && !(await rateLimit(env,req,'community55',30,900)))
+    return bad('Terlalu banyak permintaan. Coba nanti.',429);
+  if(path==='/api/community/events/form' && method==='GET'){
+    const config=await communityFormConfig(env);
+    return J({form:config.settings},200,{'Cache-Control':'private, no-store','Vary':'Cookie'});
+  }
+  if(path==='/api/admin/community/events/form' && method==='GET')
+    return J(await communityFormConfig(env),200,{'Cache-Control':'private, no-store'});
+  if(path==='/api/admin/community/events/form' && method==='PUT'){
+    const bodyInput=await body(req,10000);
+    if(typeof bodyInput.revision!=='string' || bodyInput.revision.length>100)
+      return bad('Versi pengaturan tidak valid.',400);
+    const config=validCommunityForm(bodyInput.settings);
+    const revision=new Date().toISOString()+'-'+uid();
+    const result=await env.DB.prepare('UPDATE community_event_form_policy SET settings=?,revision=? WHERE id=1 AND revision=?')
+      .bind(JSON.stringify(config),revision,bodyInput.revision).run();
+    if(!Number(result.meta?.changes))return bad('Pengaturan sudah diubah admin lain. Muat ulang dan coba lagi.',409);
+    return J({ok:true,revision});
+  }
   const now=new Date().toISOString();
   if(path==='/api/community/events/my'&&method==='GET'){
     const proposals=(await env.DB.prepare("SELECT id,executor,title,start_at,status,reason,created_at FROM community_event_proposals WHERE member_id=? ORDER BY created_at DESC LIMIT 30").bind(member.id).all()).results||[];
@@ -4653,18 +4778,29 @@ async function community55API(req,env,path,method){
     return J({proposals,joined});
   }
   if(path==='/api/community/events/propose'&&method==='POST'){
-    const x=await body(req,6000);
-    const executor=s(x.executor,120),title=s(x.title,140),technical=s(x.technical,1800),rawStart=s(x.startAt,45);
-    const start=Date.parse(rawStart),prizes=x.prizes;
-    if(!executor||!title||technical.length<20)return bad('Lengkapi nama pelaksana, event, dan teknis pelaksanaan minimal 20 karakter.',400);
-    if(!Number.isFinite(start)||start<Date.now()+3600000||start>Date.now()+2*365*86400000)return bad('Waktu mulai harus lebih dari satu jam mendatang dan maksimal dua tahun.',400);
-    if(!Array.isArray(prizes)||prizes.length<1||prizes.length>20||prizes.some((p,i)=>!s(p,180)))return bad('Isi minimal hadiah Juara 1, maksimal 20 peringkat.',400);
-    const active=await env.DB.prepare("SELECT COUNT(*) AS total FROM community_event_proposals WHERE member_id=? AND status='pending'").bind(member.id).first();
-    if(Number(active?.total)>=3)return bad('Maksimal 3 pengajuan yang masih menunggu persetujuan.',409);
+    const config=(await communityFormConfig(env)).settings;
+    if(!config.enabled)return bad('Pengajuan event komunitas sedang ditutup.',403);
+    const input=await body(req,12000),answers=communityFormAnswers(input,config);
+    const executor=s(answers.executor,120),title=s(answers.title,140);
+    const technical=s(answers.technical,1800),rawStart=s(answers.startAt,45);
+    const start=Date.parse(rawStart),prizes=answers.prizes||[];
+    if(!title)return bad('Nama event wajib diisi.',400);
+    if(!Number.isFinite(start) || start<Date.now()+config.minNoticeHours*3600000 ||
+       start>Date.now()+2*365*86400000)
+      return bad('Waktu mulai event harus sesuai batas waktu yang ditentukan Admin.',400);
+    const active=await env.DB.prepare("SELECT COUNT(*) AS total FROM community_event_proposals WHERE member_id=? AND status='pending'")
+      .bind(member.id).first();
+    if(Number(active?.total)>=config.maxPending)
+      return bad('Batas pengajuan yang masih menunggu persetujuan sudah tercapai.',409);
     const end=new Date(start+2*3600000).toISOString(),id='member-event-'+uid();
-    await env.DB.prepare("INSERT INTO community_event_proposals(id,member_id,executor,title,technical,start_at,end_at,prizes_json,status,reason,capacity,created_at) VALUES(?,?,?,?,?,?,?,?,'pending','',40,?)")
-      .bind(id,member.id,executor,title,technical,new Date(start).toISOString(),end,JSON.stringify(prizes.map((p,i)=>({rank:i+1,prize:s(p,180)}))),now).run();
-    return J({ok:true,id,status:'pending',message:'Pengajuan event berhasil dikirim dan menunggu persetujuan Admin Control.'},201);
+    await env.DB.batch([
+      env.DB.prepare("INSERT INTO community_event_proposals(id,member_id,executor,title,technical,start_at,end_at,prizes_json,status,reason,capacity,created_at) VALUES(?,?,?,?,?,?,?,?,'pending','',?,?)")
+        .bind(id,member.id,executor,title,technical,new Date(start).toISOString(),end,
+          JSON.stringify(prizes.map((p,i)=>({rank:i+1,prize:p}))),config.defaultCapacity,now),
+      env.DB.prepare("INSERT INTO community_event_form_answers(proposal_id,payload) VALUES(?,?)")
+        .bind(id,JSON.stringify({answers,fields:config.fields}))
+    ]);
+    return J({ok:true,id,status:'pending',message:'Pengajuan event dikirim dan menunggu persetujuan Admin Control.'},201);
   }
   if(path==='/api/community/events/join'&&method==='POST'){
     const x=await body(req,700),id=s(x.eventId,100);
@@ -4681,6 +4817,13 @@ async function community55API(req,env,path,method){
     return J(await community55Progress(env,member));
   if(path==='/api/admin/community/events'&&method==='GET'){
     const proposals=(await env.DB.prepare("SELECT p.*,s.status AS member_status FROM community_event_proposals p LEFT JOIN submissions s ON s.id=p.member_id ORDER BY p.created_at DESC LIMIT 100").all()).results||[];
+    const answerRows=(await env.DB.prepare("SELECT proposal_id,payload FROM community_event_form_answers ORDER BY proposal_id LIMIT 150").all()).results||[];
+    const answers=new Map(answerRows.map(row=>[row.proposal_id,parse(row.payload)||{}]));
+    for(const proposal of proposals){
+      const detail=answers.get(proposal.id);
+      proposal.formAnswers=detail?.answers||null;
+      proposal.formFields=detail?.fields||null;
+    }
     const eventId=s(new URL(req.url).searchParams.get('eventId'),100);
     const signups=eventId?(await env.DB.prepare("SELECT r.member_id,r.state,r.joined_at,r.checked_in_at,s.status AS member_status FROM community_event_signups r JOIN submissions s ON s.id=r.member_id WHERE r.event_id=? ORDER BY r.joined_at LIMIT 200").bind(eventId).all()).results||[]:[];
     const awards=eventId?(await env.DB.prepare("SELECT member_id,rank,label,created_at FROM community_event_awards WHERE event_id=? ORDER BY rank").bind(eventId).all()).results||[]:[];
@@ -5245,7 +5388,7 @@ async function route(req, env) {
     const settings = formFrom(await readSettingsRow(env)).settings;
     return J(await community55PublicEvents(env,settings),200,{'Cache-Control':'private, no-store'});
   }
-  if ((path.startsWith('/api/community/')||path.startsWith('/api/admin/community/')) && ['GET','POST'].includes(method))
+  if ((path.startsWith('/api/community/')||path.startsWith('/api/admin/community/')) && ['GET','POST','PUT'].includes(method))
     return await community55API(req,env,path,method);
   if (path === '/api/rules' && method === 'GET') {
     const settings = formFrom(await readSettingsRow(env)).settings;
