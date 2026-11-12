@@ -69,7 +69,9 @@
     if (field.type === 'textarea') control.maxLength = 1800;
     else if (field.type === 'text') control.maxLength = field.id === 'title' ? 140 : 200;
     label.append(control);
-    return {label, value: () => control.value};
+    return {label, value: () => field.type === 'datetime-local' && control.value
+      ? new Date(control.value).toISOString()
+      : control.value};
   }
 
   function prizesField(field, maxPrizes) {
