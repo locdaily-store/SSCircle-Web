@@ -2595,8 +2595,10 @@ async function memberCenterAPI(req,env,path,method) {
           memberName:b.member_name,title:b.title,description:b.description,grantedAt:b.granted_at}))});
       }
       if(method==='POST'){
-        const value=await body(req,650),id=value?.memberId,title=value?.title?.trim(),
-          description=(value?.description||'').trim();
+        const value=await body(req,650),id=value?.memberId,
+          title=typeof value?.title==='string'?value.title.trim():null,
+          description=typeof value?.description==='string'?value.description.trim():
+            value?.description===undefined?'':null;
         if(!SSC_SOCIAL_ID.test(id||'')||typeof title!=='string'||title.length<3||
           title.length>50||typeof description!=='string'||description.length>160||
           /[<>\x00-\x1f]/.test(title+description))
