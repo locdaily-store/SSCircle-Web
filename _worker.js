@@ -4567,13 +4567,18 @@ async function community55Event(env,id){
   return event?{...event,capacity:0,source:'admin'}:null;
 }
 async function community55PublicEvents(env,settings){
-  await community55Schema(env);
   const events=publicEvents(settings);
   if(!events.enabled)return events;
-  const rows=await env.DB.prepare("SELECT id,title,technical,start_at,end_at,executor,prizes_json,capacity FROM community_event_proposals WHERE status='approved' ORDER BY start_at DESC LIMIT 40").all();
-  events.events.push(...(rows.results||[]).map(r=>({id:r.id,title:r.title,description:r.technical,
-    startAt:r.start_at,endAt:r.end_at,location:'SSCIRCLE Community',image:'',executor:r.executor,
-    prizes:parse(r.prizes_json)||[],capacity:r.capacity,source:'member'})));
+  try{
+    await community55Schema(env);
+    const rows=await env.DB.prepare("SELECT id,title,technical,start_at,end_at,executor,prizes_json,capacity FROM community_event_proposals WHERE status='approved' ORDER BY start_at DESC LIMIT 40").all();
+    events.events.push(...(rows.results||[]).map(r=>({id:r.id,title:r.title,description:r.technical,
+      startAt:r.start_at,endAt:r.end_at,location:'SSCIRCLE Community',image:'',executor:r.executor,
+      prizes:parse(r.prizes_json)||[],capacity:r.capacity,source:'member'})));
+  }catch(error){
+    // Existing Event Calendar stays available even when the optional new tables are not ready.
+    console.error('[SSCircle community] Event proposals not available:',String(error?.message||error));
+  }
   return events;
 }
 async function community55Progress(env,member){
