@@ -29,3 +29,16 @@ test('halaman umum merujuk manifest aplikasi dan tidak mengganti navigasi Profil
   assert.match(read(name),/rel="manifest"/,name);
  assert.equal((html.match(/data-profile-section="preferences"/g)||[]).length,1);
 });
+
+test('PWA install memberi petunjuk Safari tanpa memaksa browser yang tidak mendukung',()=>{
+ const js=read('pwa-register.js');
+ assert.match(js,/navigator\.maxTouchPoints>1/);
+ assert.match(js,/beforeinstallprompt/);
+ assert.match(js,/Tambahkan ke Layar Utama/);
+ assert.match(js,/Tambahkan ke Dock/);
+ assert.match(js,/window\.isSecureContext/);
+ const manifest=JSON.parse(read('manifest.webmanifest'));
+ assert.ok(manifest.categories.includes('games'));
+ assert.ok(!manifest.categories.includes('social'));
+ assert.match(read('service-worker.js'),/sscircle-public-v10\.53\.5/);
+});
