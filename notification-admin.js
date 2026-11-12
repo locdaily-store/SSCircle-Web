@@ -86,18 +86,39 @@ window.SSCircleNotificationAdmin=(()=>{
     ' · '+new Date(item.publishAt).toLocaleString('id-ID',{dateStyle:'medium',timeStyle:'short'})));
    info.append(el('p',item.content));
    row.append(info);
+   const actions=el('div',undefined,'ssc-notice-head-actions');
    if(!item.archivedAt){
-    const remove=el('button','Arsipkan','button secondary');remove.type='button';
-    remove.addEventListener('click',async()=>{
-     const confirm=window.SSCNotice?.confirm
-       ?await window.SSCNotice.confirm('Arsipkan pengumuman ini?',{confirmText:'Arsipkan'})
-       :window.confirm('Arsipkan pengumuman ini?');
-     if(!confirm)return;
-     remove.disabled=true;
-     try{await api('DELETE',{id:item.id});await refreshList();status.textContent='Pengumuman diarsipkan.'}
-     catch(e){remove.disabled=false;status.textContent=e.message}
-    });row.append(remove);
+     const archive=el('button','Arsipkan','button secondary');archive.type='button';
+     archive.addEventListener('click',async()=>{
+       const yes=window.SSCNotice?.confirm
+         ?await window.SSCNotice.confirm('Arsipkan pengumuman ini?',{confirmText:'Arsipkan'})
+         :window.confirm('Arsipkan pengumuman ini?');
+       if(!yes)return;
+       archive.disabled=true;
+       try{
+         await api('DELETE',{id:item.id,mode:'archive'});
+         await refreshList();
+         status.textContent='Pengumuman dipindahkan ke arsip.';
+       }catch(error){archive.disabled=false;status.textContent=error.message;}
+     });
+     actions.append(archive);
    }
+   const remove=el('button','Hapus permanen','button secondary');remove.type='button';
+   remove.addEventListener('click',async()=>{
+     const message='Hapus permanen pengumuman "'+item.title+'"? Pengumuman dan riwayat bacanya tidak bisa dipulihkan.';
+     const yes=window.SSCNotice?.confirm
+       ?await window.SSCNotice.confirm(message,{danger:true,confirmText:'Hapus permanen'})
+       :window.confirm(message);
+     if(!yes)return;
+     remove.disabled=true;
+     try{
+       await api('DELETE',{id:item.id,mode:'delete'});
+       await refreshList();
+       status.textContent='Pengumuman dan riwayat baca berhasil dihapus.';
+     }catch(error){remove.disabled=false;status.textContent=error.message;}
+   });
+   actions.append(remove);
+   row.append(actions);
    list.append(row);
   }
   if(!list.childElementCount)list.append(el('p','Belum ada pengumuman.','field-help'));
@@ -108,7 +129,26 @@ window.SSCircleNotificationAdmin=(()=>{
   if(!form){
    root.replaceChildren();drawForm();
    const panel=el('section',undefined,'ssc-notice-admin-list');
-   panel.append(el('h3','Riwayat pengumuman'));list=el('div');
+   const head=el('div',undefined,'ssc-notice-head-actions');
+   head.append(el('h3','Riwayat pengumuman'));
+   const clear=el('button','Hapus seluruh arsip','button secondary');clear.type='button';
+   clear.addEventListener('click',async()=>{
+     const question='Hapus permanen semua pengumuman yang sudah diarsipkan beserta status bacanya?';
+     const yes=window.SSCNotice?.confirm
+       ?await window.SSCNotice.confirm(question,{danger:true,confirmText:'Hapus seluruh arsip'})
+       :window.confirm(question);
+     if(!yes)return;
+     clear.disabled=true;
+     try{
+       const result=await api('DELETE',{mode:'delete-archived',confirmation:'HAPUS RIWAYAT'});
+       await refreshList();
+       status.textContent=String(result.deleted||0)+' pengumuman arsip dihapus permanen.';
+     }catch(error){status.textContent=error.message;}
+     finally{clear.disabled=false;}
+   });
+   head.append(clear);
+   panel.append(head);
+   list=el('div');
    panel.append(list);root.append(panel);
   }
   try{await refreshList()}catch(e){status.textContent=e.message}
