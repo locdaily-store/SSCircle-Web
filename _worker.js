@@ -4609,10 +4609,16 @@ async function community55API(req,env,path,method){
     return J(data,200,{'Cache-Control':'private, no-store','Vary':'Cookie'});
   }else if(path==='/api/community/hall-of-fame'&&method==='GET'){
     await ensureMemberCenter(env);
-    const winners=(await env.DB.prepare("SELECT a.event_id,a.rank,a.label,a.created_at,e.title AS event_title,e.start_at,p.display_name,p.visibility FROM community_event_awards a JOIN community_event_proposals e ON e.id=a.event_id LEFT JOIN member_profiles p ON p.application_id=a.member_id WHERE e.status='approved' ORDER BY a.created_at DESC,a.rank ASC LIMIT 80").all()).results||[];
-    return J({items:winners.map(w=>({eventId:w.event_id,eventTitle:w.event_title,rank:w.rank,label:w.label,
-      at:w.created_at,startAt:w.start_at,winner:w.visibility==='public'&&w.display_name?w.display_name:'Anggota SSCircle'}))},
-      200,{'Cache-Control':'public, max-age=60'});
+    const settings=formFrom(await readSettingsRow(env)).settings;
+    const manual=new Map((settings.eventsItems||[]).map(event=>[event.id,event]));
+    const winners=(await env.DB.prepare("SELECT a.event_id,a.rank,a.label,a.created_at,e.title AS event_title,e.start_at,e.status AS event_status,p.display_name,p.visibility FROM community_event_awards a LEFT JOIN community_event_proposals e ON e.id=a.event_id LEFT JOIN member_profiles p ON p.application_id=a.member_id WHERE e.status='approved' OR e.id IS NULL ORDER BY a.created_at DESC,a.rank ASC LIMIT 80").all()).results||[];
+    const items=winners.filter(w=>w.event_status==='approved'||manual.has(w.event_id)).map(w=>{
+      const legacy=manual.get(w.event_id);
+      return {eventId:w.event_id,eventTitle:w.event_title||legacy?.title||'Event SSCircle',
+        rank:w.rank,label:w.label,at:w.created_at,startAt:w.start_at||legacy?.startAt||'',
+        winner:w.visibility==='public'&&w.display_name?w.display_name:'Anggota SSCircle'};
+    });
+    return J({items},200,{'Cache-Control':'public, max-age=60'});
   }else if(!member||member.status!=='accepted')return bad('Hanya anggota berstatus Diterima dapat menggunakan fitur ini.',403);
   if(!isAdmin && method!=='GET' && !(await memberStrongSession(req,env,member)))
     return bad('Buka Profile dengan password Dashboard sebelum mengirim permintaan.',403);
