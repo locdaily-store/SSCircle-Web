@@ -4532,6 +4532,169 @@ async function socialAPI(req,env,path,method){
 }
 
 
+
+/* Community Events & Achievements V10.55: separate tables, never rewrite legacy events. */
+const community55Ready=new WeakSet();
+async function community55Schema(env){
+  if(community55Ready.has(env.DB))return;
+  for(const sql of [
+    "CREATE TABLE IF NOT EXISTS community_event_proposals(id TEXT PRIMARY KEY,member_id TEXT NOT NULL,executor TEXT NOT NULL,title TEXT NOT NULL,technical TEXT NOT NULL,start_at TEXT NOT NULL,end_at TEXT NOT NULL,prizes_json TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'pending',reason TEXT NOT NULL DEFAULT '',capacity INTEGER NOT NULL DEFAULT 40,created_at TEXT NOT NULL,reviewed_at TEXT,FOREIGN KEY(member_id) REFERENCES submissions(id) ON DELETE CASCADE)",
+    "CREATE INDEX IF NOT EXISTS idx_c55_proposals_status ON community_event_proposals(status,start_at)",
+    "CREATE TABLE IF NOT EXISTS community_event_signups(event_id TEXT NOT NULL,member_id TEXT NOT NULL,state TEXT NOT NULL DEFAULT 'registered',joined_at TEXT NOT NULL,checked_in_at TEXT,PRIMARY KEY(event_id,member_id),FOREIGN KEY(member_id) REFERENCES submissions(id) ON DELETE CASCADE)",
+    "CREATE INDEX IF NOT EXISTS idx_c55_signups_event ON community_event_signups(event_id,state)",
+    "CREATE TABLE IF NOT EXISTS community_event_awards(id TEXT PRIMARY KEY,event_id TEXT NOT NULL,member_id TEXT NOT NULL,rank INTEGER NOT NULL,label TEXT NOT NULL,created_at TEXT NOT NULL,UNIQUE(event_id,member_id,rank),FOREIGN KEY(member_id) REFERENCES submissions(id) ON DELETE CASCADE)",
+    "CREATE INDEX IF NOT EXISTS idx_c55_awards_member ON community_event_awards(member_id,created_at)",
+    "CREATE TABLE IF NOT EXISTS community_achievement_rules(id TEXT PRIMARY KEY,title TEXT NOT NULL,description TEXT NOT NULL DEFAULT '',metric TEXT NOT NULL,target INTEGER NOT NULL,enabled INTEGER NOT NULL DEFAULT 1)",
+    "CREATE TABLE IF NOT EXISTS community_achievement_claims(rule_id TEXT NOT NULL,member_id TEXT NOT NULL,achieved_at TEXT NOT NULL,PRIMARY KEY(rule_id,member_id),FOREIGN KEY(member_id) REFERENCES submissions(id) ON DELETE CASCADE)"
+  ])await env.DB.prepare(sql).run();
+  for(const [id,title,description,metric,target] of [
+    ['dedicated-player','Dedicated Player','Bermain selama 100 jam','playtime_seconds',360000],
+    ['monster-hunter','Monster Hunter','Mengalahkan 1000 mob','mob_kills',1000],
+    ['event-explorer','Event Explorer','Menghadiri tiga event komunitas','events_attended',3]
+  ])await env.DB.prepare("INSERT OR IGNORE INTO community_achievement_rules(id,title,description,metric,target,enabled) VALUES(?,?,?,?,?,1)")
+    .bind(id,title,description,metric,target).run();
+  community55Ready.add(env.DB);
+}
+async function community55Event(env,id){
+  const proposal=await env.DB.prepare("SELECT * FROM community_event_proposals WHERE id=? AND status='approved'").bind(id).first();
+  if(proposal)return {id:proposal.id,title:proposal.title,description:proposal.technical,startAt:proposal.start_at,endAt:proposal.end_at,
+    executor:proposal.executor,prizes:parse(proposal.prizes_json)||[],capacity:proposal.capacity,source:'member'};
+  const settings=formFrom(await readSettingsRow(env)).settings;
+  if(settings.eventsEnabled===false)return null;
+  const event=(settings.eventsItems||[]).find(x=>x.id===id);
+  return event?{...event,capacity:0,source:'admin'}:null;
+}
+async function community55PublicEvents(env,settings){
+  await community55Schema(env);
+  const events=publicEvents(settings);
+  if(!events.enabled)return events;
+  const rows=await env.DB.prepare("SELECT id,title,technical,start_at,end_at,executor,prizes_json,capacity FROM community_event_proposals WHERE status='approved' ORDER BY start_at DESC LIMIT 40").all();
+  events.events.push(...(rows.results||[]).map(r=>({id:r.id,title:r.title,description:r.technical,
+    startAt:r.start_at,endAt:r.end_at,location:'SSCIRCLE Community',image:'',executor:r.executor,
+    prizes:parse(r.prizes_json)||[],capacity:r.capacity,source:'member'})));
+  return events;
+}
+async function community55Progress(env,member){
+  await community55Schema(env);
+  await ensureMemberCenter(env);
+  const stat=await env.DB.prepare("SELECT MAX(playtime_seconds) AS playtime_seconds,MAX(mob_kills) AS mob_kills,MAX(deaths) AS deaths,MAX(blocks_mined) AS blocks_mined FROM player_stat_snapshots WHERE application_id=?").bind(member.id).first();
+  const visited=await env.DB.prepare("SELECT COUNT(*) AS total FROM community_event_signups WHERE member_id=? AND state='attended'").bind(member.id).first();
+  const counts={playtime_seconds:Number(stat?.playtime_seconds)||0,mob_kills:Number(stat?.mob_kills)||0,
+    deaths:Number(stat?.deaths)||0,blocks_mined:Number(stat?.blocks_mined)||0,events_attended:Number(visited?.total)||0};
+  const rules=(await env.DB.prepare("SELECT * FROM community_achievement_rules WHERE enabled=1 ORDER BY id LIMIT 80").all()).results||[];
+  const now=new Date().toISOString();
+  for(const rule of rules)if((counts[rule.metric]||0)>=rule.target)
+    await env.DB.prepare("INSERT OR IGNORE INTO community_achievement_claims(rule_id,member_id,achieved_at) VALUES(?,?,?)").bind(rule.id,member.id,now).run();
+  const claims=(await env.DB.prepare("SELECT rule_id,achieved_at FROM community_achievement_claims WHERE member_id=?").bind(member.id).all()).results||[];
+  const byId=new Map(claims.map(r=>[r.rule_id,r.achieved_at]));
+  const awards=(await env.DB.prepare("SELECT event_id,rank,label,created_at FROM community_event_awards WHERE member_id=? ORDER BY created_at DESC LIMIT 30").bind(member.id).all()).results||[];
+  return {achievements:rules.map(r=>({id:r.id,title:r.title,description:r.description,metric:r.metric,target:r.target,
+    progress:Math.min(r.target,counts[r.metric]||0),earnedAt:byId.get(r.id)||null})),awards};
+}
+async function community55API(req,env,path,method){
+  await community55Schema(env);
+  const isAdmin=path.startsWith('/api/admin/');
+  const member=isAdmin?null:await playerSession(req,env);
+  if(isAdmin){if(!await admin(req,env))return bad('Akses Admin Control diperlukan.',401);}
+  else if(path==='/api/community/events'&&method==='GET'){
+    const settings=formFrom(await readSettingsRow(env)).settings;
+    const data=await community55PublicEvents(env,settings);
+    return J(data,200,{'Cache-Control':'private, no-store','Vary':'Cookie'});
+  }else if(!member||member.status!=='accepted')return bad('Hanya anggota berstatus Diterima dapat menggunakan fitur ini.',403);
+  if(!isAdmin && method!=='GET' && !(await memberStrongSession(req,env,member)))
+    return bad('Buka Profile dengan password Dashboard sebelum mengirim permintaan.',403);
+  if(method==='POST' && !(await rateLimit(env,req,'community55',30,900)))return bad('Terlalu banyak permintaan. Coba nanti.',429);
+  const now=new Date().toISOString();
+  if(path==='/api/community/events/my'&&method==='GET'){
+    const proposals=(await env.DB.prepare("SELECT id,executor,title,start_at,status,reason,created_at FROM community_event_proposals WHERE member_id=? ORDER BY created_at DESC LIMIT 30").bind(member.id).all()).results||[];
+    const joined=(await env.DB.prepare("SELECT event_id,state,joined_at,checked_in_at FROM community_event_signups WHERE member_id=? ORDER BY joined_at DESC LIMIT 40").bind(member.id).all()).results||[];
+    return J({proposals,joined});
+  }
+  if(path==='/api/community/events/propose'&&method==='POST'){
+    const x=await body(req,6000);
+    const executor=s(x.executor,120),title=s(x.title,140),technical=s(x.technical,1800),rawStart=s(x.startAt,45);
+    const start=Date.parse(rawStart),prizes=x.prizes;
+    if(!executor||!title||technical.length<20)return bad('Lengkapi nama pelaksana, event, dan teknis pelaksanaan minimal 20 karakter.',400);
+    if(!Number.isFinite(start)||start<Date.now()+3600000||start>Date.now()+2*365*86400000)return bad('Waktu mulai harus lebih dari satu jam mendatang dan maksimal dua tahun.',400);
+    if(!Array.isArray(prizes)||prizes.length<1||prizes.length>20||prizes.some((p,i)=>!s(p,180)))return bad('Isi minimal hadiah Juara 1, maksimal 20 peringkat.',400);
+    const active=await env.DB.prepare("SELECT COUNT(*) AS total FROM community_event_proposals WHERE member_id=? AND status='pending'").bind(member.id).first();
+    if(Number(active?.total)>=3)return bad('Maksimal 3 pengajuan yang masih menunggu persetujuan.',409);
+    const end=new Date(start+2*3600000).toISOString(),id='member-event-'+uid();
+    await env.DB.prepare("INSERT INTO community_event_proposals(id,member_id,executor,title,technical,start_at,end_at,prizes_json,status,reason,capacity,created_at) VALUES(?,?,?,?,?,?,?,?,'pending','',40,?)")
+      .bind(id,member.id,executor,title,technical,new Date(start).toISOString(),end,JSON.stringify(prizes.map((p,i)=>({rank:i+1,prize:s(p,180)}))),now).run();
+    return J({ok:true,id,status:'pending',message:'Pengajuan event berhasil dikirim dan menunggu persetujuan Admin Control.'},201);
+  }
+  if(path==='/api/community/events/join'&&method==='POST'){
+    const x=await body(req,700),id=s(x.eventId,100);
+    const event=await community55Event(env,id);
+    if(!event)return bad('Event tidak tersedia atau belum disetujui.',404);
+    if(Date.parse(event.startAt)<=Date.now())return bad('Pendaftaran event telah ditutup.',409);
+    const capacity=Number(event.capacity)||0;
+    const sql="INSERT OR IGNORE INTO community_event_signups(event_id,member_id,state,joined_at) SELECT ?,?,'registered',? WHERE EXISTS(SELECT 1 FROM submissions WHERE id=? AND status='accepted') AND (?=0 OR (SELECT COUNT(*) FROM community_event_signups WHERE event_id=? AND state IN ('registered','attended'))<?)";
+    const added=await env.DB.prepare(sql).bind(id,member.id,now,member.id,capacity,id,capacity).run();
+    if(!Number(added.meta?.changes))return bad('Sudah terdaftar atau kuota event sudah penuh.',409);
+    return J({ok:true,message:'Pendaftaran event berhasil.'},201);
+  }
+  if(path==='/api/community/achievements'&&method==='GET')
+    return J(await community55Progress(env,member));
+  if(path==='/api/admin/community/events'&&method==='GET'){
+    const proposals=(await env.DB.prepare("SELECT p.*,s.status AS member_status FROM community_event_proposals p LEFT JOIN submissions s ON s.id=p.member_id ORDER BY p.created_at DESC LIMIT 100").all()).results||[];
+    const eventId=s(new URL(req.url).searchParams.get('eventId'),100);
+    const signups=eventId?(await env.DB.prepare("SELECT r.member_id,r.state,r.joined_at,r.checked_in_at,s.status AS member_status FROM community_event_signups r JOIN submissions s ON s.id=r.member_id WHERE r.event_id=? ORDER BY r.joined_at LIMIT 200").bind(eventId).all()).results||[]:[];
+    const awards=eventId?(await env.DB.prepare("SELECT member_id,rank,label,created_at FROM community_event_awards WHERE event_id=? ORDER BY rank").bind(eventId).all()).results||[]:[];
+    return J({proposals,signups,awards});
+  }
+  if(path==='/api/admin/community/events/review'&&method==='POST'){
+    const x=await body(req,1500),id=s(x.id,100),action=s(x.action,12);
+    if(!['approved','rejected'].includes(action))return bad('Keputusan tidak valid.',400);
+    const reason=s(x.reason,500);
+    if(action==='rejected'&&!reason)return bad('Alasan penolakan wajib diisi.',400);
+    const cap=Number(x.capacity||40);
+    if(!Number.isInteger(cap)||cap<1||cap>500)return bad('Kapasitas peserta harus 1–500.',400);
+    const result=await env.DB.prepare("UPDATE community_event_proposals SET status=?,reason=?,capacity=?,reviewed_at=? WHERE id=? AND status='pending' AND EXISTS(SELECT 1 FROM submissions WHERE id=member_id AND status='accepted')")
+      .bind(action,reason,cap,now,id).run();
+    if(!Number(result.meta?.changes))return bad('Pengajuan tidak ada, sudah diproses, atau akun tidak lagi diterima.',409);
+    return J({ok:true,status:action});
+  }
+  if(path==='/api/admin/community/events/check-in'&&method==='POST'){
+    const x=await body(req,700),id=s(x.eventId,100),memberId=s(x.memberId,40);
+    const event=await community55Event(env,id);
+    if(!event)return bad('Event tidak ditemukan.',404);
+    const result=await env.DB.prepare("UPDATE community_event_signups SET state='attended',checked_in_at=? WHERE event_id=? AND member_id=? AND state='registered'")
+      .bind(now,id,memberId).run();
+    if(!Number(result.meta?.changes))return bad('Peserta belum terdaftar atau sudah check-in.',409);
+    return J({ok:true});
+  }
+  if(path==='/api/admin/community/events/award'&&method==='POST'){
+    const x=await body(req,1000),id=s(x.eventId,100),memberId=s(x.memberId,40),rank=Number(x.rank);
+    if(!Number.isInteger(rank)||rank<1||rank>20)return bad('Nomor juara tidak valid.',400);
+    const event=await community55Event(env,id);
+    if(!event)return bad('Event tidak ditemukan.',404);
+    const prize=(event.prizes||[]).find(p=>p.rank===rank);
+    const registered=await env.DB.prepare("SELECT state FROM community_event_signups WHERE event_id=? AND member_id=?").bind(id,memberId).first();
+    if(!registered||registered.state!=='attended')return bad('Pemenang harus peserta yang sudah check-in.',403);
+    const label=s(x.label,180)||prize?.prize||('Juara '+rank+' - '+event.title);
+    const result=await env.DB.prepare("INSERT OR IGNORE INTO community_event_awards(id,event_id,member_id,rank,label,created_at) VALUES(?,?,?,?,?,?)")
+      .bind(uid(),id,memberId,rank,label,now).run();
+    if(!Number(result.meta?.changes))return bad('Hadiah ini sudah diberikan kepada peserta.',409);
+    await ensureSocial(env);
+    await env.DB.prepare("INSERT INTO member_community_badges(id,application_id,title,description,granted_at) VALUES(?,?,?,?,?)")
+      .bind(uid(),memberId,'Juara '+rank+' · '+event.title,label,now).run();
+    return J({ok:true});
+  }
+  if(path==='/api/admin/community/achievements'&&method==='GET'){
+    return J({rules:(await env.DB.prepare("SELECT * FROM community_achievement_rules ORDER BY id LIMIT 80").all()).results||[]});
+  }
+  if(path==='/api/admin/community/achievements'&&method==='POST'){
+    const x=await body(req,1500),id=s(x.id,60),title=s(x.title,120),description=s(x.description,300),metric=s(x.metric,35),target=Number(x.target);
+    if(!/^[a-z0-9_-]{3,60}$/.test(id)||!title||!['playtime_seconds','mob_kills','deaths','blocks_mined','events_attended'].includes(metric)||!Number.isSafeInteger(target)||target<1||target>1000000000)return bad('Aturan achievement tidak valid.',400);
+    await env.DB.prepare("INSERT INTO community_achievement_rules(id,title,description,metric,target,enabled) VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET title=excluded.title,description=excluded.description,metric=excluded.metric,target=excluded.target,enabled=excluded.enabled")
+      .bind(id,title,description,metric,target,x.enabled===false?0:1).run();
+    return J({ok:true});
+  }
+  return bad('Endpoint Community Events tidak ditemukan.',404);
+}
+
 /* One inbox for official announcements and event reminders.
    Published announcements are not copied into every member's mailbox. */
 const noticeSchemaReady=new WeakSet();
@@ -5013,8 +5176,10 @@ async function route(req, env) {
     return await memberCenterAPI(req,env,path,method);
   if (path === '/api/events' && method === 'GET') {
     const settings = formFrom(await readSettingsRow(env)).settings;
-    return J(publicEvents(settings), 200, {'Cache-Control': 'public, max-age=45'});
+    return J(await community55PublicEvents(env,settings),200,{'Cache-Control':'private, no-store'});
   }
+  if ((path.startsWith('/api/community/')||path.startsWith('/api/admin/community/')) && ['GET','POST'].includes(method))
+    return await community55API(req,env,path,method);
   if (path === '/api/rules' && method === 'GET') {
     const settings = formFrom(await readSettingsRow(env)).settings;
     return J({ ...publicRules(settings), discordInviteUrl:settings.homeDiscordUrl||HOME_DEFAULTS.homeDiscordUrl, discordRequired:true, registrationOpen: settings.open === true,
