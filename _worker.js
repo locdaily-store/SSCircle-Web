@@ -2566,6 +2566,62 @@ async function memberCenterAPI(req,env,path,method) {
         allow_event_alerts:Number(value.allowEventAlerts)
       })});
     }
+    if(path==='/api/admin/social-settings'&&method==='GET'){
+      await ensureSocial(env);
+      return J({settings:await socialPolicy(env)});
+    }
+    if(path==='/api/admin/social-settings'&&method==='PUT'){
+      await ensureSocial(env);
+      const input=await body(req,500);
+      if(!input||typeof input.requestsEnabled!=='boolean'||
+        typeof input.badgesEnabled!=='boolean'||!Number.isInteger(input.maxPending)||
+        input.maxPending<1||input.maxPending>100)
+        return bad('Pengaturan komunitas tidak valid.',400);
+      await env.DB.prepare(`UPDATE member_social_policy SET
+        requests_enabled=?,max_pending=?,badges_enabled=?,updated_at=? WHERE id=1`)
+        .bind(Number(input.requestsEnabled),input.maxPending,
+          Number(input.badgesEnabled),new Date().toISOString()).run();
+      return J({ok:true,settings:await socialPolicy(env)});
+    }
+    if(path==='/api/admin/member-badges'){
+      await ensureSocial(env);
+      if(method==='GET'){
+        const rows=await env.DB.prepare(`SELECT b.id,b.application_id,b.title,b.description,
+          b.granted_at,COALESCE(p.display_name,'') AS member_name
+          FROM member_community_badges b
+          LEFT JOIN member_profiles p ON p.application_id=b.application_id
+          ORDER BY b.granted_at DESC LIMIT 100`).all();
+        return J({items:(rows.results||[]).map(b=>({id:b.id,memberId:b.application_id,
+          memberName:b.member_name,title:b.title,description:b.description,grantedAt:b.granted_at}))});
+      }
+      if(method==='POST'){
+        const value=await body(req,650),id=value?.memberId,title=value?.title?.trim(),
+          description=(value?.description||'').trim();
+        if(!SSC_SOCIAL_ID.test(id||'')||typeof title!=='string'||title.length<3||
+          title.length>50||typeof description!=='string'||description.length>160||
+          /[<>\x00-\x1f]/.test(title+description))
+          return bad('Data penghargaan tidak valid.',400);
+        const member=await env.DB.prepare("SELECT id FROM submissions WHERE id=? AND status='accepted'")
+          .bind(id).first();
+        if(!member)return bad('Anggota belum terdaftar sebagai member.',404);
+        const count=(await env.DB.prepare('SELECT COUNT(*) AS n FROM member_community_badges WHERE application_id=?')
+          .bind(id).first())?.n||0;
+        if(count>=50)return bad('Batas penghargaan anggota tercapai.',409);
+        const badgeId=crypto.randomUUID();
+        await env.DB.prepare(`INSERT INTO member_community_badges
+          (id,application_id,title,description,granted_at) VALUES(?,?,?,?,?)`)
+          .bind(badgeId,id,title,description,new Date().toISOString()).run();
+        return J({ok:true,id:badgeId});
+      }
+      if(method==='DELETE'){
+        const input=await body(req,200);
+        if(!SSC_SOCIAL_ID.test(input?.id||''))
+          return bad('Penghargaan tidak valid.',400);
+        const result=await env.DB.prepare('DELETE FROM member_community_badges WHERE id=?')
+          .bind(input.id).run();
+        return result.meta?.changes?J({ok:true}):bad('Penghargaan tidak ditemukan.',404);
+      }
+    }
     if (path==='/api/admin/member-revoke' && method==='POST') {
       const value=await body(req,1200);
       if(typeof value.id!=='string'||!/^[0-9a-f-]{36}$/.test(value.id))return bad('ID anggota tidak valid.',400);
