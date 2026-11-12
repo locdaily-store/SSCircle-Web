@@ -413,6 +413,8 @@ const HOME_DEFAULTS = {
   homeVotingResultsMode: 'after_end',
   homeVotingRequireCode: true,
   homeVotingSessionId: 'voting-1',
+  homeVotingTokenMode: 'global',
+  homeVotingTokens: 3,
   homeVotingImages: [],
   homeVotingOptions: [{ id: 'opsi-1', label: 'Pilihan 1' }, { id: 'opsi-2', label: 'Pilihan 2' }, { id: 'opsi-3', label: 'Pilihan 3' }],
   homeVotingQuestions: null,
@@ -773,10 +775,10 @@ function validVotingQuestions(input, legacy) {
     const images = Array.isArray(q?.images) ? q.images : [];
     if (images.length > 8) throw Error('Maksimal 8 foto untuk satu pertanyaan.');
     return {id,title,description:s(q?.description,500),images:[...new Set(images.map(v=>imageSource(v,'Foto voting')))],
-      options:validVotingOptions(q?.options)};
+      options:validVotingOptions(q?.options),tokens:q?.tokens===undefined?3:Number(q.tokens)};
   });
 }
-function validVotingVotes(input, questions) {
+function validVotingVotes(input, questions, mode='global', globalTokens=3) {
   const votes=Array.isArray(input)?input:[];
   const valid=new Map(questions.map(q=>[q.id,new Set(q.options.map(o=>o.id))]));
   const seen=new Set(),counts=new Map();
@@ -786,7 +788,9 @@ function validVotingVotes(input, questions) {
     const questionId=s(v?.questionId,64)||'question-1';
     const optionId=s(v?.optionId,64);
     const group=questionId+'|'+voterKey,unique=group+'|'+optionId;
-    if(!voterKey||!valid.get(questionId)?.has(optionId)||seen.has(unique)||(counts.get(group)||0)>=3)return [];
+    const config=questions.find(q=>q.id===questionId);
+    const limit=mode==='per-question'?config?.tokens:globalTokens;
+    if(!voterKey||!valid.get(questionId)?.has(optionId)||seen.has(unique)||(counts.get(group)||0)>=limit)return [];
     seen.add(unique);counts.set(group,(counts.get(group)||0)+1);
     return [{questionId,account,optionId,voterKey,createdAt:s(v?.createdAt,40)||new Date().toISOString()}];
   });
@@ -866,9 +870,13 @@ async function publicVotingPayload(env, application=null) {
     const id=vote.questionId||'question-1';
     (usedOptions[id]??=[]).push(vote.optionId);
   }
-  const tokensPerQuestion=3;
-  const remainingTokens=Object.fromEntries(runtime.questions.map(q=>
-    [q.id,Math.max(0,Math.min(tokensPerQuestion,q.options.length)-(usedOptions[q.id]||[]).length)]));
+  const tokensPerQuestion=Number(settings.homeVotingTokens)||3;
+  const questionTokens=Object.fromEntries(runtime.questions.map(q=>[
+    q.id,settings.homeVotingTokenMode==='per-question'?Number(q.tokens||3):tokensPerQuestion
+  ]));
+  const remainingTokens=Object.fromEntries(runtime.questions.map(q=>[
+    q.id,Math.max(0,questionTokens[q.id]-(usedOptions[q.id]||[]).length)
+  ]));
   const votedQuestionIds=Object.keys(remainingTokens).filter(id=>remainingTokens[id]===0);
   return {
     enabled:settings.homeVotingEnabled===true,title:settings.homeVotingTitle,
@@ -878,8 +886,8 @@ async function publicVotingPayload(env, application=null) {
     active:runtime.active,expired:runtime.expired,deadlineLabel:settings.homeVotingDeadlineLabel,
     options:runtime.options,results:runtime.showResults?runtime.results:[],
     showResults:runtime.showResults,totalVotes:runtime.showResults?runtime.total:0,
-    votedQuestionIds,tokensPerQuestion,usedOptions,remainingTokens,
-    questions:runtime.questions.map(q=>({id:q.id,title:q.title,description:q.description,
+    votedQuestionIds,tokensPerQuestion,questionTokens,usedOptions,remainingTokens,
+    questions:runtime.questions.map(q=>({id:q.id,title:q.title,description:q.description,tokens:questionTokens[q.id],
       images:settings.homeVotingShowImage!==false?q.images:[],options:q.options,
       results:runtime.showResults?q.results:[],totalVotes:runtime.showResults?q.totalVotes:0,
       showResults:runtime.showResults}))
@@ -899,9 +907,10 @@ async function submitVote(env, req) {
   if (!application) return bad('Masuk menggunakan kode pendaftaran terlebih dahulu.',401);
   if (application.status!==VOTING_ACCEPTED_STATUS) return bad('Voting hanya untuk pendaftar yang Diterima.',403);
   const voterKey='app:'+application.id,safeAccount='Pendaftar '+application.id.slice(0,8).toUpperCase();
+  const tokenCap=settings.homeVotingTokenMode==='per-question'?Number(question.tokens||3):Number(settings.homeVotingTokens||3);
   const existing=runtime.votes.filter(v=>(v.questionId||'question-1')===questionId&&v.voterKey===voterKey);
   if(existing.some(v=>v.optionId===optionId))return bad('Pilihan ini sudah kamu vote. Pilih jawaban yang berbeda.',409);
-  if(existing.length>=3)return bad('Ketiga token voting untuk pertanyaan ini sudah digunakan.',409);
+  if(existing.length>=tokenCap)return bad('Token voting untuk pertanyaan ini sudah digunakan seluruhnya.',409);
   if(runtime.votes.length>=5000)return bad('Batas suara voting tercapai. Hubungi admin.',409);
   const now=new Date().toISOString(),vote={questionId,voterKey,account:safeAccount,optionId,createdAt:now};
   const firstId='question-1';
@@ -915,14 +924,15 @@ async function submitVote(env, req) {
     AND EXISTS (SELECT 1 FROM submissions WHERE id=? AND status='accepted')
     AND (EXISTS (SELECT 1 FROM json_each(settings,'$.homeVotingQuestions') WHERE json_extract(value,'$.id')=?)
       OR (?=? AND (json_type(settings,'$.homeVotingQuestions') IS NULL OR json_type(settings,'$.homeVotingQuestions')='null')))
+    AND COALESCE(updated_at,'')=?
     AND (SELECT COUNT(*) FROM json_each(COALESCE(json_extract(settings,'$.homeVotingVotes'),'[]'))
       WHERE json_extract(value,'$.voterKey')=?
-      AND (json_extract(value,'$.questionId')=? OR (json_extract(value,'$.questionId') IS NULL AND ?=?)))<3
+      AND (json_extract(value,'$.questionId')=? OR (json_extract(value,'$.questionId') IS NULL AND ?=?)))<?
     AND NOT EXISTS (SELECT 1 FROM json_each(COALESCE(json_extract(settings,'$.homeVotingVotes'),'[]'))
       WHERE json_extract(value,'$.voterKey')=? AND json_extract(value,'$.optionId')=?
       AND (json_extract(value,'$.questionId')=? OR (json_extract(value,'$.questionId') IS NULL AND ?=?)))`)
     .bind(JSON.stringify(vote),settings.homeVotingSessionId||'voting-1',now,application.id,
-      questionId,questionId,firstId,voterKey,questionId,questionId,firstId,voterKey,optionId,questionId,questionId,firstId).run();
+      questionId,questionId,firstId,row.updated_at||'',voterKey,questionId,questionId,firstId,tokenCap,voterKey,optionId,questionId,questionId,firstId).run();
   if (!Number(res.meta?.changes||0)) return bad('Suara belum tersimpan. Muat ulang halaman dan coba lagi.',409);
   const payload=await publicVotingPayload(env,application);
   return J({ok:true,message:'Satu token voting berhasil digunakan.',remainingTokens:payload.remainingTokens,questions:payload.questions,
@@ -1343,14 +1353,27 @@ function settingsValid(input) {
     throw Error('Waktu akhir voting tidak valid.');
   out.homeVotingEndsAt = votingEndsAt;
   out.homeVotingResultsMode = ['always', 'after_end', 'hidden'].includes(input.homeVotingResultsMode) ? input.homeVotingResultsMode : HOME_DEFAULTS.homeVotingResultsMode;
+  out.homeVotingTokenMode = input.homeVotingTokenMode === 'per-question' ? 'per-question' : 'global';
+  const globalTokens = Number(input.homeVotingTokens ?? HOME_DEFAULTS.homeVotingTokens);
+  if (!Number.isInteger(globalTokens) || globalTokens < 1 || globalTokens > 20)
+    throw Error('Jumlah token voting harus 1 sampai 20.');
+  out.homeVotingTokens = globalTokens;
   out.homeVotingOptions = validVotingOptions(input.homeVotingOptions === undefined ? HOME_DEFAULTS.homeVotingOptions : input.homeVotingOptions);
   out.homeVotingQuestions = validVotingQuestions(input.homeVotingQuestions, {...HOME_DEFAULTS,...input,homeVotingOptions:out.homeVotingOptions});
   if (out.homeVotingEnabled && !out.homeVotingQuestion)
     throw Error('Isi pertanyaan voting sebelum mengaktifkannya.');
-  if(out.homeVotingEnabled && out.homeVotingQuestions.some(q=>q.options.length<3))
-    throw Error('Setiap pertanyaan voting aktif membutuhkan minimal 3 pilihan berbeda untuk tiga token.');
+  for (const q of out.homeVotingQuestions) {
+    if (!Number.isInteger(q.tokens) || q.tokens < 1 || q.tokens > 20)
+      throw Error('Token setiap pertanyaan harus 1 sampai 20.');
+    const cap = out.homeVotingTokenMode === 'per-question' ? q.tokens : out.homeVotingTokens;
+    if (out.homeVotingEnabled && q.options.length < cap)
+      throw Error('Jumlah pilihan pada "' + q.title + '" harus minimal ' + cap + ' agar setiap token memilih jawaban berbeda.');
+  }
   out.homeVotingRequireCode = true;
-  out.homeVotingVotes = validVotingVotes(input.homeVotingVotes === undefined ? HOME_DEFAULTS.homeVotingVotes : input.homeVotingVotes, out.homeVotingQuestions);
+  out.homeVotingVotes = validVotingVotes(
+    input.homeVotingVotes === undefined ? HOME_DEFAULTS.homeVotingVotes : input.homeVotingVotes,
+    out.homeVotingQuestions, out.homeVotingTokenMode, out.homeVotingTokens
+  );
   out.homeLeaderboardSeasons = validLeaderboard(input.homeLeaderboardSeasons === undefined ? HOME_DEFAULTS.homeLeaderboardSeasons : input.homeLeaderboardSeasons);
   const selectedStatSeason=s(input.statSeasonId||'',64);
   if(selectedStatSeason && !out.homeLeaderboardSeasons.some(season=>season.id===selectedStatSeason))
@@ -5491,10 +5514,22 @@ async function route(req, env) {
           ? persistedVoting.statSeasonActivatedAt : new Date().toISOString()
         : '';
       const oldQuestions=votingQuestions(persistedVoting),newQuestions=settings.homeVotingQuestions;
-      const previouslyUsed=(persistedVoting.homeVotingVotes||[]).map(v=>({questionId:v.questionId||'question-1',optionId:v.optionId}));
+      const previouslyUsed=(persistedVoting.homeVotingVotes||[]).map(v=>({
+        questionId:v.questionId||'question-1',optionId:v.optionId,voterKey:v.voterKey
+      }));
       const requestedOptions=new Set(newQuestions.flatMap(q=>q.options.map(o=>q.id+'|'+o.id)));
       if (previouslyUsed.some(v=>!requestedOptions.has(v.questionId+'|'+v.optionId)))
         return bad('Pilihan yang sudah memiliki suara tidak dapat dihapus. Mulai sesi voting baru terlebih dahulu.', 409);
+      const totals=new Map();
+      for(const vote of previouslyUsed){
+        const key=vote.questionId+'|'+vote.voterKey;
+        totals.set(key,(totals.get(key)||0)+1);
+      }
+      const limits=new Map(newQuestions.map(q=>[
+        q.id,settings.homeVotingTokenMode==='per-question'?q.tokens:settings.homeVotingTokens
+      ]));
+      if([...totals].some(([key,total])=>total>(limits.get(key.split('|')[0])||0)))
+        return bad('Jumlah token tidak dapat dikurangi di bawah suara yang sudah dipakai. Reset sesi voting terlebih dahulu.',409);
       const activeVideoId = videoIdFromURL(settings.homeVideoUrl);
       if (activeVideoId) {
         const video = await env.DB.prepare("SELECT id FROM media WHERE id=? AND visibility='public' AND mime_type IN ('video/mp4','video/webm')").bind(activeVideoId).first();
