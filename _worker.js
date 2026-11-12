@@ -414,7 +414,7 @@ const HOME_DEFAULTS = {
   homeVotingRequireCode: true,
   homeVotingSessionId: 'voting-1',
   homeVotingImages: [],
-  homeVotingOptions: [{ id: 'opsi-1', label: 'Pilihan 1' }, { id: 'opsi-2', label: 'Pilihan 2' }],
+  homeVotingOptions: [{ id: 'opsi-1', label: 'Pilihan 1' }, { id: 'opsi-2', label: 'Pilihan 2' }, { id: 'opsi-3', label: 'Pilihan 3' }],
   homeVotingQuestions: null,
   homeVotingVotes: [],
   seasonArchiveEnabled: false,
@@ -1347,6 +1347,8 @@ function settingsValid(input) {
   out.homeVotingQuestions = validVotingQuestions(input.homeVotingQuestions, {...HOME_DEFAULTS,...input,homeVotingOptions:out.homeVotingOptions});
   if (out.homeVotingEnabled && !out.homeVotingQuestion)
     throw Error('Isi pertanyaan voting sebelum mengaktifkannya.');
+  if(out.homeVotingEnabled && out.homeVotingQuestions.some(q=>q.options.length<3))
+    throw Error('Setiap pertanyaan voting aktif membutuhkan minimal 3 pilihan berbeda untuk tiga token.');
   out.homeVotingRequireCode = true;
   out.homeVotingVotes = validVotingVotes(input.homeVotingVotes === undefined ? HOME_DEFAULTS.homeVotingVotes : input.homeVotingVotes, out.homeVotingQuestions);
   out.homeLeaderboardSeasons = validLeaderboard(input.homeLeaderboardSeasons === undefined ? HOME_DEFAULTS.homeLeaderboardSeasons : input.homeLeaderboardSeasons);
