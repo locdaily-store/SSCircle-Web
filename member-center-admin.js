@@ -180,6 +180,8 @@ window.SSCircleMemberCenterAdmin = (() => {
       content.append(el('p','member-admin-advisory','Waktu bermain, kematian dan mob kill per season belum tersedia sampai plugin terverifikasi mengirim data.'));
     }
     content.append(note);root.append(content);
+    if(current==='policy'||current==='awards')
+      void window.SSCircleCommunityAdmin?.render(current,content,snapshot,message);
   }
   async function issueInvite(member){
     if(member.status!=='accepted')return;

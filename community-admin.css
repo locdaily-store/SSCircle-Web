@@ -1,0 +1,10 @@
+.ssc-community-admin{margin-top:20px;border:1px solid var(--ssc-border,rgba(150,144,180,.35));border-radius:16px;padding:16px;display:grid;gap:12px;min-width:0}
+.ssc-community-admin-head h3{margin:0 0 6px}
+.ssc-community-admin-head p{margin:0;opacity:.78}
+.ssc-community-admin-field{display:grid;gap:6px;min-width:0}
+.ssc-community-admin-field input,.ssc-community-admin-field select,.ssc-community-admin-field textarea{width:100%;box-sizing:border-box;min-width:0;max-width:100%;padding:10px;border-radius:10px;background:var(--ssc-input,#211d30);color:var(--ssc-text,#f5f4ff);border:1px solid var(--ssc-border,#68617a);color-scheme:dark;font:inherit}
+.ssc-community-admin-list{display:grid;gap:8px;min-width:0}
+.ssc-community-admin-badge{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;border:1px solid var(--ssc-border,rgba(150,144,180,.35));border-radius:12px;padding:12px}
+.ssc-community-admin-badge>div{min-width:0;flex:1 1 180px;overflow-wrap:anywhere}
+.ssc-community-admin-badge small{display:block;opacity:.75;margin-top:5px}
+@media(max-width:620px){.ssc-community-admin{padding:12px}.ssc-community-admin-badge .button{width:100%}}
