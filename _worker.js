@@ -2568,7 +2568,12 @@ async function memberCenterAPI(req,env,path,method) {
     }
     if(path==='/api/admin/social-settings'&&method==='GET'){
       await ensureSocial(env);
-      return J({settings:await socialPolicy(env)});
+      const rows=await env.DB.prepare(`SELECT status,COUNT(*) AS n
+        FROM member_friendships GROUP BY status`).all();
+      const counts=Object.fromEntries((rows.results||[]).map(x=>[x.status,x.n]));
+      const awards=(await env.DB.prepare('SELECT COUNT(*) AS n FROM member_community_badges').first())?.n||0;
+      return J({settings:await socialPolicy(env),overview:{
+        friends:counts.accepted||0,pending:counts.pending||0,badges:awards}});
     }
     if(path==='/api/admin/social-settings'&&method==='PUT'){
       await ensureSocial(env);

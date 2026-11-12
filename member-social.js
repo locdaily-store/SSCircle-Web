@@ -174,6 +174,9 @@
    const visible=friends.filter(f=>f.relationship===activeTab&&
      (!filter||(f.displayName||'').toLocaleLowerCase('id-ID').includes(filter)||
        (f.memberId||'').toLocaleLowerCase('id-ID').includes(filter)));
+   if($('ssc-social-friend-order').value==='name')
+     visible.sort((a,b)=>(a.displayName||'').localeCompare(b.displayName||'','id-ID'));
+   else visible.sort((a,b)=>String(b.updatedAt||'').localeCompare(String(a.updatedAt||'')));
    if(!visible.length){
      const empty={friends:'Belum ada teman. Cari member untuk menambah teman.',
        incoming:'Belum ada permintaan pertemanan masuk.',
@@ -308,6 +311,7 @@
  for(const id of ['ssc-social-order','ssc-social-edition'])
    $(id).addEventListener('change',()=>void loadDirectory(true));
  $('ssc-social-friend-search').addEventListener('input',renderFriends);
+ $('ssc-social-friend-order').addEventListener('change',renderFriends);
  $('ssc-social-search').addEventListener('input',()=>{
    clearTimeout(searchTimer);
    const value=$('ssc-social-search').value.trim();

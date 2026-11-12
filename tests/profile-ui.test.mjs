@@ -280,7 +280,8 @@ test('V10.52 keeps three Profile categories and official server wording',()=>{
  const social=source('member-social.js');
  const community=source('community-admin.js');
  for(const id of ['ssc-allow-friends','ssc-show-friends','ssc-show-mutual',
-   'ssc-show-badges','ssc-social-order','ssc-social-edition','ssc-social-friend-search'])
+   'ssc-show-badges','ssc-social-order','ssc-social-edition','ssc-social-friend-search',
+   'ssc-social-friend-order'])
    assert.match(profile,new RegExp('id="'+id+'"'));
  assert.match(profile,/value="friends"/);
  assert.match(admin,/community-admin\.js\?v=10\.52\.4/);

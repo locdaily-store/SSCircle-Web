@@ -37,8 +37,13 @@ window.SSCircleCommunityAdmin=(()=>{
     panel.append(title('Pengaturan komunitas','Kelola permintaan pertemanan dan badge anggota SSCircle.'));
     parent.append(panel);
     try{
-      const settings=(await api('/api/admin/social-settings')).settings||{};
+      const data=await api('/api/admin/social-settings');
+      const settings=data.settings||{};
       if(!panel.isConnected)return;
+      const summary=data.overview||{};
+      panel.append(element('p','ssc-community-overview',
+        'Pertemanan aktif: '+(summary.friends||0)+' · Permintaan menunggu: '+
+        (summary.pending||0)+' · Badge diberikan: '+(summary.badges||0)));
       const requests=check('Izinkan permintaan pertemanan',settings.requestsEnabled!==false);
       const badges=check('Tampilkan badge komunitas',settings.badgesEnabled!==false);
       const max=element('input');max.type='number';max.min='1';max.max='100';
