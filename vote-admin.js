@@ -487,7 +487,7 @@ window.SSCircleVoteAdmin = (() => {
     const mode = select(controls, 'homeVotingResultsMode', 'Tampilkan hasil kepada pengunjung', [['after_end', 'Setelah sesi berakhir'], ['always', 'Selama dan setelah voting'], ['hidden', 'Hanya admin']]);
     mode.classList.add('ssc-vote-control');
     host.append(statusCard);
-    const questionCard=card('02 · Daftar Pertanyaan', 'Satu pemain mendapat satu suara untuk setiap pertanyaan. Seret ikon ⠿ untuk mengurutkan. Setelah ada suara, reset sesi sebelum menghapus pertanyaan atau pilihan yang sudah dipilih.');
+    const questionCard=card('02 · Daftar Pertanyaan', 'Setiap anggota Diterima mendapat 3 token per pertanyaan dan wajib memilih jawaban berbeda. Seret ikon ⠿ untuk mengurutkan. Setelah ada suara, reset sesi sebelum menghapus pertanyaan atau pilihan yang sudah dipilih.');
     field(questionCard,'homeVotingTitle','Judul halaman voting');
     field(questionCard,'homeVotingText','Deskripsi halaman',{multiline:true,max:500});
     field(questionCard,'homeVotingButton','Teks tombol di Homepage',{max:90});
