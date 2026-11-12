@@ -414,7 +414,7 @@ const HOME_DEFAULTS = {
   homeVotingRequireCode: true,
   homeVotingSessionId: 'voting-1',
   homeVotingImages: [],
-  homeVotingOptions: [{ id: 'opsi-1', label: 'Pilihan 1' }, { id: 'opsi-2', label: 'Pilihan 2' }],
+  homeVotingOptions: [{ id: 'opsi-1', label: 'Pilihan 1' }, { id: 'opsi-2', label: 'Pilihan 2' }, { id: 'opsi-3', label: 'Pilihan 3' }],
   homeVotingQuestions: null,
   homeVotingVotes: [],
   seasonArchiveEnabled: false,
@@ -777,16 +777,17 @@ function validVotingQuestions(input, legacy) {
   });
 }
 function validVotingVotes(input, questions) {
-  const votes = Array.isArray(input) ? input : [];
-  const valid = new Map(questions.map(q=>[q.id,new Set(q.options.map(o=>o.id))]));
-  const seen = new Set(), first = questions[0]?.id;
+  const votes=Array.isArray(input)?input:[];
+  const valid=new Map(questions.map(q=>[q.id,new Set(q.options.map(o=>o.id))]));
+  const seen=new Set(),counts=new Map();
   return votes.slice(0,5000).flatMap(v=>{
     const account=s(v?.account,40).replace(/\s+/g,' ').trim();
-    const voterKey=s(v?.voterKey,128) || ('name:'+account.toLowerCase());
-    const questionId=s(v?.questionId,64) || 'question-1';
-    const optionId=s(v?.optionId,64),unique=questionId+'|'+voterKey;
-    if (!voterKey || !valid.get(questionId)?.has(optionId) || seen.has(unique)) return [];
-    seen.add(unique);
+    const voterKey=s(v?.voterKey,128)||('name:'+account.toLowerCase());
+    const questionId=s(v?.questionId,64)||'question-1';
+    const optionId=s(v?.optionId,64);
+    const group=questionId+'|'+voterKey,unique=group+'|'+optionId;
+    if(!voterKey||!valid.get(questionId)?.has(optionId)||seen.has(unique)||(counts.get(group)||0)>=3)return [];
+    seen.add(unique);counts.set(group,(counts.get(group)||0)+1);
     return [{questionId,account,optionId,voterKey,createdAt:s(v?.createdAt,40)||new Date().toISOString()}];
   });
 }
@@ -860,7 +861,15 @@ async function readSettingsRow(env) {
 async function publicVotingPayload(env, application=null) {
   const {settings}=formFrom(await readSettingsRow(env)),runtime=votingRuntime(settings);
   const key=application?'app:'+application.id:null;
-  const votedQuestionIds=key?runtime.votes.filter(v=>v.voterKey===key).map(v=>v.questionId||'question-1'):[];
+  const usedOptions={};
+  if(key)for(const vote of runtime.votes.filter(v=>v.voterKey===key)){
+    const id=vote.questionId||'question-1';
+    (usedOptions[id]??=[]).push(vote.optionId);
+  }
+  const tokensPerQuestion=3;
+  const remainingTokens=Object.fromEntries(runtime.questions.map(q=>
+    [q.id,Math.max(0,Math.min(tokensPerQuestion,q.options.length)-(usedOptions[q.id]||[]).length)]));
+  const votedQuestionIds=Object.keys(remainingTokens).filter(id=>remainingTokens[id]===0);
   return {
     enabled:settings.homeVotingEnabled===true,title:settings.homeVotingTitle,
     question:runtime.questions[0]?.title||'',text:settings.homeVotingText,
@@ -869,7 +878,7 @@ async function publicVotingPayload(env, application=null) {
     active:runtime.active,expired:runtime.expired,deadlineLabel:settings.homeVotingDeadlineLabel,
     options:runtime.options,results:runtime.showResults?runtime.results:[],
     showResults:runtime.showResults,totalVotes:runtime.showResults?runtime.total:0,
-    votedQuestionIds,
+    votedQuestionIds,tokensPerQuestion,usedOptions,remainingTokens,
     questions:runtime.questions.map(q=>({id:q.id,title:q.title,description:q.description,
       images:settings.homeVotingShowImage!==false?q.images:[],options:q.options,
       results:runtime.showResults?q.results:[],totalVotes:runtime.showResults?q.totalVotes:0,
@@ -890,9 +899,10 @@ async function submitVote(env, req) {
   if (!application) return bad('Masuk menggunakan kode pendaftaran terlebih dahulu.',401);
   if (application.status!==VOTING_ACCEPTED_STATUS) return bad('Voting hanya untuk pendaftar yang Diterima.',403);
   const voterKey='app:'+application.id,safeAccount='Pendaftar '+application.id.slice(0,8).toUpperCase();
-  const already=runtime.votes.some(v=>(v.questionId||'question-1')===questionId && v.voterKey===voterKey);
-  if (already) return bad('Kamu sudah memberikan suara untuk pertanyaan ini.',409);
-  if (runtime.votes.length>=5000) return bad('Batas suara voting tercapai. Hubungi admin.',409);
+  const existing=runtime.votes.filter(v=>(v.questionId||'question-1')===questionId&&v.voterKey===voterKey);
+  if(existing.some(v=>v.optionId===optionId))return bad('Pilihan ini sudah kamu vote. Pilih jawaban yang berbeda.',409);
+  if(existing.length>=3)return bad('Ketiga token voting untuk pertanyaan ini sudah digunakan.',409);
+  if(runtime.votes.length>=5000)return bad('Batas suara voting tercapai. Hubungi admin.',409);
   const now=new Date().toISOString(),vote={questionId,voterKey,account:safeAccount,optionId,createdAt:now};
   const firstId='question-1';
   const res=await env.DB.prepare(`UPDATE form_config
@@ -905,14 +915,17 @@ async function submitVote(env, req) {
     AND EXISTS (SELECT 1 FROM submissions WHERE id=? AND status='accepted')
     AND (EXISTS (SELECT 1 FROM json_each(settings,'$.homeVotingQuestions') WHERE json_extract(value,'$.id')=?)
       OR (?=? AND (json_type(settings,'$.homeVotingQuestions') IS NULL OR json_type(settings,'$.homeVotingQuestions')='null')))
-    AND NOT EXISTS (SELECT 1 FROM json_each(COALESCE(json_extract(settings,'$.homeVotingVotes'),'[]'))
+    AND (SELECT COUNT(*) FROM json_each(COALESCE(json_extract(settings,'$.homeVotingVotes'),'[]'))
       WHERE json_extract(value,'$.voterKey')=?
+      AND (json_extract(value,'$.questionId')=? OR (json_extract(value,'$.questionId') IS NULL AND ?=?)))<3
+    AND NOT EXISTS (SELECT 1 FROM json_each(COALESCE(json_extract(settings,'$.homeVotingVotes'),'[]'))
+      WHERE json_extract(value,'$.voterKey')=? AND json_extract(value,'$.optionId')=?
       AND (json_extract(value,'$.questionId')=? OR (json_extract(value,'$.questionId') IS NULL AND ?=?)))`)
     .bind(JSON.stringify(vote),settings.homeVotingSessionId||'voting-1',now,application.id,
-      questionId,questionId,firstId,voterKey,questionId,questionId,firstId).run();
+      questionId,questionId,firstId,voterKey,questionId,questionId,firstId,voterKey,optionId,questionId,questionId,firstId).run();
   if (!Number(res.meta?.changes||0)) return bad('Suara belum tersimpan. Muat ulang halaman dan coba lagi.',409);
   const payload=await publicVotingPayload(env,application);
-  return J({ok:true,message:'Suara untuk pertanyaan ini berhasil dikirim.',questions:payload.questions,
+  return J({ok:true,message:'Satu token voting berhasil digunakan.',remainingTokens:payload.remainingTokens,questions:payload.questions,
     results:payload.results,showResults:payload.showResults,totalVotes:payload.totalVotes});
 }
 // Validasi pengaturan dari Admin Control
@@ -1334,6 +1347,8 @@ function settingsValid(input) {
   out.homeVotingQuestions = validVotingQuestions(input.homeVotingQuestions, {...HOME_DEFAULTS,...input,homeVotingOptions:out.homeVotingOptions});
   if (out.homeVotingEnabled && !out.homeVotingQuestion)
     throw Error('Isi pertanyaan voting sebelum mengaktifkannya.');
+  if(out.homeVotingEnabled && out.homeVotingQuestions.some(q=>q.options.length<3))
+    throw Error('Setiap pertanyaan voting aktif membutuhkan minimal 3 pilihan berbeda untuk tiga token.');
   out.homeVotingRequireCode = true;
   out.homeVotingVotes = validVotingVotes(input.homeVotingVotes === undefined ? HOME_DEFAULTS.homeVotingVotes : input.homeVotingVotes, out.homeVotingQuestions);
   out.homeLeaderboardSeasons = validLeaderboard(input.homeLeaderboardSeasons === undefined ? HOME_DEFAULTS.homeLeaderboardSeasons : input.homeLeaderboardSeasons);
@@ -4519,6 +4534,186 @@ async function socialAPI(req,env,path,method){
 }
 
 
+
+/* Community Events & Achievements V10.55: separate tables, never rewrite legacy events. */
+const community55Ready=new WeakSet();
+async function community55Schema(env){
+  if(community55Ready.has(env.DB))return;
+  for(const sql of [
+    "CREATE TABLE IF NOT EXISTS community_event_proposals(id TEXT PRIMARY KEY,member_id TEXT NOT NULL,executor TEXT NOT NULL,title TEXT NOT NULL,technical TEXT NOT NULL,start_at TEXT NOT NULL,end_at TEXT NOT NULL,prizes_json TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'pending',reason TEXT NOT NULL DEFAULT '',capacity INTEGER NOT NULL DEFAULT 40,created_at TEXT NOT NULL,reviewed_at TEXT,FOREIGN KEY(member_id) REFERENCES submissions(id) ON DELETE CASCADE)",
+    "CREATE INDEX IF NOT EXISTS idx_c55_proposals_status ON community_event_proposals(status,start_at)",
+    "CREATE TABLE IF NOT EXISTS community_event_signups(event_id TEXT NOT NULL,member_id TEXT NOT NULL,state TEXT NOT NULL DEFAULT 'registered',joined_at TEXT NOT NULL,checked_in_at TEXT,PRIMARY KEY(event_id,member_id),FOREIGN KEY(member_id) REFERENCES submissions(id) ON DELETE CASCADE)",
+    "CREATE INDEX IF NOT EXISTS idx_c55_signups_event ON community_event_signups(event_id,state)",
+    "CREATE TABLE IF NOT EXISTS community_event_awards(id TEXT PRIMARY KEY,event_id TEXT NOT NULL,member_id TEXT NOT NULL,rank INTEGER NOT NULL,label TEXT NOT NULL,created_at TEXT NOT NULL,UNIQUE(event_id,member_id,rank),FOREIGN KEY(member_id) REFERENCES submissions(id) ON DELETE CASCADE)",
+    "CREATE INDEX IF NOT EXISTS idx_c55_awards_member ON community_event_awards(member_id,created_at)",
+    "CREATE TABLE IF NOT EXISTS community_achievement_rules(id TEXT PRIMARY KEY,title TEXT NOT NULL,description TEXT NOT NULL DEFAULT '',metric TEXT NOT NULL,target INTEGER NOT NULL,enabled INTEGER NOT NULL DEFAULT 1)",
+    "CREATE TABLE IF NOT EXISTS community_achievement_claims(rule_id TEXT NOT NULL,member_id TEXT NOT NULL,achieved_at TEXT NOT NULL,PRIMARY KEY(rule_id,member_id),FOREIGN KEY(member_id) REFERENCES submissions(id) ON DELETE CASCADE)"
+  ])await env.DB.prepare(sql).run();
+  for(const [id,title,description,metric,target] of [
+    ['dedicated-player','Dedicated Player','Bermain selama 100 jam','playtime_seconds',360000],
+    ['monster-hunter','Monster Hunter','Mengalahkan 1000 mob','mob_kills',1000],
+    ['event-explorer','Event Explorer','Menghadiri tiga event komunitas','events_attended',3]
+  ])await env.DB.prepare("INSERT OR IGNORE INTO community_achievement_rules(id,title,description,metric,target,enabled) VALUES(?,?,?,?,?,1)")
+    .bind(id,title,description,metric,target).run();
+  community55Ready.add(env.DB);
+}
+async function community55Event(env,id){
+  const proposal=await env.DB.prepare("SELECT * FROM community_event_proposals WHERE id=? AND status='approved'").bind(id).first();
+  if(proposal)return {id:proposal.id,title:proposal.title,description:proposal.technical,startAt:proposal.start_at,endAt:proposal.end_at,
+    executor:proposal.executor,prizes:parse(proposal.prizes_json)||[],capacity:proposal.capacity,source:'member'};
+  const settings=formFrom(await readSettingsRow(env)).settings;
+  if(settings.eventsEnabled===false)return null;
+  const event=(settings.eventsItems||[]).find(x=>x.id===id);
+  return event?{...event,capacity:0,source:'admin'}:null;
+}
+async function community55PublicEvents(env,settings){
+  const events=publicEvents(settings);
+  if(!events.enabled)return events;
+  try{
+    await community55Schema(env);
+    const rows=await env.DB.prepare("SELECT id,title,technical,start_at,end_at,executor,prizes_json,capacity FROM community_event_proposals WHERE status='approved' ORDER BY start_at DESC LIMIT 40").all();
+    events.events.push(...(rows.results||[]).map(r=>({id:r.id,title:r.title,description:r.technical,
+      startAt:r.start_at,endAt:r.end_at,location:'SSCIRCLE Community',image:'',executor:r.executor,
+      prizes:parse(r.prizes_json)||[],capacity:r.capacity,source:'member'})));
+  }catch(error){
+    // Existing Event Calendar stays available even when the optional new tables are not ready.
+    console.error('[SSCircle community] Event proposals not available:',String(error?.message||error));
+  }
+  return events;
+}
+async function community55Progress(env,member){
+  await community55Schema(env);
+  await ensureMemberCenter(env);
+  const stat=await env.DB.prepare("SELECT MAX(playtime_seconds) AS playtime_seconds,MAX(mob_kills) AS mob_kills,MAX(deaths) AS deaths,MAX(blocks_mined) AS blocks_mined FROM player_stat_snapshots WHERE application_id=?").bind(member.id).first();
+  const visited=await env.DB.prepare("SELECT COUNT(*) AS total FROM community_event_signups WHERE member_id=? AND state='attended'").bind(member.id).first();
+  const counts={playtime_seconds:Number(stat?.playtime_seconds)||0,mob_kills:Number(stat?.mob_kills)||0,
+    deaths:Number(stat?.deaths)||0,blocks_mined:Number(stat?.blocks_mined)||0,events_attended:Number(visited?.total)||0};
+  const rules=(await env.DB.prepare("SELECT * FROM community_achievement_rules WHERE enabled=1 ORDER BY id LIMIT 80").all()).results||[];
+  const now=new Date().toISOString();
+  for(const rule of rules)if((counts[rule.metric]||0)>=rule.target)
+    await env.DB.prepare("INSERT OR IGNORE INTO community_achievement_claims(rule_id,member_id,achieved_at) VALUES(?,?,?)").bind(rule.id,member.id,now).run();
+  const claims=(await env.DB.prepare("SELECT rule_id,achieved_at FROM community_achievement_claims WHERE member_id=?").bind(member.id).all()).results||[];
+  const byId=new Map(claims.map(r=>[r.rule_id,r.achieved_at]));
+  const awards=(await env.DB.prepare("SELECT event_id,rank,label,created_at FROM community_event_awards WHERE member_id=? ORDER BY created_at DESC LIMIT 30").bind(member.id).all()).results||[];
+  return {achievements:rules.map(r=>({id:r.id,title:r.title,description:r.description,metric:r.metric,target:r.target,
+    progress:Math.min(r.target,counts[r.metric]||0),earnedAt:byId.get(r.id)||null})),awards};
+}
+async function community55API(req,env,path,method){
+  await community55Schema(env);
+  const isAdmin=path.startsWith('/api/admin/');
+  const member=isAdmin?null:await playerSession(req,env);
+  if(isAdmin){if(!await admin(req,env))return bad('Akses Admin Control diperlukan.',401);}
+  else if(path==='/api/community/events'&&method==='GET'){
+    const settings=formFrom(await readSettingsRow(env)).settings;
+    const data=await community55PublicEvents(env,settings);
+    return J(data,200,{'Cache-Control':'private, no-store','Vary':'Cookie'});
+  }else if(path==='/api/community/hall-of-fame'&&method==='GET'){
+    await ensureMemberCenter(env);
+    const settings=formFrom(await readSettingsRow(env)).settings;
+    const manual=new Map((settings.eventsItems||[]).map(event=>[event.id,event]));
+    const winners=(await env.DB.prepare("SELECT a.event_id,a.rank,a.label,a.created_at,e.title AS event_title,e.start_at,e.status AS event_status,p.display_name,p.visibility FROM community_event_awards a LEFT JOIN community_event_proposals e ON e.id=a.event_id LEFT JOIN member_profiles p ON p.application_id=a.member_id WHERE e.status='approved' OR e.id IS NULL ORDER BY a.created_at DESC,a.rank ASC LIMIT 80").all()).results||[];
+    const items=winners.filter(w=>w.event_status==='approved'||manual.has(w.event_id)).map(w=>{
+      const legacy=manual.get(w.event_id);
+      return {eventId:w.event_id,eventTitle:w.event_title||legacy?.title||'Event SSCircle',
+        rank:w.rank,label:w.label,at:w.created_at,startAt:w.start_at||legacy?.startAt||'',
+        winner:w.visibility==='public'&&w.display_name?w.display_name:'Anggota SSCircle'};
+    });
+    return J({items},200,{'Cache-Control':'public, max-age=60'});
+  }else if(!member||member.status!=='accepted')return bad('Hanya anggota berstatus Diterima dapat menggunakan fitur ini.',403);
+  if(!isAdmin && method!=='GET' && !(await memberStrongSession(req,env,member)))
+    return bad('Buka Profile dengan password Dashboard sebelum mengirim permintaan.',403);
+  if(method==='POST' && !(await rateLimit(env,req,'community55',30,900)))return bad('Terlalu banyak permintaan. Coba nanti.',429);
+  const now=new Date().toISOString();
+  if(path==='/api/community/events/my'&&method==='GET'){
+    const proposals=(await env.DB.prepare("SELECT id,executor,title,start_at,status,reason,created_at FROM community_event_proposals WHERE member_id=? ORDER BY created_at DESC LIMIT 30").bind(member.id).all()).results||[];
+    const joined=(await env.DB.prepare("SELECT event_id,state,joined_at,checked_in_at FROM community_event_signups WHERE member_id=? ORDER BY joined_at DESC LIMIT 40").bind(member.id).all()).results||[];
+    return J({proposals,joined});
+  }
+  if(path==='/api/community/events/propose'&&method==='POST'){
+    const x=await body(req,6000);
+    const executor=s(x.executor,120),title=s(x.title,140),technical=s(x.technical,1800),rawStart=s(x.startAt,45);
+    const start=Date.parse(rawStart),prizes=x.prizes;
+    if(!executor||!title||technical.length<20)return bad('Lengkapi nama pelaksana, event, dan teknis pelaksanaan minimal 20 karakter.',400);
+    if(!Number.isFinite(start)||start<Date.now()+3600000||start>Date.now()+2*365*86400000)return bad('Waktu mulai harus lebih dari satu jam mendatang dan maksimal dua tahun.',400);
+    if(!Array.isArray(prizes)||prizes.length<1||prizes.length>20||prizes.some((p,i)=>!s(p,180)))return bad('Isi minimal hadiah Juara 1, maksimal 20 peringkat.',400);
+    const active=await env.DB.prepare("SELECT COUNT(*) AS total FROM community_event_proposals WHERE member_id=? AND status='pending'").bind(member.id).first();
+    if(Number(active?.total)>=3)return bad('Maksimal 3 pengajuan yang masih menunggu persetujuan.',409);
+    const end=new Date(start+2*3600000).toISOString(),id='member-event-'+uid();
+    await env.DB.prepare("INSERT INTO community_event_proposals(id,member_id,executor,title,technical,start_at,end_at,prizes_json,status,reason,capacity,created_at) VALUES(?,?,?,?,?,?,?,?,'pending','',40,?)")
+      .bind(id,member.id,executor,title,technical,new Date(start).toISOString(),end,JSON.stringify(prizes.map((p,i)=>({rank:i+1,prize:s(p,180)}))),now).run();
+    return J({ok:true,id,status:'pending',message:'Pengajuan event berhasil dikirim dan menunggu persetujuan Admin Control.'},201);
+  }
+  if(path==='/api/community/events/join'&&method==='POST'){
+    const x=await body(req,700),id=s(x.eventId,100);
+    const event=await community55Event(env,id);
+    if(!event)return bad('Event tidak tersedia atau belum disetujui.',404);
+    if(Date.parse(event.startAt)<=Date.now())return bad('Pendaftaran event telah ditutup.',409);
+    const capacity=Number(event.capacity)||0;
+    const sql="INSERT OR IGNORE INTO community_event_signups(event_id,member_id,state,joined_at) SELECT ?,?,'registered',? WHERE EXISTS(SELECT 1 FROM submissions WHERE id=? AND status='accepted') AND (?=0 OR (SELECT COUNT(*) FROM community_event_signups WHERE event_id=? AND state IN ('registered','attended'))<?)";
+    const added=await env.DB.prepare(sql).bind(id,member.id,now,member.id,capacity,id,capacity).run();
+    if(!Number(added.meta?.changes))return bad('Sudah terdaftar atau kuota event sudah penuh.',409);
+    return J({ok:true,message:'Pendaftaran event berhasil.'},201);
+  }
+  if(path==='/api/community/achievements'&&method==='GET')
+    return J(await community55Progress(env,member));
+  if(path==='/api/admin/community/events'&&method==='GET'){
+    const proposals=(await env.DB.prepare("SELECT p.*,s.status AS member_status FROM community_event_proposals p LEFT JOIN submissions s ON s.id=p.member_id ORDER BY p.created_at DESC LIMIT 100").all()).results||[];
+    const eventId=s(new URL(req.url).searchParams.get('eventId'),100);
+    const signups=eventId?(await env.DB.prepare("SELECT r.member_id,r.state,r.joined_at,r.checked_in_at,s.status AS member_status FROM community_event_signups r JOIN submissions s ON s.id=r.member_id WHERE r.event_id=? ORDER BY r.joined_at LIMIT 200").bind(eventId).all()).results||[]:[];
+    const awards=eventId?(await env.DB.prepare("SELECT member_id,rank,label,created_at FROM community_event_awards WHERE event_id=? ORDER BY rank").bind(eventId).all()).results||[]:[];
+    return J({proposals,signups,awards});
+  }
+  if(path==='/api/admin/community/events/review'&&method==='POST'){
+    const x=await body(req,1500),id=s(x.id,100),action=s(x.action,12);
+    if(!['approved','rejected'].includes(action))return bad('Keputusan tidak valid.',400);
+    const reason=s(x.reason,500);
+    if(action==='rejected'&&!reason)return bad('Alasan penolakan wajib diisi.',400);
+    const cap=Number(x.capacity||40);
+    if(!Number.isInteger(cap)||cap<1||cap>500)return bad('Kapasitas peserta harus 1–500.',400);
+    const result=await env.DB.prepare("UPDATE community_event_proposals SET status=?,reason=?,capacity=?,reviewed_at=? WHERE id=? AND status='pending' AND EXISTS(SELECT 1 FROM submissions WHERE id=member_id AND status='accepted')")
+      .bind(action,reason,cap,now,id).run();
+    if(!Number(result.meta?.changes))return bad('Pengajuan tidak ada, sudah diproses, atau akun tidak lagi diterima.',409);
+    return J({ok:true,status:action});
+  }
+  if(path==='/api/admin/community/events/check-in'&&method==='POST'){
+    const x=await body(req,700),id=s(x.eventId,100),memberId=s(x.memberId,40);
+    const event=await community55Event(env,id);
+    if(!event)return bad('Event tidak ditemukan.',404);
+    const result=await env.DB.prepare("UPDATE community_event_signups SET state='attended',checked_in_at=? WHERE event_id=? AND member_id=? AND state='registered'")
+      .bind(now,id,memberId).run();
+    if(!Number(result.meta?.changes))return bad('Peserta belum terdaftar atau sudah check-in.',409);
+    return J({ok:true});
+  }
+  if(path==='/api/admin/community/events/award'&&method==='POST'){
+    const x=await body(req,1000),id=s(x.eventId,100),memberId=s(x.memberId,40),rank=Number(x.rank);
+    if(!Number.isInteger(rank)||rank<1||rank>20)return bad('Nomor juara tidak valid.',400);
+    const event=await community55Event(env,id);
+    if(!event)return bad('Event tidak ditemukan.',404);
+    const prize=(event.prizes||[]).find(p=>p.rank===rank);
+    const registered=await env.DB.prepare("SELECT state FROM community_event_signups WHERE event_id=? AND member_id=?").bind(id,memberId).first();
+    if(!registered||registered.state!=='attended')return bad('Pemenang harus peserta yang sudah check-in.',403);
+    const label=s(x.label,180)||prize?.prize||('Juara '+rank+' - '+event.title);
+    const result=await env.DB.prepare("INSERT OR IGNORE INTO community_event_awards(id,event_id,member_id,rank,label,created_at) VALUES(?,?,?,?,?,?)")
+      .bind(uid(),id,memberId,rank,label,now).run();
+    if(!Number(result.meta?.changes))return bad('Hadiah ini sudah diberikan kepada peserta.',409);
+    await ensureSocial(env);
+    await env.DB.prepare("INSERT INTO member_community_badges(id,application_id,title,description,granted_at) VALUES(?,?,?,?,?)")
+      .bind(uid(),memberId,'Juara '+rank+' · '+event.title,label,now).run();
+    return J({ok:true});
+  }
+  if(path==='/api/admin/community/achievements'&&method==='GET'){
+    return J({rules:(await env.DB.prepare("SELECT * FROM community_achievement_rules ORDER BY id LIMIT 80").all()).results||[]});
+  }
+  if(path==='/api/admin/community/achievements'&&method==='POST'){
+    const x=await body(req,1500),id=s(x.id,60),title=s(x.title,120),description=s(x.description,300),metric=s(x.metric,35),target=Number(x.target);
+    if(!/^[a-z0-9_-]{3,60}$/.test(id)||!title||!['playtime_seconds','mob_kills','deaths','blocks_mined','events_attended'].includes(metric)||!Number.isSafeInteger(target)||target<1||target>1000000000)return bad('Aturan achievement tidak valid.',400);
+    await env.DB.prepare("INSERT INTO community_achievement_rules(id,title,description,metric,target,enabled) VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET title=excluded.title,description=excluded.description,metric=excluded.metric,target=excluded.target,enabled=excluded.enabled")
+      .bind(id,title,description,metric,target,x.enabled===false?0:1).run();
+    return J({ok:true});
+  }
+  return bad('Endpoint Community Events tidak ditemukan.',404);
+}
+
 /* One inbox for official announcements and event reminders.
    Published announcements are not copied into every member's mailbox. */
 const noticeSchemaReady=new WeakSet();
@@ -4561,7 +4756,8 @@ async function noticeVirtual(env,account,prefs){
    const settings=formFrom(await readSettingsRow(env)).settings;
    if(settings.eventsEnabled!==false){
     const current=Date.now();
-    for(const event of (settings.eventsItems||[]).slice(0,40)){
+    const calendar=await community55PublicEvents(env,settings);
+    for(const event of (calendar.events||[]).slice(0,80)){
      const start=Date.parse(event.startAt),remaining=start-current;
      if(!Number.isFinite(start)||remaining<=0||remaining>86400000)continue;
      const window=remaining<=3600000?'1h':'24h';
@@ -4576,8 +4772,32 @@ async function noticeVirtual(env,account,prefs){
    }
   }
  }
- if(!raw.length)return [];
- const ids=raw.map(x=>x.id);
+ if(account.status==='accepted'){
+    try{
+      await community55Schema(env);
+      if(prefs.events){
+        const changes=(await env.DB.prepare("SELECT id,title,status,reason,reviewed_at FROM community_event_proposals WHERE member_id=? AND status IN ('approved','rejected') AND reviewed_at IS NOT NULL ORDER BY reviewed_at DESC LIMIT 15")
+          .bind(account.id).all()).results||[];
+        for(const proposal of changes){
+          raw.push({id:await noticeEventId('proposal-review|'+proposal.id+'|'+proposal.status),
+            type:'event',title:proposal.status==='approved'?'Event disetujui: '+proposal.title:'Event ditolak: '+proposal.title,
+            content:proposal.status==='approved'?'Event kamu sudah disetujui dan dapat dilihat pada kalender.':proposal.reason||'Pengajuan belum memenuhi persyaratan.',
+            createdAt:proposal.reviewed_at,priority:'normal',link:'/events.html',canReveal:false});
+        }
+      }
+      if(prefs.awards){
+        const wins=(await env.DB.prepare("SELECT a.id,a.rank,a.label,a.created_at,e.title FROM community_event_awards a JOIN community_event_proposals e ON e.id=a.event_id WHERE a.member_id=? ORDER BY a.created_at DESC LIMIT 15")
+          .bind(account.id).all()).results||[];
+        for(const award of wins)raw.push({id:await noticeEventId('event-award|'+award.id),type:'award',
+          title:'Penghargaan event: Juara '+award.rank+' · '+award.title,
+          content:award.label,createdAt:award.created_at,priority:'normal',link:'/my-sscircle.html',canReveal:false});
+      }
+    }catch(error){
+      console.error('[SSCircle community] Award/event notices unavailable:',String(error?.message||error));
+    }
+  }
+  if(!raw.length)return [];
+  const ids=raw.map(x=>x.id);
  const sql='SELECT notice_id,read_at,hidden_at FROM notice_receipts WHERE application_id=? AND notice_id IN ('+ids.map(()=>'?').join(',')+')';
  const receipts=await env.DB.prepare(sql).bind(account.id,...ids).all();
  const states=new Map((receipts.results||[]).map(x=>[x.notice_id,x]));
@@ -4663,7 +4883,7 @@ async function noticeAPI(req,env,path,method){
  return bad('Tindakan tidak tersedia.',405);
 }
 
-const SSC_RUNTIME_RELEASE='10.54.5';
+const SSC_RUNTIME_RELEASE='10.55.3';
 const SSC_RUNTIME_ISSUES=new Set();
 function sscRuntimeBindings(env){
   return {
@@ -5000,8 +5220,10 @@ async function route(req, env) {
     return await memberCenterAPI(req,env,path,method);
   if (path === '/api/events' && method === 'GET') {
     const settings = formFrom(await readSettingsRow(env)).settings;
-    return J(publicEvents(settings), 200, {'Cache-Control': 'public, max-age=45'});
+    return J(await community55PublicEvents(env,settings),200,{'Cache-Control':'private, no-store'});
   }
+  if ((path.startsWith('/api/community/')||path.startsWith('/api/admin/community/')) && ['GET','POST'].includes(method))
+    return await community55API(req,env,path,method);
   if (path === '/api/rules' && method === 'GET') {
     const settings = formFrom(await readSettingsRow(env)).settings;
     return J({ ...publicRules(settings), discordInviteUrl:settings.homeDiscordUrl||HOME_DEFAULTS.homeDiscordUrl, discordRequired:true, registrationOpen: settings.open === true,

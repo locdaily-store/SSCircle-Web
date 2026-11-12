@@ -31,8 +31,8 @@ function setup(){
  }
  return {call,db,admin,p1,p2};
 }
-const q1={id:'question-1',title:'Event favorit?',description:'',images:[],options:[{id:'option-a',label:'Dragon',description:'',images:[]},{id:'option-b',label:'Build',description:'',images:[]}]};
-const q2={id:'question-2',title:'Waktu yang cocok?',description:'',images:[],options:[{id:'option-c',label:'Sabtu',description:'',images:[]},{id:'option-d',label:'Minggu',description:'',images:[]}]};
+const q1={id:'question-1',title:'Event favorit?',description:'',images:[],options:[{id:'option-a',label:'Dragon',description:'',images:[]},{id:'option-b',label:'Build',description:'',images:[]},{id:'option-e',label:'PvP',description:'',images:[]}]};
+const q2={id:'question-2',title:'Waktu yang cocok?',description:'',images:[],options:[{id:'option-c',label:'Sabtu',description:'',images:[]},{id:'option-d',label:'Minggu',description:'',images:[]},{id:'option-f',label:'Jumat',description:'',images:[]}]};
 async function seed(setup){const {call,admin}=setup;
  const initial=await call('/api/admin/form',{cookie:admin});assert.equal(initial.status,200);
  const settings=initial.data.settings;
@@ -41,31 +41,38 @@ async function seed(setup){const {call,admin}=setup;
  eventsItems:[{id:'event-test',title:'Contoh Event',startAt:'2026-12-01T12:00:00.000Z',endAt:'2026-12-01T14:00:00.000Z',image:'',description:'',location:''}]});
  return await call('/api/admin/form',{cookie:admin,method:'PUT',payload:{settings,pages:initial.data.pages,revision:initial.data.revision}});
 }
-test('banyak pertanyaan terpisah, one vote per applicant per question, results per question',async()=>{
+test('banyak pertanyaan terpisah, three distinct votes per applicant per question, results per question',async()=>{
  const t=setup(), saved=await seed(t);assert.equal(saved.status,200,JSON.stringify(saved.data));
  const homepage=await t.call('/api/form');assert.equal(homepage.data.settings.homeUpcomingCount,3);assert.equal(homepage.data.settings.homeUpcomingLayout,'slider');
  let result=await t.call('/api/voting',{cookie:t.p1});assert.equal(result.status,200);
  assert.equal(result.data.questions.length,2);assert.equal(result.data.questions[0].totalVotes,0);
  assert.equal((await t.call('/api/voting/vote',{cookie:t.p1,method:'POST',payload:{questionId:'question-1',optionId:'option-a'}})).status,200);
  assert.equal((await t.call('/api/voting/vote',{cookie:t.p1,method:'POST',payload:{questionId:'question-2',optionId:'option-d'}})).status,200);
- assert.equal((await t.call('/api/voting/vote',{cookie:t.p1,method:'POST',payload:{questionId:'question-1',optionId:'option-b'}})).status,409);
+ assert.equal((await t.call('/api/voting/vote',{cookie:t.p1,method:'POST',payload:{questionId:'question-1',optionId:'option-b'}})).status,200);
+  assert.equal((await t.call('/api/voting/vote',{cookie:t.p1,method:'POST',payload:{questionId:'question-1',optionId:'option-b'}})).status,409);
+  assert.equal((await t.call('/api/voting/vote',{cookie:t.p1,method:'POST',payload:{questionId:'question-1',optionId:'option-e'}})).status,200);
+  assert.equal((await t.call('/api/voting/vote',{cookie:t.p1,method:'POST',payload:{questionId:'question-1',optionId:'option-a'}})).status,409);
  assert.equal((await t.call('/api/voting/vote',{cookie:t.p1,method:'POST',payload:{questionId:'question-2',optionId:'option-a'}})).status,400);
  assert.equal((await t.call('/api/voting/vote',{cookie:t.p1,method:'POST',payload:{questionId:'fake',optionId:'option-a'}})).status,400);
  assert.equal((await t.call('/api/voting/vote',{cookie:t.p2,method:'POST',payload:{questionId:'question-1',optionId:'option-b'}})).status,200);
  result=await t.call('/api/voting',{cookie:t.p1});
- assert.equal(result.data.questions[0].totalVotes,2);assert.equal(result.data.questions[1].totalVotes,1);
- assert.equal(result.data.questions[0].results[0].percent,50);assert.equal(result.data.questions[1].results[1].percent,100);
- assert.deepEqual(new Set(result.data.votedQuestionIds),new Set(['question-1','question-2']));
+ assert.equal(result.data.questions[0].totalVotes,4);assert.equal(result.data.questions[1].totalVotes,1);
+ assert.equal(result.data.questions[0].results[0].percent,25);assert.equal(result.data.questions[1].results[1].percent,100);
+ assert.deepEqual(new Set(result.data.votedQuestionIds),new Set(['question-1']));
+  assert.equal(result.data.remainingTokens['question-1'],0);
+  assert.equal(result.data.remainingTokens['question-2'],2);
+  assert.deepEqual(new Set(result.data.usedOptions['question-1']),new Set(['option-a','option-b','option-e']));
  const admin=await t.call('/api/admin/voting',{cookie:t.admin});assert.equal(admin.status,200);
- assert.equal(admin.data.questions[0].totalVotes,2);assert.equal(admin.data.questions[1].totalVotes,1);
+ assert.equal(admin.data.questions[0].totalVotes,4);assert.equal(admin.data.questions[1].totalVotes,1);
  const savedVotes=t.db.prepare('SELECT settings FROM form_config WHERE id=1').get();
- assert.deepEqual(JSON.parse(savedVotes.settings).homeVotingVotes.map(v=>v.questionId),['question-1','question-2','question-1']);
+ assert.deepEqual(JSON.parse(savedVotes.settings).homeVotingVotes.map(v=>v.questionId),['question-1','question-2','question-1','question-1','question-1']);
 });
 test('admin cannot erase voted option; reset updates revision and allows changing choices',async()=>{
  const t=setup();assert.equal((await seed(t)).status,200);
  assert.equal((await t.call('/api/voting/vote',{cookie:t.p1,method:'POST',payload:{questionId:'question-2',optionId:'option-c'}})).status,200);
  let state=await t.call('/api/admin/form',{cookie:t.admin});
  state.data.settings.homeVotingQuestions[1].options=state.data.settings.homeVotingQuestions[1].options.filter(o=>o.id!=='option-c');
+  state.data.settings.homeVotingQuestions[1].options.push({id:'option-g',label:'Senin',description:'',images:[]});
  let response=await t.call('/api/admin/form',{cookie:t.admin,method:'PUT',payload:{settings:state.data.settings,pages:state.data.pages,revision:state.data.revision}});
  assert.equal(response.status,409);
  const reset=await t.call('/api/admin/voting/reset',{cookie:t.admin,method:'POST',payload:{confirmation:'RESET VOTING'}});

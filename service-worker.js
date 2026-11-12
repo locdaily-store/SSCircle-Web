@@ -1,6 +1,6 @@
 /* SSCircle offline support: only public static assets are cached. */
 'use strict';
-const CACHE='sscircle-public-v10.54.5';
+const CACHE='sscircle-public-v10.55.3';
 const PRE=['/offline.html','/style.css','/assets/sscircle-logo.png','/assets/sscircle-pwa-icon.svg','/manifest.webmanifest'];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(PRE)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('sscircle-public-')&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
