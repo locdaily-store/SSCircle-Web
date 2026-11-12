@@ -72,6 +72,7 @@ test('admin cannot erase voted option; reset updates revision and allows changin
  assert.equal((await t.call('/api/voting/vote',{cookie:t.p1,method:'POST',payload:{questionId:'question-2',optionId:'option-c'}})).status,200);
  let state=await t.call('/api/admin/form',{cookie:t.admin});
  state.data.settings.homeVotingQuestions[1].options=state.data.settings.homeVotingQuestions[1].options.filter(o=>o.id!=='option-c');
+  state.data.settings.homeVotingQuestions[1].options.push({id:'option-g',label:'Senin',description:'',images:[]});
  let response=await t.call('/api/admin/form',{cookie:t.admin,method:'PUT',payload:{settings:state.data.settings,pages:state.data.pages,revision:state.data.revision}});
  assert.equal(response.status,409);
  const reset=await t.call('/api/admin/voting/reset',{cookie:t.admin,method:'POST',payload:{confirmation:'RESET VOTING'}});
