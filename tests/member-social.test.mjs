@@ -277,3 +277,42 @@ test('V10.52: badges and social policy require admin access',async()=>{
  assert.equal((await x.call(A,'/api/admin/member-badges',{method:'DELETE',cookie:admin,body:{id:badge.data.id}})).status,200);
  assert.equal((await x.call(A,'/api/admin/member-badges',{cookie:admin})).data.items.length,0);
 });
+
+test('V10.52: directory filter and newest order keep private members hidden',async()=>{
+ const x=fixture();await x.initialize();
+ const D='44444444-4444-4444-8444-444444444444';
+ x.db.prepare('INSERT INTO submissions VALUES(?,?,?,?)').run(D,'accepted','DDDDDDDDDDDDDDDDDDDD','2026-11-12T00:00:00Z');
+ x.db.prepare('INSERT INTO member_profiles(application_id,display_name,visibility) VALUES(?,?,?)')
+   .run(D,'Newest Member','members');
+ x.db.prepare('INSERT INTO minecraft_accounts(id,application_id,provider,provider_id,username,verified_at) VALUES(?,?,?,?,?,?)')
+   .run('55555555-5555-4555-8555-555555555555',B,'java_premium','premium-beta','Beta','2026-11-10');
+ x.db.prepare('INSERT INTO minecraft_accounts(id,application_id,provider,provider_id,username,verified_at) VALUES(?,?,?,?,?,?)')
+   .run('66666666-6666-4666-8666-666666666666',D,'bedrock','bedrock-new','Newest','2026-11-12');
+ const all=await x.call(A,'/api/player/social/directory?order=recent&edition=all');
+ assert.equal(all.status,200,JSON.stringify(all.data));
+ assert.deepEqual(all.data.items.map(a=>a.id),[D,B]);
+ const premium=await x.call(A,'/api/player/social/directory?edition=java_premium');
+ assert.deepEqual(premium.data.items.map(a=>a.id),[B]);
+ const bedrock=await x.call(A,'/api/player/social/directory?edition=bedrock');
+ assert.deepEqual(bedrock.data.items.map(a=>a.id),[D]);
+ assert.equal(JSON.stringify(all.data).includes('CCCCCCCCCCCCCCCCCCCC'),false);
+});
+test('V10.52: mutual friends are shared only with consent',async()=>{
+ const x=fixture();await x.initialize();
+ x.db.prepare("UPDATE member_profiles SET visibility='members' WHERE application_id=?").run(C);
+ const actions=async(a,b,action)=>x.call(a,'/api/player/social/action',{method:'POST',body:{id:b,action}});
+ assert.equal((await actions(A,B,'request')).status,200);
+ assert.equal((await actions(B,A,'accept')).status,200);
+ assert.equal((await actions(A,C,'request')).status,200);
+ assert.equal((await actions(C,A,'accept')).status,200);
+ assert.equal((await actions(B,C,'request')).status,200);
+ assert.equal((await actions(C,B,'accept')).status,200);
+ assert.deepEqual((await x.call(A,'/api/player/social/profile?id='+B)).data.mutualFriends,[]);
+ const preferences={allowRequests:true,showFriends:false,showMutual:true,showBadges:true};
+ assert.equal((await x.call(B,'/api/player/social/settings',{method:'PUT',body:preferences})).status,200);
+ const result=await x.call(A,'/api/player/social/profile?id='+B);
+ assert.equal(result.status,200,JSON.stringify(result.data));
+ assert.equal(result.data.mutualFriends.length,1);
+ assert.equal(result.data.mutualFriends[0].id,C);
+ assert.equal(result.data.friendCount,null);
+});
