@@ -1,37 +1,85 @@
-/* SSCircle read-only achievement progress integrated in Profile. */
-(()=>{'use strict';
- const root=document.getElementById('community55-achievements');
- if(!root)return;
- const el=(t,cl='',txt='')=>{const n=document.createElement(t);if(cl)n.className=cl;if(txt)n.textContent=txt;return n;};
- let busy=false;
- async function load(){
-   if(busy)return;busy=true;
-   try{
-     const res=await fetch('/api/community/achievements',{credentials:'same-origin',cache:'no-store'});
-     if(!res.ok){root.replaceChildren();return;}
-     const data=await res.json();
-     root.replaceChildren(el('h3','','Community Achievements'));
-     const box=el('div','c55-achievements');
-     for(const rule of data.achievements||[]){
-       const row=el('article','c55-achievement');row.append(el('strong','',rule.title));
-       if(rule.description)row.append(el('small','',rule.description));
-       const progress=el('progress');progress.max=Math.max(1,rule.target);progress.value=rule.progress;
-       row.append(progress,el('small','',rule.earnedAt?'✓ Tercapai · '+new Date(rule.earnedAt).toLocaleDateString('id-ID'):rule.progress+' / '+rule.target));
-       box.append(row);
-     }
-     if(!data.achievements?.length)box.append(el('p','player-helper','Belum ada achievement yang aktif.'));
-     if(data.awards?.length){
-       box.append(el('h3','','Hasil Event Saya'));
-       for(const award of data.awards){
-         const card=el('article','c55-achievement');card.append(el('strong','','Juara '+award.rank),el('small','',award.label));box.append(card);
-       }
-     }
-     root.append(box);
-   }catch{root.replaceChildren();}finally{busy=false;}
- }
- document.addEventListener('DOMContentLoaded',()=>load());
- document.addEventListener('click',e=>{
-   if(e.target.closest('[data-profile-tab="profile"],[data-profile-section="achievements"],a[href*="achievements"]'))load();
- });
- window.SSCircleCommunityAchievementsReload=load;
+/* Community Achievements pada Dashboard anggota SSCircle. */
+'use strict';
+
+(() => {
+  const root = document.getElementById('community55-achievements');
+  if (!root) return;
+
+  const element = (tag, className = '', text = '') => {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text) node.textContent = text;
+    return node;
+  };
+
+  let loading = false;
+
+  async function refresh() {
+    if (loading) return;
+    loading = true;
+
+    try {
+      const response = await fetch('/api/community/achievements', {
+        credentials: 'same-origin',
+        cache: 'no-store'
+      });
+      if (!response.ok) {
+        root.replaceChildren();
+        return;
+      }
+
+      const data = await response.json();
+      root.replaceChildren(element('h3', '', 'Community Achievements'));
+      const list = element('div', 'c55-achievements');
+
+      for (const achievement of data.achievements || []) {
+        const card = element('article', 'c55-achievement');
+        card.append(element('strong', '', achievement.title));
+
+        if (achievement.description)
+          card.append(element('small', '', achievement.description));
+
+        const progress = element('progress');
+        progress.max = Math.max(1, Number(achievement.target) || 1);
+        progress.value = Math.min(progress.max, Number(achievement.progress) || 0);
+        card.append(progress);
+
+        const details = achievement.earnedAt
+          ? '✓ Tercapai · ' + new Date(achievement.earnedAt).toLocaleDateString('id-ID')
+          : achievement.progress + ' / ' + achievement.target;
+        card.append(element('small', '', details));
+        list.append(card);
+      }
+
+      if (!data.achievements?.length)
+        list.append(element('p', 'player-helper', 'Belum ada achievement yang aktif.'));
+
+      if (data.awards?.length) {
+        list.append(element('h3', '', 'Hasil Event Saya'));
+        for (const award of data.awards) {
+          const card = element('article', 'c55-achievement');
+          card.append(
+            element('strong', '', 'Juara ' + award.rank),
+            element('small', '', award.label)
+          );
+          list.append(card);
+        }
+      }
+
+      root.append(list);
+    } catch {
+      root.replaceChildren();
+    } finally {
+      loading = false;
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', refresh, {once: true});
+  document.addEventListener('click', event => {
+    if (event.target.closest(
+      '[data-profile-tab="profile"],[data-profile-section="achievements"],a[href*="achievements"]'
+    )) refresh();
+  });
+
+  window.SSCircleCommunityAchievementsReload = refresh;
 })();
