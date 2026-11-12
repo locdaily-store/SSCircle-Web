@@ -5071,7 +5071,7 @@ async function noticeAPI(req,env,path,method){
  return bad('Tindakan tidak tersedia.',405);
 }
 
-const SSC_RUNTIME_RELEASE='10.55.3';
+const SSC_RUNTIME_RELEASE='10.55.4';
 const SSC_RUNTIME_ISSUES=new Set();
 function sscRuntimeBindings(env){
   return {
