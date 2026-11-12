@@ -336,6 +336,8 @@ test('V10.52: private or administrator-hidden members never appear in mutual fri
  const admin=signed('ssc_s6_admin',{exp:now()+3600},SECRET+'|test-admin-password');
  assert.equal((await x.call(A,'/api/admin/member-policy',{method:'PUT',cookie:admin,
    body:{allowBio:true,allowMembers:false,allowPublic:false,allowStats:true,allowEventAlerts:true}})).status,200);
+ // The viewed member remains visible to their friend, but the third member must not leak.
+ x.db.prepare("UPDATE member_profiles SET visibility='friends' WHERE application_id=?").run(B);
  assert.deepEqual((await x.call(A,'/api/player/social/profile?id='+B)).data.mutualFriends,[]);
  x.db.prepare("UPDATE member_profiles SET visibility='friends' WHERE application_id=?").run(C);
  assert.equal((await x.call(A,'/api/player/social/profile?id='+B)).data.mutualFriends.length,1);
