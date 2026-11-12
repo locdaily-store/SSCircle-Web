@@ -2618,6 +2618,10 @@ async function memberCenterAPI(req,env,path,method) {
         await env.DB.prepare(`INSERT INTO member_community_badges
           (id,application_id,title,description,granted_at) VALUES(?,?,?,?,?)`)
           .bind(badgeId,id,title,description,new Date().toISOString()).run();
+        try{
+          await mailboxNote(env,id,'badge','Penghargaan komunitas',
+            'Kamu mendapatkan penghargaan: '+title+(description?'. '+description:'')+'.');
+        }catch(error){console.error('[SSCircle Badge Notice] delivery failed');}
         return J({ok:true,id:badgeId});
       }
       if(method==='DELETE'){
@@ -4614,9 +4618,14 @@ async function noticeAPI(req,env,path,method){
    const link=String(data?.link||'');
    if(title.length<3||content.length<5||!noticeLinks.has(link))
     return bad('Periksa judul, isi, dan tujuan pengumuman.',400);
-   const targetId=audience==='member'?String(data?.targetId||''):null;
+   let targetId=audience==='member'?String(data?.targetId||'').trim():null;
    if(audience==='member'){
-    if(!SSC_SOCIAL_ID.test(targetId))return bad('Pilih ID penerima yang valid.',400);
+    if(/^SSC-M[0-9A-F]{12}$/i.test(targetId)){
+      const suffix=targetId.slice(5).toLowerCase();
+      targetId=(await env.DB.prepare('SELECT id FROM submissions WHERE LOWER(SUBSTR(id,25,12))=? LIMIT 1')
+        .bind(suffix).first())?.id||'';
+    }
+    if(!SSC_SOCIAL_ID.test(targetId))return bad('ID Anggota penerima tidak ditemukan.',404);
     if(!await env.DB.prepare('SELECT id FROM submissions WHERE id=?').bind(targetId).first())
      return bad('Penerima tidak ditemukan.',404);
    }
