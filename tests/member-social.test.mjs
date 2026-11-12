@@ -342,3 +342,81 @@ test('V10.52: private or administrator-hidden members never appear in mutual fri
  x.db.prepare("UPDATE member_profiles SET visibility='friends' WHERE application_id=?").run(C);
  assert.equal((await x.call(A,'/api/player/social/profile?id='+B)).data.mutualFriends.length,1);
 });
+
+
+test('V10.53: pengumuman resmi hanya dapat diterbitkan admin dan muncul per penerima',async()=>{
+ const x=fixture();await x.initialize();
+ const admin=signed('ssc_s6_admin',{exp:now()+3600},SECRET+'|test-admin-password');
+ const create={title:'Informasi season',content:'Persiapan season SSCircle sedang berlangsung.',
+  priority:'important',audience:'accepted',link:'/events.html'};
+ assert.equal((await x.call(A,'/api/admin/notifications',{method:'POST',body:create})).status,401);
+ assert.equal((await x.call(A,'/api/admin/notifications',{method:'POST',cookie:admin,body:{...create,link:'https://phishing.invalid'}})).status,400);
+ const published=await x.call(A,'/api/admin/notifications',{method:'POST',cookie:admin,body:create});
+ assert.equal(published.status,201,JSON.stringify(published.data));
+ const announcement=published.data.id;
+ const a=await x.call(A,'/api/player/mailbox');
+ const b=await x.call(B,'/api/player/mailbox');
+ assert.equal(a.status,200,JSON.stringify(a.data));
+ assert.ok(a.data.items.some(item=>item.id===announcement&&item.type==='announcement'&&!item.read));
+ assert.ok(b.data.items.some(item=>item.id===announcement));
+ assert.equal((await x.call(A,'/api/player/mailbox/read',{method:'POST',body:{id:announcement}})).status,200);
+ assert.equal((await x.call(A,'/api/player/mailbox')).data.items.find(x=>x.id===announcement).read,true);
+ assert.equal((await x.call(B,'/api/player/mailbox')).data.items.find(x=>x.id===announcement).read,false);
+ assert.equal((await x.call(A,'/api/player/mailbox/delete',{method:'POST',body:{id:announcement}})).status,200);
+ assert.ok(!(await x.call(A,'/api/player/mailbox')).data.items.some(x=>x.id===announcement));
+ assert.ok((await x.call(B,'/api/player/mailbox')).data.items.some(x=>x.id===announcement));
+ assert.equal((await x.call(A,'/api/admin/notifications',{method:'DELETE',cookie:admin,body:{id:announcement}})).status,200);
+ assert.ok(!(await x.call(B,'/api/player/mailbox')).data.items.some(x=>x.id===announcement));
+});
+test('V10.53: preferensi anggota membatasi pengumuman tanpa menyembunyikan notifikasi mendesak',async()=>{
+ const x=fixture();await x.initialize();
+ const admin=signed('ssc_s6_admin',{exp:now()+3600},SECRET+'|test-admin-password');
+ const before=await x.call(A,'/api/player/notifications/preferences');
+ assert.equal(before.status,200,JSON.stringify(before.data));
+ assert.equal(before.data.preferences.reminderMode,'both');
+ const prefs={announcements:false,events:false,community:true,awards:true,reminderMode:'off'};
+ assert.equal((await x.call(A,'/api/player/notifications/preferences',{method:'PUT',body:prefs})).status,200);
+ assert.equal((await x.call(B,'/api/player/notifications/preferences',{method:'PUT',body:{events:false}})).status,400);
+ const create=async(priority)=>x.call(A,'/api/admin/notifications',{method:'POST',cookie:admin,
+  body:{title:'Pemberitahuan SSCircle',content:'Informasi terbaru dari pengurus SSCircle.',
+   priority,audience:'accepted',link:''}});
+ assert.equal((await create('normal')).status,201);
+ assert.equal((await create('urgent')).status,201);
+ const messages=(await x.call(A,'/api/player/mailbox')).data.items.filter(m=>m.type==='announcement');
+ assert.equal(messages.length,1);
+ assert.equal(messages[0].priority,'urgent');
+ assert.equal((await x.call(B,'/api/player/mailbox')).data.items.filter(m=>m.type==='announcement').length,2);
+});
+test('V10.53: pengumuman terjadwal dan penerima ID Anggota terisolasi',async()=>{
+ const x=fixture();await x.initialize();
+ const admin=signed('ssc_s6_admin',{exp:now()+3600},SECRET+'|test-admin-password');
+ const create={title:'Pengumuman khusus',content:'Informasi keanggotaan yang hanya relevan untuk satu anggota.',
+  priority:'normal',audience:'member',targetId:'SSC-M'+A.slice(-12).toUpperCase(),link:''};
+ const targeted=await x.call(A,'/api/admin/notifications',{method:'POST',cookie:admin,body:create});
+ assert.equal(targeted.status,201,JSON.stringify(targeted.data));
+ assert.ok((await x.call(A,'/api/player/mailbox')).data.items.some(x=>x.id===targeted.data.id));
+ assert.ok(!(await x.call(B,'/api/player/mailbox')).data.items.some(x=>x.id===targeted.data.id));
+ assert.equal((await x.call(B,'/api/player/mailbox/read',{method:'POST',body:{id:targeted.data.id}})).status,404);
+ const scheduled=await x.call(A,'/api/admin/notifications',{method:'POST',cookie:admin,body:{
+  ...create,targetId:'SSC-M'+B.slice(-12).toUpperCase(),
+  publishAt:new Date(Date.now()+2*3600000).toISOString()}});
+ assert.equal(scheduled.status,201,JSON.stringify(scheduled.data));
+ assert.ok(!(await x.call(B,'/api/player/mailbox')).data.items.some(x=>x.id===scheduled.data.id));
+});
+test('V10.53: pengingat event berasal dari jadwal resmi dan dapat ditandai dibaca',async()=>{
+ const x=fixture();await x.initialize();
+ const start=new Date(Date.now()+30*60000),end=new Date(start.getTime()+60*60000);
+ x.db.prepare('UPDATE form_config SET settings=? WHERE id=1').run(JSON.stringify({
+  eventsEnabled:true,eventsItems:[{id:'event-test-sscircle',title:'Kumpul komunitas',
+   description:'',location:'Lobby',image:'',startAt:start.toISOString(),endAt:end.toISOString()}],
+  homeLeaderboardSeasons:[]
+ }));
+ const response=await x.call(A,'/api/player/mailbox');
+ assert.equal(response.status,200,JSON.stringify(response.data));
+ const reminder=response.data.items.find(x=>x.type==='event');
+ assert.ok(reminder,JSON.stringify(response.data));
+ assert.match(reminder.title,/Kumpul komunitas/);
+ assert.equal((await x.call(A,'/api/player/mailbox/manage',{method:'POST',
+   body:{action:'read',ids:[reminder.id]}})).status,200);
+ assert.equal((await x.call(A,'/api/player/mailbox')).data.items.find(x=>x.id===reminder.id).read,true);
+});
