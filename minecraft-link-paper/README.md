@@ -1,4 +1,4 @@
-# SSCircle Player Sync Paper V10.54.5 (Web V10.54.5)
+# SSCircle Player Sync Paper V10.54.6 (Web V10.54.5)
 
 Penghubung akun Minecraft ke Profile SSCircle, tanpa Velocity. Plugin memakai HMAC, nonce, kode sekali-pakai 10 menit, dan konfirmasi ulang pada website. Satu anggota dapat menghubungkan beberapa identitas Minecraft sesuai kebijakan Admin (default 3, batas 1–5). Identitas, statistik, UUID dan inventory tetap terpisah.
 

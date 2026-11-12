@@ -1,7 +1,7 @@
 plugins { java }
 
 group = "id.sscircle"
-version = "10.54.5"
+version = "10.54.6"
 
 repositories {
     mavenCentral()
@@ -28,5 +28,5 @@ tasks.test { useJUnitPlatform() }
 
 tasks.jar {
     archiveBaseName.set("SSCircle-Player-Sync-Paper")
-    archiveVersion.set("10.54.5")
+    archiveVersion.set("10.54.6")
 }

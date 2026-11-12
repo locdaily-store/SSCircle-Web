@@ -147,7 +147,7 @@ public final class SSCircleSkinBridge extends JavaPlugin implements Listener, Co
             sender.sendMessage("Target sukses: SKIN_GAMBAR_TERSIMPAN_HTTP_200. Jika ada error periksa /ssskin status.");
             return true;
         }
-        sender.sendMessage("SSCircle Skin Bridge 10.49.1.3");
+        sender.sendMessage("SSCircle Skin Bridge 10.49.1.4");
         sender.sendMessage("Core aktif: "+(core!=null&&core.isEnabled()?"YA":"TIDAK"));
         sender.sendMessage("Endpoint HTTPS: "+(!endpoint.isBlank()?"TERSEDIA":"BELUM DIATUR"));
         if(!endpoint.isBlank())sender.sendMessage("Tujuan upload skin: "+endpoint+"/api/minecraft/skin/sync");

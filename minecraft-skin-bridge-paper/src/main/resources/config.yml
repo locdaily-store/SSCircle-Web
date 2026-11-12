@@ -3,3 +3,7 @@
 skin-sync:
   enabled: true
   interval-seconds: 300
+  # Pemrosesan antrean maksimum satu pemain setiap 20 tick.
+  # Pemeriksaan skin ditunda ketika TPS 1 menit terlalu rendah.
+  pause-on-low-tps: true
+  low-tps-threshold: 18.0

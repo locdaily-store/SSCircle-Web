@@ -21,6 +21,8 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.ArrayDeque;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.Optional;
@@ -62,7 +64,12 @@ final class SkinPublisher {
     private final AtomicInteger active=new AtomicInteger();
     private volatile String lastDelivery="Belum ada pengiriman";
     private volatile Instant lastSuccess=null;
-    private int task=-1;
+    private int task=-1, scanTask=-1;
+    // One drain task for all players, instead of one Bukkit timer per player.
+    // These three structures are accessed only from the Paper primary thread.
+    private final ArrayDeque<UUID> pendingScans=new ArrayDeque<>();
+    private final Set<UUID> queuedPlayers=new HashSet<>();
+    private final Set<UUID> forcedPlayers=new HashSet<>();
 
     SkinPublisher(JavaPlugin plugin,HttpClient http,Function<Player,Identity> identity,
                   Supplier<String> endpoint,Supplier<String> secret,Supplier<String> serverId){
@@ -77,6 +84,9 @@ final class SkinPublisher {
     }
     void stop(){
         if(task!=-1)Bukkit.getScheduler().cancelTask(task);
+        if(scanTask!=-1)Bukkit.getScheduler().cancelTask(scanTask);
+        task=-1;scanTask=-1;
+        pendingScans.clear();queuedPlayers.clear();forcedPlayers.clear();
         confirmed.clear();states.clear();inFlight.clear();
     }
     void afterJoin(Player player){
@@ -86,9 +96,19 @@ final class SkinPublisher {
         // the join settles and retry automatically until *the image* is in D1.
         scheduleRetry(uuid,0,100L);
     }
-    void afterQuit(UUID uuid){confirmed.remove(uuid);states.remove(uuid);}
+    void afterQuit(UUID uuid){
+        confirmed.remove(uuid);states.remove(uuid);
+        pendingScans.remove(uuid);queuedPlayers.remove(uuid);forcedPlayers.remove(uuid);
+    }
     void forceAll(){scheduleOnline(true);}
-    void forcePlayer(Player player){confirmed.remove(player.getUniqueId());capture(player,true,0);}
+    void forcePlayer(Player player){
+        UUID uuid=player.getUniqueId();
+        confirmed.remove(uuid);
+        queueScan(uuid,true);
+        // Prioritize a manual inspection without bypassing concurrency limits.
+        if(pendingScans.remove(uuid))pendingScans.addFirst(uuid);
+        drainScans();
+    }
     private void scheduleRetry(UUID uuid,int next,long ticks){
         if(next>MAX_JOIN_RETRIES||!plugin.isEnabled())return;
         Bukkit.getScheduler().runTaskLater(plugin,()->{
@@ -110,16 +130,44 @@ final class SkinPublisher {
     String lastSuccess(){return lastSuccess==null?"BELUM ADA":lastSuccess.toString();}
     int activeLookups(){return active.get();}
 
-    /** Invoke only on the primary thread. Spread capture to avoid TPS spikes. */
+    /** Queue once per UUID. The queue is bounded by distinct online players. */
     private void scheduleOnline(boolean force){
         if(!plugin.getConfig().getBoolean("skin-sync.enabled",true))return;
-        int index=0;
-        for(Player player:Bukkit.getOnlinePlayers()){
-            UUID uuid=player.getUniqueId();
-            Bukkit.getScheduler().runTaskLater(plugin,()->{
-                Player online=Bukkit.getPlayer(uuid);
-                if(online!=null&&online.isOnline())capture(online,force,0);
-            },index++*20L);
+        for(Player player:Bukkit.getOnlinePlayers())queueScan(player.getUniqueId(),force);
+    }
+    private void queueScan(UUID uuid,boolean force){
+        if(force)forcedPlayers.add(uuid);
+        if(queuedPlayers.add(uuid))pendingScans.addLast(uuid);
+        if(scanTask==-1&&!pendingScans.isEmpty())
+            scanTask=Bukkit.getScheduler().runTaskTimer(plugin,this::drainScans,1L,20L).getTaskId();
+    }
+    private boolean pauseForLowTps(){
+        if(!plugin.getConfig().getBoolean("skin-sync.pause-on-low-tps",true))return false;
+        try{
+            double[] tps=Bukkit.getTPS();
+            double threshold=plugin.getConfig().getDouble("skin-sync.low-tps-threshold",18.0);
+            return tps.length>0&&Double.isFinite(tps[0])&&tps[0]<threshold;
+        }catch(Exception ignored){return false;}
+    }
+    private void drainScans(){
+        if(active.get()>=MAX_ACTIVE||pauseForLowTps())return;
+        UUID uuid=pendingScans.peekFirst();
+        if(uuid==null){
+            if(scanTask!=-1){Bukkit.getScheduler().cancelTask(scanTask);scanTask=-1;}
+            return;
+        }
+        Player player=Bukkit.getPlayer(uuid);
+        if(player!=null&&player.isOnline()&&inFlight.contains(uuid)){
+            // An earlier join retry is still running. Keep the request queued.
+            pendingScans.addLast(pendingScans.removeFirst());
+            return;
+        }
+        pendingScans.removeFirst();queuedPlayers.remove(uuid);
+        boolean force=forcedPlayers.remove(uuid);
+        if(player!=null&&player.isOnline())capture(player,force,0);
+        if(pendingScans.isEmpty()&&scanTask!=-1){
+            Bukkit.getScheduler().cancelTask(scanTask);
+            scanTask=-1;
         }
     }
     private void mark(UUID uuid,String code){states.put(uuid,new State(code,Instant.now()));lastDelivery=code;}

@@ -133,13 +133,20 @@ final class PaperStatsSync implements Listener {
         int flush=Math.max(3,Math.min(60,
             plugin.getConfig().getInt("stats-sync.queue-flush-seconds",10)));
         plugin.getServer().getPluginManager().registerEvents(this,plugin);
-        plugin.getServer().getScheduler().runTaskTimer(plugin,this::captureOneTick,20L,1L);
+        plugin.getServer().getScheduler().runTaskTimer(plugin,this::captureOneTick,20L,
+            capturePeriodTicks(plugin.getConfig().getInt("stats-sync.capture-period-ticks",2)));
         plugin.getServer().getScheduler().runTaskTimer(plugin,this::captureScheduled,100L,20L*interval);
         plugin.getServer().getScheduler().runTaskTimer(plugin,this::sendNext,140L,HTTP_PERIOD_TICKS);
         plugin.getServer().getScheduler().runTaskTimer(plugin,this::flushQueue,20L*flush,20L*flush);
         plugin.getLogger().info("Stats V10.54: "+blockReadsPerTick+
             " reads/tick (TPS rendah: "+lowTpsBlockReadsPerTick+
             "), interval "+interval+"s, antrean pulih "+pending.size());
+    }
+
+    // Reduce scheduler wakeups when scanning many block categories; one tick
+    // is still supported for servers that prefer more frequent sampling.
+    static long capturePeriodTicks(int configured){
+        return Math.max(1L,Math.min(10L,configured));
     }
 
     void stop(){

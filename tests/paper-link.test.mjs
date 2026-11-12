@@ -151,7 +151,7 @@ test('V10.47: vanilla statistics are only sampled for verified identities',()=>{
 
 test('V10.47.2: statistic collection is tick-budgeted, disk I/O asynchronous and season-aware',()=>{
  const stats=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/PaperStatsSync.java',import.meta.url),'utf8');
- assert.match(stats,/runTaskTimer\(plugin,this::captureOneTick,20L,1L\)/);
+ assert.match(stats,/capturePeriodTicks\(plugin\.getConfig\(\)\.getInt\("stats-sync\.capture-period-ticks",2\)\)/);
  assert.match(stats,/this::captureScheduled/);
  assert.match(stats,/stats-sync.busy-player-threshold/);
  assert.match(config,/adaptive-enabled:\s*true/);
@@ -357,7 +357,7 @@ test('V10.49.1.3: addon sends PNG only after CDN validation, retries automatic f
  assert.match(source,/LOGIN_BELUM_TERVERIFIKASI.*retry\(uuid,attempt\)/);
  assert.match(source,/imageStored/);
  assert.match(source,/WORKER_BELUM_SUPPORT_SIMPAN_PNG/);
- assert.match(addon,/10\.49\.1\.3/);
+ assert.match(addon,/10\.49\.1\.4/);
 });
 
 
@@ -398,4 +398,20 @@ test('V10.54: bounded snapshot cache, coalesced disk writer, and non-destructive
  assert.match(stats,/\.damaged-/);
  assert.match(stats,/queueLocked=true/);
  assert.doesNotMatch(stats,/pending\.remove\(pending\.keySet\(\)\.iterator\(\)\.next\(\)\)/);
+});
+
+test('V10.54.6: lightweight capture intervals and a single bounded skin publishing queue',()=>{
+ const stats=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/PaperStatsSync.java',import.meta.url),'utf8');
+ const fallback=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/PaperSkinSync.java',import.meta.url),'utf8');
+ const bridge=readFileSync(new URL('../minecraft-skin-bridge-paper/src/main/java/id/sscircle/skin/SkinPublisher.java',import.meta.url),'utf8');
+ const bridgeConfig=readFileSync(new URL('../minecraft-skin-bridge-paper/src/main/resources/config.yml',import.meta.url),'utf8');
+ assert.match(stats,/capturePeriodTicks/);
+ assert.match(config,/capture-period-ticks: 2/);
+ assert.match(fallback,/skin-sync.profile-scan-ticks/);
+ assert.match(bridge,/ArrayDeque<UUID> pendingScans/);
+ assert.match(bridge,/runTaskTimer\(plugin,this::drainScans,1L,20L\)/);
+ assert.match(bridge,/queuedPlayers\.add\(uuid\)/);
+ assert.match(bridge,/pauseForLowTps\(\)/);
+ assert.match(bridgeConfig,/pause-on-low-tps: true/);
+ assert.doesNotMatch(bridge,/index\+\+\*20L/);
 });

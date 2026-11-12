@@ -1,4 +1,4 @@
-# SSCircleSkinBridge V10.49.1.3
+# SSCircleSkinBridge V10.49.1.4
 
 Addon untuk SSCirclePlayerSync 10.49.1. Perbaikan penting: mengirim file PNG skin dari server ke Cloudflare D1, bukan hanya hash. User web otomatis melihat skin ketika berhasil ditautkan dan login. Baca `docs/V10.49.1.3-SKIN-IMAGE-D1-AUTO.md` untuk pemasangan dan diagnosis.
 

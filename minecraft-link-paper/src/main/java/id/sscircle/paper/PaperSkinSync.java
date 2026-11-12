@@ -72,7 +72,9 @@ final class PaperSkinSync {
         if(!plugin.getConfig().getBoolean("skin-sync.enabled", true))return;
         stopping=false;
         // Read at most ONE online profile per scan. No HTTP or image parsing on main thread.
-        timer=Bukkit.getScheduler().runTaskTimer(plugin,this::scan,100L,40L);
+        timer=Bukkit.getScheduler().runTaskTimer(plugin,this::scan,100L,
+            Math.max(40L,Math.min(200L,
+                plugin.getConfig().getLong("skin-sync.profile-scan-ticks",60L))));
     }
     void stop() {
         stopping=true;

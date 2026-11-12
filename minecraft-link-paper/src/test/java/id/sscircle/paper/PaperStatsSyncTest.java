@@ -48,6 +48,11 @@ class PaperStatsSyncTest {
         assertTrue(PaperStatsSync.canQueue(entries,"id-1"));
         assertFalse(PaperStatsSync.canQueue(entries,"id-new"));
         assertEquals(1024,entries.size());
+    } 
+    @Test void captureSchedulerUsesBoundedPeriod(){
+        assertEquals(2L,PaperStatsSync.capturePeriodTicks(2));
+        assertEquals(1L,PaperStatsSync.capturePeriodTicks(0));
+        assertEquals(10L,PaperStatsSync.capturePeriodTicks(999));
     }
     @Test void checksumChangesWhenSavedQueueIsTampered() throws Exception {
         var props=new java.util.Properties();

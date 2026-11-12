@@ -39,6 +39,9 @@ stats-sync:
   busy-interval-seconds: 600
   # Limit 16 pembacaan kategori blok tiap tick (bukan semua pemain sekaligus).
   block-reads-per-tick: 16
+  # Pembacaan kategori blok dilakukan tiap 2 tick, bukan setiap tick.
+  # Rentang 1-10 tick. Naikkan jika CPU server sedang sibuk.
+  capture-period-ticks: 2
   # V10.48.5: Saat TPS 1 menit jatuh di bawah batas, kecilkan
   # pembacaan kategori per tick; tidak menonaktifkan data statistik.
   tps-aware-enabled: true
@@ -63,6 +66,9 @@ sync-monitor:
 # Polling bertahap: satu pemain per 40 tick, maksimal dua permintaan HTTPS aktif.
 skin-sync:
   enabled: true
+  # Hanya digunakan jika SSCircle Skin Bridge terpisah tidak aktif.
+  # Satu profil diperiksa setiap 60 tick; tidak memuat semua pemain sekaligus.
+  profile-scan-ticks: 60
 
 # V10.54: jangan hapus stats-queue.properties ataupun .damaged-* tanpa backup.
 # Antrean disk tetap asynchronous dan maksimum satu pekerjaan penulisan aktif.
