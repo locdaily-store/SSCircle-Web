@@ -1143,3 +1143,14 @@ test('V10.49.1.7: legacy secret is still supported with no server-id header',asy
  }),x.env);
  assert.equal(res.status,200);
 });
+
+test('V10.54: signed telemetry reports queue pressure and storage alerts',async()=>{
+ const x=fixture();
+ for(const code of ['QUEUE_FULL','QUEUE_STORAGE_ERROR']){
+   const response=await monitorBeat(x,telemetryBody({deliveryCode:code}));
+   assert.equal(response.status,200,JSON.stringify(response.json));
+   const admin=await x.call('/api/admin/minecraft/sync',{cookie:x.admin});
+   assert.equal(admin.status,200);
+   assert.equal(admin.json.telemetry.deliveryCode,code);
+ }
+});

@@ -121,12 +121,12 @@ final class PaperStatsSync implements Listener {
             if(material.isBlock())blockMaterials.add(material);
         }
         blockReadsPerTick=Math.max(4,Math.min(96,
-            plugin.getConfig().getInt("stats-sync.block-reads-per-tick",24)));
+            plugin.getConfig().getInt("stats-sync.block-reads-per-tick",16)));
         tpsAware=plugin.getConfig().getBoolean("stats-sync.tps-aware-enabled",true);
         lowTpsThreshold=Math.max(10.0,Math.min(20.0,
             plugin.getConfig().getDouble("stats-sync.low-tps-threshold",18.0)));
         lowTpsBlockReadsPerTick=Math.max(2,Math.min(blockReadsPerTick,
-            plugin.getConfig().getInt("stats-sync.low-tps-block-reads-per-tick",6)));
+            plugin.getConfig().getInt("stats-sync.low-tps-block-reads-per-tick",4)));
         int interval=Math.max(60,Math.min(3600,
             plugin.getConfig().getInt("stats-sync.interval-seconds",300)));
         normalIntervalSeconds=interval;
@@ -137,7 +137,7 @@ final class PaperStatsSync implements Listener {
         plugin.getServer().getScheduler().runTaskTimer(plugin,this::captureScheduled,100L,20L*interval);
         plugin.getServer().getScheduler().runTaskTimer(plugin,this::sendNext,140L,HTTP_PERIOD_TICKS);
         plugin.getServer().getScheduler().runTaskTimer(plugin,this::flushQueue,20L*flush,20L*flush);
-        plugin.getLogger().info("Stats V10.48.5: "+blockReadsPerTick+
+        plugin.getLogger().info("Stats V10.54: "+blockReadsPerTick+
             " reads/tick (TPS rendah: "+lowTpsBlockReadsPerTick+
             "), interval "+interval+"s, antrean pulih "+pending.size());
     }

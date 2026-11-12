@@ -20,7 +20,8 @@ window.SSCircleMinecraftSyncAdmin=(()=>{
     bedrock:'Minecraft Bedrock'};
   const eventText={IDLE:'Menunggu pengiriman',SYNC_OK:'Berhasil',
     QUEUE_PENDING:'Menunggu pengiriman',NETWORK_ERROR:'Gangguan jaringan',
-    HTTP_ERROR:'Permintaan gagal',AUTH_ERROR:'Masalah autentikasi'};
+    HTTP_ERROR:'Permintaan gagal',AUTH_ERROR:'Masalah autentikasi',
+    QUEUE_FULL:'Antrean penuh',QUEUE_STORAGE_ERROR:'Penyimpanan bermasalah'};
   let state=null,policy=null,servers=[],loading=false,offset=0,term='',filter='all',searchTimer=null;
   async function api(path,options={}){
     const res=await fetch(path,{credentials:'same-origin',cache:'no-store',
@@ -170,6 +171,12 @@ window.SSCircleMinecraftSyncAdmin=(()=>{
       item.append(el('span','',label),el('strong','',value));foot.append(item);
     }
     overview.append(foot);
+    if(telemetry&&['QUEUE_FULL','QUEUE_STORAGE_ERROR'].includes(telemetry.deliveryCode)){
+      const hint=telemetry.deliveryCode==='QUEUE_FULL'
+        ?'Antrean penyimpanan penuh. Statistik lama dipertahankan. Periksa jaringan server lalu lakukan sinkronisasi jika diperlukan.'
+        :'Penyimpanan statistik perlu diperiksa. Cadangkan folder plugin sebelum menangani file antrean yang bermasalah.';
+      overview.append(el('p','ssc-sync-pending',hint));
+    }
     if(state.pendingCommand){
       overview.append(el('p','ssc-sync-pending',
         'Permintaan sinkronisasi menunggu plugin: sejak '+stamp(state.pendingCommand.createdAt)+
@@ -213,7 +220,7 @@ window.SSCircleMinecraftSyncAdmin=(()=>{
       const line=el('div','ssc-sync-event');
       const dot=el('span','ssc-sync-event-dot');
       dot.dataset.state=event.code==='SYNC_OK'?'ok':
-        ['NETWORK_ERROR','HTTP_ERROR','AUTH_ERROR'].includes(event.code)?'error':'idle';
+        ['NETWORK_ERROR','HTTP_ERROR','AUTH_ERROR','QUEUE_FULL','QUEUE_STORAGE_ERROR'].includes(event.code)?'error':'idle';
       line.append(dot,el('span','',event.details||eventText[event.code]||'Aktivitas'),
         el('small','',stamp(event.at)));history.append(line);
     }

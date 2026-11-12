@@ -3614,7 +3614,8 @@ async function ensureMinecraftSyncMonitor(env){
   mcSyncReady.add(env.DB);
 }
 const MC_DELIVERY_CODES=new Set([
-  'IDLE','SYNC_OK','QUEUE_PENDING','NETWORK_ERROR','HTTP_ERROR','AUTH_ERROR'
+  'IDLE','SYNC_OK','QUEUE_PENDING','NETWORK_ERROR','HTTP_ERROR','AUTH_ERROR',
+   'QUEUE_FULL','QUEUE_STORAGE_ERROR'
 ]);
 async function minecraftSyncHeartbeat(req,env){
   const secret=await minecraftRequestSigningSecret(req,env);
@@ -3685,7 +3686,9 @@ async function minecraftSyncHeartbeat(req,env){
       QUEUE_PENDING:'Pengiriman statistik masih tertunda.',
       NETWORK_ERROR:'Koneksi ke website sempat gagal.',
       HTTP_ERROR:'Permintaan statistik ditolak atau gagal.',
-      AUTH_ERROR:'Periksa kunci atau autentikasi pengiriman.'
+      AUTH_ERROR:'Periksa kunci atau autentikasi pengiriman.',
+       QUEUE_FULL:'Antrean penuh; data sebelumnya dipertahankan.',
+       QUEUE_STORAGE_ERROR:'Arsip antrean perlu diperiksa oleh pengurus.'
     })[code];
     await env.DB.prepare('INSERT INTO minecraft_sync_events(id,at,code,details) VALUES(?,?,?,?)')
       .bind(uid(),at,code,detail).run();
@@ -4660,7 +4663,7 @@ async function noticeAPI(req,env,path,method){
  return bad('Tindakan tidak tersedia.',405);
 }
 
-const SSC_RUNTIME_RELEASE='10.53.5';
+const SSC_RUNTIME_RELEASE='10.54.5';
 const SSC_RUNTIME_ISSUES=new Set();
 function sscRuntimeBindings(env){
   return {

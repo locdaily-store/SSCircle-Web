@@ -158,10 +158,10 @@ test('V10.47.2: statistic collection is tick-budgeted, disk I/O asynchronous and
  assert.match(stats,/blockReadsPerTick=Math\.max/);
  assert.match(stats,/while\(budget-->0&&activeJob\.index<blockMaterials\.size\(\)\)/);
  assert.match(stats,/Executors\.newSingleThreadExecutor/);
- assert.match(stats,/diskWriter\.submit\(\(\)->writeQueue\(copy\)\)/);
+ assert.match(stats,/diskWriter\.execute\(this::drainWrites\)/);
  assert.match(stats,/SyncRetryPolicy\.nextBaseDelayMs\(retryDelayMs\)/);
  assert.match(stats,/lastDelivery=/);
- assert.match(config,/block-reads-per-tick:\s*24/);
+ assert.match(config,/block-reads-per-tick:\s*16/);
  assert.match(config,/queue-flush-seconds:\s*10/);
  assert.match(worker,/minecraft_stat_progress/);
  assert.match(worker,/statSeasonActivatedAt/);
@@ -301,10 +301,10 @@ test('V10.49.0: TPS-aware capture and offline identity recovery preserve safety'
  const identity=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/PaperIdentitySync.java',import.meta.url),'utf8');
  const retry=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/SyncRetryPolicy.java',import.meta.url),'utf8');
  assert.match(config,/tps-aware-enabled: true/);
- assert.match(config,/low-tps-block-reads-per-tick: 6/);
+ assert.match(config,/low-tps-block-reads-per-tick: 4/);
  assert.match(stats,/int budget=currentReadBudget\(\)/);
  assert.match(stats,/lowTps=samples\.length>0/);
- assert.match(stats,/latestSample\.put\(key,snap\)/);
+ assert.match(stats,/rememberSample\(key,snapshot\)/);
  assert.match(stats,/SyncRetryPolicy\.delayMs\(/);
  assert.match(stats,/response\.headers\(\)\.firstValue\("Retry-After"\)/);
  assert.match(identity,/if\(state\.inflight\|\|now<state\.retryNotBeforeMs\)continue/);

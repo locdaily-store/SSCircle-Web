@@ -549,6 +549,11 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
         if(operator){
             statusItem(sender,"Antrean",statsSync==null?"Tidak aktif":
                 statsSync.pendingCount()+" akun",NamedTextColor.YELLOW);
+            if(statsSync!=null){
+                statusItem(sender,"Kesehatan antrean",statsSync.queueHealth(),NamedTextColor.YELLOW);
+                statusItem(sender,"Jeda kirim ulang",statsSync.retrySeconds()+" detik",NamedTextColor.GRAY);
+                statusItem(sender,"Pemain menunggu",statsSync.captureBacklogCount()+" pemain",NamedTextColor.GRAY);
+            }
             statusItem(sender,"Hasil statistik",statsSync==null?"Tidak ada":
                 statsSync.deliveryStatus(),NamedTextColor.GRAY);
             statusItem(sender,"Hasil bukti sesi",identitySync==null?"Tidak ada":
