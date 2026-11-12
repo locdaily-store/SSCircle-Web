@@ -273,3 +273,20 @@ test('Profile workspace has three tabs with all cards visible per category',()=>
  assert.doesNotMatch(preview,/member-social\.js|\/api\/player\/social\/directory/);
  assert.match(layout,/ssc-profile-layout-change/);
 });
+
+test('V10.52 keeps three Profile categories and official server wording',()=>{
+ const profile=source('my-sscircle.html');
+ const admin=source('admin.html');
+ const social=source('member-social.js');
+ const community=source('community-admin.js');
+ for(const id of ['ssc-allow-friends','ssc-show-friends','ssc-show-mutual',
+   'ssc-show-badges','ssc-social-order','ssc-social-edition','ssc-social-friend-search'])
+   assert.match(profile,new RegExp('id="'+id+'"'));
+ assert.match(profile,/value="friends"/);
+ assert.match(admin,/community-admin\.js\?v=10\.52\.4/);
+ assert.match(community,/\/api\/admin\/member-badges/);
+ assert.match(social,/data\.communityBadges/);
+ assert.match(social,/data\.mutualFriends/);
+ assert.doesNotMatch(profile,/UUID Mojang|Cloudflare D1|Backend Error|OpenAI|ChatGPT|AI generated/i);
+ assert.doesNotMatch(profile+community+social,/Block Member|Blokir Anggota|Chat Pribadi/i);
+});
