@@ -115,6 +115,17 @@
     }catch(error){note(error.message,true)}finally{applyAccess();}
   });
   $('mailbox-refresh').addEventListener('click',()=>void load());
+  $('mailbox-mark-all').addEventListener('click',async()=>{
+    const ids=items.filter(item=>!item.read).map(item=>item.id);
+    const button=$('mailbox-mark-all');button.disabled=true;
+    try{
+      for(let i=0;i<ids.length;i+=60)
+        await call('/api/player/mailbox/manage','POST',{action:'read',ids:ids.slice(i,i+60)});
+      items.forEach(item=>item.read=true);renderList();
+      note(ids.length?'Semua notifikasi ditandai sudah dibaca.':'Semua notifikasi sudah dibaca.');
+    }catch(error){note(error.message,true);await load()}
+    finally{button.disabled=false}
+  });
   document.querySelectorAll('.mailbox-filter').forEach(button=>button.addEventListener('click',()=>{
     filter=button.dataset.filter;
     for(const btn of document.querySelectorAll('.mailbox-filter')){

@@ -20,7 +20,8 @@
     '<div class="mailbox-grid">',
     '<section class="mailbox-surface mailbox-inbox" aria-label="Pesan pribadi">',
     '<div class="mailbox-inbox-head"><h3>Notifikasi <span id="ssc-mailbox-unread" class="mailbox-count" hidden></span></h3>',
-    '<button type="button" id="ssc-mailbox-refresh">Perbarui</button></div>',
+    '<div class="ssc-notice-head-actions"><button type="button" id="ssc-mailbox-mark-all">Tandai semua dibaca</button>',
+    '<button type="button" id="ssc-mailbox-refresh">Perbarui</button></div></div>',
     '<div role="group" class="mailbox-filters" aria-label="Filter pesan">',
     '<button type="button" class="mailbox-filter is-current" data-ssc-filter="all" aria-pressed="true">Semua</button>',
     '<button type="button" class="mailbox-filter" data-ssc-filter="unread" aria-pressed="false">Belum dibaca</button>',
@@ -250,6 +251,20 @@
     if(e.target===dialog)dialog.close();
   });
   $('ssc-mailbox-refresh').addEventListener('click',()=>void refresh());
+  $('ssc-mailbox-mark-all').addEventListener('click',async()=>{
+    const pending=items.filter(item=>!item.read).map(item=>item.id);
+    if(!pending.length){notify('Semua notifikasi sudah dibaca.');return;}
+    const button=$('ssc-mailbox-mark-all');button.disabled=true;
+    try{
+      for(let i=0;i<pending.length;i+=60)
+        await api('/api/player/mailbox/manage','POST',{action:'read',ids:pending.slice(i,i+60)});
+      items.forEach(item=>item.read=true);draw();notify('Semua notifikasi ditandai sudah dibaca.');
+    }catch(error){notify(error.message,true);await refresh(true)}
+    finally{button.disabled=false}
+  });
+  document.addEventListener('visibilitychange',()=>{
+    if(!document.hidden&&dialog.open)void refresh(true);
+  });
   $('ssc-mailbox-select-mode').addEventListener('click',()=>{
     if(managing)return;
     selecting=!selecting;selected.clear();draw();
