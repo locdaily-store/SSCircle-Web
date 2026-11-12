@@ -316,3 +316,27 @@ test('V10.52: mutual friends are shared only with consent',async()=>{
  assert.equal(result.data.mutualFriends[0].id,C);
  assert.equal(result.data.friendCount,null);
 });
+
+test('V10.52: private or administrator-hidden members never appear in mutual friends',async()=>{
+ const x=fixture();await x.initialize();
+ x.db.prepare("UPDATE member_profiles SET visibility='members' WHERE application_id=?").run(C);
+ const act=async(a,b,action)=>x.call(a,'/api/player/social/action',{method:'POST',body:{id:b,action}});
+ for(const [from,to] of [[A,B],[A,C],[B,C]]){
+   assert.equal((await act(from,to,'request')).status,200);
+   assert.equal((await act(to,from,'accept')).status,200);
+ }
+ const prefs={allowRequests:true,showFriends:false,showMutual:true,showBadges:true};
+ assert.equal((await x.call(B,'/api/player/social/settings',{method:'PUT',body:prefs})).status,200);
+ assert.equal((await x.call(A,'/api/player/social/profile?id='+B)).data.mutualFriends.length,1);
+ x.db.prepare("UPDATE member_profiles SET visibility='private' WHERE application_id=?").run(C);
+ const privateProfile=await x.call(A,'/api/player/social/profile?id='+B);
+ assert.equal(privateProfile.status,200);
+ assert.deepEqual(privateProfile.data.mutualFriends,[]);
+ x.db.prepare("UPDATE member_profiles SET visibility='members' WHERE application_id=?").run(C);
+ const admin=signed('ssc_s6_admin',{exp:now()+3600},SECRET+'|test-admin-password');
+ assert.equal((await x.call(A,'/api/admin/member-policy',{method:'PUT',cookie:admin,
+   body:{allowBio:true,allowMembers:false,allowPublic:false,allowStats:true,allowEventAlerts:true}})).status,200);
+ assert.deepEqual((await x.call(A,'/api/player/social/profile?id='+B)).data.mutualFriends,[]);
+ x.db.prepare("UPDATE member_profiles SET visibility='friends' WHERE application_id=?").run(C);
+ assert.equal((await x.call(A,'/api/player/social/profile?id='+B)).data.mutualFriends.length,1);
+});

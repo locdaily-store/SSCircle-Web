@@ -291,3 +291,11 @@ test('V10.52 keeps three Profile categories and official server wording',()=>{
  assert.doesNotMatch(profile,/UUID Mojang|Cloudflare D1|Backend Error|OpenAI|ChatGPT|AI generated/i);
  assert.doesNotMatch(profile+community+social,/Block Member|Blokir Anggota|Chat Pribadi/i);
 });
+
+test('V10.52: public Profile copy stays member-friendly and has no internal implementation hints',()=>{
+ const html=readFileSync(new URL('../my-sscircle.html',import.meta.url),'utf8');
+ assert.doesNotMatch(html,/\\b(?:AuthMe|Floodgate|Cloudflare D1|stack trace|debug endpoint|AI assistant|prompt)\\b/i);
+ assert.doesNotMatch(html,/Block Member|Blokir anggota|chat pribadi/i);
+ assert.match(html,/Penghargaan dari pengurus SSCircle/);
+ assert.match(html,/member-social\\.js\\?v=10\\.52\\.5/);
+});

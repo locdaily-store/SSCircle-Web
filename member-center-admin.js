@@ -177,7 +177,7 @@ window.SSCircleMemberCenterAdmin = (() => {
       for(const [season,count] of groups)
         content.append(el('div','member-admin-season-line',season+' · '+count+' penghargaan'));
       if(!groups.size)content.append(empty('Belum ada riwayat penghargaan season.'));
-      content.append(el('p','member-admin-advisory','Waktu bermain, kematian dan mob kill per season belum tersedia sampai plugin terverifikasi mengirim data.'));
+      content.append(el('p','member-admin-advisory','Statistik per season akan ditampilkan setelah data pemain tersedia.'));
     }
     content.append(note);root.append(content);
     if(current==='policy'||current==='awards')

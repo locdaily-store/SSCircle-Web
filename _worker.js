@@ -4353,6 +4353,11 @@ async function socialAPI(req,env,path,method){
         JOIN submissions s ON s.id=(CASE WHEN a.member_a=? THEN a.member_b ELSE a.member_a END)
         LEFT JOIN member_profiles p ON p.application_id=s.id
         WHERE a.status='accepted' AND b.status='accepted'
+        AND (p.visibility='friends'
+          OR (p.visibility='members' AND
+            (SELECT allow_members FROM member_policy WHERE id=1)=1)
+          OR (p.visibility='public' AND
+            (SELECT allow_public FROM member_policy WHERE id=1)=1))
         AND (a.member_a=? OR a.member_b=?)
         AND (b.member_a=? OR b.member_b=?) AND s.status='accepted' LIMIT 8`)
         .bind(me.id,id,me.id,me.id,me.id,id,id).all();
@@ -4488,7 +4493,7 @@ async function socialAPI(req,env,path,method){
   return bad('Endpoint sosial tidak ditemukan.',404);
 }
 
-const SSC_RUNTIME_RELEASE='10.52.4';
+const SSC_RUNTIME_RELEASE='10.52.5';
 const SSC_RUNTIME_ISSUES=new Set();
 function sscRuntimeBindings(env){
   return {
