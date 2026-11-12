@@ -4079,7 +4079,12 @@ async function mailboxAPI(req,env,path,method){
     const found=await env.DB.prepare(
       `SELECT id,type,expires_at FROM member_mailbox WHERE application_id=? AND id IN (${placeholders})`)
       .bind(account.id,...ids).all();
-    if((found.results||[]).length!==ids.length)return bad('Notifikasi tidak ditemukan.',404);
+    const realIds=new Set((found.results||[]).map(x=>x.id));
+    const virtualIds=ids.filter(id=>!realIds.has(id));
+    if(virtualIds.length){
+      const allowed=new Set((await noticeVirtual(env,account,await noticePrefs(env,account.id))).map(x=>x.id));
+      if(virtualIds.some(id=>!allowed.has(id)))return bad('Notifikasi tidak ditemukan.',404);
+    }
     if(payload.action==='delete'){
       const latest=await env.DB.prepare(
         "SELECT id FROM member_mailbox WHERE application_id=? AND type='activation' ORDER BY rowid DESC LIMIT 1")
@@ -4103,20 +4108,25 @@ async function mailboxAPI(req,env,path,method){
             WHERE application_id=? AND used_at IS NULL
             AND expires_at=member_mailbox.expires_at))`)
         .bind(account.id,...ids,account.id,Math.floor(Date.now()/1000),account.id).run();
-      return J({ok:true,deleted:Number(deleted.meta?.changes||0)});
+      if(virtualIds.length)await noticeMark(env,account,virtualIds,'delete');
+      return J({ok:true,deleted:Number(deleted.meta?.changes||0)+virtualIds.length});
     }
     const marked=await env.DB.prepare(
       `UPDATE member_mailbox SET read_at=COALESCE(read_at,?)
       WHERE application_id=? AND id IN (${placeholders})`)
       .bind(new Date().toISOString(),account.id,...ids).run();
-    return J({ok:true,updated:Number(marked.meta?.changes||0)});
+    if(virtualIds.length)await noticeMark(env,account,virtualIds,'read');
+    return J({ok:true,updated:Number(marked.meta?.changes||0)+virtualIds.length});
   }
   if(path==='/api/player/mailbox/delete' && method==='POST'){
     const payload=await body(req,250);
     if(!/^[0-9a-f-]{36}$/.test(payload?.id||''))return bad('Pesan tidak ditemukan.',404);
     const row=await env.DB.prepare('SELECT id,type,expires_at FROM member_mailbox WHERE id=? AND application_id=?')
       .bind(payload.id,account.id).first();
-    if(!row)return bad('Pesan tidak ditemukan.',404);
+    if(!row){
+      if(await noticeMark(env,account,[payload.id],'delete'))return J({ok:true});
+      return bad('Pesan tidak ditemukan.',404);
+    }
     // Never remove the sole copy of a still-valid, one-use activation code.
     if(row.type==='activation'){
       const newest=await env.DB.prepare("SELECT id FROM member_mailbox WHERE application_id=? AND type='activation' ORDER BY rowid DESC LIMIT 1")
@@ -4136,7 +4146,10 @@ async function mailboxAPI(req,env,path,method){
     if(!/^[0-9a-f-]{36}$/.test(payload?.id||''))return bad('Pesan tidak ditemukan.',404);
     const updated=await env.DB.prepare(`UPDATE member_mailbox SET read_at=COALESCE(read_at,?)
       WHERE id=? AND application_id=?`).bind(new Date().toISOString(),payload.id,account.id).run();
-    if(!(updated.meta?.changes>0))return bad('Pesan tidak ditemukan.',404);
+    if(!(updated.meta?.changes>0)){
+      if(await noticeMark(env,account,[payload.id],'read'))return J({ok:true});
+      return bad('Pesan tidak ditemukan.',404);
+    }
     return J({ok:true});
   }
   return bad('Halaman Mail Box tidak tersedia.',404);
