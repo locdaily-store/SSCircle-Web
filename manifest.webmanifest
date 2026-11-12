@@ -1,0 +1,50 @@
+{
+  "name": "SSCircle Server",
+  "short_name": "SSCircle",
+  "description": "Website resmi SSCircle Minecraft Server. Informasi komunitas, event, profil, dan notifikasi.",
+  "lang": "id",
+  "id": "/",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": [
+    "standalone"
+  ],
+  "orientation": "any",
+  "background_color": "#150d25",
+  "theme_color": "#160a28",
+  "categories": [
+    "games",
+    "social"
+  ],
+  "icons": [
+    {
+      "src": "/assets/sscircle-logo.png",
+      "sizes": "64x64",
+      "type": "image/png"
+    },
+    {
+      "src": "/assets/sscircle-pwa-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Event SSCircle",
+      "url": "/events.html",
+      "description": "Jadwal kegiatan komunitas"
+    },
+    {
+      "name": "Profile Anggota",
+      "url": "/my-sscircle",
+      "description": "Profil anggota SSCircle"
+    },
+    {
+      "name": "Notifikasi",
+      "url": "/mailbox",
+      "description": "Pusat pemberitahuan"
+    }
+  ]
+}

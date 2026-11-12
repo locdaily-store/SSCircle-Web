@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="SSCircle">
+<defs><radialGradient id="bg" cx="23%" cy="14%" r="105%"><stop stop-color="#41246d"/><stop offset="1" stop-color="#150d25"/></radialGradient><linearGradient id="halo" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#d4b9ff"/><stop offset="1" stop-color="#8372f2"/></linearGradient></defs>
+<rect width="512" height="512" rx="116" fill="url(#bg)"/><circle cx="256" cy="256" r="174" fill="none" stroke="url(#halo)" stroke-width="21"/><circle cx="256" cy="256" r="130" fill="#1c1231" stroke="#6951a3" stroke-width="3"/>
+<path d="M337 176c-20-23-47-34-82-34-50 0-81 26-81 65 0 41 28 55 77 66 45 11 59 19 59 37 0 17-18 28-48 28-32 0-58-12-83-36l-26 35c29 29 67 45 110 45 56 0 91-28 91-72 0-42-30-60-85-72-41-9-53-17-53-34 0-14 15-24 40-24 26 0 48 9 68 25z" fill="#f5efff"/>
+</svg>
