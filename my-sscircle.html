@@ -10,7 +10,7 @@
   <link rel="icon" href="assets/sscircle-logo.png" type="image/png">
   <link rel="stylesheet" href="style.css?v=10.49.1.6">
   <link rel="stylesheet" href="player-dashboard.css?v=10.49.1.5">
-  <link rel="stylesheet" href="member-social.css?v=10.51.3">
+  <link rel="stylesheet" href="member-social.css?v=10.52.4">
   <link rel="stylesheet" href="profile-workspace.css?v=10.51.4">
   <link rel="stylesheet" href="mailbox.css?v=10.41.0">
   <link rel="stylesheet" href="profile-ui.css?v=10.43.0">
@@ -21,8 +21,8 @@
   <script src="mailbox-widget.js?v=10.43.0" defer></script>
   <script src="minecraft-skin-3d.js?v=10.49.1.5" defer></script>
   <script src="minecraft-avatars.js?v=10.49.1.5" defer></script>
-  <script src="player-dashboard.js?v=10.51.2" defer></script>
-  <script src="member-social.js?v=10.51.5" defer></script>
+  <script src="player-dashboard.js?v=10.52.4" defer></script>
+  <script src="member-social.js?v=10.52.4" defer></script>
   <script src="profile-workspace.js?v=10.51.4" defer></script>
   <link rel="stylesheet" href="password-visibility.css?v=10.39.0">
   <script src="password-visibility.js?v=10.39.0" defer></script>
@@ -132,11 +132,25 @@
           <div class="ssc-social-grid">
             <div class="ssc-social-panel" id="ssc-social-directory-panel" role="region" aria-label="Daftar semua member">
               <div class="ssc-social-panel-head"><h3 class="ssc-social-subtitle" id="ssc-social-result-title">Semua member</h3><span class="player-tag" id="ssc-social-count">0 member</span></div>
+              <div class="ssc-social-filter-bar">
+                <label>Urutkan
+                  <select id="ssc-social-order"><option value="name">Nama A–Z</option><option value="recent">Terbaru bergabung</option></select>
+                </label>
+                <label>Jenis Minecraft
+                  <select id="ssc-social-edition">
+                    <option value="all">Semua</option><option value="java_premium">Java Premium</option>
+                    <option value="java_offline">Non-Premium</option><option value="bedrock">Bedrock</option>
+                  </select>
+                </label>
+              </div>
               <div id="ssc-social-results" class="ssc-social-results"></div>
               <button type="button" id="ssc-social-more" class="player-action player-action-secondary" hidden>Tampilkan lebih banyak</button>
             </div>
             <div class="ssc-social-panel" id="ssc-social-friends-panel" role="region" aria-label="Daftar pertemanan" hidden>
               <div class="ssc-social-panel-head"><h3 class="ssc-social-subtitle">Manage Friends</h3><button type="button" id="ssc-social-refresh" class="player-action player-action-secondary">Perbarui</button></div>
+              <label class="ssc-social-friend-search">Cari teman
+                <input type="search" id="ssc-social-friend-search" placeholder="Nama atau ID Anggota" maxlength="40" autocomplete="off">
+              </label>
               <div class="ssc-social-tabs" role="tablist" aria-label="Kelola pertemanan">
                 <button type="button" role="tab" aria-selected="true" data-ssc-friends-tab="friends">Teman <span data-ssc-friends-count="friends">0</span></button>
                 <button type="button" role="tab" aria-selected="false" data-ssc-friends-tab="incoming">Permintaan masuk <span data-ssc-friends-count="incoming">0</span></button>
@@ -243,6 +257,7 @@
               <select id="player-visibility">
                 <option value="private">Pribadi — hanya akun saya dan admin</option>
                 <option value="members">Anggota — hanya anggota SSCircle</option>
+                <option value="friends">Teman saja — anggota yang sudah berteman</option>
                 <option value="public">Publik — dapat dilihat pengunjung</option>
               </select>
               <small>Pribadi selalu tersedia. Anggota dapat dicari oleh sesama member bila diizinkan admin; opsi Publik diatur terpisah.</small>
@@ -251,6 +266,14 @@
               <label class="player-setting-switch"><input type="checkbox" id="player-show-stats"><span>Tampilkan statistik saat profil publik tersedia</span></label>
               <label class="player-setting-switch"><input type="checkbox" id="player-event-alerts"><span>Pengingat event di dashboard</span></label>
             </div>
+            <fieldset class="ssc-member-privacy-options">
+              <legend>Privasi komunitas</legend>
+              <p class="player-helper">Atur informasi yang boleh dilihat anggota lain melalui direktori SSCircle.</p>
+              <label class="player-setting-switch"><input type="checkbox" id="ssc-allow-friends" checked><span>Terima permintaan pertemanan</span></label>
+              <label class="player-setting-switch"><input type="checkbox" id="ssc-show-friends"><span>Tampilkan jumlah teman</span></label>
+              <label class="player-setting-switch"><input type="checkbox" id="ssc-show-mutual"><span>Tampilkan teman bersama</span></label>
+              <label class="player-setting-switch"><input type="checkbox" id="ssc-show-badges" checked><span>Tampilkan penghargaan komunitas</span></label>
+            </fieldset>
             <div class="player-setting-actions">
               <button class="player-action player-action-primary" type="submit" id="player-save-profile">Simpan perubahan</button>
               <p id="player-profile-message" role="status" aria-live="polite"></p>
@@ -265,6 +288,10 @@
           </div>
           <div id="player-achievements-list" class="player-achievements-list">
             <p class="player-helper">Belum ada penghargaan yang terhubung dengan keanggotaanmu.</p>
+          </div>
+          <div class="ssc-community-awards" id="player-community-awards" hidden>
+            <h3>Penghargaan komunitas</h3>
+            <div id="player-community-awards-list" class="player-achievements-list"></div>
           </div>
           <p class="player-helper">Penghargaan dikelola sekali saja melalui Admin Control → Season &amp; Sejarah. Data akan otomatis muncul di sini jika penerima dipilih sebagai anggota yang benar.</p>
         </section>

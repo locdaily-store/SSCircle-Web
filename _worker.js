@@ -4230,6 +4230,9 @@ async function socialAPI(req,env,path,method){
   if(path==='/api/player/social/settings'&&method==='GET')
     return J({settings:await socialSettings(env,me.id),policy:socialFlags},
       200,{'Cache-Control':'private, no-store','Vary':'Cookie'});
+  if(path==='/api/player/social/my-badges'&&method==='GET')
+    return J({items:await socialBadges(env,me.id)},200,
+      {'Cache-Control':'private, no-store','Vary':'Cookie'});
   if(path==='/api/player/social/settings'&&method==='PUT'){
     if(!await rateLimit(env,req,'social-settings',12,900))
       return bad('Terlalu banyak perubahan pengaturan. Coba lagi nanti.',429);

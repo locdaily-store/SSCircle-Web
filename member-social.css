@@ -112,3 +112,18 @@
  .ssc-social-search-row button{width:100%}
  .ssc-social-results,#ssc-social-friends{max-height:min(54vh,420px)}
 }
+
+/* Member directory and community options */
+.ssc-member-privacy-options{border:1px solid var(--ssc-border,rgba(150,144,180,.35));border-radius:14px;padding:14px;margin:12px 0;min-width:0}
+.ssc-member-privacy-options legend{font-weight:700;padding:0 8px}
+.ssc-member-privacy-options .player-helper{margin:0 0 10px}
+.ssc-social-filter-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:8px 0 12px}
+.ssc-social-filter-bar label,.ssc-social-friend-search{display:flex;flex-direction:column;gap:5px;font-size:.84rem;min-width:0;flex:1 1 155px}
+.ssc-social-filter-bar select,.ssc-social-friend-search input{width:100%;min-width:0;box-sizing:border-box;background:var(--ssc-input,#211d30);color:var(--ssc-text,#f5f4ff);border:1px solid var(--ssc-border,#68617a);border-radius:10px;padding:10px;font:inherit;color-scheme:dark}
+.ssc-social-friend-search{margin:8px 0 14px}
+.ssc-social-award,.ssc-community-award{border:1px solid var(--ssc-border,rgba(150,144,180,.35));border-radius:12px;padding:12px;margin:8px 0}
+.ssc-social-award p,.ssc-community-award p{margin:5px 0 0;opacity:.8;white-space:pre-line}
+.ssc-social-mutual{display:flex;flex-wrap:wrap;gap:8px}
+.ssc-social-mutual button{max-width:100%}
+.ssc-community-awards{margin-top:16px}
+@media(max-width:620px){.ssc-social-filter-bar{display:grid;grid-template-columns:1fr 1fr;gap:8px}}

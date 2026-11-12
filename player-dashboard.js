@@ -166,7 +166,24 @@
     try {
       const profile=await request('/api/player/profile');
       applyProfile(profile);
+      const settings=await request('/api/player/social/settings');
+      const social=settings.settings||{};
+      $('ssc-allow-friends').checked=social.allowRequests!==false;
+      $('ssc-show-friends').checked=social.showFriends===true;
+      $('ssc-show-mutual').checked=social.showMutual===true;
+      $('ssc-show-badges').checked=social.showBadges!==false;
       $('player-profile-message').textContent='';
+      const badgeData=await request('/api/player/social/my-badges');
+      const badges=badgeData.items||[],list=$('player-community-awards-list');
+      list.replaceChildren();
+      $('player-community-awards').hidden=!badges.length;
+      for(const badge of badges){
+        const card=document.createElement('article');card.className='ssc-community-award';
+        const title=document.createElement('strong');title.textContent='✦ '+badge.title;
+        card.append(title);
+        if(badge.description){const detail=document.createElement('p');detail.textContent=badge.description;card.append(detail);}
+        list.append(card);
+      }
     } catch(error) {
       $('player-profile-message').textContent='Pengaturan profil belum bisa dimuat: '+error.message;
     }
@@ -189,6 +206,12 @@
         method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(value)
       });
       $('player-profile-title').textContent=result.profile?.displayName||'Anggota SSCircle';
+      const social={allowRequests:$('ssc-allow-friends').checked,
+        showFriends:$('ssc-show-friends').checked,showMutual:$('ssc-show-mutual').checked,
+        showBadges:$('ssc-show-badges').checked};
+      await request('/api/player/social/settings',{
+        method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(social)
+      });
       $('player-profile-message').textContent='Perubahan profil berhasil disimpan.';
     } catch(error) {
       $('player-profile-message').textContent='Tidak dapat menyimpan profil: '+error.message;
