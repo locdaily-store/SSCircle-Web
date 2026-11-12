@@ -42,3 +42,16 @@ test('PWA install memberi petunjuk Safari tanpa memaksa browser yang tidak mendu
  assert.ok(!manifest.categories.includes('social'));
  assert.match(read('service-worker.js'),/sscircle-public-v10\.53\.5/);
 });
+
+test('V10.54 PWA displays the official website logo',()=>{
+ const original=readFileSync(new URL('../assets/sscircle-logo.png',import.meta.url));
+ const scalable=read('assets/sscircle-pwa-icon.svg');
+ const embedded=/data:image\/png;base64,([A-Za-z0-9+/=]+)/.exec(scalable)?.[1];
+ assert.ok(embedded,'Scalable icon must embed the original PNG');
+ assert.deepEqual(Buffer.from(embedded,'base64'),original,'Icon artwork must be identical to official logo');
+ assert.doesNotMatch(scalable,/<path\b/,'No substitute logo or recreated artwork');
+ const manifest=JSON.parse(read('manifest.webmanifest'));
+ assert.equal(manifest.icons[0].src,'/assets/sscircle-logo.png');
+ assert.ok(manifest.icons.some(icon=>icon.sizes==='512x512'));
+ assert.match(read('service-worker.js'),/sscircle-public-v10\.54\.5/);
+});
