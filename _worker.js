@@ -4603,7 +4603,7 @@ function validCommunityForm(input) {
       placeholder:s(f.placeholder,180),options:options.map(v=>s(v,100))};
   });
   if(!ids.has('title') || !ids.has('startAt'))
-    throw Error('Nama event dan tanggal mulai tidak boleh dihapus dari formulir.');
+    throw Error('Formulir event harus memuat nama event dan tanggal mulai.');
   return {
     enabled:input.enabled!==false,
     maxPending:number(input.maxPending,1,10,'Batas pengajuan aktif'),
