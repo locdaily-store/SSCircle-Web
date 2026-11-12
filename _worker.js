@@ -4256,6 +4256,10 @@ async function socialAPI(req,env,path,method){
     if(!await rateLimit(env,req,'social-directory',40,900))
       return bad('Daftar anggota terlalu sering dimuat. Coba lagi nanti.',429);
     const rawOffset=Number(url.searchParams.get('offset')||0);
+    const order=url.searchParams.get('order')==='recent'?'recent':'name';
+    const edition=['java_premium','java_offline','bedrock'].includes(url.searchParams.get('edition'))
+      ?url.searchParams.get('edition'):'all';
+    const orderSql=order==='recent'?'s.submitted_at DESC,s.id':'p.display_name COLLATE NOCASE,s.id';
     if(!Number.isSafeInteger(rawOffset)||rawOffset<0||rawOffset>1000)
       return bad('Halaman daftar anggota tidak valid.',400);
     const rows=await env.DB.prepare(`SELECT s.id,COALESCE(p.display_name,'') AS name,
@@ -4274,8 +4278,10 @@ async function socialAPI(req,env,path,method){
         OR (p.visibility='friends' AND EXISTS(SELECT 1 FROM member_friendships f WHERE f.status='accepted'
           AND ((f.member_a=s.id AND f.member_b=?) OR
                (f.member_b=s.id AND f.member_a=?)))))
-      ORDER BY p.display_name COLLATE NOCASE,s.id LIMIT 25 OFFSET ?`)
-      .bind(me.id,me.id,me.id,rawOffset).all();
+      AND (?='all' OR EXISTS(SELECT 1 FROM minecraft_accounts mc
+        WHERE mc.application_id=s.id AND mc.provider=?))
+      ORDER BY ${orderSql} LIMIT 25 OFFSET ?`)
+      .bind(me.id,me.id,me.id,edition,edition,rawOffset).all();
     const all=rows.results||[],items=all.slice(0,24);
     return J({items:items.map(r=>({
       id:r.id,memberId:memberPublicId(r.id),

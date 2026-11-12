@@ -3,7 +3,7 @@
 (()=>{
  const $=id=>document.getElementById(id),root=$('ssc-social-root');
  if(!root)return;
- let current=null,results=[],friends=[],loading=false,activeTab='friends',directoryOffset=0,directoryMode=false,directoryHasMore=false,profileRequest=0;
+ let current=null,results=[],friends=[],loading=false,activeTab='friends',directoryOffset=0,directoryMode=false,directoryHasMore=false,profileRequest=0,searchTimer=null;
  const escapeId=id=>/^[0-9a-f-]{36}$/.test(id||'');
  const output=$('ssc-social-feedback');
  function showPanel(panel){
@@ -25,7 +25,8 @@
    const res=await fetch(path,{credentials:'same-origin',cache:'no-store',headers:{
      Accept:'application/json',...(options.body?{'Content-Type':'application/json'}:{})},...options});
    const body=await res.json().catch(()=>({}));
-   if(!res.ok)throw new Error(body.error||'Permintaan gagal (HTTP '+res.status+').');
+   if(!res.ok)throw new Error(res.status>=500?'Layanan sedang tidak tersedia. Coba lagi nanti.':
+     (body.error||'Permintaan tidak berhasil.'));
    return body;
  }
  const node=(tag,text,className)=>{
@@ -92,7 +93,8 @@
      window.SSCircleMailbox?.refresh?.();
    }catch(e){message(e.message,true)}
  }
- function actionFor(id,rel){
+ function actionFor(id,rel,allowRequests=true){
+   if(rel==='none'&&!allowRequests)return node('span','Permintaan teman ditutup','player-helper');
    if(rel==='none')return button('Tambah teman',()=>act(id,'request'),'player-action player-action-primary');
    if(rel==='incoming'){
      const box=node('div',undefined,'ssc-social-actions');
@@ -145,7 +147,9 @@
    loading=true;$('ssc-social-directory').disabled=true;$('ssc-social-more').disabled=true;
    if(reset){directoryOffset=0;results=[];directoryMode=true;$('ssc-social-search').value='';}
    try{
-     const data=await api('/api/player/social/directory?offset='+directoryOffset);
+     const order=$('ssc-social-order').value,edition=$('ssc-social-edition').value;
+     const data=await api('/api/player/social/directory?offset='+directoryOffset+
+       '&order='+encodeURIComponent(order)+'&edition='+encodeURIComponent(edition));
      results.push(...(data.items||[]));directoryOffset=data.nextOffset||directoryOffset;
      directoryHasMore=!!data.hasMore;renderResults();
      message('Menampilkan '+results.length+' member yang mengizinkan pencarian.');
@@ -166,7 +170,10 @@
      el.textContent=String(counts[el.dataset.sscFriendsCount]||0);
    }
    const list=$('ssc-social-friends');list.replaceChildren();
-   const visible=friends.filter(f=>f.relationship===activeTab);
+   const filter=($('ssc-social-friend-search').value||'').trim().toLocaleLowerCase('id-ID');
+   const visible=friends.filter(f=>f.relationship===activeTab&&
+     (!filter||(f.displayName||'').toLocaleLowerCase('id-ID').includes(filter)||
+       (f.memberId||'').toLocaleLowerCase('id-ID').includes(filter)));
    if(!visible.length){
      const empty={friends:'Belum ada teman. Cari member untuk menambah teman.',
        incoming:'Belum ada permintaan pertemanan masuk.',
@@ -225,8 +232,17 @@
      view.append(node('p',data.bio||'Member ini belum menambahkan deskripsi.','ssc-social-bio'));
      const relation=node('div',undefined,'ssc-social-relationship');
      relation.append(node('span',statusLabel[data.relationship]||'Belum berteman'),
-       actionFor(id,data.relationship));
+       actionFor(id,data.relationship,data.allowRequests!==false));
      view.append(relation);
+     if(Number.isInteger(data.friendCount))
+       view.append(node('p',data.friendCount+' teman di SSCircle','player-helper'));
+     if(data.mutualFriends?.length){
+       view.append(node('h4','Teman bersama','ssc-social-subtitle'));
+       const mutual=node('div',undefined,'ssc-social-mutual');
+       for(const friend of data.mutualFriends)
+         mutual.append(button(friend.displayName,()=>openProfile(friend.id)));
+       view.append(mutual);
+     }
      view.append(node('h4','Akun Minecraft','ssc-social-subtitle'));
      const accounts=node('div',undefined,'ssc-social-accounts');
      for(const a of data.accounts||[]){
@@ -259,6 +275,15 @@
      }else{
        view.append(node('p','Pemilik tidak membagikan statistik permainannya.','player-helper'));
      }
+     if(data.communityBadges?.length){
+       view.append(node('h4','Penghargaan komunitas','ssc-social-subtitle'));
+       for(const badge of data.communityBadges){
+         const card=node('div',undefined,'ssc-social-award');
+         card.append(node('strong','✦ '+badge.title));
+         if(badge.description)card.append(node('p',badge.description));
+         view.append(card);
+       }
+     }
      if(data.achievements?.length){
        view.append(node('h4','Penghargaan SSCircle','ssc-social-subtitle'));
        for(const award of data.achievements.slice(0,15))
@@ -280,6 +305,14 @@
    }
  });
  $('ssc-social-directory').addEventListener('click',()=>void loadDirectory(true));
+ for(const id of ['ssc-social-order','ssc-social-edition'])
+   $(id).addEventListener('change',()=>void loadDirectory(true));
+ $('ssc-social-friend-search').addEventListener('input',renderFriends);
+ $('ssc-social-search').addEventListener('input',()=>{
+   clearTimeout(searchTimer);
+   const value=$('ssc-social-search').value.trim();
+   if(value.length>=2)searchTimer=setTimeout(()=>void search(),350);
+ });
  $('ssc-social-friends-open').addEventListener('click',()=>{
    showPanel('friends');void refreshFriends();
  });
