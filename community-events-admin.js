@@ -161,7 +161,7 @@
 
     const questions = element('div', 'c55-question-list');
     formPolicy.fields.forEach((question, index) => {
-      const card = element('article', 'c55-mini-card');
+      const card = element('article', 'c55-mini-card c55-question-entry');
       const heading = element('div', 'c55-admin-actions');
       heading.append(element('strong', '', 'Pertanyaan ' + (index + 1)));
       const move = delta => {
@@ -258,6 +258,16 @@
       questions.append(card);
     });
     formEditor.append(questions);
+    window.SSCircleSort?.attach(questions, {
+      item: '.c55-question-entry',
+      handleTarget: '.c55-admin-actions',
+      onMove: (from, to) => {
+        const fields = formPolicy.fields;
+        fields.splice(to, 0, fields.splice(from, 1)[0]);
+        pendingEdits = true;
+        renderFormEditor();
+      }
+    });
 
     const add = button('+ Tambah pertanyaan', () => {
       if (formPolicy.fields.length >= 20) return notify('Maksimal 20 pertanyaan.', true);
