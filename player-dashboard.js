@@ -34,7 +34,10 @@
     let data = null;
     try { data = await response.json(); } catch { /* network/server failure */ }
     if (!response.ok) {
-      const err = new Error(data?.error || (response.status === 401 ? 'Silakan masuk kembali.' : 'Koneksi ke server sedang bermasalah.'));
+      const feedback=response.status>=500?'Layanan SSCircle sedang tidak tersedia. Coba lagi nanti.':
+        (typeof data?.error==='string'&&data.error.length<=180?data.error:
+          (response.status===401?'Silakan masuk kembali.':'Permintaan belum berhasil.'));
+      const err = new Error(feedback);
       err.status = response.status;
       err.remainingSeconds = Number(data?.remainingSeconds || response.headers.get('Retry-After') || 0);
       throw err;
