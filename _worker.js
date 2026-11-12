@@ -875,7 +875,7 @@ async function publicVotingPayload(env, application=null) {
     q.id,settings.homeVotingTokenMode==='per-question'?Number(q.tokens||3):tokensPerQuestion
   ]));
   const remainingTokens=Object.fromEntries(runtime.questions.map(q=>[
-    q.id,Math.max(0,questionTokens[q.id]-(usedOptions[q.id]||[]).length)
+    q.id,Math.max(0,Math.min(questionTokens[q.id],q.options.length)-(usedOptions[q.id]||[]).length)
   ]));
   const votedQuestionIds=Object.keys(remainingTokens).filter(id=>remainingTokens[id]===0);
   return {
