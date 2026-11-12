@@ -4995,10 +4995,32 @@ async function noticeAPI(req,env,path,method){
   if(!await rateLimit(env,req,'admin-notification',30,900))return bad('Terlalu banyak perubahan.',429);
   const data=await body(req,4000);
   if(method==='DELETE'){
-   if(!SSC_SOCIAL_ID.test(data?.id||''))return bad('Pengumuman tidak ditemukan.',404);
-   const result=await env.DB.prepare('UPDATE notice_announcements SET archived_at=? WHERE id=? AND archived_at IS NULL').bind(new Date().toISOString(),data.id).run();
-   if(!result.meta?.changes)return bad('Pengumuman sudah diarsipkan.',404);
-   return J({ok:true});
+    const mode=['archive','delete','delete-archived'].includes(data?.mode)?data.mode:'archive';
+    if(mode==='delete-archived'){
+      if(data.confirmation!=='HAPUS RIWAYAT')return bad('Konfirmasi hapus riwayat tidak sesuai.',400);
+      const result=await env.DB.prepare("SELECT id FROM notice_announcements WHERE archived_at IS NOT NULL LIMIT 200").all();
+      const ids=(result.results||[]).map(row=>row.id);
+      if(!ids.length)return J({ok:true,deleted:0});
+      await env.DB.batch([
+        ...ids.map(id=>env.DB.prepare('DELETE FROM notice_receipts WHERE notice_id=?').bind(id)),
+        ...ids.map(id=>env.DB.prepare('DELETE FROM notice_announcements WHERE id=? AND archived_at IS NOT NULL').bind(id))
+      ]);
+      return J({ok:true,deleted:ids.length});
+    }
+    if(!SSC_SOCIAL_ID.test(data?.id||''))return bad('Pengumuman tidak ditemukan.',404);
+    if(mode==='delete'){
+      const found=await env.DB.prepare('SELECT id FROM notice_announcements WHERE id=?').bind(data.id).first();
+      if(!found)return bad('Pengumuman tidak ditemukan.',404);
+      await env.DB.batch([
+        env.DB.prepare('DELETE FROM notice_receipts WHERE notice_id=?').bind(data.id),
+        env.DB.prepare('DELETE FROM notice_announcements WHERE id=?').bind(data.id)
+      ]);
+      return J({ok:true,deleted:1});
+    }
+    const result=await env.DB.prepare('UPDATE notice_announcements SET archived_at=? WHERE id=? AND archived_at IS NULL')
+      .bind(new Date().toISOString(),data.id).run();
+    if(!result.meta?.changes)return bad('Pengumuman sudah diarsipkan.',404);
+    return J({ok:true,archived:1});
   }
   if(method==='POST'){
    const title=s(data?.title,120).trim(),content=s(data?.content,1500).trim();
