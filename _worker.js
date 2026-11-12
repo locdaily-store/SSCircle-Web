@@ -4793,13 +4793,16 @@ async function community55API(req,env,path,method){
     if(Number(active?.total)>=config.maxPending)
       return bad('Batas pengajuan yang masih menunggu persetujuan sudah tercapai.',409);
     const end=new Date(start+2*3600000).toISOString(),id='member-event-'+uid();
-    await env.DB.batch([
-      env.DB.prepare("INSERT INTO community_event_proposals(id,member_id,executor,title,technical,start_at,end_at,prizes_json,status,reason,capacity,created_at) VALUES(?,?,?,?,?,?,?,?,'pending','',?,?)")
+    const operations=await env.DB.batch([
+      env.DB.prepare("INSERT INTO community_event_proposals(id,member_id,executor,title,technical,start_at,end_at,prizes_json,status,reason,capacity,created_at) SELECT ?,?,?,?,?,?,?,?,'pending','',?,? WHERE (SELECT COUNT(*) FROM community_event_proposals WHERE member_id=? AND status='pending')<? AND EXISTS(SELECT 1 FROM submissions WHERE id=? AND status='accepted')")
         .bind(id,member.id,executor,title,technical,new Date(start).toISOString(),end,
-          JSON.stringify(prizes.map((p,i)=>({rank:i+1,prize:p}))),config.defaultCapacity,now),
-      env.DB.prepare("INSERT INTO community_event_form_answers(proposal_id,payload) VALUES(?,?)")
-        .bind(id,JSON.stringify({answers,fields:config.fields}))
+          JSON.stringify(prizes.map((p,i)=>({rank:i+1,prize:p}))),config.defaultCapacity,now,
+          member.id,config.maxPending,member.id),
+      env.DB.prepare("INSERT INTO community_event_form_answers(proposal_id,payload) SELECT ?,? WHERE EXISTS (SELECT 1 FROM community_event_proposals WHERE id=?)")
+        .bind(id,JSON.stringify({answers,fields:config.fields}),id)
     ]);
+    if(!Number(operations[0]?.meta?.changes))
+      return bad('Batas pengajuan aktif telah tercapai atau akun tidak lagi diterima.',409);
     return J({ok:true,id,status:'pending',message:'Pengajuan event dikirim dan menunggu persetujuan Admin Control.'},201);
   }
   if(path==='/api/community/events/join'&&method==='POST'){
