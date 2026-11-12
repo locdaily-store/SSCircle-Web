@@ -57,7 +57,7 @@ test('Paper Direct: no insecure default endpoint or secrets in shipped config',(
 });
 
 test('V10.45.2: safe tab-completion shows matching commands and hides admin-only reload',()=>{
- assert.match(manifest,/version: '10\.49\.1\.7'/);
+ assert.match(manifest,/version: '10\.54\.5'/);
  assert.match(paper,/implements CommandExecutor, TabCompleter, Listener/);
  assert.match(paper,/public List<String> onTabComplete\(CommandSender sender, Command command, String alias, String\[\] args\)/);
  assert.match(paper,/if \(args\.length != 1\) return List\.of\(\)/);
@@ -82,7 +82,7 @@ test('V10.45.2: explain both independent failures without exposing shared secret
 });
 
 test('V10.45.3: operator-only signed diagnostic and safe error presentation',()=>{
- assert.match(manifest,/version: '10\.49\.1\.7'/);
+ assert.match(manifest,/version: '10\.54\.5'/);
  assert.match(paper,/private static final String DIAGNOSE_PATH = "\/api\/minecraft\/link\/diagnose"/);
  assert.match(paper,/options\.add\("diagnose"\)/);
  assert.match(paper,/private void runDiagnostic\(CommandSender sender\)/);
@@ -279,8 +279,8 @@ test('V10.48.4.3: Profile/Admin refresh their actual script URLs after Premium f
  const [major,minor,patch]=dashboardTag.slice(1).map(Number);
  assert.ok(major>10||(major===10&&(minor>49||(minor===49&&patch>=1))),
    'Jangan memuat script Dashboard versi lama');
- assert.match(adminHtml,/minecraft-sync-admin\.js\?v=10\.49\.1\.7/);
- assert.match(adminHtml,/minecraft-sync-admin\.css\?v=10\.49\.1\.7/);
+ assert.match(adminHtml,/minecraft-sync-admin\.js\?v=10\.54\.5/);
+ assert.match(adminHtml,/minecraft-sync-admin\.css\?v=10\.54\.5/);
  assert.match(headers,/\/my-sscircle\.html\s+Cache-Control: no-store/);
  assert.match(headers,/\/my-sscircle\s+Cache-Control: no-store/);
  assert.match(headers,/\/admin\.html\s+Cache-Control: no-store/);
@@ -387,4 +387,15 @@ test('statistics collection stops retrying unsupported material categories on fu
  assert.match(stats,/blockMaterials\.removeAll\(rejectedMaterials\)/);
  assert.match(stats,/activeJob=null;\s*\/\/ Only compact after/);
  assert.match(stats,/http\.sendAsync\(/);
+});
+
+test('V10.54: bounded snapshot cache, coalesced disk writer, and non-destructive overflow',()=>{
+ const stats=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/PaperStatsSync.java',import.meta.url),'utf8');
+ assert.match(stats,/MAX_RECENT_SAMPLES=2048/);
+ assert.match(stats,/AtomicReference<List<Snapshot>> waitingWrite/);
+ assert.match(stats,/writerRunning\.compareAndSet\(false,true\)/);
+ assert.match(stats,/queueDigest\(props,copy\.size\(\)\)/);
+ assert.match(stats,/\.damaged-/);
+ assert.match(stats,/queueLocked=true/);
+ assert.doesNotMatch(stats,/pending\.remove\(pending\.keySet\(\)\.iterator\(\)\.next\(\)\)/);
 });

@@ -42,4 +42,23 @@ class PaperStatsSyncTest {
             premium,"fastlogin-cracked",0,0,0,0));
     }
 
+    @Test void fullQueueKeepsOldSnapshots() {
+        var entries=new java.util.HashMap<String,PaperStatsSync.Snapshot>();
+        for(int i=0;i<1024;i++)entries.put("id-"+i,null);
+        assertTrue(PaperStatsSync.canQueue(entries,"id-1"));
+        assertFalse(PaperStatsSync.canQueue(entries,"id-new"));
+        assertEquals(1024,entries.size());
+    }
+    @Test void checksumChangesWhenSavedQueueIsTampered() throws Exception {
+        var props=new java.util.Properties();
+        var item=new PaperStatsSync.Snapshot(UUID.randomUUID().toString(),"bedrock",
+            "12345678901234567","floodgate-xuid","2026-11-12T10:00:00Z",120,1,3,16);
+        props.setProperty("item.0",item.toStorage());
+        String digest=PaperStatsSync.queueDigest(props,1);
+        assertEquals(64,digest.length());
+        assertEquals(digest,PaperStatsSync.queueDigest(props,1));
+        props.setProperty("item.0",item.toStorage()+"tampered");
+        assertNotEquals(digest,PaperStatsSync.queueDigest(props,1));
+        assertThrows(java.io.IOException.class,()->PaperStatsSync.queueDigest(props,2));
+    }
 }

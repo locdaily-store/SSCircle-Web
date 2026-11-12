@@ -27,12 +27,16 @@ import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.security.GeneralSecurityException;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
+import java.util.HexFormat;
+import java.util.Iterator;
 import java.util.HashSet;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
@@ -44,7 +48,9 @@ import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -57,6 +63,7 @@ import java.util.function.Supplier;
 final class PaperStatsSync implements Listener {
     private static final String ROUTE="/api/minecraft/stats/ingest";
     private static final int MAX_PENDING=1024;
+    private static final int MAX_RECENT_SAMPLES=2048;
     private static final long MAX_FILE_BYTES=2_000_000;
     private static final long HTTP_PERIOD_TICKS=60L;
     private final SSCirclePaperLinkPlugin plugin;
@@ -65,7 +72,7 @@ final class PaperStatsSync implements Listener {
     private final Supplier<String> endpoint;
     private final Supplier<String> secret;
     private final LinkedHashMap<String,Snapshot> pending=new LinkedHashMap<>();
-    private final Map<String,Snapshot> latestSample=new HashMap<>();
+    private final Map<String,Snapshot> latestSample=new LinkedHashMap<>(128,0.75f,true);
     private final ArrayDeque<UUID> playersToSample=new ArrayDeque<>();
     private final Set<UUID> enqueuedPlayers=new HashSet<>();
     private final List<Material> blockMaterials=new ArrayList<>();
@@ -78,6 +85,10 @@ final class PaperStatsSync implements Listener {
         return thread;
     });
     private final AtomicBoolean diskError=new AtomicBoolean(false);
+    private final AtomicReference<List<Snapshot>> waitingWrite=new AtomicReference<>();
+    private final AtomicBoolean writerRunning=new AtomicBoolean(false);
+    private boolean queueLocked,queueQuarantined,queueFull;
+    private long lastFullWarningMs;
     private CaptureJob activeJob;
     private boolean dirty,inFlight;
     private int blockReadsPerTick=24;
@@ -137,7 +148,7 @@ final class PaperStatsSync implements Listener {
         flushQueue();
         diskWriter.shutdown();
         try {
-            if(!diskWriter.awaitTermination(3,TimeUnit.SECONDS))
+            if(!diskWriter.awaitTermination(5,TimeUnit.SECONDS))
                 plugin.getLogger().warning("Disk queue belum selesai ditulis; pastikan shutdown selesai bersih.");
         }catch(InterruptedException ex){
             Thread.currentThread().interrupt();
@@ -152,7 +163,18 @@ final class PaperStatsSync implements Listener {
 
     int pendingCount(){return pending.size();}
     int captureBacklogCount(){return playersToSample.size()+(activeJob==null?0:1);}
-    String deliveryCode(){return deliveryCode;}
+    String deliveryCode(){
+        if(queueLocked||queueQuarantined||diskError.get())return "QUEUE_STORAGE_ERROR";
+        return queueFull?"QUEUE_FULL":deliveryCode;
+    }
+    String queueHealth(){
+        if(queueLocked)return "File lama perlu diperiksa; penulisan ditahan";
+        if(queueQuarantined)return "Arsip file rusak perlu diperiksa";
+        if(diskError.get())return "Penulisan disk bermasalah";
+        if(queueFull)return "Penuh; data lama dipertahankan";
+        return "Normal";
+    }
+    long retrySeconds(){return Math.max(0,(nextAttemptAtMs-System.currentTimeMillis()+999)/1000);}
     String lastSuccessAt(){return lastSuccessAt==null?null:lastSuccessAt.toString();}
     String deliveryStatus(){return lastDelivery;}
     private boolean enabled(){return plugin.getConfig().getBoolean("stats-sync.enabled",true);}
@@ -286,6 +308,16 @@ final class PaperStatsSync implements Listener {
             previous.blocksMined());
     }
 
+    private void rememberSample(String key,Snapshot snapshot){
+        latestSample.put(key,snapshot);
+        if(latestSample.size()>MAX_RECENT_SAMPLES){
+            Iterator<String> it=latestSample.keySet().iterator();
+            if(it.hasNext()){it.next();it.remove();}
+        }
+    }
+    static boolean canQueue(Map<String,Snapshot> map,String key){
+        return map.containsKey(key)||map.size()<MAX_PENDING;
+    }
     private void captureFinished(SSCirclePaperLinkPlugin.Identity id,int playtime,
                                  int deaths,int mobs,int blocks){
         String key=id.provider()+":"+id.verifiedId();
@@ -296,13 +328,21 @@ final class PaperStatsSync implements Listener {
         Snapshot snapshot=new Snapshot(UUID.randomUUID().toString(),id.provider(),
             id.verifiedId(),id.authSource(),Instant.now().toString(),
             playtime,deaths,mobs,blocks);
-        latestSample.put(key,snapshot);
-        pending.remove(key); // Coalesce older unacknowledged snapshots.
-        if(pending.size()>=MAX_PENDING){
-            pending.remove(pending.keySet().iterator().next());
-            plugin.getLogger().warning("Antrean stats penuh; snapshot tertua diganti.");
+        if(!canQueue(pending,key)){
+            queueFull=true;
+            deliveryCode="QUEUE_FULL";
+            lastDelivery="Antrean penuh; data lama tetap disimpan.";
+            long now=System.currentTimeMillis();
+            if(now-lastFullWarningMs>=60000L){
+                lastFullWarningMs=now;
+                plugin.getLogger().warning("Antrean statistik penuh. Snapshot lama dipertahankan.");
+            }
+            return;
         }
+        rememberSample(key,snapshot);
+        pending.remove(key);
         pending.put(key,snapshot);
+        queueFull=pending.size()>=MAX_PENDING;
         if(lastSuccessAt==null)deliveryCode="QUEUE_PENDING";
         dirty=true;
     }
@@ -383,6 +423,7 @@ final class PaperStatsSync implements Listener {
             if(current!=null&&current.eventId().equals(eventId)){
                 pending.remove(key);
                 dirty=true;
+                queueFull=pending.size()>=MAX_PENDING;
             }
             lastDelivery=acknowledged?"Statistik berhasil tersinkron":
                 "Akun belum tertaut; menunggu statistik berikutnya.";
@@ -408,48 +449,84 @@ final class PaperStatsSync implements Listener {
             mac.doFinal(value.getBytes(StandardCharsets.UTF_8)));
     }
 
+    static String queueDigest(Properties props,int count) throws IOException {
+        try{
+            MessageDigest hash=MessageDigest.getInstance("SHA-256");
+            for(int i=0;i<count;i++){
+                String item=props.getProperty("item."+i);
+                if(item==null)throw new IOException("Queue item missing");
+                hash.update(item.getBytes(StandardCharsets.UTF_8));
+                hash.update((byte)10);
+            }
+            return HexFormat.of().formatHex(hash.digest());
+        }catch(NoSuchAlgorithmException ex){throw new IOException("Missing checksum algorithm",ex);}
+    }
     private void loadQueue(){
         if(!Files.exists(queueFile,LinkOption.NOFOLLOW_LINKS))return;
         try{
             if(!Files.isRegularFile(queueFile,LinkOption.NOFOLLOW_LINKS)
+                ||Files.isSymbolicLink(queueFile)
                 ||Files.size(queueFile)>MAX_FILE_BYTES)throw new IOException("Invalid queue file");
             Properties props=new Properties();
             try(InputStream in=Files.newInputStream(queueFile)){props.load(in);}
-            int count=Math.min(MAX_PENDING,Integer.parseInt(props.getProperty("count","0")));
+            int count=Integer.parseInt(props.getProperty("count","-1"));
+            if(count<0||count>MAX_PENDING)throw new IOException("Invalid queue count");
+            String saved=props.getProperty("sha256");
+            if(saved!=null&&!saved.equals(queueDigest(props,count)))
+                throw new IOException("Queue checksum mismatch");
+            LinkedHashMap<String,Snapshot> recovered=new LinkedHashMap<>();
             for(int i=0;i<count;i++){
                 Snapshot snap=Snapshot.fromStorage(props.getProperty("item."+i,""));
-                if(snap!=null){
-                    String key=snap.provider()+":"+snap.providerId();
-                    pending.put(key,snap);
-                    // Preserve last sampled values after restart: a quick
-                    // exit must never accidentally replace recovered blocks
-                    // with an incomplete or zero-valued sample.
-                    latestSample.put(key,snap);
-                }
+                if(snap==null)throw new IOException("Invalid queue entry");
+                String key=snap.provider()+":"+snap.providerId();
+                if(recovered.putIfAbsent(key,snap)!=null)
+                    throw new IOException("Duplicate queue identity");
             }
+            pending.putAll(recovered);
+            for(Map.Entry<String,Snapshot> e:recovered.entrySet())
+                rememberSample(e.getKey(),e.getValue());
+            if(saved==null)dirty=true; // Upgrade pre-V10.54 queue without losing old entries.
             if(!pending.isEmpty()){
                 deliveryCode="QUEUE_PENDING";
                 lastDelivery="Memulihkan "+pending.size()+" snapshot dari disk.";
             }
         }catch(Exception ex){
-            plugin.getLogger().warning("Antrean statistik tidak bisa dibaca; data tidak valid tidak dikirim.");
-            pending.clear();
+            queueQuarantined=true;
+            deliveryCode="QUEUE_STORAGE_ERROR";
+            lastDelivery="File antrean lama memerlukan pemeriksaan.";
+            Path archive=queueFile.resolveSibling(queueFile.getFileName()
+                +".damaged-"+System.currentTimeMillis());
+            try{
+                if(Files.isSymbolicLink(queueFile))throw new IOException("Queue symlink");
+                Files.move(queueFile,archive);
+                plugin.getLogger().warning("Arsip antrean lama disimpan sebagai "+archive.getFileName()
+                    +"; jangan dihapus sebelum diperiksa.");
+            }catch(IOException failed){
+                queueLocked=true;
+                plugin.getLogger().warning("Antrean lama tidak bisa diamankan; penulisan baru ditahan.");
+            }
         }
     }
-
     private void flushQueue(){
+        if(queueLocked)return;
         if(diskError.getAndSet(false))dirty=true;
         if(!dirty)return;
         dirty=false;
-        List<Snapshot> copy=new ArrayList<>(pending.values());
-        try{
-            diskWriter.submit(()->writeQueue(copy));
-        }catch(RuntimeException ignored){
-            plugin.getLogger().warning("Antrean statistik belum bisa disimpan.");
-            dirty=true;
+        // One scheduled worker and one replaceable copy: bounded RAM on slow disks.
+        waitingWrite.set(new ArrayList<>(pending.values()));
+        if(!writerRunning.compareAndSet(false,true))return;
+        try{diskWriter.execute(this::drainWrites);}
+        catch(RejectedExecutionException ex){writerRunning.set(false);diskError.set(true);}
+    }
+    private void drainWrites(){
+        while(true){
+            List<Snapshot> copy=waitingWrite.getAndSet(null);
+            if(copy!=null){writeQueue(copy);continue;}
+            writerRunning.set(false);
+            if(waitingWrite.get()==null||!writerRunning.compareAndSet(false,true))
+                return;
         }
     }
-
     private void writeQueue(List<Snapshot> copy){
         Path temporary=null;
         try{
@@ -459,6 +536,7 @@ final class PaperStatsSync implements Listener {
             props.setProperty("count",Integer.toString(copy.size()));
             int index=0;
             for(Snapshot s:copy)props.setProperty("item."+(index++),s.toStorage());
+            props.setProperty("sha256",queueDigest(props,copy.size()));
             temporary=Files.createTempFile(queueFile.getParent(),"stats-queue-",".tmp");
             try(OutputStream out=Files.newOutputStream(temporary)){
                 props.store(out,"SSCircle private stats queue");
@@ -469,6 +547,7 @@ final class PaperStatsSync implements Listener {
             }catch(AtomicMoveNotSupportedException unsupported){
                 Files.move(temporary,queueFile,StandardCopyOption.REPLACE_EXISTING);
             }
+            diskError.set(false);
         }catch(IOException ex){
             diskError.set(true);
             plugin.getLogger().warning("Antrean statistik gagal ditulis; periksa penyimpanan host.");

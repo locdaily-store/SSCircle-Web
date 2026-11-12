@@ -1,4 +1,4 @@
-# SSCircle Player Sync Paper V10.49.1.1 (Web V10.49.1.1)
+# SSCircle Player Sync Paper V10.54.5 (Web V10.54.5)
 
 Penghubung akun Minecraft ke Profile SSCircle, tanpa Velocity. Plugin memakai HMAC, nonce, kode sekali-pakai 10 menit, dan konfirmasi ulang pada website. Satu anggota dapat menghubungkan beberapa identitas Minecraft sesuai kebijakan Admin (default 3, batas 1–5). Identitas, statistik, UUID dan inventory tetap terpisah.
 
@@ -225,3 +225,12 @@ Tidak ada perubahan migrasi D1, secret, metode pembuktian Premium, kontrak API, 
 ## V10.49.1.7: Auto Server Pairing
 
 Instalasi baru cukup menetapkan URL HTTPS website pada config.yml dan menyetujui kode lewat Admin Control -> Minecraft Sync. Server lama tetap mempertahankan server-secret.txt dan tidak wajib migrasi. Detail: [panduan V10.49.1.7](../docs/V10.49.1.7-AUTO-SERVER-PAIRING.md).
+
+## V10.54: penyimpanan statistik dan beban server
+- Antrean lama tidak dibuang ketika mencapai batas 1.024. Data dari identitas baru ditunda dan peringatan ditampilkan.
+- Cache sampel Minecraft dibatasi 2.048 identitas agar RAM tidak bertambah tanpa batas pada server yang lama menyala.
+- Pekerja disk hanya satu, dengan satu salinan antrean yang dapat diganti jika disk melambat. Penulisan tidak dilakukan pada thread tick.
+- File antrean baru memakai checksum SHA-256 dan pergantian file atomik. File yang tidak valid dipertahankan sebagai .damaged-*, tanpa reset otomatis.
+- Periksa kesehatan antrean melalui /sscircle status sebelum menghapus atau memulihkan file plugin.
+- Config.yml yang sudah dibuat server tidak direset; pengaturan pembacaan statistik dan Auto Pairing tetap berlaku.
+- GitHub CI tidak membuktikan TPS di hosting nyata. Lakukan uji MSPT/TPS dengan 20–50 pemain aktif.

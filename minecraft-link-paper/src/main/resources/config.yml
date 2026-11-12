@@ -63,3 +63,6 @@ sync-monitor:
 # Polling bertahap: satu pemain per 40 tick, maksimal dua permintaan HTTPS aktif.
 skin-sync:
   enabled: true
+
+# V10.54: jangan hapus stats-queue.properties ataupun .damaged-* tanpa backup.
+# Antrean disk tetap asynchronous dan maksimum satu pekerjaan penulisan aktif.
