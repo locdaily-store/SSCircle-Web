@@ -4,8 +4,8 @@
 (() => {
   const $=id=>document.getElementById(id);
   let items=[],current=null,filter='all',loading=false,appStatus='none';
-  const kindLabel=type=>type==='activation'?'AKTIVASI AKUN':type==='status'?'STATUS PENDAFTARAN':'PEMBERITAHUAN';
-  const kindIcon=type=>type==='activation'?'✦':type==='status'?'◆':'✉';
+  const kindLabel=type=>({activation:'AKTIVASI AKUN',status:'STATUS PENDAFTARAN',announcement:'PENGUMUMAN RESMI',event:'EVENT SSCIRCLE',friend_request:'KOMUNITAS',friend_response:'KOMUNITAS',badge:'PENGHARGAAN'})[type]||'PEMBERITAHUAN';
+  const kindIcon=type=>({activation:'✦',status:'◆',announcement:'◈',event:'▦',friend_request:'♙',friend_response:'♙',badge:'★'})[type]||'✉';
   // Kode aktivasi hanya untuk pendaftar yang diterima; selain itu tombolnya dikunci.
   function applyAccess(){
     const ok=appStatus==='accepted';
@@ -35,7 +35,10 @@
     const root=$('mailbox-list');root.replaceChildren();
     const shown=items.filter(p=>filter==='all'||(filter==='unread'&&!p.read)||
       (filter==='status'&&p.type==='status')||
-      (filter==='activation'&&(p.type==='activation'||p.type==='information')));
+      (filter==='activation'&&(p.type==='activation'||p.type==='information'))||
+      (filter==='announcement'&&p.type==='announcement')||
+      (filter==='event'&&p.type==='event')||
+      (filter==='community'&&['friend_request','friend_response','badge'].includes(p.type)));
     const unread=items.filter(x=>!x.read).length;
     $('mailbox-unread').hidden=!unread;
     $('mailbox-unread').textContent=String(unread);
@@ -66,6 +69,10 @@
     $('mailbox-detail-title').textContent=item.title;
     $('mailbox-detail-time').textContent=fmt(item.createdAt);
     $('mailbox-detail-body').textContent=item.content;
+    const link=$('mailbox-detail-link');
+    const allowed=new Set(['/','/events.html','/events','/rules.html','/rules','/seasons','/seasons.html','/mailbox','/my-sscircle']);
+    link.hidden=!allowed.has(item.link);
+    if(!link.hidden)link.href=item.link;
     $('mailbox-secret-panel').hidden=item.type!=='activation';
     $('mailbox-secret-row').hidden=true;
     $('mailbox-secret-value').textContent='';

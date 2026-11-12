@@ -23,7 +23,9 @@
   <script src="site-shell.js?v=10.35.0" defer></script>
   <script src="member-password-client.js?v=10.40.0" defer></script>
   <script src="profile-page-layout.js?v=10.51.3" defer></script>
-  <script src="mailbox-widget.js?v=10.43.0" defer></script>
+  <script src="mailbox-widget.js?v=10.53.0" defer></script>
+  <script src="notification-preferences.js?v=10.53.0" defer></script>
+  <link rel="stylesheet" href="notification-center.css?v=10.53.0">
   <script src="minecraft-skin-3d.js?v=10.49.1.5" defer></script>
   <script src="minecraft-avatars.js?v=10.49.1.5" defer></script>
   <script src="player-dashboard.js?v=10.52.5" defer></script>
@@ -290,6 +292,28 @@
               <p id="player-profile-message" role="status" aria-live="polite"></p>
             </div>
           </form>
+          <section class="ssc-notice-preferences" id="ssc-notice-preferences" aria-labelledby="ssc-notice-settings-heading">
+            <h3 id="ssc-notice-settings-heading">Pengaturan notifikasi</h3>
+            <p class="player-helper">Pilih pemberitahuan yang ingin diterima. Informasi akun dan keamanan tetap dikirim.</p>
+            <form id="ssc-notice-preferences-form">
+              <label class="player-setting-switch"><input type="checkbox" name="announcements" checked>Pengumuman server</label>
+              <label class="player-setting-switch"><input type="checkbox" name="events" checked>Informasi dan pengingat event</label>
+              <label class="player-setting-switch"><input type="checkbox" name="community" checked>Permintaan pertemanan</label>
+              <label class="player-setting-switch"><input type="checkbox" name="awards" checked>Badge dan penghargaan</label>
+              <label class="player-setting-field">Waktu pengingat event
+                <select name="reminderMode">
+                  <option value="both">24 jam dan 1 jam sebelumnya</option>
+                  <option value="24h">24 jam sebelumnya</option>
+                  <option value="1h">1 jam sebelumnya</option>
+                  <option value="off">Tanpa pengingat</option>
+                </select>
+              </label>
+              <div class="player-setting-actions">
+                <button class="player-action player-action-primary" id="ssc-notice-preferences-save" type="submit">Simpan notifikasi</button>
+                <p id="ssc-notice-preferences-message" role="status" aria-live="polite"></p>
+              </div>
+            </form>
+          </section>
         </section>
 
         <section data-profile-section="achievements" class="player-card player-achievements" aria-labelledby="player-achievements-title">

@@ -17,7 +17,7 @@
   <link rel="stylesheet" href="mailbox.css?v=10.38.0">
   <script src="color-theme.js?v=10.38.0" defer></script>
   <script src="site-shell.js?v=10.38.0" defer></script>
-  <script src="mailbox.js?v=10.50.0" defer></script>
+  <script src="mailbox.js?v=10.53.0" defer></script>
     <script src="/pwa-register.js?v=10.53.0" defer></script>
   </head>
 <body class="home-page mailbox-page theme-v3">
@@ -62,6 +62,9 @@
           <button type="button" class="mailbox-filter" data-filter="unread" aria-pressed="false">Belum dibaca</button>
           <button type="button" class="mailbox-filter" data-filter="status" aria-pressed="false">Status</button>
           <button type="button" class="mailbox-filter" data-filter="activation" aria-pressed="false">Aktivasi</button>
+            <button type="button" class="mailbox-filter" data-filter="announcement" aria-pressed="false">Pengumuman</button>
+            <button type="button" class="mailbox-filter" data-filter="event" aria-pressed="false">Event</button>
+            <button type="button" class="mailbox-filter" data-filter="community" aria-pressed="false">Komunitas</button>
         </div>
         <div id="mailbox-list" class="mailbox-list" aria-live="polite"></div>
       </div>
@@ -72,6 +75,7 @@
           <h2 id="mailbox-detail-title"></h2>
           <time id="mailbox-detail-time"></time>
           <p id="mailbox-detail-body"></p>
+          <a class="mailbox-primary ssc-notice-link" id="mailbox-detail-link" hidden>Lihat informasi</a>
           <div id="mailbox-secret-panel" hidden class="mailbox-secret-panel">
             <p>Kode bersifat rahasia. Jangan bagikan kepada pemain lain.</p>
             <button type="button" id="mailbox-reveal" class="mailbox-secondary">Tampilkan kode</button>

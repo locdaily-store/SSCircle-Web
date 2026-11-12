@@ -26,6 +26,8 @@
     <script src="vote-admin.js?v=10.31.0" defer></script>
     <script src="rules-admin.js?v=10.31.0" defer></script>
     <script src="events-admin.js?v=10.31.0" defer></script>
+    <script src="notification-admin.js?v=10.53.0" defer></script>
+    <link rel="stylesheet" href="notification-center.css?v=10.53.0">
     <script src="seasons-admin.js?v=10.34.0" defer></script>
     <script src="registration-preview.js?v=10.26.0" defer></script>
     <script src="color-theme-admin.js?v=10.31.0" defer></script>
@@ -95,6 +97,7 @@
                 <h2 id="sidebar-group-1">KONTEN &amp; KOMUNITAS</h2>
                 <button type="button" class="side-link" data-tab="homepage"><span class="side-icon" aria-hidden="true">⌂</span><span>Homepage</span></button>
                 <button type="button" class="side-link" data-tab="events-admin"><span class="side-icon" aria-hidden="true">▦</span><span>Event &amp; Jadwal</span></button>
+                <button type="button" class="side-link" data-tab="notifications-admin"><span class="side-icon" aria-hidden="true">♢</span><span>Pusat Notifikasi</span></button>
                 <button type="button" class="side-link" data-tab="seasons-admin"><span class="side-icon" aria-hidden="true">★</span><span>Season &amp; Sejarah</span></button>
                 <button type="button" class="side-link" data-tab="profile-admin"><span class="side-icon" aria-hidden="true">♙</span><span>Profile</span></button>
                 <button type="button" class="side-link" data-tab="voting-admin"><span class="side-icon" aria-hidden="true">◉</span><span>Voting</span></button>
@@ -268,6 +271,14 @@
                   <p id="rules-admin-preview-status" class="field-help" role="status">Memuat pratinjau...</p>
                 </aside>
               </div>
+            </section>
+            <section id="notifications-admin" class="tab-page hide">
+              <div class="dashboard-heading"><div>
+                <div class="overline">SSCIRCLE / PEMBERITAHUAN</div>
+                <h1>Pusat Notifikasi<span class="dot-accent">.</span></h1>
+                <p>Terbitkan pengumuman resmi, jadwalkan pemberitahuan, dan arsipkan informasi yang sudah selesai.</p>
+              </div></div>
+              <div id="ssc-notification-admin-root" class="ssc-notice-admin-root"></div>
             </section>
             <!-- Editor jadwal event dengan pratinjau langsung. -->
             <section id="events-admin" class="tab-page hide">

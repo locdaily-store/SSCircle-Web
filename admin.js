@@ -97,6 +97,8 @@ function tab(id) {
     window.SSCircleRulesAdmin?.schedule();
   if (id === 'events-admin')
     window.SSCircleEventsAdmin?.schedule();
+  if (id === 'notifications-admin')
+    void window.SSCircleNotificationAdmin?.load();
   if (id === 'seasons-admin')
     window.SSCircleSeasonsAdmin?.schedule();
   if (id === 'members-admin')

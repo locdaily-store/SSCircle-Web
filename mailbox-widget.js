@@ -25,7 +25,10 @@
     '<button type="button" class="mailbox-filter is-current" data-ssc-filter="all" aria-pressed="true">Semua</button>',
     '<button type="button" class="mailbox-filter" data-ssc-filter="unread" aria-pressed="false">Belum dibaca</button>',
     '<button type="button" class="mailbox-filter" data-ssc-filter="status" aria-pressed="false">Status</button>',
-    '<button type="button" class="mailbox-filter" data-ssc-filter="activation" aria-pressed="false">Aktivasi</button></div>',
+    '<button type="button" class="mailbox-filter" data-ssc-filter="activation" aria-pressed="false">Aktivasi</button>',
+    '<button type="button" class="mailbox-filter" data-ssc-filter="announcement" aria-pressed="false">Pengumuman</button>',
+    '<button type="button" class="mailbox-filter" data-ssc-filter="event" aria-pressed="false">Event</button>',
+    '<button type="button" class="mailbox-filter" data-ssc-filter="community" aria-pressed="false">Komunitas</button></div>',
     '<div class="ssc-mailbox-selection-bar">',
     '<button type="button" class="mailbox-secondary" id="ssc-mailbox-select-mode" aria-pressed="false">Pilih pesan</button>',
     '<div id="ssc-mailbox-bulk-actions" class="ssc-mailbox-bulk-actions" hidden>',
@@ -41,6 +44,7 @@
     '<p>Tekan pesan untuk membaca isinya.</p></div>',
     '<div id="ssc-mailbox-detail" hidden><span class="mailbox-eyebrow" id="ssc-mailbox-category"></span>',
     '<h3 id="ssc-mailbox-subject"></h3><time id="ssc-mailbox-time"></time><p id="ssc-mailbox-body"></p>',
+    '<a class="mailbox-primary ssc-notice-link" id="ssc-mailbox-link" hidden>Lihat informasi</a>',
     '<div class="ssc-mailbox-friend-actions player-actions" id="ssc-mailbox-friend-actions" hidden>',
     '<button type="button" id="ssc-mailbox-friend-accept" class="mailbox-primary">Terima pertemanan</button>',
     '<button type="button" id="ssc-mailbox-friend-decline" class="mailbox-secondary">Tolak</button></div>',
@@ -56,8 +60,8 @@
   const $=id=>dialog.querySelector('#'+id);
   let items=[],current=null,filter='all',lastTrigger=null,refreshTask=null,loaded=false,loadFailed=false,deleting=false,
     selecting=false,selected=new Set(),managing=false,appStatus='none';
-  const kindLabel=type=>type==='activation'?'AKTIVASI AKUN':type==='status'?'STATUS PENDAFTARAN':'PEMBERITAHUAN';
-  const kindIcon=type=>type==='activation'?'✦':type==='status'?'◆':'✉';
+  const kindLabel=type=>({activation:'AKTIVASI AKUN',status:'STATUS PENDAFTARAN',announcement:'PENGUMUMAN RESMI',event:'EVENT SSCIRCLE',friend_request:'KOMUNITAS',friend_response:'KOMUNITAS',badge:'PENGHARGAAN'})[type]||'PEMBERITAHUAN';
+  const kindIcon=type=>({activation:'✦',status:'◆',announcement:'◈',event:'▦',friend_request:'♙',friend_response:'♙',badge:'★'})[type]||'✉';
   // Kode aktivasi hanya untuk pendaftar yang diterima; selain itu tombolnya dikunci.
   function applyAccess(){
     const ok=appStatus==='accepted';
@@ -105,7 +109,10 @@
   function shownItems(){
     return items.filter(item=>filter==='all'||(filter==='unread'&&!item.read)||
       (filter==='status'&&item.type==='status')||
-      (filter==='activation'&&['activation','information'].includes(item.type)));
+      (filter==='activation'&&['activation','information'].includes(item.type))||
+      (filter==='announcement'&&item.type==='announcement')||
+      (filter==='event'&&item.type==='event')||
+      (filter==='community'&&['friend_request','friend_response','badge'].includes(item.type)));
   }
   function updateSelection(){
     $('ssc-mailbox-select-mode').textContent=selecting?'Batal pilih':'Pilih pesan';
@@ -171,6 +178,10 @@
     $('ssc-mailbox-subject').textContent=item.title;
     $('ssc-mailbox-time').textContent=fmt(item.createdAt);
     $('ssc-mailbox-body').textContent=item.content;
+    const link=$('ssc-mailbox-link');
+    const allowed=new Set(['/','/events.html','/events','/rules.html','/rules','/seasons','/seasons.html','/mailbox','/my-sscircle']);
+    link.hidden=!allowed.has(item.link);
+    if(!link.hidden)link.href=item.link;
     $('ssc-mailbox-friend-actions').hidden=!(item.type==='friend_request'&&item.friendSenderId);
     $('ssc-mailbox-secret').hidden=item.type!=='activation';
     $('ssc-mailbox-secret-row').hidden=true;
