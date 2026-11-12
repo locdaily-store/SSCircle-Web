@@ -777,16 +777,17 @@ function validVotingQuestions(input, legacy) {
   });
 }
 function validVotingVotes(input, questions) {
-  const votes = Array.isArray(input) ? input : [];
-  const valid = new Map(questions.map(q=>[q.id,new Set(q.options.map(o=>o.id))]));
-  const seen = new Set(), first = questions[0]?.id;
+  const votes=Array.isArray(input)?input:[];
+  const valid=new Map(questions.map(q=>[q.id,new Set(q.options.map(o=>o.id))]));
+  const seen=new Set(),counts=new Map();
   return votes.slice(0,5000).flatMap(v=>{
     const account=s(v?.account,40).replace(/\s+/g,' ').trim();
-    const voterKey=s(v?.voterKey,128) || ('name:'+account.toLowerCase());
-    const questionId=s(v?.questionId,64) || 'question-1';
-    const optionId=s(v?.optionId,64),unique=questionId+'|'+voterKey;
-    if (!voterKey || !valid.get(questionId)?.has(optionId) || seen.has(unique)) return [];
-    seen.add(unique);
+    const voterKey=s(v?.voterKey,128)||('name:'+account.toLowerCase());
+    const questionId=s(v?.questionId,64)||'question-1';
+    const optionId=s(v?.optionId,64);
+    const group=questionId+'|'+voterKey,unique=group+'|'+optionId;
+    if(!voterKey||!valid.get(questionId)?.has(optionId)||seen.has(unique)||(counts.get(group)||0)>=3)return [];
+    seen.add(unique);counts.set(group,(counts.get(group)||0)+1);
     return [{questionId,account,optionId,voterKey,createdAt:s(v?.createdAt,40)||new Date().toISOString()}];
   });
 }
@@ -860,7 +861,15 @@ async function readSettingsRow(env) {
 async function publicVotingPayload(env, application=null) {
   const {settings}=formFrom(await readSettingsRow(env)),runtime=votingRuntime(settings);
   const key=application?'app:'+application.id:null;
-  const votedQuestionIds=key?runtime.votes.filter(v=>v.voterKey===key).map(v=>v.questionId||'question-1'):[];
+  const usedOptions={};
+  if(key)for(const vote of runtime.votes.filter(v=>v.voterKey===key)){
+    const id=vote.questionId||'question-1';
+    (usedOptions[id]??=[]).push(vote.optionId);
+  }
+  const tokensPerQuestion=3;
+  const remainingTokens=Object.fromEntries(runtime.questions.map(q=>
+    [q.id,Math.max(0,Math.min(tokensPerQuestion,q.options.length)-(usedOptions[q.id]||[]).length)]));
+  const votedQuestionIds=Object.keys(remainingTokens).filter(id=>remainingTokens[id]===0);
   return {
     enabled:settings.homeVotingEnabled===true,title:settings.homeVotingTitle,
     question:runtime.questions[0]?.title||'',text:settings.homeVotingText,
@@ -869,7 +878,7 @@ async function publicVotingPayload(env, application=null) {
     active:runtime.active,expired:runtime.expired,deadlineLabel:settings.homeVotingDeadlineLabel,
     options:runtime.options,results:runtime.showResults?runtime.results:[],
     showResults:runtime.showResults,totalVotes:runtime.showResults?runtime.total:0,
-    votedQuestionIds,
+    votedQuestionIds,tokensPerQuestion,usedOptions,remainingTokens,
     questions:runtime.questions.map(q=>({id:q.id,title:q.title,description:q.description,
       images:settings.homeVotingShowImage!==false?q.images:[],options:q.options,
       results:runtime.showResults?q.results:[],totalVotes:runtime.showResults?q.totalVotes:0,
@@ -890,9 +899,10 @@ async function submitVote(env, req) {
   if (!application) return bad('Masuk menggunakan kode pendaftaran terlebih dahulu.',401);
   if (application.status!==VOTING_ACCEPTED_STATUS) return bad('Voting hanya untuk pendaftar yang Diterima.',403);
   const voterKey='app:'+application.id,safeAccount='Pendaftar '+application.id.slice(0,8).toUpperCase();
-  const already=runtime.votes.some(v=>(v.questionId||'question-1')===questionId && v.voterKey===voterKey);
-  if (already) return bad('Kamu sudah memberikan suara untuk pertanyaan ini.',409);
-  if (runtime.votes.length>=5000) return bad('Batas suara voting tercapai. Hubungi admin.',409);
+  const existing=runtime.votes.filter(v=>(v.questionId||'question-1')===questionId&&v.voterKey===voterKey);
+  if(existing.some(v=>v.optionId===optionId))return bad('Pilihan ini sudah kamu vote. Pilih jawaban yang berbeda.',409);
+  if(existing.length>=3)return bad('Ketiga token voting untuk pertanyaan ini sudah digunakan.',409);
+  if(runtime.votes.length>=5000)return bad('Batas suara voting tercapai. Hubungi admin.',409);
   const now=new Date().toISOString(),vote={questionId,voterKey,account:safeAccount,optionId,createdAt:now};
   const firstId='question-1';
   const res=await env.DB.prepare(`UPDATE form_config
@@ -905,14 +915,17 @@ async function submitVote(env, req) {
     AND EXISTS (SELECT 1 FROM submissions WHERE id=? AND status='accepted')
     AND (EXISTS (SELECT 1 FROM json_each(settings,'$.homeVotingQuestions') WHERE json_extract(value,'$.id')=?)
       OR (?=? AND (json_type(settings,'$.homeVotingQuestions') IS NULL OR json_type(settings,'$.homeVotingQuestions')='null')))
-    AND NOT EXISTS (SELECT 1 FROM json_each(COALESCE(json_extract(settings,'$.homeVotingVotes'),'[]'))
+    AND (SELECT COUNT(*) FROM json_each(COALESCE(json_extract(settings,'$.homeVotingVotes'),'[]'))
       WHERE json_extract(value,'$.voterKey')=?
+      AND (json_extract(value,'$.questionId')=? OR (json_extract(value,'$.questionId') IS NULL AND ?=?)))<3
+    AND NOT EXISTS (SELECT 1 FROM json_each(COALESCE(json_extract(settings,'$.homeVotingVotes'),'[]'))
+      WHERE json_extract(value,'$.voterKey')=? AND json_extract(value,'$.optionId')=?
       AND (json_extract(value,'$.questionId')=? OR (json_extract(value,'$.questionId') IS NULL AND ?=?)))`)
     .bind(JSON.stringify(vote),settings.homeVotingSessionId||'voting-1',now,application.id,
-      questionId,questionId,firstId,voterKey,questionId,questionId,firstId).run();
+      questionId,questionId,firstId,voterKey,questionId,questionId,firstId,voterKey,optionId,questionId,questionId,firstId).run();
   if (!Number(res.meta?.changes||0)) return bad('Suara belum tersimpan. Muat ulang halaman dan coba lagi.',409);
   const payload=await publicVotingPayload(env,application);
-  return J({ok:true,message:'Suara untuk pertanyaan ini berhasil dikirim.',questions:payload.questions,
+  return J({ok:true,message:'Satu token voting berhasil digunakan.',remainingTokens:payload.remainingTokens,questions:payload.questions,
     results:payload.results,showResults:payload.showResults,totalVotes:payload.totalVotes});
 }
 // Validasi pengaturan dari Admin Control
