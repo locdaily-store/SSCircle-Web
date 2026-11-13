@@ -54,13 +54,20 @@
       if (section.description) copy.append(element('p', '', section.description));
       intro.append(count, copy);
       const list = element('ol', 'rules-list');
-      for (const [index, rule] of (section.items || []).entries()) {
-        const item = element('li', 'rules-item');
-        const number = element('span', 'rules-item-number', String(index + 1).padStart(2, '0'));
-        const details = element('div', 'rules-item-copy');
-        details.append(element('h3', '', rule.text || 'Peraturan'));
-        if (rule.detail) details.append(element('p', '', rule.detail));
-        item.append(number, details);
+      let numbered=0;
+      for(const rule of (section.items||[])){
+        if(rule.type==='note'){
+          const note=element('li','rules-item rules-item-note');
+          note.append(element('p','rules-note-text',rule.text||''));
+          list.append(note);
+          continue;
+        }
+        const item=element('li','rules-item');
+        const number=element('span','rules-item-number',String(++numbered).padStart(2,'0'));
+        const details=element('div','rules-item-copy');
+        details.append(element('h3','',rule.text||'Peraturan'));
+        if(rule.detail)details.append(element('p','',rule.detail));
+        item.append(number,details);
         list.append(item);
       }
       card.append(intro, list);

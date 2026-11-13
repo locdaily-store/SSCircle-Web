@@ -389,7 +389,7 @@ function buildSection(page, index) {
   clone.title = 'Duplikat bagian';
   const del = button('✕', async () => {
     if (data.pages.length === 1)
-      return SSCNotice.SSCNotice.alert('Minimal ada satu halaman.');
+      return SSCNotice.alert('Minimal ada satu halaman.');
     if (!await SSCNotice.confirm('Hapus bagian beserta pertanyaan di dalamnya? Jawaban yang sudah masuk tetap disimpan.', { danger: true, confirmText: 'Hapus bagian' }))
       return;
     data.pages.splice(index, 1);

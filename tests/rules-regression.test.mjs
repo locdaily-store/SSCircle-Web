@@ -115,3 +115,23 @@ test('aturan default yang dihapus tidak muncul kembali dari konfigurasi lama',as
   const result=await (await request('/api/rules')).json();
   assert.equal(result.rulesSections[0].items.some(x=>x.text==='Bagikan konten di tempatnya'),false);
 });
+
+
+test('Server Rules accepts plain explanatory paragraphs without numbering',async()=>{
+  const {request,adminCookie}=setup();
+  const form=await(await request('/api/admin/form',{cookie:adminCookie})).json();
+  form.settings.rulesSections[0].items.push({id:'intro-note',type:'note',
+    text:'Teks penjelasan khusus komunitas.\nInformasi tambahan untuk anggota.',detail:''});
+  form.settings.mailboxAcceptedDiscordNote='Alamat IP Minecraft ada di channel informasi Discord.';
+  const saved=await request('/api/admin/form',{cookie:adminCookie,method:'PUT',
+    body:{settings:form.settings,pages:form.pages,revision:form.revision}});
+  assert.equal(saved.status,200,await saved.clone().text());
+  const rules=await(await request('/api/rules')).json();
+  const item=rules.rulesSections[0].items.find(x=>x.id==='intro-note');
+  assert.equal(item.type,'note');
+  assert.match(item.text,/Teks penjelasan khusus/);
+  const persisted=(await(await request('/api/admin/form',{cookie:adminCookie})).json()).settings;
+  assert.equal(persisted.mailboxAcceptedDiscordNote,'Alamat IP Minecraft ada di channel informasi Discord.');
+  const renderer=readFileSync(new URL('../rules.js',import.meta.url),'utf8');
+  assert.match(renderer,/rule\.type==='note'/);
+});

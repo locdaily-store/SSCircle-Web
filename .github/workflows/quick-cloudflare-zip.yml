@@ -1,4 +1,7 @@
 name: Paket Cloudflare cepat
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 on:
   pull_request:
     paths:
@@ -26,10 +29,29 @@ on:
       - 'minecraft-avatars.js'
       - 'tests/member-social.test.mjs'
       - '.github/workflows/quick-cloudflare-zip.yml'
+      - '.github/workflows/validate-and-package.yml'
+      - 'community-events-admin.js'
+      - 'community-events.css'
+      - 'community-achievements.js'
+      - 'rules-admin.js'
+      - 'rules.js'
+      - 'community-pages.css'
+      - 'mailbox.js'
+      - 'mailbox.css'
+      - 'announcements.css'
+      - 'ssc-dialog.js'
+      - 'ssc-dialog.css'
+      - 'service-worker.js'
+      - 'tests/community-events.test.mjs'
+      - 'tests/rules-regression.test.mjs'
+      - 'tests/paper-link.test.mjs'
+      - 'tests/layout_regression.py'
+      - 'scripts/package-cloudflare.py'
   workflow_dispatch:
 jobs:
   package:
     runs-on: ubuntu-latest
+    timeout-minutes: 14
     permissions:
       contents: read
     steps:
@@ -38,11 +60,16 @@ jobs:
         with:
           node-version: '24'
       - name: Run social and security smoke tests
-        run: node --test tests/member-social.test.mjs tests/member-center.test.mjs tests/profile-ui.test.mjs tests/mailbox.test.mjs tests/runtime-health.test.mjs
+        run: node --test tests/member-social.test.mjs tests/member-center.test.mjs tests/profile-ui.test.mjs tests/mailbox.test.mjs tests/runtime-health.test.mjs tests/community-events.test.mjs tests/rules-regression.test.mjs
       - name: Check source syntax and exclude secrets
         shell: bash
         run: |
           node --check _worker.js
+          node --check community-events-admin.js
+          node --check rules-admin.js
+          node --check mailbox.js
+          node --check mailbox-widget.js
+          node --check ssc-dialog.js
           node --check member-social.js
           node --check profile-workspace.js
           node --check member-center-admin.js

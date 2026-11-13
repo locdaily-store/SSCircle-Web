@@ -101,6 +101,9 @@ with sync_playwright() as p:
         page.locator('#ssc-mailbox-list .mailbox-item').nth(1).click()
         assert page.locator('#ssc-mailbox-delete').is_enabled()
         page.locator('#ssc-mailbox-delete').click()
+        # The website now uses SSCircle's themed confirmation instead of window.confirm.
+        # Confirm the real dialog so this test also covers the current delete flow.
+        page.locator('dialog.ssc-circle-dialog[open] .ssc-circle-dialog-accept').click()
         page.wait_for_function("document.querySelectorAll('#ssc-mailbox-list .mailbox-item').length === 1")
         assert page.locator('#ssc-mailbox-list .mailbox-item').count()==1
         page.locator('#ssc-mailbox-close').click()
@@ -149,7 +152,8 @@ with sync_playwright() as p:
     page.evaluate('window.SSCircleMemberCenterAdmin.load(true)')
     page.locator('.member-admin-tab').nth(5).click()
     page.get_by_text('Verifikasi & kirim kode ke Mail Box').click()
-    page.locator('#member-admin-invite-result').wait_for(state='visible')
+    page.locator('dialog.ssc-circle-dialog[open] .ssc-circle-dialog-accept').click()
+    page.get_by_text('Kode otomatis dikirim').wait_for()
     assert page.get_by_text('Kode otomatis dikirim').count()==1
     assert page.locator('.member-admin-invite-secret').count()==0
     assert page.evaluate("document.querySelector('#members-admin-root').scrollWidth <= document.querySelector('#members-admin-root').clientWidth+2")
@@ -168,7 +172,9 @@ with sync_playwright() as p:
       });
     };""".replace('__DATA__',mock_data)
     shell='<!doctype html><html><body><button data-open-mailbox>Buka inbox</button>'
-    shell+='<script>'+recovery_mock+'</script><script>'+widget_js.replace('</script','<\\/script')+'</script></body></html>'
+    dialog_js=(ROOT/'ssc-dialog.js').read_text(encoding='utf-8')
+    shell+='<script>'+recovery_mock+'</script><script>'+dialog_js.replace('</script','<\\/script')+'</script>'
+    shell+='<script>'+widget_js.replace('</script','<\\/script')+'</script></body></html>'
     recovery.set_content(shell,wait_until='domcontentloaded')
     recovery.get_by_text('Buka inbox').click()
     recovery.locator('#ssc-mailbox-list .mailbox-item').first.wait_for()
@@ -193,6 +199,7 @@ with sync_playwright() as p:
     assert recovery.locator('#ssc-mailbox-selected-count').inner_text()=='1 dipilih'
     recovery.on('dialog',lambda d:d.accept())
     recovery.locator('#ssc-mailbox-delete-selected').click()
+    recovery.locator('dialog.ssc-circle-dialog[open] .ssc-circle-dialog-accept').click()
     recovery.wait_for_function("document.querySelectorAll('#ssc-mailbox-list .mailbox-item').length === 1")
     assert recovery.locator('#ssc-mailbox-list .mailbox-item').count()==1
     recovery.close()

@@ -96,6 +96,25 @@ window.SSCircleRulesAdmin = (() => {
     ]) settings.append(field(label, s[key], v => { s[key] = v; }, multiline, max));
     root.append(settings);
 
+    const inboxSettings=el('section','panel rules-admin-panel');
+    inboxSettings.append(el('h2','','Mail Box · Status Diterima & Discord'),
+      el('p','field-help','Teks pesan saat pendaftar diterima dan tombol menuju Discord. IP Address server Minecraft tersedia di Discord, bukan ditampilkan secara publik pada website. Tautan undangan mengikuti Atur Homepage → Discord.'));
+    const discordToggle=el('label','rules-admin-switch');
+    const discordEnabled=el('input');
+    discordEnabled.type='checkbox';
+    discordEnabled.checked=s.mailboxAcceptedDiscordEnabled!==false;
+    discordEnabled.onchange=()=>{s.mailboxAcceptedDiscordEnabled=discordEnabled.checked;mark();};
+    discordToggle.append(discordEnabled,el('span','','Tampilkan tombol Discord di Mail Box saat diterima'));
+    inboxSettings.append(discordToggle);
+    for(const [key,label,multiline,max] of [
+      ['mailboxAcceptedTitle','Judul pemberitahuan diterima',false,120],
+      ['mailboxAcceptedBody','Isi pesan status diterima',true,1200],
+      ['mailboxAcceptedDiscordNote','Penjelasan lokasi IP Address server di Discord',true,600],
+      ['mailboxAcceptedDiscordButton','Teks tombol bergabung ke Discord',false,100]
+    ])inboxSettings.append(field(label,s[key],value=>{s[key]=value;},multiline,max));
+    inboxSettings.append(el('p','field-help','Perubahan isi pesan berlaku untuk pemberitahuan baru. Teks penjelasan dan tombol Discord pada pemberitahuan diterima yang lama juga mengikuti pengaturan terbaru.'));
+    root.append(inboxSettings);
+
     const sections = el('section', 'panel rules-admin-panel');
     const toolbar = el('div', 'rules-admin-toolbar');
     toolbar.append(el('div', '', 'Kategori & daftar aturan'));
@@ -139,7 +158,7 @@ window.SSCircleRulesAdmin = (() => {
         item.addEventListener('toggle', () => { if (item.open) openedRule = rule.id; });
         const top = el('summary','rules-admin-rule-top');
         top.append(el('span','rules-item-index',String(index+1).padStart(2,'0')),
-          el('strong','', rule.text || 'Peraturan baru'));
+          el('strong','', rule.text || (rule.type==='note'?'Teks penjelasan':'Peraturan baru')));
         const controls = el('div','rules-admin-actions');
         controls.append(button('↑',()=>reorder(section.items,index,index-1)),
           button('↓',()=>reorder(section.items,index,index+1)),
@@ -148,19 +167,45 @@ window.SSCircleRulesAdmin = (() => {
             section.items.splice(index,1); mark();renderEditor();
           }));
         const inner = el('div', 'rules-admin-rule-fields');
-        inner.append(field('Isi aturan',rule.text,v=>{
-          rule.text=v;top.querySelector('strong').textContent=v||'Peraturan baru';
-        },false,280),field('Penjelasan tambahan (opsional)',rule.detail,v=>{rule.detail=v;},true,650),controls);
+        const note=rule.type==='note';
+        const typeLabel=el('label','field-group');
+        const typeTitle=el('span','field-label','Jenis konten');
+        const typeSelect=el('select');
+        for(const [value,label] of [['rule','Peraturan bernomor'],['note','Teks penjelasan saja']]){
+          const option=el('option','',label);option.value=value;typeSelect.append(option);
+        }
+        typeSelect.value=note?'note':'rule';
+        typeSelect.onchange=()=>{
+          rule.type=typeSelect.value;
+          if(rule.type==='note')rule.detail='';
+          mark();renderEditor();
+        };
+        typeLabel.append(typeTitle,typeSelect);
+        inner.append(typeLabel,field(note?'Isi teks penjelasan':'Isi aturan',rule.text,v=>{
+          rule.text=v;top.querySelector('strong').textContent=v||(note?'Teks penjelasan':'Peraturan baru');
+        },note,note?1600:280));
+        if(!note)inner.append(field('Penjelasan tambahan (opsional)',rule.detail,v=>{rule.detail=v;},true,650));
+        inner.append(controls);
         item.append(top,inner);
         list.append(item);
       });
       window.SSCircleSort?.attach(list, { item: '.rules-admin-rule', handleTarget: 'summary', onMove: (from, to) => {
         const moved = section.items.splice(from, 1)[0]; section.items.splice(to, 0, moved); mark(); renderEditor();
       }});
-      contents.append(list,button('+ Tambah peraturan',()=>{
-        if(section.items.length >= 50) return SSCNotice.alert('Maksimal 50 peraturan per kategori.');
-        section.items.push({id:newId('rule'),text:'Peraturan baru',detail:''});mark();renderEditor();
-      }));
+      const addButtons=el('div','rules-admin-actions');
+      addButtons.append(
+        button('+ Tambah peraturan',()=>{
+          if(section.items.length >= 50)return SSCNotice.alert('Maksimal 50 item per kategori.');
+          section.items.push({id:newId('rule'),type:'rule',text:'Peraturan baru',detail:''});
+          openedCategory=section.id;openedRule=section.items.at(-1).id;mark();renderEditor();
+        }),
+        button('+ Teks penjelasan saja',()=>{
+          if(section.items.length >= 50)return SSCNotice.alert('Maksimal 50 item per kategori.');
+          section.items.push({id:newId('note'),type:'note',text:'Tuliskan penjelasan untuk anggota di sini.',detail:''});
+          openedCategory=section.id;openedRule=section.items.at(-1).id;mark();renderEditor();
+        })
+      );
+      contents.append(list,addButtons);
       details.append(contents);
       sections.append(details);
     });

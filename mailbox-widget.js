@@ -45,6 +45,8 @@
     '<p>Tekan pesan untuk membaca isinya.</p></div>',
     '<div id="ssc-mailbox-detail" hidden><span class="mailbox-eyebrow" id="ssc-mailbox-category"></span>',
     '<h3 id="ssc-mailbox-subject"></h3><time id="ssc-mailbox-time"></time><p id="ssc-mailbox-body"></p>',
+    '<div id="ssc-mailbox-accepted-discord" class="mailbox-accepted-discord" hidden><p id="ssc-mailbox-accepted-discord-note"></p>',
+    '<a id="ssc-mailbox-accepted-discord-button" class="mailbox-primary mailbox-accepted-discord-button" target="_blank" rel="noopener noreferrer">Gabung SSCircle Community ↗</a></div>',
     '<a class="mailbox-primary ssc-notice-link" id="ssc-mailbox-link" hidden>Lihat informasi</a>',
     '<div class="ssc-mailbox-friend-actions player-actions" id="ssc-mailbox-friend-actions" hidden>',
     '<button type="button" id="ssc-mailbox-friend-accept" class="mailbox-primary">Terima pertemanan</button>',
@@ -187,6 +189,15 @@
     $('ssc-mailbox-subject').textContent=item.title;
     $('ssc-mailbox-time').textContent=fmt(item.createdAt);
     $('ssc-mailbox-body').textContent=item.content;
+    const cta=item.discordCTA;
+    const validDiscord=typeof cta?.url==='string' && /^https:\/\/(?:discord\.gg\/[A-Za-z0-9-]{3,}|discord\.com\/invite\/[A-Za-z0-9-]{3,})\/?$/.test(cta.url);
+    $('ssc-mailbox-accepted-discord').hidden=!validDiscord;
+    if(validDiscord){
+      $('ssc-mailbox-accepted-discord-note').textContent=String(cta.note||'');
+      const join=$('ssc-mailbox-accepted-discord-button');
+      join.textContent=String(cta.label||'Gabung SSCircle Community')+' ↗';
+      join.href=cta.url;
+    }
     const link=$('ssc-mailbox-link');
     const allowed=new Set(['/','/events.html','/events','/rules.html','/rules','/seasons','/seasons.html','/mailbox','/my-sscircle']);
     link.hidden=!allowed.has(item.link);

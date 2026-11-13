@@ -12,12 +12,12 @@ function signed(name,payload,key){const p=Buffer.from(JSON.stringify(payload)).t
  return name+'='+p+'.'+createHmac('sha256',key).update(p).digest('base64url');}
 function fixture(){
  const db=new DatabaseSync(':memory:');
- db.exec(`CREATE TABLE submissions(id TEXT PRIMARY KEY,status TEXT,tracking_code TEXT,submitted_at TEXT);
+ db.exec(`CREATE TABLE submissions(id TEXT PRIMARY KEY,status TEXT,tracking_code TEXT,submitted_at TEXT,rejection_reason TEXT DEFAULT '');
  CREATE TABLE form_config(id INTEGER PRIMARY KEY,settings TEXT,pages TEXT,questions TEXT,updated_at TEXT);
  CREATE TABLE rate_limits(key TEXT PRIMARY KEY,count INTEGER,expires_at INTEGER);
  CREATE TABLE revoked_sessions(token_hash TEXT PRIMARY KEY,expires_at INTEGER);`);
- db.prepare('INSERT INTO submissions VALUES(?,?,?,?)').run(ID,'accepted',CODE,'2026-11-07T00:00:00Z');
- db.prepare('INSERT INTO submissions VALUES(?,?,?,?)').run(OTHER,'accepted','112233445566778899AA','2026-11-07T01:00:00Z');
+ db.prepare('INSERT INTO submissions(id,status,tracking_code,submitted_at) VALUES(?,?,?,?)').run(ID,'accepted',CODE,'2026-11-07T00:00:00Z');
+ db.prepare('INSERT INTO submissions(id,status,tracking_code,submitted_at) VALUES(?,?,?,?)').run(OTHER,'accepted','112233445566778899AA','2026-11-07T01:00:00Z');
  let settings={seasonArchiveEnabled:true,homeVotingEnabled:false,homeVotingPermanent:true,
   homeVotingQuestions:[{id:'q1',title:'A',options:[{id:'o1',label:'One'},{id:'o2',label:'Two'}]}]};
  db.prepare('INSERT INTO form_config VALUES(1,?,?,?,?)').run(JSON.stringify(settings),JSON.stringify([{id:'page-1',title:'Registration',description:'',blocks:[],routes:{}}]),'[]','v1');
@@ -274,4 +274,37 @@ test('Mail Box batch operations require a valid owner session, including status-
    method:'POST',cookie:x.another,body:{action:'delete',ids:[message.id]}})).status,404);
  assert.equal((await x.request('/api/player/mailbox/manage',{
    method:'POST',body:{action:'delete',ids:[message.id]}})).status,200);
+});
+
+
+test('Accepted status Mail Box includes custom Discord invite CTA, never for rejected status',async()=>{
+ const x=fixture();
+ const entry=JSON.parse(x.db.prepare('SELECT settings FROM form_config WHERE id=1').get().settings);
+ Object.assign(entry,{
+   mailboxAcceptedTitle:'Pendaftaranmu diterima oleh SSCircle',
+   mailboxAcceptedBody:'Akunmu lolos seleksi. Silakan lakukan aktivasi akun.',
+   mailboxAcceptedDiscordNote:'IP Address server Minecraft ada di Discord SSCircle Community.',
+   mailboxAcceptedDiscordButton:'Gabung Discord untuk melihat IP',
+   mailboxAcceptedDiscordEnabled:true,
+   homeDiscordUrl:'https://discord.gg/vQQSgY2GRS'
+ });
+ x.db.prepare('UPDATE form_config SET settings=? WHERE id=1').run(JSON.stringify(entry));
+ x.db.prepare("UPDATE submissions SET status='pending' WHERE id=?").run(ID);
+ const changed=await x.request('/api/admin/status',{method:'PATCH',cookie:x.admin,
+   body:{id:ID,status:'accepted'}});
+ assert.equal(changed.status,200,JSON.stringify(changed.data));
+ const inbox=await x.request('/api/player/mailbox');
+ assert.equal(inbox.status,200,JSON.stringify(inbox.data));
+ const accepted=inbox.data.items.find(row=>row.type==='status');
+ assert.ok(accepted,JSON.stringify(inbox.data));
+ assert.equal(accepted.title,entry.mailboxAcceptedTitle);
+ assert.equal(accepted.content,entry.mailboxAcceptedBody);
+ assert.equal(accepted.discordCTA.label,entry.mailboxAcceptedDiscordButton);
+ assert.equal(accepted.discordCTA.note,entry.mailboxAcceptedDiscordNote);
+ assert.equal(accepted.discordCTA.url,entry.homeDiscordUrl);
+ const rejected=await x.request('/api/admin/status',{method:'PATCH',cookie:x.admin,
+   body:{id:ID,status:'rejected',reason:'Dokumen belum lengkap'}});
+ assert.equal(rejected.status,200,JSON.stringify(rejected.data));
+ const after=await x.request('/api/player/mailbox');
+ assert.equal(after.data.items.find(row=>row.content.includes('Dokumen belum lengkap')).discordCTA,null);
 });

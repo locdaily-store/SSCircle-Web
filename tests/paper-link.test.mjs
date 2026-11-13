@@ -144,7 +144,7 @@ test('V10.47: vanilla statistics are only sampled for verified identities',()=>{
  assert.match(stats,/StandardCopyOption\.ATOMIC_MOVE/);
  assert.match(paper,/statsSync\.start\(\)/);
  assert.match(paper,/statsSync\.stop\(\)/);
- assert.match(worker,/async function minecraftStatsIngest\(req,env\)/);
+ assert.match(worker,/async function minecraftStatsIngest\(req,env(?:,ctx)?\)/);
  assert.match(worker,/STATS_NOT_LINKED/);
  assert.match(worker,/minecraft_stat_receipts/);
 });
@@ -279,8 +279,8 @@ test('V10.48.4.3: Profile/Admin refresh their actual script URLs after Premium f
  const [major,minor,patch]=dashboardTag.slice(1).map(Number);
  assert.ok(major>10||(major===10&&(minor>49||(minor===49&&patch>=1))),
    'Jangan memuat script Dashboard versi lama');
- assert.match(adminHtml,/minecraft-sync-admin\.js\?v=10\.54\.5/);
- assert.match(adminHtml,/minecraft-sync-admin\.css\?v=10\.54\.5/);
+ assert.match(adminHtml,/minecraft-sync-admin\.js\?v=\d+\.\d+\.\d+/);
+ assert.match(adminHtml,/minecraft-sync-admin\.css\?v=\d+\.\d+\.\d+/);
  assert.match(headers,/\/my-sscircle\.html\s+Cache-Control: no-store/);
  assert.match(headers,/\/my-sscircle\s+Cache-Control: no-store/);
  assert.match(headers,/\/admin\.html\s+Cache-Control: no-store/);

@@ -139,3 +139,38 @@ test('required event name and start date cannot be deleted from form', async () 
   });
   assert.equal(response.status, 400);
 });
+
+
+test('Achievement auto-grant, hours, migration and pending badge API remain consistent',async()=>{
+ const t=fixture();await t.init();
+ const endpoint='/api/admin/community/achievements';
+ const initial=await t.call(endpoint,{asAdmin:true});
+ assert.equal(initial.status,200,JSON.stringify(initial.data));
+ const playtime=initial.data.rules.find(x=>x.id==='dedicated-player');
+ assert.equal(playtime.metric,'playtime_hours');
+ assert.equal(playtime.target,100);
+ const rule={id:'event-checkin-once',title:'Pertama Hadir',description:'Ikut satu event',
+   metric:'events_attended',target:1,enabled:true,autoGrant:false};
+ const inactive=await t.call(endpoint,{method:'POST',asAdmin:true,payload:rule});
+ assert.equal(inactive.status,200,JSON.stringify(inactive.data));
+ t.db.prepare("INSERT INTO community_event_signups(event_id,member_id,state,joined_at,checked_in_at) VALUES(?,?,'attended',?,?)")
+   .run('custom-event-test',A,'2026-11-13','2026-11-13');
+ const check=await t.call(endpoint+'/recheck',{method:'POST',asAdmin:true,payload:{afterId:''}});
+ assert.equal(check.status,200,JSON.stringify(check.data));
+ assert.equal(t.db.prepare("SELECT COUNT(*) n FROM community_achievement_claims WHERE rule_id=? AND member_id=?")
+   .get(rule.id,A).n,0,'Disabled auto-grant never awards itself');
+ const enabled=await t.call(endpoint,{method:'POST',asAdmin:true,payload:{...rule,autoGrant:true}});
+ assert.equal(enabled.status,200,JSON.stringify(enabled.data));
+ const awarded=await t.call(endpoint+'/recheck',{method:'POST',asAdmin:true,payload:{afterId:''}});
+ assert.equal(awarded.status,200,JSON.stringify(awarded.data));
+ assert.equal(t.db.prepare("SELECT COUNT(*) n FROM community_achievement_claims WHERE rule_id=? AND member_id=?")
+   .get(rule.id,A).n,1);
+ await t.call(endpoint+'/recheck',{method:'POST',asAdmin:true,payload:{afterId:''}});
+ assert.equal(t.db.prepare("SELECT COUNT(*) n FROM community_achievement_claims WHERE rule_id=? AND member_id=?")
+   .get(rule.id,A).n,1,'Rechecking cannot grant duplicate achievement');
+ const latest=await t.call(endpoint,{asAdmin:true});
+ assert.equal(latest.data.rules.find(x=>x.id===rule.id).awarded,1);
+ const removed=await t.call(endpoint,{asAdmin:true,method:'DELETE',
+   payload:{id:rule.id,confirmation:'HAPUS ACHIEVEMENT'}});
+ assert.equal(removed.status,200,JSON.stringify(removed.data));
+});

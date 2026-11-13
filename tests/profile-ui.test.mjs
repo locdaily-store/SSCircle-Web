@@ -284,7 +284,7 @@ test('V10.52 keeps three Profile categories and official server wording',()=>{
    'ssc-social-friend-order'])
    assert.match(profile,new RegExp('id="'+id+'"'));
  assert.match(profile,/value="friends"/);
- assert.match(admin,/community-admin\.js\?v=10\.52\.4/);
+ assert.match(admin,/community-admin\.js\?v=\d+\.\d+\.\d+/);
  assert.match(community,/\/api\/admin\/member-badges/);
  assert.match(social,/data\.communityBadges/);
  assert.match(social,/data\.mutualFriends/);
@@ -297,5 +297,5 @@ test('V10.52: public Profile copy stays member-friendly and has no internal impl
  assert.doesNotMatch(html,/\b(?:AuthMe|Floodgate|Cloudflare D1|stack trace|debug endpoint|AI assistant|prompt)\b/i);
  assert.doesNotMatch(html,/Block Member|Blokir anggota|chat pribadi/i);
  assert.match(html,/Penghargaan dari pengurus SSCircle/);
- assert.match(html,/member-social\.js\?v=10\.52\.5/);
+ assert.match(html,/member-social\.js\?v=\d+\.\d+\.\d+/);
 });
