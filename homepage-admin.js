@@ -270,7 +270,7 @@ window.SSCircleHomeAdmin = (() => {
   }
   function galleryEditor(box) {
     const container = node('div', 'home-admin-gallery'), toolbar = node('div', 'home-admin-gallery-add');
-    box.append(toolbar, container);
+    box.append(node('h3','ssc-gallery-step','03 · Koleksi foto'),node('p','ssc-gallery-admin-tip','Tambah foto, edit judul dan kategori, lalu susun urutannya. Perubahan baru tampil publik setelah disimpan.'),toolbar, container);
     function redraw() {
       container.replaceChildren();
       const gallery = state.settings.homeGallery || [];
@@ -1328,10 +1328,14 @@ window.SSCircleHomeAdmin = (() => {
     formGrid(about, [['homeAboutEyebrow', 'Label bagian', 'input'], ['homeAboutTitle', 'Judul Tentang', 'input'], ['homeAboutText', 'Deskripsi Tentang', 'textarea']]);
     aboutTagsEditor(about);
     const gallery = section('05 · SSCircle Gallery', 'Judul dan catatan foto untuk pengelolaan saja; pada Homepage foto ditampilkan bersih tanpa tulisan. Atur urutan atau tambahkan foto dari perangkat.');
+    gallery.append(node('h3','ssc-gallery-step','01 · Informasi galeri'));
+    gallery.append(node('p','ssc-gallery-admin-tip','Atur judul dan deskripsi untuk Homepage maupun halaman Gallery.'));
     toggle(gallery, 'homeShowGallery', 'Tampilkan galeri', '');
     formGrid(gallery, [['homeGalleryEyebrow', 'Label galeri', 'input'], ['homeGalleryTitle', 'Judul galeri', 'input'], ['homeGalleryText', 'Deskripsi galeri', 'textarea']]);
     toggle(gallery,'galleryPageEnabled','Aktifkan halaman Gallery lengkap','Halaman terpisah tetap dapat diakses dari menu website.');
     formGrid(gallery,[['galleryPageTitle','Judul halaman Gallery','input'],['galleryPageDescription','Deskripsi halaman Gallery','textarea']]);
+    gallery.append(node('h3','ssc-gallery-step','02 · Kategori foto'));
+    gallery.append(node('p','ssc-gallery-admin-tip','Buat kategori agar pengunjung mudah menyaring foto. Foto tanpa kategori tetap akan ditampilkan.'));
     const categoriesBox=node('div','home-admin-gallery');
     const catHeading=node('h3','home-admin-subheading','Kategori Gallery');
     const catList=node('div','home-admin-gallery');
