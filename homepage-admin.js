@@ -1330,7 +1330,6 @@ window.SSCircleHomeAdmin = (() => {
     const gallery = section('05 · SSCircle Gallery', 'Judul dan catatan foto untuk pengelolaan saja; pada Homepage foto ditampilkan bersih tanpa tulisan. Atur urutan atau tambahkan foto dari perangkat.');
     gallery.append(node('h3','ssc-gallery-step','01 · Informasi galeri'));
     gallery.append(node('p','ssc-gallery-admin-tip','Atur judul dan deskripsi untuk Homepage maupun halaman Gallery.'));
-    toggle(gallery, 'homeShowGallery', 'Tampilkan galeri', '');
     formGrid(gallery, [['homeGalleryEyebrow', 'Label galeri', 'input'], ['homeGalleryTitle', 'Judul galeri', 'input'], ['homeGalleryText', 'Deskripsi galeri', 'textarea']]);
     toggle(gallery,'galleryPageEnabled','Aktifkan halaman Gallery lengkap','Halaman terpisah tetap dapat diakses dari menu website.');
     formGrid(gallery,[['galleryPageTitle','Judul halaman Gallery','input'],['galleryPageDescription','Deskripsi halaman Gallery','textarea']]);
