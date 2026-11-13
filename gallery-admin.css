@@ -1,0 +1,22 @@
+/* Gallery admin layout uses the same panel / field palette as Admin Control. */
+.ssc-gallery-admin-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(340px,.95fr);gap:18px;align-items:start;min-width:0}
+.ssc-gallery-admin-editor{min-width:0;display:grid;gap:16px}
+.ssc-gallery-admin-editor .home-admin-section{margin:0;min-width:0}
+.ssc-gallery-admin-editor .home-admin-section:not(.is-collapsed)>:not(.home-admin-section-toggle){max-width:100%}
+.ssc-gallery-admin-editor .home-admin-gallery-row{min-width:0;max-width:100%}
+.ssc-gallery-admin-preview{min-width:0;padding:18px;position:sticky;top:16px}
+.ssc-gallery-preview-top{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.ssc-gallery-preview-top h2{margin:0 0 6px;font-size:17px}
+.ssc-gallery-preview-top p{margin:0;color:var(--ssc-muted,#cbb9dc);font-size:12px}
+.ssc-gallery-preview-actions{display:flex;gap:8px;flex-wrap:wrap}
+.ssc-gallery-preview-viewport{width:100%;min-width:0;position:relative;overflow:hidden;border-radius:12px;border:1px solid var(--ssc-border,#59416d);background:var(--ssc-bg,#130a20)}
+.ssc-gallery-preview-viewport iframe{display:block;width:1100px;height:800px;border:0;transform-origin:top left;background:var(--ssc-bg,#130a20)}
+.ssc-gallery-admin-preview #gallery-open-colors{margin-top:10px}
+.ssc-gallery-theme-editor{border:1px solid var(--ssc-border,#59416d);border-radius:14px;padding:18px;margin:18px 0;min-width:0;background:var(--ssc-panel,#20132c)}
+.ssc-gallery-theme-editor h3{margin:0 0 8px}
+.ssc-gallery-color-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:14px 0}
+.ssc-gallery-color-field{display:grid;min-width:0;gap:7px}
+.ssc-gallery-color-field .ssc-theme-color-pair{min-width:0}
+.ssc-gallery-color-field input[type=text]{min-width:0;max-width:100%}
+@media(max-width:1150px){.ssc-gallery-admin-layout{grid-template-columns:minmax(0,1fr)}.ssc-gallery-admin-preview{position:static}}
+@media(max-width:600px){.ssc-gallery-admin-preview{padding:12px}.ssc-gallery-color-grid{grid-template-columns:minmax(0,1fr)}}
