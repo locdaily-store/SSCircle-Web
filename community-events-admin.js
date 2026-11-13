@@ -215,7 +215,7 @@
           const message = 'Hapus pertanyaan "' + question.label + '" dari formulir berikutnya?';
           const approved = window.SSCNotice?.confirm
             ? await window.SSCNotice.confirm(message, {danger: true, confirmText: 'Hapus'})
-            : window.confirm(message);
+            : await window.SSCircleDialog.confirm(message);
           if (!approved) return;
           formPolicy.fields.splice(index, 1);
           pendingEdits = true;

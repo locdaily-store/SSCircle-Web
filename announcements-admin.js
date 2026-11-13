@@ -266,7 +266,7 @@ window.SSCircleAnnouncementAdmin = (() => {
   }
   async function deleteArticle(){
     if(busy||!editor?.id)return;
-    const confirmed=window.SSCNotice?.confirm?await window.SSCNotice.confirm('Hapus berita ini secara permanen? Tindakan tidak bisa dibatalkan.',{confirmText:'Hapus berita'}):confirm('Hapus berita ini permanen?');
+    const confirmed=window.SSCNotice?.confirm?await window.SSCNotice.confirm('Hapus berita ini secara permanen? Tindakan tidak bisa dibatalkan.',{confirmText:'Hapus berita'}):await window.SSCircleDialog.confirm('Hapus berita ini permanen?');
     if(!confirmed)return;
     busy=true;
     try{

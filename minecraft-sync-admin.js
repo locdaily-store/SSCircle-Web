@@ -125,7 +125,7 @@ window.SSCircleMinecraftSyncAdmin=(()=>{
       }
       if(server.status==='active'){
         const revoke=button('Cabut akses',async()=>{
-          if(!window.confirm('Cabut akses server '+server.label+'? Statistik dan akun pemain tidak dihapus.'))return;
+          if(!await window.SSCircleDialog.confirm('Cabut akses server '+server.label+'? Statistik dan akun pemain tidak dihapus.'))return;
           revoke.disabled=true;
           try{
             await api('/api/admin/minecraft/servers/action',{method:'POST',
