@@ -23,7 +23,10 @@ EXCLUDED_ROOT = {'.gitignore', '.gitattributes', 'README.md', 'CONTRIBUTING.md',
                  'package.json', 'package-lock.json'}
 REQUIRED = {'index.html', 'admin.html', 'registration.html', 'status.html',
             'voting.html', '_worker.js', '_routes.json', 'member-social.js',
-            'member-social.css', 'profile-workspace.js', 'profile-workspace.css'}
+            'member-social.css', 'profile-workspace.js', 'profile-workspace.css',
+            'announcements.html', 'announcements.js', 'announcements.css',
+            'announcements-admin.js', 'announcements-admin.css',
+            'overview-dashboard.js', 'overview-dashboard.css'}
 
 def build(output_dir=None):
     pkg = json.loads((ROOT / 'package.json').read_text('utf-8'))

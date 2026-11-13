@@ -55,6 +55,8 @@ test('artikel bisa terbit, diperbarui dengan revisi aman, dan dihapus',async()=>
  assert.equal(created.status,201,JSON.stringify(created.body));
  const pub=(await f.call('/api/announcements')).body;
  assert.equal(pub.items.length,1);
+ assert.equal(pub.items[0].pinned,true);
+ assert.equal(pub.items[0].imageUrl,'https://images.example.org/cover.webp');
  const prev=pub.items[0];
  const updated=await f.call('/api/admin/announcements','PUT',{...prev,title:'Judul baru'});
  assert.equal(updated.status,200,JSON.stringify(updated.body));
