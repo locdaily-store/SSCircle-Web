@@ -2,13 +2,13 @@
 .c55-community,.c55-admin-root {
   margin:clamp(18px,3vw,36px) auto;
   max-width:1160px;
-  color:var(--text-color,var(--text,#e9f4f2))
+  color:var(--ssc-text,var(--text,#f5efff))
 }
 .c55-form,.c55-admin-card {
-  border:1px solid var(--border-color,rgba(150,200,190,.24));
+  border:1px solid var(--ssc-border,var(--line));
   border-radius:18px;
   padding:clamp(16px,3vw,26px);
-  background:var(--panel-color,var(--panel,rgba(15,35,37,.75)));
+  background:var(--ssc-panel,var(--panel));
   box-shadow:0 12px 30px rgba(0,0,0,.06)
 }
 .c55-form {
@@ -22,7 +22,7 @@
   margin:0
 }
 .c55-form p,.c55-note {
-  color:var(--muted-color,var(--muted,#9fb9b6));
+  color:var(--ssc-muted,var(--muted));
   line-height:1.55
 }
 .c55-field {
@@ -36,10 +36,10 @@
   width:100%;
   min-width:0;
   border-radius:10px;
-  border:1px solid var(--input-border-color,var(--border-color,#738a88));
+  border:1px solid var(--ssc-input-border,var(--ssc-border,var(--line)));
   padding:10px 12px;
-  color:var(--input-text-color,var(--text-color,#eff));
-  background:var(--input-color,var(--panel-color,#12252b));
+  color:var(--ssc-input-text,var(--ssc-text,var(--text)));
+  background:var(--ssc-input,var(--ssc-panel,var(--panel)));
   font:inherit
 }
 .c55-prizes {
@@ -62,14 +62,14 @@
   border-radius:10px;
   cursor:pointer;
   padding:10px 14px;
-  background:var(--primary-button-color,var(--primary-color,#16a085));
-  color:var(--button-text-color,#fff);
+  background:var(--ssc-button-start,var(--ssc-primary,var(--purple)));
+  color:var(--ssc-button-text,var(--text));
   font-weight:700;
   min-height:42px
 }
 .c55-button.secondary {
-  background:var(--secondary-button-color,#283d40);
-  color:var(--secondary-button-text-color,#eee)
+  background:var(--ssc-button-secondary,var(--panel-raised));
+  color:var(--ssc-button-secondary-text,var(--text))
 }
 .c55-button:disabled {
   opacity:.55;
@@ -81,7 +81,7 @@
   max-width:330px
 }
 .c55-note.error {
-  color:#f18e94
+  color:var(--ssc-danger,var(--red))
 }
 .c55-my-events {
   max-width:760px;
@@ -95,8 +95,8 @@
 .c55-mini-card {
   display:grid;
   gap:8px;
-  border:1px solid var(--border-color,rgba(150,200,190,.3));
-  background:var(--card-background-color,rgba(27,57,60,.26));
+  border:1px solid var(--ssc-border,var(--line));
+  background:var(--ssc-card-start,var(--panel));
   padding:13px;
   border-radius:12px;
   overflow-wrap:anywhere
@@ -128,14 +128,14 @@
   padding:12px 0
 }
 .c55-achievement {
-  border:1px solid var(--border-color,rgba(150,200,190,.2));
+  border:1px solid var(--ssc-border,var(--line));
   padding:12px;
   border-radius:12px
 }
 .c55-achievement progress {
   width:100%;
   height:8px;
-  accent-color:var(--primary-color,#16a085)
+  accent-color:var(--ssc-primary,var(--purple))
 }
 .c55-achievement small {
   display:block;
