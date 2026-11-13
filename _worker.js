@@ -1062,13 +1062,16 @@ function settingsValid(input) {
       throw Error('Setiap kategori perlu 1–50 peraturan.');
     const itemIds = new Set();
     const items = section.items.map(item => {
-      const ruleId = s(item?.id, 64), text = s(item?.text, 280);
+      const isNote=item?.type==='note';
+      const ruleId = s(item?.id, 64), text = s(item?.text, isNote ? 1600 : 280);
+      if(String(item?.text||'').trim().length>(isNote?1600:280))
+        throw Error('Teks Server Rules terlalu panjang.');
       if (!/^[a-z0-9_-]{1,64}$/i.test(ruleId) || itemIds.has(ruleId) || !text)
         throw Error('Ada aturan kosong atau ID aturan yang berulang.');
       itemIds.add(ruleId);
       if (++rulesCount > 150)
         throw Error('Maksimal 150 aturan di seluruh kategori.');
-      return { id: ruleId, text, detail: s(item?.detail, 650) };
+      return { id: ruleId, type:isNote?'note':'rule', text, detail:isNote?'':s(item?.detail, 650) };
     });
     return { id, title, description: s(section.description, 500), items };
   });

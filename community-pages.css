@@ -1029,3 +1029,8 @@ body.rules-page .rules-consent { width: 100%; }
 .rules-discord-required .rules-discord-hint{font-size:11px;line-height:1.6}
 @media(max-width:420px){.rules-discord-content{gap:9px}.rules-discord-icon{width:34px;height:34px;flex-basis:34px}
  .rules-discord-button{justify-self:stretch;text-align:center;flex-wrap:wrap}}
+
+/* Unnumbered explanation blocks in Server Rules. */
+.rules-page .rules-item-note{list-style:none;display:block;padding:18px 21px;border:1px solid var(--ssc-border,var(--line));border-radius:13px;background:color-mix(in srgb,var(--ssc-primary,var(--purple)) 7%,var(--ssc-panel,var(--panel)));min-width:0}
+.rules-page .rules-note-text{margin:0;color:var(--ssc-text,var(--text));line-height:1.8;white-space:pre-line;overflow-wrap:anywhere}
+.rules-admin-rule-fields .field-group select{width:100%}
