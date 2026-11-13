@@ -1,0 +1,30 @@
+/* Header publik seragam, selaras dengan variabel warna Admin Control. */
+.ssc-public-shell .home-header.ssc-public-header{position:relative;z-index:35;box-sizing:border-box;display:grid;grid-template-columns:minmax(148px,1fr) max-content minmax(94px,1fr);align-items:center;gap:clamp(12px,1.7vw,28px);min-height:82px;padding:16px clamp(16px,3vw,54px);width:100%;background:var(--ssc-header-bg,#170c25);border-bottom:1px solid var(--ssc-border,#614575);color:var(--ssc-header-text,#eee)}
+.ssc-public-header .home-brand{grid-column:1;justify-self:start;display:inline-flex;gap:10px;align-items:center;white-space:nowrap;margin:0}
+.ssc-public-header .home-brand img{width:41px;height:41px;border-radius:10px;object-fit:cover}
+.ssc-public-header .home-nav{grid-column:2;justify-self:center;display:flex;gap:clamp(10px,1vw,19px);align-items:center;flex-wrap:nowrap;white-space:nowrap;width:auto;margin:0}
+.ssc-public-header .home-nav .home-nav-link{padding:9px 2px;min-height:42px;font-size:clamp(11px,.82vw,13px);color:var(--ssc-header-text,#fff);opacity:.82;white-space:nowrap}
+.ssc-public-header .home-nav .home-nav-link:hover,.ssc-public-header .home-nav .home-nav-link[aria-current=page]{color:var(--ssc-primary,#bf91ed);opacity:1}
+.ssc-public-header .home-nav [aria-current=page]{font-weight:800;border-bottom:2px solid var(--ssc-primary,#bf91ed)}
+.ssc-public-header .home-nav .home-nav-join{margin-left:5px;padding:10px 14px;min-width:max-content;white-space:nowrap;background:var(--ssc-button-start,var(--ssc-panel,#291737));border-color:var(--ssc-border,#614575);color:var(--ssc-button-text,#fff)}
+.ssc-public-header>.ssc-header-actions{grid-column:3;justify-self:end;display:flex;align-items:center;gap:12px;margin:0;flex-shrink:0}
+.ssc-public-header .ssc-header-actions :is(.ssc-header-mailbox,.ssc-header-profile){display:inline-flex;align-items:center;justify-content:center;position:relative;width:40px;height:40px;border:1px solid var(--ssc-border,#614575);border-radius:10px;background:var(--ssc-panel,#261535);color:var(--ssc-header-text,#fff);text-decoration:none;font-size:22px;cursor:pointer;flex:none}
+.ssc-public-header .ssc-header-profile img{width:34px;height:34px;image-rendering:pixelated;object-fit:cover;border-radius:7px}
+.ssc-public-header .ssc-header-mailbox [data-mailbox-count]{position:absolute;right:-5px;top:-6px;min-width:16px;padding:2px 4px;background:var(--ssc-danger,#db568d);color:#fff;border-radius:99px;font-size:10px;text-align:center}
+.ssc-public-header .ssc-header-mailbox [data-mailbox-count][hidden]{display:none}
+.ssc-public-shell .home-footer.ssc-unified-footer{margin-top:auto;background:var(--ssc-footer-bg,#170c25);color:var(--ssc-footer-text,#eee);border-top:1px solid var(--ssc-border,#614575)}
+.ssc-public-shell .home-footer-links{display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px}
+.ssc-public-shell .home-footer-links a{color:var(--ssc-footer-text,#eee)}
+.ssc-public-shell .home-footer-links a:hover,.ssc-public-shell .home-footer-links a[aria-current=page]{color:var(--ssc-primary,#bf91ed)}
+.ssc-public-shell .home-footer-mark img{object-fit:cover;border-radius:6px}
+@media(max-width:1420px){.ssc-public-header .home-nav{gap:9px}.ssc-public-header .home-nav .home-nav-link{font-size:11px}}
+@media(max-width:1180px){
+.ssc-public-shell .home-header.ssc-public-header{display:flex;justify-content:space-between;gap:10px;min-height:72px;padding:14px clamp(12px,3vw,30px)}
+.ssc-public-header .home-brand{flex:0 1 auto;min-width:0}
+.ssc-public-header>.ssc-header-actions{margin-left:auto;gap:8px}
+.ssc-public-header .home-menu-button{display:inline-flex;align-items:center;justify-content:center;flex:0 0 42px;width:42px;height:42px;background:var(--ssc-panel,#261535);border:1px solid var(--ssc-border,#614575);color:var(--ssc-header-text,#fff);border-radius:10px;margin:0}
+.ssc-public-header>.home-nav{display:none;position:absolute;top:calc(100% + 2px);left:14px;right:14px;z-index:60;flex-direction:column;align-items:stretch;gap:4px;padding:12px;max-height:70vh;overflow:auto;width:auto;white-space:normal;background:var(--ssc-header-bg,#170c25);border:1px solid var(--ssc-border,#614575);border-radius:12px}
+.ssc-public-shell.home-menu-open .ssc-public-header>.home-nav{display:flex}
+.ssc-public-header>.home-nav .home-nav-link,.ssc-public-header>.home-nav .home-nav-join{display:flex;align-items:center;justify-content:flex-start;padding:11px 13px;min-height:43px;width:100%;margin:0;box-sizing:border-box}
+}
+@media(max-width:410px){.ssc-public-header .home-brand img{width:34px;height:34px}.ssc-public-header>.ssc-header-actions{gap:5px}.ssc-public-header .ssc-header-actions :is(.ssc-header-mailbox,.ssc-header-profile){width:36px;height:36px}}

@@ -1,0 +1,15 @@
+/* Editor Pengajuan Event dan Achievement sesuai panel Admin Control. */
+#community-events-admin .c55-admin-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;align-items:start}
+#community-events-admin .c55-admin-grid>.c55-admin-card:last-child{grid-column:1/-1}
+:is(#community-events-admin,#achievements-admin) .c55-admin-root{display:grid;gap:18px;min-width:0}
+:is(#community-events-admin,#achievements-admin) .c55-admin-card{min-width:0;padding:clamp(16px,2vw,24px);background:var(--ssc-panel,#24172f);border:1px solid var(--ssc-border,#674c7d);border-radius:16px;color:var(--ssc-text,#f5efff);display:grid;gap:16px}
+:is(#community-events-admin,#achievements-admin) .c55-admin-card h2{margin:0;color:var(--ssc-heading,var(--ssc-text,#f5efff));font-size:20px}
+:is(#community-events-admin,#achievements-admin) .c55-admin-list{display:grid;gap:12px;min-width:0}
+:is(#community-events-admin,#achievements-admin) .c55-field{display:grid;gap:7px;min-width:0}
+:is(#community-events-admin,#achievements-admin) .c55-field :is(input,select,textarea),:is(#community-events-admin,#achievements-admin) .c55-field-input{box-sizing:border-box;width:100%;min-width:0;max-width:100%;padding:10px;border:1px solid var(--ssc-input-border,var(--ssc-border,#674c7d));border-radius:10px;background:var(--ssc-input,#281939);color:var(--ssc-input-text,var(--ssc-text,#fff));font:inherit}
+:is(#community-events-admin,#achievements-admin) .c55-check-row{display:flex;align-items:center;gap:10px}
+:is(#community-events-admin,#achievements-admin) .c55-check-row input{width:auto;accent-color:var(--ssc-primary,#bf91ed)}
+:is(#community-events-admin,#achievements-admin) .c55-mini-card{padding:14px;border:1px solid var(--ssc-border,#674c7d);border-radius:12px;background:var(--ssc-card-start,var(--ssc-panel,#24172f));overflow-wrap:anywhere}
+:is(#community-events-admin,#achievements-admin) .c55-admin-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+:is(#community-events-admin,#achievements-admin) .c55-note{color:var(--ssc-muted,#beaec9)}
+@media(max-width:1200px){#community-events-admin .c55-admin-grid{grid-template-columns:minmax(0,1fr)}#community-events-admin .c55-admin-grid>.c55-admin-card:last-child{grid-column:auto}}
