@@ -86,7 +86,7 @@
       const card=make('section','vote-poll-card');card.id='poll-'+question.id;
       card.append(make('span','vote-poll-index','PERTANYAAN '+String(index+1).padStart(2,'0')),
         make('h2','',question.title));
-      card.append(make('p','vote-option-description','Token tersisa: '+Number(remaining[question.id]??3)+' / 3. Setiap token wajib memilih jawaban berbeda.'));
+      card.append(make('p','vote-option-description','Token tersisa: '+Number(remaining[question.id]??3)+' / '+Number(question.tokens||3)+'. Setiap token wajib memilih jawaban berbeda.'));
       if(question.description)card.append(make('p','vote-option-description',question.description));
       if(question.images?.length)card.append(imageGallery(question.images,'vote-image-gallery'));
       const form=make('form','vote-form vote-question-form');

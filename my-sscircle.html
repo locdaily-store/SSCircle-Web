@@ -16,7 +16,7 @@
   <link rel="stylesheet" href="style.css?v=10.49.1.6">
   <link rel="stylesheet" href="player-dashboard.css?v=10.49.1.5">
   <link rel="stylesheet" href="member-social.css?v=10.52.5">
-   <link rel="stylesheet" href="community-events-v1055.css?v=10.55.3">
+   <link rel="stylesheet" href="community-events.css?v=10.55.4">
   <link rel="stylesheet" href="profile-workspace.css?v=10.51.4">
   <link rel="stylesheet" href="mailbox.css?v=10.41.0">
   <link rel="stylesheet" href="profile-ui.css?v=10.43.0">
@@ -32,7 +32,7 @@
   <script src="player-dashboard.js?v=10.52.5" defer></script>
   <script src="member-social.js?v=10.52.5" defer></script>
   <script src="profile-workspace.js?v=10.51.4" defer></script>
-   <script src="community-achievements-v1055.js?v=10.55.3" defer></script>
+   <script src="community-achievements.js?v=10.55.4" defer></script>
   <link rel="stylesheet" href="password-visibility.css?v=10.39.0">
   <script src="password-visibility.js?v=10.39.0" defer></script>
     <script src="pwa-register.js?v=10.54.5" defer></script>
@@ -237,14 +237,6 @@
                 <button class="player-action player-action-primary" type="submit" id="player-change-password-submit">Ganti password</button>
               </form>
             </div>
-            <div class="player-security-subsection">
-              <div class="player-security-subsection-title">
-                <h3>Riwayat keamanan akun</h3>
-                <button class="player-action player-action-secondary" type="button" id="player-refresh-security-history">Perbarui</button>
-              </div>
-              <p class="player-helper">Menampilkan 40 aktivitas terbaru tanpa password, kode aktivasi atau alamat IP.</p>
-              <div id="player-security-history" class="player-security-history" aria-live="polite"></div>
-            </div>
           </div>
           <p id="player-security-message" class="player-helper" role="status" aria-live="polite"></p>
         </section>
@@ -265,7 +257,7 @@
             <label class="player-setting-field" id="player-bio-wrap">
               <span>Tentang saya</span>
               <textarea id="player-bio" maxlength="350" rows="3" placeholder="Ceritakan sedikit tentang dirimu di SSCircle..."></textarea>
-              <small>Maksimal 350 karakter. Tidak mendukung HTML.</small>
+              <small>Maksimal 350 karakter.</small>
             </label>
             <label class="player-setting-field">
               <span>Privasi profil</span>

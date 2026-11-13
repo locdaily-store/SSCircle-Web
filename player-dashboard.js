@@ -303,33 +303,6 @@
       actions.append(rename,revoke);card.append(block,actions);list.append(card);
     }
   }
-  async function loadSecurityHistory(){
-    const box=$('player-security-history');
-    box.replaceChildren();
-    const res=await request('/api/player/security/history');
-    const events=Array.isArray(res.events)?res.events:[];
-    const labels={
-      login_success:'Login password berhasil',login_locked:'Akun terkunci sementara setelah percobaan login',
-      password_activated:'Password dashboard diaktifkan',
-      password_recovered:'Password dipulihkan melalui verifikasi admin',
-      password_changed:'Password dashboard diganti',
-      device_renamed:'Nama perangkat diperbarui',device_revoked:'Sesi perangkat dicabut',
-      session_locked:'Dashboard dikunci pada perangkat',all_sessions_revoked:'Semua perangkat dikeluarkan'
-    };
-    if(!events.length){
-      box.append(Object.assign(document.createElement('p'),{
-        textContent:'Belum ada aktivitas keamanan yang tercatat.'}));return;
-    }
-    for(const event of events){
-      const row=document.createElement('div');row.className='player-security-history-item';
-      const main=document.createElement('strong');
-      main.textContent=labels[event.type]||'Aktivitas keamanan akun';
-      const meta=document.createElement('small');
-      meta.textContent=new Date(event.at).toLocaleString('id-ID')+
-        ' · '+String(event.client||'Perangkat tidak diketahui').slice(0,105);
-      row.append(main,meta);box.append(row);
-    }
-  }
   async function loadSecurityState(){
     try {
       const state=await request('/api/player/security/state');
@@ -339,7 +312,6 @@
       $('player-recovery-back').hidden=!state.hasPassword;
       if(state.authenticated){
         await listDevices();await loadProfile();
-        try{await loadSecurityHistory();}catch{securityMessage('Riwayat keamanan belum dapat dimuat. Coba Perbarui.');}
         try{await loadMinecraftLink();}catch(error){$('player-link-notice').textContent='Status Minecraft belum tersedia: '+error.message;}
       }
       return mode;
@@ -482,12 +454,6 @@
         'Belum dapat memastikan penyimpanan. Coba masuk menggunakan password baru sebelum mengulangi perubahan.':
         'Gagal mengganti password: '+error.message);
     }finally{button.disabled=false;}
-  });
-  $('player-refresh-security-history').addEventListener('click',async()=>{
-    const button=$('player-refresh-security-history');button.disabled=true;
-    try{await loadSecurityHistory();securityMessage('Riwayat keamanan diperbarui.');}
-    catch(error){securityMessage('Riwayat belum dapat dimuat: '+error.message);}
-    finally{button.disabled=false;}
   });
   $('player-refresh-devices').addEventListener('click',async()=>{
     try{await listDevices();securityMessage('Daftar perangkat diperbarui.');}

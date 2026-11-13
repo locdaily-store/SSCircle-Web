@@ -105,11 +105,11 @@ test('V10.44 credential and device management use only private authenticated API
  assert.match(worker,/if\(path==='\/api\/player\/security\/history'/);
  assert.match(worker,/if\(path==='\/api\/player\/security\/device\/rename'/);
  assert.match(script,/\/api\/player\/security\/password\/change/);
- assert.match(script,/\/api\/player\/security\/history/);
+ assert.doesNotMatch(script,/\/api\/player\/security\/history/);
  assert.match(script,/\/api\/player\/security\/device\/rename/);
  assert.match(html,/id="player-change-password-form"/);
- assert.match(html,/id="player-security-history"/);
- assert.match(script,/textContent=labels\[event\.type\]/);
+ assert.doesNotMatch(html,/id="player-security-history"/);
+ assert.doesNotMatch(script,/textContent=labels\[event\.type\]/);
  assert.doesNotMatch(worker,/member_security_events.*client_ip/);
 });
 

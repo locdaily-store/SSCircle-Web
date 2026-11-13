@@ -29,6 +29,8 @@ window.SSCircleVoteAdmin = (() => {
     s.homeVotingPermanent ??= false;
     s.homeVotingEnabled ??= false;
     s.homeVotingShowImage ??= true;
+    s.homeVotingTokenMode ??= 'global';
+    s.homeVotingTokens ??= 3;
     if (!Array.isArray(s.homeVotingQuestions) || !s.homeVotingQuestions.length)
       s.homeVotingQuestions=[{id:'question-1',title:s.homeVotingQuestion,
         description:'',images:[...s.homeVotingImages],options:structuredClone(s.homeVotingOptions)}];
@@ -470,7 +472,7 @@ window.SSCircleVoteAdmin = (() => {
     const controls = el('div', 'ssc-vote-controls');
     statusCard.append(controls);
     toggle(controls, 'homeVotingEnabled', 'Buka akses Voting', 'Saat dimatikan, halaman dan API Voting tidak bisa dibuka oleh pemain, termasuk lewat tautan langsung.');
-    controls.append(el('p', 'field-help', 'Pemain masuk memakai kode pendaftaran yang terverifikasi. Satu pendaftaran hanya mendapat satu suara per sesi.'));
+    controls.append(el('p', 'field-help', 'Hanya anggota berstatus Diterima yang dapat voting. Setiap token harus digunakan untuk jawaban yang berbeda.'));
     toggle(controls, 'homeVotingPermanent', 'Tanpa batas waktu', 'Jika dimatikan, voting akan berhenti pada waktu yang ditentukan.');
     const dateField = el('label', 'field-group');
     dateField.append(el('span', 'field-label', 'Waktu akhir voting'));
@@ -486,8 +488,44 @@ window.SSCircleVoteAdmin = (() => {
     controls.append(dateField);
     const mode = select(controls, 'homeVotingResultsMode', 'Tampilkan hasil kepada pengunjung', [['after_end', 'Setelah sesi berakhir'], ['always', 'Selama dan setelah voting'], ['hidden', 'Hanya admin']]);
     mode.classList.add('ssc-vote-control');
-    host.append(statusCard);
-    const questionCard=card('02 · Daftar Pertanyaan', 'Setiap anggota Diterima mendapat 3 token per pertanyaan dan wajib memilih jawaban berbeda. Seret ikon ⠿ untuk mengurutkan. Setelah ada suara, reset sesi sebelum menghapus pertanyaan atau pilihan yang sudah dipilih.');
+    const tokenPanel = card('02 · Aturan token voting', 'Atur jumlah token secara global atau berbeda untuk tiap pertanyaan. Setiap token hanya dapat memilih satu jawaban unik.');
+    const tokenMode = el('label', 'field-group');
+    tokenMode.append(el('span', 'field-label', 'Mode pembagian token'));
+    const tokenSelect = el('select');
+    for (const [value, name] of [
+      ['global', 'Jumlah token sama untuk seluruh pertanyaan'],
+      ['per-question', 'Atur jumlah token setiap pertanyaan']
+    ]) {
+      const option = el('option', '', name);
+      option.value = value;
+      tokenSelect.append(option);
+    }
+    tokenSelect.value = data.settings.homeVotingTokenMode;
+    tokenMode.append(tokenSelect);
+    const globalField = el('label', 'field-group');
+    globalField.append(el('span', 'field-label', 'Token per pertanyaan (1–20)'));
+    const globalInput = el('input');
+    globalInput.type = 'number';
+    globalInput.min = '1';
+    globalInput.max = '20';
+    globalInput.step = '1';
+    globalInput.value = data.settings.homeVotingTokens;
+    globalInput.oninput = () => {
+      data.settings.homeVotingTokens = Number(globalInput.value);
+      dirty();
+    };
+    globalField.append(globalInput);
+    tokenSelect.onchange = () => {
+      data.settings.homeVotingTokenMode = tokenSelect.value;
+      globalField.hidden = tokenSelect.value !== 'global';
+      dirty();
+      render(data, dirtyMark);
+    };
+    globalField.hidden = tokenSelect.value !== 'global';
+    tokenPanel.append(tokenMode, globalField);
+    tokenPanel.append(el('p', 'field-help', 'Pengurangan token di bawah suara yang sudah digunakan memerlukan reset sesi. Jumlah opsi harus setidaknya sama dengan jumlah token.'));
+    host.append(statusCard, tokenPanel);
+    const questionCard=card('03 · Daftar Pertanyaan', 'Setiap anggota Diterima mendapat token sesuai pengaturan dan wajib memilih jawaban berbeda. Seret ikon ⠿ untuk mengurutkan. Setelah ada suara, reset sesi sebelum menghapus pertanyaan atau pilihan yang sudah dipilih.');
     field(questionCard,'homeVotingTitle','Judul halaman voting');
     field(questionCard,'homeVotingText','Deskripsi halaman',{multiline:true,max:500});
     field(questionCard,'homeVotingButton','Teks tombol di Homepage',{max:90});
@@ -514,6 +552,22 @@ window.SSCircleVoteAdmin = (() => {
       head.append(number,name,el('small','',q.options.length+' pilihan'));
       details.addEventListener('toggle',()=>{if(details.open)openQuestion=q.id;});
       const inner=el('div','ssc-vote-question-body');
+      if (data.settings.homeVotingTokenMode === 'per-question') {
+        const tokenField = el('label', 'field-group');
+        tokenField.append(el('span', 'field-label', 'Jumlah token untuk pertanyaan ini (1–20)'));
+        const tokenInput = el('input');
+        tokenInput.type = 'number';
+        tokenInput.min = '1';
+        tokenInput.max = '20';
+        tokenInput.step = '1';
+        tokenInput.value = q.tokens ?? 3;
+        tokenInput.oninput = () => {
+          q.tokens = Number(tokenInput.value);
+          dirty();
+        };
+        tokenField.append(tokenInput);
+        inner.append(tokenField);
+      }
       const titleLabel=el('label','field-group');titleLabel.append(el('span','field-label','Teks pertanyaan'));
       const titleInput=el('input');titleInput.type='text';titleInput.maxLength=200;titleInput.value=q.title||'';
       titleInput.oninput=()=>{q.title=titleInput.value;name.textContent=q.title||'Pertanyaan voting';dirty();};
@@ -540,7 +594,7 @@ window.SSCircleVoteAdmin = (() => {
       dirty();render(data,dirtyMark);
     }});
     host.append(questionCard);
-    const resultsCard=card('03 · Hasil Setiap Pertanyaan','Hasil tiap pertanyaan dihitung secara terpisah.');
+    const resultsCard=card('04 · Hasil Setiap Pertanyaan','Hasil tiap pertanyaan dihitung secara terpisah.');
     const resultHead=el('div','ssc-vote-results-head');
     const total=el('div','ssc-vote-total','0 suara masuk');
     const reload=el('button','button secondary','↻ Muat ulang hasil');reload.type='button';reload.onclick=refreshResults;

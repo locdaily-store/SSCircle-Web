@@ -74,3 +74,68 @@ test('achievement rules evaluate only member snapshots and do not duplicate clai
  assert.deepEqual(new Set(earned),new Set(['dedicated-player','monster-hunter']));
  assert.equal(t.db.prepare('SELECT COUNT(*) AS n FROM community_achievement_claims WHERE member_id=?').get(A).n,2);
 });
+
+
+test('admin can customize member event questions and keep submitted answers', async () => {
+  const t = fixture();
+  await t.init();
+  const endpoint = '/api/admin/community/events/form';
+  assert.equal((await t.call(endpoint)).status, 401);
+  const first = await t.call(endpoint, {asAdmin: true});
+  assert.equal(first.status, 200, JSON.stringify(first.data));
+
+  const form = first.data.settings;
+  form.maxPending = 1;
+  form.defaultCapacity = 12;
+  form.fields.splice(1, 0, {
+    id: 'custom_theme', label: 'Tema event',
+    type: 'select', required: true,
+    placeholder: '', options: ['Fantasy', 'Survival']
+  });
+  const saved = await t.call(endpoint, {
+    asAdmin: true, method: 'PUT',
+    payload: {revision: first.data.revision, settings: form}
+  });
+  assert.equal(saved.status, 200, JSON.stringify(saved.data));
+  assert.equal((await t.call(endpoint, {
+    asAdmin: true, method: 'PUT',
+    payload: {revision: first.data.revision, settings: form}
+  })).status, 409);
+
+  const answers = {
+    executor: 'Alpha dan panitia', title: 'Festival Rumah',
+    technical: 'Peserta membuat bangunan yang dinilai oleh pengurus SSCircle.',
+    startAt: new Date(Date.now() + 86400000 * 7).toISOString(),
+    prizes: ['Badge Builder'], custom_theme: 'Fantasy'
+  };
+  assert.equal((await t.call('/api/community/events/propose', {
+    method: 'POST', payload: {answers: {...answers, custom_theme: 'Invalid'}}
+  })).status, 400);
+  const proposal = await t.call('/api/community/events/propose', {
+    method: 'POST', payload: {answers}
+  });
+  assert.equal(proposal.status, 201, JSON.stringify(proposal.data));
+  assert.equal((await t.call('/api/community/events/propose', {
+    method: 'POST', payload: {answers}
+  })).status, 409, 'Pending limit must be enforced');
+
+  const review = await t.call('/api/admin/community/events', {asAdmin: true});
+  assert.equal(review.status, 200, JSON.stringify(review.data));
+  const entry = review.data.proposals.find(item => item.id === proposal.data.id);
+  assert.equal(entry.formAnswers.custom_theme, 'Fantasy');
+  assert.equal(entry.formFields[1].label, 'Tema event');
+  assert.equal(entry.capacity, 12);
+});
+
+test('required event name and start date cannot be deleted from form', async () => {
+  const t = fixture();
+  await t.init();
+  const first = await t.call('/api/admin/community/events/form', {asAdmin: true});
+  const form = first.data.settings;
+  form.fields = form.fields.filter(item => item.id !== 'title');
+  const response = await t.call('/api/admin/community/events/form', {
+    asAdmin: true, method: 'PUT',
+    payload: {revision: first.data.revision, settings: form}
+  });
+  assert.equal(response.status, 400);
+});

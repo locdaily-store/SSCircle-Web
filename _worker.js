@@ -413,6 +413,8 @@ const HOME_DEFAULTS = {
   homeVotingResultsMode: 'after_end',
   homeVotingRequireCode: true,
   homeVotingSessionId: 'voting-1',
+  homeVotingTokenMode: 'global',
+  homeVotingTokens: 3,
   homeVotingImages: [],
   homeVotingOptions: [{ id: 'opsi-1', label: 'Pilihan 1' }, { id: 'opsi-2', label: 'Pilihan 2' }, { id: 'opsi-3', label: 'Pilihan 3' }],
   homeVotingQuestions: null,
@@ -773,10 +775,10 @@ function validVotingQuestions(input, legacy) {
     const images = Array.isArray(q?.images) ? q.images : [];
     if (images.length > 8) throw Error('Maksimal 8 foto untuk satu pertanyaan.');
     return {id,title,description:s(q?.description,500),images:[...new Set(images.map(v=>imageSource(v,'Foto voting')))],
-      options:validVotingOptions(q?.options)};
+      options:validVotingOptions(q?.options),tokens:q?.tokens===undefined?3:Number(q.tokens)};
   });
 }
-function validVotingVotes(input, questions) {
+function validVotingVotes(input, questions, mode='global', globalTokens=3) {
   const votes=Array.isArray(input)?input:[];
   const valid=new Map(questions.map(q=>[q.id,new Set(q.options.map(o=>o.id))]));
   const seen=new Set(),counts=new Map();
@@ -786,7 +788,9 @@ function validVotingVotes(input, questions) {
     const questionId=s(v?.questionId,64)||'question-1';
     const optionId=s(v?.optionId,64);
     const group=questionId+'|'+voterKey,unique=group+'|'+optionId;
-    if(!voterKey||!valid.get(questionId)?.has(optionId)||seen.has(unique)||(counts.get(group)||0)>=3)return [];
+    const config=questions.find(q=>q.id===questionId);
+    const limit=mode==='per-question'?config?.tokens:globalTokens;
+    if(!voterKey||!valid.get(questionId)?.has(optionId)||seen.has(unique)||(counts.get(group)||0)>=limit)return [];
     seen.add(unique);counts.set(group,(counts.get(group)||0)+1);
     return [{questionId,account,optionId,voterKey,createdAt:s(v?.createdAt,40)||new Date().toISOString()}];
   });
@@ -866,9 +870,13 @@ async function publicVotingPayload(env, application=null) {
     const id=vote.questionId||'question-1';
     (usedOptions[id]??=[]).push(vote.optionId);
   }
-  const tokensPerQuestion=3;
-  const remainingTokens=Object.fromEntries(runtime.questions.map(q=>
-    [q.id,Math.max(0,Math.min(tokensPerQuestion,q.options.length)-(usedOptions[q.id]||[]).length)]));
+  const tokensPerQuestion=Number(settings.homeVotingTokens)||3;
+  const questionTokens=Object.fromEntries(runtime.questions.map(q=>[
+    q.id,settings.homeVotingTokenMode==='per-question'?Number(q.tokens||3):tokensPerQuestion
+  ]));
+  const remainingTokens=Object.fromEntries(runtime.questions.map(q=>[
+    q.id,Math.max(0,Math.min(questionTokens[q.id],q.options.length)-(usedOptions[q.id]||[]).length)
+  ]));
   const votedQuestionIds=Object.keys(remainingTokens).filter(id=>remainingTokens[id]===0);
   return {
     enabled:settings.homeVotingEnabled===true,title:settings.homeVotingTitle,
@@ -878,8 +886,8 @@ async function publicVotingPayload(env, application=null) {
     active:runtime.active,expired:runtime.expired,deadlineLabel:settings.homeVotingDeadlineLabel,
     options:runtime.options,results:runtime.showResults?runtime.results:[],
     showResults:runtime.showResults,totalVotes:runtime.showResults?runtime.total:0,
-    votedQuestionIds,tokensPerQuestion,usedOptions,remainingTokens,
-    questions:runtime.questions.map(q=>({id:q.id,title:q.title,description:q.description,
+    votedQuestionIds,tokensPerQuestion,questionTokens,usedOptions,remainingTokens,
+    questions:runtime.questions.map(q=>({id:q.id,title:q.title,description:q.description,tokens:questionTokens[q.id],
       images:settings.homeVotingShowImage!==false?q.images:[],options:q.options,
       results:runtime.showResults?q.results:[],totalVotes:runtime.showResults?q.totalVotes:0,
       showResults:runtime.showResults}))
@@ -899,9 +907,10 @@ async function submitVote(env, req) {
   if (!application) return bad('Masuk menggunakan kode pendaftaran terlebih dahulu.',401);
   if (application.status!==VOTING_ACCEPTED_STATUS) return bad('Voting hanya untuk pendaftar yang Diterima.',403);
   const voterKey='app:'+application.id,safeAccount='Pendaftar '+application.id.slice(0,8).toUpperCase();
+  const tokenCap=settings.homeVotingTokenMode==='per-question'?Number(question.tokens||3):Number(settings.homeVotingTokens||3);
   const existing=runtime.votes.filter(v=>(v.questionId||'question-1')===questionId&&v.voterKey===voterKey);
   if(existing.some(v=>v.optionId===optionId))return bad('Pilihan ini sudah kamu vote. Pilih jawaban yang berbeda.',409);
-  if(existing.length>=3)return bad('Ketiga token voting untuk pertanyaan ini sudah digunakan.',409);
+  if(existing.length>=tokenCap)return bad('Token voting untuk pertanyaan ini sudah digunakan seluruhnya.',409);
   if(runtime.votes.length>=5000)return bad('Batas suara voting tercapai. Hubungi admin.',409);
   const now=new Date().toISOString(),vote={questionId,voterKey,account:safeAccount,optionId,createdAt:now};
   const firstId='question-1';
@@ -915,14 +924,15 @@ async function submitVote(env, req) {
     AND EXISTS (SELECT 1 FROM submissions WHERE id=? AND status='accepted')
     AND (EXISTS (SELECT 1 FROM json_each(settings,'$.homeVotingQuestions') WHERE json_extract(value,'$.id')=?)
       OR (?=? AND (json_type(settings,'$.homeVotingQuestions') IS NULL OR json_type(settings,'$.homeVotingQuestions')='null')))
+    AND COALESCE(updated_at,'')=?
     AND (SELECT COUNT(*) FROM json_each(COALESCE(json_extract(settings,'$.homeVotingVotes'),'[]'))
       WHERE json_extract(value,'$.voterKey')=?
-      AND (json_extract(value,'$.questionId')=? OR (json_extract(value,'$.questionId') IS NULL AND ?=?)))<3
+      AND (json_extract(value,'$.questionId')=? OR (json_extract(value,'$.questionId') IS NULL AND ?=?)))<?
     AND NOT EXISTS (SELECT 1 FROM json_each(COALESCE(json_extract(settings,'$.homeVotingVotes'),'[]'))
       WHERE json_extract(value,'$.voterKey')=? AND json_extract(value,'$.optionId')=?
       AND (json_extract(value,'$.questionId')=? OR (json_extract(value,'$.questionId') IS NULL AND ?=?)))`)
     .bind(JSON.stringify(vote),settings.homeVotingSessionId||'voting-1',now,application.id,
-      questionId,questionId,firstId,voterKey,questionId,questionId,firstId,voterKey,optionId,questionId,questionId,firstId).run();
+      questionId,questionId,firstId,row.updated_at||'',voterKey,questionId,questionId,firstId,tokenCap,voterKey,optionId,questionId,questionId,firstId).run();
   if (!Number(res.meta?.changes||0)) return bad('Suara belum tersimpan. Muat ulang halaman dan coba lagi.',409);
   const payload=await publicVotingPayload(env,application);
   return J({ok:true,message:'Satu token voting berhasil digunakan.',remainingTokens:payload.remainingTokens,questions:payload.questions,
@@ -1343,14 +1353,27 @@ function settingsValid(input) {
     throw Error('Waktu akhir voting tidak valid.');
   out.homeVotingEndsAt = votingEndsAt;
   out.homeVotingResultsMode = ['always', 'after_end', 'hidden'].includes(input.homeVotingResultsMode) ? input.homeVotingResultsMode : HOME_DEFAULTS.homeVotingResultsMode;
+  out.homeVotingTokenMode = input.homeVotingTokenMode === 'per-question' ? 'per-question' : 'global';
+  const globalTokens = Number(input.homeVotingTokens ?? HOME_DEFAULTS.homeVotingTokens);
+  if (!Number.isInteger(globalTokens) || globalTokens < 1 || globalTokens > 20)
+    throw Error('Jumlah token voting harus 1 sampai 20.');
+  out.homeVotingTokens = globalTokens;
   out.homeVotingOptions = validVotingOptions(input.homeVotingOptions === undefined ? HOME_DEFAULTS.homeVotingOptions : input.homeVotingOptions);
   out.homeVotingQuestions = validVotingQuestions(input.homeVotingQuestions, {...HOME_DEFAULTS,...input,homeVotingOptions:out.homeVotingOptions});
   if (out.homeVotingEnabled && !out.homeVotingQuestion)
     throw Error('Isi pertanyaan voting sebelum mengaktifkannya.');
-  if(out.homeVotingEnabled && out.homeVotingQuestions.some(q=>q.options.length<3))
-    throw Error('Setiap pertanyaan voting aktif membutuhkan minimal 3 pilihan berbeda untuk tiga token.');
+  for (const q of out.homeVotingQuestions) {
+    if (!Number.isInteger(q.tokens) || q.tokens < 1 || q.tokens > 20)
+      throw Error('Token setiap pertanyaan harus 1 sampai 20.');
+    const cap = out.homeVotingTokenMode === 'per-question' ? q.tokens : out.homeVotingTokens;
+    if (out.homeVotingEnabled && q.options.length < cap)
+      throw Error('Jumlah pilihan pada "' + q.title + '" harus minimal ' + cap + ' agar setiap token memilih jawaban berbeda.');
+  }
   out.homeVotingRequireCode = true;
-  out.homeVotingVotes = validVotingVotes(input.homeVotingVotes === undefined ? HOME_DEFAULTS.homeVotingVotes : input.homeVotingVotes, out.homeVotingQuestions);
+  out.homeVotingVotes = validVotingVotes(
+    input.homeVotingVotes === undefined ? HOME_DEFAULTS.homeVotingVotes : input.homeVotingVotes,
+    out.homeVotingQuestions, out.homeVotingTokenMode, out.homeVotingTokens
+  );
   out.homeLeaderboardSeasons = validLeaderboard(input.homeLeaderboardSeasons === undefined ? HOME_DEFAULTS.homeLeaderboardSeasons : input.homeLeaderboardSeasons);
   const selectedStatSeason=s(input.statSeasonId||'',64);
   if(selectedStatSeason && !out.homeLeaderboardSeasons.some(season=>season.id===selectedStatSeason))
@@ -4535,11 +4558,116 @@ async function socialAPI(req,env,path,method){
 
 
 
+/* The event proposal form is configurable without changing existing proposals. */
+const COMMUNITY_FORM_DEFAULT = {
+  enabled: true,
+  maxPending: 3,
+  defaultCapacity: 40,
+  minNoticeHours: 1,
+  maxPrizes: 20,
+  fields: [
+    {id:'executor',label:'Nama Pelaksana / Pembuat / Staff Event',type:'text',required:true,placeholder:'Nama pelaksana atau tim'},
+    {id:'title',label:'Nama event yang dibuat',type:'text',required:true,placeholder:'Judul kegiatan'},
+    {id:'technical',label:'Teknis / Sistem pelaksanaan',type:'textarea',required:true,placeholder:'Jelaskan aturan dan alur acara'},
+    {id:'startAt',label:'Kapan event dimulai?',type:'datetime-local',required:true,placeholder:''},
+    {id:'prizes',label:'Hadiah untuk para pemenang',type:'prizes',required:true,placeholder:'Hadiah Juara'}
+  ]
+};
+const COMMUNITY_CORE_TYPES = {
+  executor:'text',title:'text',technical:'textarea',startAt:'datetime-local',prizes:'prizes'
+};
+const COMMUNITY_FIELD_TYPES = new Set(['text','textarea','datetime-local','prizes','number','date','select']);
+function validCommunityForm(input) {
+  if(!input || typeof input!=='object' || Array.isArray(input))
+    throw Error('Pengaturan formulir event tidak valid.');
+  const number=(value,min,max,label)=>{
+    if(!Number.isSafeInteger(Number(value)) || Number(value)<min || Number(value)>max)
+      throw Error(label+' harus '+min+' sampai '+max+'.');
+    return Number(value);
+  };
+  const fields=input.fields;
+  if(!Array.isArray(fields) || fields.length<2 || fields.length>20)
+    throw Error('Formulir event membutuhkan 2 sampai 20 pertanyaan.');
+  const ids=new Set();
+  const normalized=fields.map((f,index)=>{
+    const id=s(f?.id,64),label=s(f?.label,160),type=s(f?.type,24);
+    if(!/^[a-zA-Z][a-zA-Z0-9_-]{1,63}$/.test(id) || ids.has(id) || !label ||
+       !COMMUNITY_FIELD_TYPES.has(type) || (Object.hasOwn(COMMUNITY_CORE_TYPES,id) && COMMUNITY_CORE_TYPES[id]!==type))
+      throw Error('Pertanyaan event nomor '+(index+1)+' tidak valid atau duplikat.');
+    ids.add(id);
+    const options=type==='select' ? (Array.isArray(f.options)?f.options:[]) : [];
+    if(type==='select' && (options.length<2 || options.length>15 ||
+       options.some(x=>!s(x,100)) || new Set(options.map(x=>s(x,100))).size!==options.length))
+      throw Error('Pilihan dropdown event harus 2 sampai 15 pilihan berbeda.');
+    return {id,label,type,required:['title','startAt'].includes(id)||f.required===true,
+      placeholder:s(f.placeholder,180),options:options.map(v=>s(v,100))};
+  });
+  if(!ids.has('title') || !ids.has('startAt'))
+    throw Error('Formulir event harus memuat nama event dan tanggal mulai.');
+  return {
+    enabled:input.enabled!==false,
+    maxPending:number(input.maxPending,1,10,'Batas pengajuan aktif'),
+    defaultCapacity:number(input.defaultCapacity,1,500,'Kuota awal peserta'),
+    minNoticeHours:number(input.minNoticeHours,1,168,'Jeda sebelum event'),
+    maxPrizes:number(input.maxPrizes,1,20,'Batas peringkat hadiah'),
+    fields:normalized
+  };
+}
+async function communityFormConfig(env){
+  const row=await env.DB.prepare('SELECT settings,revision FROM community_event_form_policy WHERE id=1').first();
+  if(!row)return {settings:COMMUNITY_FORM_DEFAULT,revision:''};
+  try {
+    return {settings:validCommunityForm(parse(row.settings)),revision:row.revision||''};
+  }catch(error){
+    console.error('[SSCircle event form] Invalid policy:',String(error?.message||error));
+    throw Error('Konfigurasi event perlu diperiksa oleh Admin.');
+  }
+}
+function communityFormAnswers(input,settings) {
+  const raw=input?.answers && typeof input.answers==='object' && !Array.isArray(input.answers)
+    ? input.answers : input;
+  const answers={};
+  for(const field of settings.fields) {
+    const value=raw?.[field.id];
+    if(field.type==='prizes'){
+      const prizes=Array.isArray(value)?value:[];
+      if(prizes.length>settings.maxPrizes || (field.required && !prizes.length) ||
+         prizes.some(p=>typeof p!=='string' || !p.trim() || p.trim().length>180))
+        throw Error('Hadiah Juara harus diisi sesuai batas yang ditentukan Admin.');
+      answers[field.id]=prizes.map(v=>v.trim());
+    }else if(field.type==='number'){
+      if(value===''||value===null||value===undefined){
+        if(field.required)throw Error(field.label+' wajib diisi.');
+        answers[field.id]='';
+      }else{
+        const n=Number(value);
+        if(!Number.isFinite(n) || Math.abs(n)>1000000000)throw Error('Angka pada '+field.label+' tidak valid.');
+        answers[field.id]=n;
+      }
+    }else{
+      const limit=field.id==='technical'?1800:field.id==='title'?140:field.id==='executor'?120:
+        field.type==='textarea'?1800:field.type==='select'?100:200;
+      const text=s(value,limit);
+      if(field.required && !text)throw Error(field.label+' wajib diisi.');
+      if(field.id==='technical' && field.required && text.length<20)
+        throw Error('Teknis pelaksanaan membutuhkan minimal 20 karakter.');
+      if(field.type==='select' && text && !field.options.includes(text))
+        throw Error('Pilihan '+field.label+' tidak tersedia.');
+      if(field.type==='date' && text && !/^\d{4}-\d{2}-\d{2}$/.test(text))
+        throw Error('Tanggal '+field.label+' tidak valid.');
+      answers[field.id]=text;
+    }
+  }
+  return answers;
+}
+
 /* Community Events & Achievements V10.55: separate tables, never rewrite legacy events. */
 const community55Ready=new WeakSet();
 async function community55Schema(env){
   if(community55Ready.has(env.DB))return;
   for(const sql of [
+    "CREATE TABLE IF NOT EXISTS community_event_form_policy(id INTEGER PRIMARY KEY CHECK(id=1),settings TEXT NOT NULL,revision TEXT NOT NULL)",
+    "CREATE TABLE IF NOT EXISTS community_event_form_answers(proposal_id TEXT PRIMARY KEY,payload TEXT NOT NULL,FOREIGN KEY(proposal_id) REFERENCES community_event_proposals(id) ON DELETE CASCADE)",
     "CREATE TABLE IF NOT EXISTS community_event_proposals(id TEXT PRIMARY KEY,member_id TEXT NOT NULL,executor TEXT NOT NULL,title TEXT NOT NULL,technical TEXT NOT NULL,start_at TEXT NOT NULL,end_at TEXT NOT NULL,prizes_json TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'pending',reason TEXT NOT NULL DEFAULT '',capacity INTEGER NOT NULL DEFAULT 40,created_at TEXT NOT NULL,reviewed_at TEXT,FOREIGN KEY(member_id) REFERENCES submissions(id) ON DELETE CASCADE)",
     "CREATE INDEX IF NOT EXISTS idx_c55_proposals_status ON community_event_proposals(status,start_at)",
     "CREATE TABLE IF NOT EXISTS community_event_signups(event_id TEXT NOT NULL,member_id TEXT NOT NULL,state TEXT NOT NULL DEFAULT 'registered',joined_at TEXT NOT NULL,checked_in_at TEXT,PRIMARY KEY(event_id,member_id),FOREIGN KEY(member_id) REFERENCES submissions(id) ON DELETE CASCADE)",
@@ -4555,6 +4683,8 @@ async function community55Schema(env){
     ['event-explorer','Event Explorer','Menghadiri tiga event komunitas','events_attended',3]
   ])await env.DB.prepare("INSERT OR IGNORE INTO community_achievement_rules(id,title,description,metric,target,enabled) VALUES(?,?,?,?,?,1)")
     .bind(id,title,description,metric,target).run();
+  await env.DB.prepare("INSERT OR IGNORE INTO community_event_form_policy(id,settings,revision) VALUES(1,?,'')")
+    .bind(JSON.stringify(COMMUNITY_FORM_DEFAULT)).run();
   community55Ready.add(env.DB);
 }
 async function community55Event(env,id){
@@ -4622,7 +4752,25 @@ async function community55API(req,env,path,method){
   }else if(!member||member.status!=='accepted')return bad('Hanya anggota berstatus Diterima dapat menggunakan fitur ini.',403);
   if(!isAdmin && method!=='GET' && !(await memberStrongSession(req,env,member)))
     return bad('Buka Profile dengan password Dashboard sebelum mengirim permintaan.',403);
-  if(method==='POST' && !(await rateLimit(env,req,'community55',30,900)))return bad('Terlalu banyak permintaan. Coba nanti.',429);
+  if(['POST','PUT'].includes(method) && !(await rateLimit(env,req,'community55',30,900)))
+    return bad('Terlalu banyak permintaan. Coba nanti.',429);
+  if(path==='/api/community/events/form' && method==='GET'){
+    const config=await communityFormConfig(env);
+    return J({form:config.settings},200,{'Cache-Control':'private, no-store','Vary':'Cookie'});
+  }
+  if(path==='/api/admin/community/events/form' && method==='GET')
+    return J(await communityFormConfig(env),200,{'Cache-Control':'private, no-store'});
+  if(path==='/api/admin/community/events/form' && method==='PUT'){
+    const bodyInput=await body(req,10000);
+    if(typeof bodyInput.revision!=='string' || bodyInput.revision.length>100)
+      return bad('Versi pengaturan tidak valid.',400);
+    const config=validCommunityForm(bodyInput.settings);
+    const revision=new Date().toISOString()+'-'+uid();
+    const result=await env.DB.prepare('UPDATE community_event_form_policy SET settings=?,revision=? WHERE id=1 AND revision=?')
+      .bind(JSON.stringify(config),revision,bodyInput.revision).run();
+    if(!Number(result.meta?.changes))return bad('Pengaturan sudah diubah admin lain. Muat ulang dan coba lagi.',409);
+    return J({ok:true,revision});
+  }
   const now=new Date().toISOString();
   if(path==='/api/community/events/my'&&method==='GET'){
     const proposals=(await env.DB.prepare("SELECT id,executor,title,start_at,status,reason,created_at FROM community_event_proposals WHERE member_id=? ORDER BY created_at DESC LIMIT 30").bind(member.id).all()).results||[];
@@ -4630,18 +4778,32 @@ async function community55API(req,env,path,method){
     return J({proposals,joined});
   }
   if(path==='/api/community/events/propose'&&method==='POST'){
-    const x=await body(req,6000);
-    const executor=s(x.executor,120),title=s(x.title,140),technical=s(x.technical,1800),rawStart=s(x.startAt,45);
-    const start=Date.parse(rawStart),prizes=x.prizes;
-    if(!executor||!title||technical.length<20)return bad('Lengkapi nama pelaksana, event, dan teknis pelaksanaan minimal 20 karakter.',400);
-    if(!Number.isFinite(start)||start<Date.now()+3600000||start>Date.now()+2*365*86400000)return bad('Waktu mulai harus lebih dari satu jam mendatang dan maksimal dua tahun.',400);
-    if(!Array.isArray(prizes)||prizes.length<1||prizes.length>20||prizes.some((p,i)=>!s(p,180)))return bad('Isi minimal hadiah Juara 1, maksimal 20 peringkat.',400);
-    const active=await env.DB.prepare("SELECT COUNT(*) AS total FROM community_event_proposals WHERE member_id=? AND status='pending'").bind(member.id).first();
-    if(Number(active?.total)>=3)return bad('Maksimal 3 pengajuan yang masih menunggu persetujuan.',409);
+    const config=(await communityFormConfig(env)).settings;
+    if(!config.enabled)return bad('Pengajuan event komunitas sedang ditutup.',403);
+    const input=await body(req,12000),answers=communityFormAnswers(input,config);
+    const executor=s(answers.executor,120),title=s(answers.title,140);
+    const technical=s(answers.technical,1800),rawStart=s(answers.startAt,45);
+    const start=Date.parse(rawStart),prizes=answers.prizes||[];
+    if(!title)return bad('Nama event wajib diisi.',400);
+    if(!Number.isFinite(start) || start<Date.now()+config.minNoticeHours*3600000 ||
+       start>Date.now()+2*365*86400000)
+      return bad('Waktu mulai event harus sesuai batas waktu yang ditentukan Admin.',400);
+    const active=await env.DB.prepare("SELECT COUNT(*) AS total FROM community_event_proposals WHERE member_id=? AND status='pending'")
+      .bind(member.id).first();
+    if(Number(active?.total)>=config.maxPending)
+      return bad('Batas pengajuan yang masih menunggu persetujuan sudah tercapai.',409);
     const end=new Date(start+2*3600000).toISOString(),id='member-event-'+uid();
-    await env.DB.prepare("INSERT INTO community_event_proposals(id,member_id,executor,title,technical,start_at,end_at,prizes_json,status,reason,capacity,created_at) VALUES(?,?,?,?,?,?,?,?,'pending','',40,?)")
-      .bind(id,member.id,executor,title,technical,new Date(start).toISOString(),end,JSON.stringify(prizes.map((p,i)=>({rank:i+1,prize:s(p,180)}))),now).run();
-    return J({ok:true,id,status:'pending',message:'Pengajuan event berhasil dikirim dan menunggu persetujuan Admin Control.'},201);
+    const operations=await env.DB.batch([
+      env.DB.prepare("INSERT INTO community_event_proposals(id,member_id,executor,title,technical,start_at,end_at,prizes_json,status,reason,capacity,created_at) SELECT ?,?,?,?,?,?,?,?,'pending','',?,? WHERE (SELECT COUNT(*) FROM community_event_proposals WHERE member_id=? AND status='pending')<? AND EXISTS(SELECT 1 FROM submissions WHERE id=? AND status='accepted')")
+        .bind(id,member.id,executor,title,technical,new Date(start).toISOString(),end,
+          JSON.stringify(prizes.map((p,i)=>({rank:i+1,prize:p}))),config.defaultCapacity,now,
+          member.id,config.maxPending,member.id),
+      env.DB.prepare("INSERT INTO community_event_form_answers(proposal_id,payload) SELECT ?,? WHERE EXISTS (SELECT 1 FROM community_event_proposals WHERE id=?)")
+        .bind(id,JSON.stringify({answers,fields:config.fields}),id)
+    ]);
+    if(!Number(operations[0]?.meta?.changes))
+      return bad('Batas pengajuan aktif telah tercapai atau akun tidak lagi diterima.',409);
+    return J({ok:true,id,status:'pending',message:'Pengajuan event dikirim dan menunggu persetujuan Admin Control.'},201);
   }
   if(path==='/api/community/events/join'&&method==='POST'){
     const x=await body(req,700),id=s(x.eventId,100);
@@ -4658,6 +4820,13 @@ async function community55API(req,env,path,method){
     return J(await community55Progress(env,member));
   if(path==='/api/admin/community/events'&&method==='GET'){
     const proposals=(await env.DB.prepare("SELECT p.*,s.status AS member_status FROM community_event_proposals p LEFT JOIN submissions s ON s.id=p.member_id ORDER BY p.created_at DESC LIMIT 100").all()).results||[];
+    const answerRows=(await env.DB.prepare("SELECT proposal_id,payload FROM community_event_form_answers ORDER BY proposal_id LIMIT 150").all()).results||[];
+    const answers=new Map(answerRows.map(row=>[row.proposal_id,parse(row.payload)||{}]));
+    for(const proposal of proposals){
+      const detail=answers.get(proposal.id);
+      proposal.formAnswers=detail?.answers||null;
+      proposal.formFields=detail?.fields||null;
+    }
     const eventId=s(new URL(req.url).searchParams.get('eventId'),100);
     const signups=eventId?(await env.DB.prepare("SELECT r.member_id,r.state,r.joined_at,r.checked_in_at,s.status AS member_status FROM community_event_signups r JOIN submissions s ON s.id=r.member_id WHERE r.event_id=? ORDER BY r.joined_at LIMIT 200").bind(eventId).all()).results||[]:[];
     const awards=eventId?(await env.DB.prepare("SELECT member_id,rank,label,created_at FROM community_event_awards WHERE event_id=? ORDER BY rank").bind(eventId).all()).results||[]:[];
@@ -4829,10 +4998,31 @@ async function noticeAPI(req,env,path,method){
   if(!await rateLimit(env,req,'admin-notification',30,900))return bad('Terlalu banyak perubahan.',429);
   const data=await body(req,4000);
   if(method==='DELETE'){
-   if(!SSC_SOCIAL_ID.test(data?.id||''))return bad('Pengumuman tidak ditemukan.',404);
-   const result=await env.DB.prepare('UPDATE notice_announcements SET archived_at=? WHERE id=? AND archived_at IS NULL').bind(new Date().toISOString(),data.id).run();
-   if(!result.meta?.changes)return bad('Pengumuman sudah diarsipkan.',404);
-   return J({ok:true});
+    const mode=['archive','delete','delete-archived'].includes(data?.mode)?data.mode:'archive';
+    if(mode==='delete-archived'){
+      if(data.confirmation!=='HAPUS RIWAYAT')return bad('Konfirmasi hapus riwayat tidak sesuai.',400);
+      const count=await env.DB.prepare("SELECT COUNT(*) AS n FROM notice_announcements WHERE archived_at IS NOT NULL LIMIT 200").first();
+      if(!Number(count?.n))return J({ok:true,deleted:0});
+      const [receipts,announcements]=await env.DB.batch([
+        env.DB.prepare("DELETE FROM notice_receipts WHERE notice_id IN (SELECT id FROM notice_announcements WHERE archived_at IS NOT NULL ORDER BY created_at LIMIT 200)"),
+        env.DB.prepare("DELETE FROM notice_announcements WHERE id IN (SELECT id FROM notice_announcements WHERE archived_at IS NOT NULL ORDER BY created_at LIMIT 200)")
+      ]);
+      return J({ok:true,deleted:Number(announcements?.meta?.changes||0)});
+    }
+    if(!SSC_SOCIAL_ID.test(data?.id||''))return bad('Pengumuman tidak ditemukan.',404);
+    if(mode==='delete'){
+      const found=await env.DB.prepare('SELECT id FROM notice_announcements WHERE id=?').bind(data.id).first();
+      if(!found)return bad('Pengumuman tidak ditemukan.',404);
+      await env.DB.batch([
+        env.DB.prepare('DELETE FROM notice_receipts WHERE notice_id=?').bind(data.id),
+        env.DB.prepare('DELETE FROM notice_announcements WHERE id=?').bind(data.id)
+      ]);
+      return J({ok:true,deleted:1});
+    }
+    const result=await env.DB.prepare('UPDATE notice_announcements SET archived_at=? WHERE id=? AND archived_at IS NULL')
+      .bind(new Date().toISOString(),data.id).run();
+    if(!result.meta?.changes)return bad('Pengumuman sudah diarsipkan.',404);
+    return J({ok:true,archived:1});
   }
   if(method==='POST'){
    const title=s(data?.title,120).trim(),content=s(data?.content,1500).trim();
@@ -4883,7 +5073,7 @@ async function noticeAPI(req,env,path,method){
  return bad('Tindakan tidak tersedia.',405);
 }
 
-const SSC_RUNTIME_RELEASE='10.55.3';
+const SSC_RUNTIME_RELEASE='10.55.4';
 const SSC_RUNTIME_ISSUES=new Set();
 function sscRuntimeBindings(env){
   return {
@@ -5222,7 +5412,7 @@ async function route(req, env) {
     const settings = formFrom(await readSettingsRow(env)).settings;
     return J(await community55PublicEvents(env,settings),200,{'Cache-Control':'private, no-store'});
   }
-  if ((path.startsWith('/api/community/')||path.startsWith('/api/admin/community/')) && ['GET','POST'].includes(method))
+  if ((path.startsWith('/api/community/')||path.startsWith('/api/admin/community/')) && ['GET','POST','PUT'].includes(method))
     return await community55API(req,env,path,method);
   if (path === '/api/rules' && method === 'GET') {
     const settings = formFrom(await readSettingsRow(env)).settings;
@@ -5491,10 +5681,22 @@ async function route(req, env) {
           ? persistedVoting.statSeasonActivatedAt : new Date().toISOString()
         : '';
       const oldQuestions=votingQuestions(persistedVoting),newQuestions=settings.homeVotingQuestions;
-      const previouslyUsed=(persistedVoting.homeVotingVotes||[]).map(v=>({questionId:v.questionId||'question-1',optionId:v.optionId}));
+      const previouslyUsed=(persistedVoting.homeVotingVotes||[]).map(v=>({
+        questionId:v.questionId||'question-1',optionId:v.optionId,voterKey:v.voterKey
+      }));
       const requestedOptions=new Set(newQuestions.flatMap(q=>q.options.map(o=>q.id+'|'+o.id)));
       if (previouslyUsed.some(v=>!requestedOptions.has(v.questionId+'|'+v.optionId)))
         return bad('Pilihan yang sudah memiliki suara tidak dapat dihapus. Mulai sesi voting baru terlebih dahulu.', 409);
+      const totals=new Map();
+      for(const vote of previouslyUsed){
+        const key=vote.questionId+'|'+vote.voterKey;
+        totals.set(key,(totals.get(key)||0)+1);
+      }
+      const limits=new Map(newQuestions.map(q=>[
+        q.id,settings.homeVotingTokenMode==='per-question'?q.tokens:settings.homeVotingTokens
+      ]));
+      if([...totals].some(([key,total])=>total>(limits.get(key.split('|')[0])||0)))
+        return bad('Jumlah token tidak dapat dikurangi di bawah suara yang sudah dipakai. Reset sesi voting terlebih dahulu.',409);
       const activeVideoId = videoIdFromURL(settings.homeVideoUrl);
       if (activeVideoId) {
         const video = await env.DB.prepare("SELECT id FROM media WHERE id=? AND visibility='public' AND mime_type IN ('video/mp4','video/webm')").bind(activeVideoId).first();
