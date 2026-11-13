@@ -93,3 +93,27 @@ body .ssc-site-header .home-menu-button{touch-action:manipulation}
   body .ssc-site-header .ssc-header-actions{gap:8px}
   body .ssc-unified-footer .ssc-footer-content{width:calc(100% - 32px);justify-content:center;text-align:center}
 }
+
+/* Gallery CTA inherits the same configurable primary/secondary palette. */
+.home-page .ssc-gallery-all-button{
+  display:flex;
+  width:max-content;
+  max-width:calc(100% - 32px);
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  margin:26px auto 0;
+  padding:12px 21px;
+  text-decoration:none;
+  background:var(--ssc-button-secondary,var(--ssc-panel,#241831));
+  border:1px solid var(--ssc-border,#62437c);
+  color:var(--ssc-button-secondary-text,var(--ssc-text,#fff));
+}
+.home-page .ssc-gallery-all-button:hover{
+  border-color:var(--ssc-input-focus,var(--ssc-primary,#b87bea));
+  color:var(--ssc-link-hover,var(--ssc-text,#fff));
+  background:color-mix(in srgb,var(--ssc-button-secondary,var(--ssc-panel,#241831)) 85%,var(--ssc-primary,#b87bea));
+}
+/* Retain homepage hero overlay without using a different header layout. */
+body.home-page .ssc-site-header{position:absolute;top:0;left:0}
+body:not(.home-page) .ssc-site-header{position:relative;top:auto;left:auto}
