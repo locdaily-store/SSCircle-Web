@@ -16,3 +16,10 @@
 :is(#community-events-admin,#achievements-admin) .c55-note.error{color:var(--ssc-danger,#ff768d)}
 @media(max-width:1200px){#community-events-admin .c55-admin-grid{grid-template-columns:minmax(0,1fr)}#community-events-admin .c55-admin-grid>.c55-admin-card:last-child{grid-column:auto}}
 @media(max-width:640px){:is(#community-events-admin,#achievements-admin) .c55-admin-card{padding:14px}:is(#community-events-admin,#achievements-admin) .c55-admin-actions .button{flex:1 1 auto}}
+
+/* Consistent Admin Control section and form surfaces. */
+:is(#community-events-admin,#achievements-admin) .c55-admin-grid{gap:20px}
+:is(#community-events-admin,#achievements-admin) .c55-admin-card{background:var(--ssc-panel,var(--panel));border-color:var(--ssc-border,var(--line));box-shadow:0 8px 26px color-mix(in srgb,var(--ssc-shadow,#000000) 16%,transparent)}
+:is(#community-events-admin,#achievements-admin) :is(.c55-field input,.c55-field select,.c55-field textarea){background:var(--ssc-input,var(--panel-raised));border-color:var(--ssc-input-border,var(--ssc-border));color:var(--ssc-input-text,var(--ssc-text));accent-color:var(--ssc-primary)}
+:is(#community-events-admin,#achievements-admin) :is(.c55-field input,.c55-field select,.c55-field textarea):focus-visible{outline:2px solid var(--ssc-input-focus,var(--ssc-primary));outline-offset:2px}
+:is(#community-events-admin,#achievements-admin) .c55-mini-card{background:linear-gradient(140deg,var(--ssc-card-start,var(--ssc-panel)),var(--ssc-card-end,var(--ssc-panel)));border-color:var(--ssc-border)}
