@@ -39,3 +39,8 @@ body .ssc-unified-footer{background:var(--ssc-footer-bg,var(--ssc-bg,var(--ssc-s
 body .ssc-site-header .home-nav-join{background:var(--ssc-button-secondary,color-mix(in srgb,var(--ssc-shell-bg) 85%,var(--ssc-shell-primary)));color:var(--ssc-button-secondary-text,var(--ssc-shell-text))}
 @media(max-width:1480px){body .ssc-site-header .home-nav{gap:6px}body .ssc-site-header .home-nav .home-nav-link{padding:11px 14px}body .ssc-site-header .ssc-header-actions{gap:12px}}
 @media(max-width:480px){body .ssc-site-header .ssc-header-actions{gap:10px}}
+
+/* Minecraft face in the shared header; the fallback logo uses the same frame. */
+body .ssc-site-header .ssc-header-profile{overflow:hidden}
+body .ssc-site-header .ssc-header-avatar-canvas{display:block;width:34px;height:34px;border-radius:8px;object-fit:cover;image-rendering:pixelated}
+body .ssc-site-header .ssc-header-avatar-canvas[hidden],body .ssc-site-header .ssc-header-profile img[hidden]{display:none}
