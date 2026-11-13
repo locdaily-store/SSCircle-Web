@@ -22,6 +22,18 @@ window.SSCircleThemeEditor = (() => {
     ['.ann-story-card', 'Kartu berita'],
     ['.ann-detail', 'Halaman isi berita'],
     ['.ann-tag', 'Label kategori berita'],
+    ['.gallery-page', 'Gallery: seluruh halaman'],
+    ['.gallery-main', 'Gallery: area konten'],
+    ['.gallery-main h1', 'Gallery: judul'],
+    ['.gallery-eyebrow', 'Gallery: label pembuka'],
+    ['.gallery-toolbar', 'Gallery: bar kategori'],
+    ['.gallery-tab', 'Gallery: kategori'],
+    ['.gallery-card', 'Gallery: kartu foto'],
+    ['.gallery-card-info', 'Gallery: keterangan foto'],
+    ['.gallery-card-info strong', 'Gallery: judul foto'],
+    ['.gallery-card-info small', 'Gallery: kategori foto'],
+    ['.gallery-viewer', 'Gallery: jendela detail foto'],
+    ['.gallery-viewer-controls button', 'Gallery: tombol detail'],
     ['.events-page', 'Seluruh Event Calendar'], ['.events-hero', 'Pembuka Event'],
     ['.events-card', 'Kartu event'], ['.events-card h2', 'Judul event'],
     ['.events-calendar', 'Kalender bulanan'], ['.events-status', 'Label status event'],
@@ -104,6 +116,42 @@ window.SSCircleThemeEditor = (() => {
     return control;
   }
   function mark() { changed(); schedule(); }
+  const galleryPalette=[
+    ['Latar halaman','.gallery-page','background','#120b20'],
+    ['Teks utama','.gallery-main','text','#f5efff'],
+    ['Judul Gallery','.gallery-main h1','text','#f5efff'],
+    ['Label atas','.gallery-eyebrow','text','#b884eb'],
+    ['Latar kategori','.gallery-tab','background','#28183d'],
+    ['Teks kategori','.gallery-tab','text','#f5efff'],
+    ['Bingkai kategori','.gallery-tab','border','#806294'],
+    ['Latar kartu','.gallery-card','background','#28183d'],
+    ['Bingkai kartu','.gallery-card','border','#78568c'],
+    ['Teks judul foto','.gallery-card-info strong','text','#ffffff'],
+    ['Teks kategori foto','.gallery-card-info small','text','#cdb7db'],
+    ['Latar popup foto','.gallery-viewer','background','#160b24'],
+    ['Bingkai popup','.gallery-viewer','border','#78568c']
+  ];
+  function renderGalleryColors(){
+    const root=$('gallery-color-editor');
+    if(!root||!state)return;
+    root.replaceChildren();
+    state.settings.themeOverrides ||= [];
+    for(const [label,selector,property,defaultValue] of galleryPalette){
+      const field=node('label','ssc-gallery-color-field');
+      field.append(node('span','field-label',label));
+      const existing=state.settings.themeOverrides.find(r=>r.selector===selector&&r.property===property);
+      field.append(colorGroup(existing?.value||defaultValue,value=>{
+        let rule=state.settings.themeOverrides.find(r=>r.selector===selector&&r.property===property);
+        if(!rule){
+          if(state.settings.themeOverrides.length>=80){$('theme-preview-status').textContent='Maksimal 80 pengaturan warna khusus.';return;}
+          rule={selector,property,value};
+          state.settings.themeOverrides.push(rule);
+        }else rule.value=value;
+        mark();
+      }));
+      root.append(field);
+    }
+  }
   function renderOverrides() {
     const area = $('theme-overrides');
     if (!area || !state)
@@ -219,6 +267,7 @@ window.SSCircleThemeEditor = (() => {
     state = data;
     changed = notify;
     renderOverrides();
+    renderGalleryColors();
     const angle = $('theme-gradient-angle'), output = $('theme-gradient-angle-value');
     angle.value = String(state.settings.themeGradientAngle ?? 135);
     output.value = angle.value + '°';
@@ -249,6 +298,7 @@ window.SSCircleThemeEditor = (() => {
         renderOverrides();
       };
       $('theme-preview-page').onchange = choosePage;
+      $('gallery-colors-preview')?.addEventListener('click',()=>{ $('theme-preview-page').value='gallery.html';choosePage(); });
       $('theme-preview-desktop').onclick = () => { phone = false; resize(); };
       $('theme-preview-mobile').onclick = () => { phone = true; resize(); };
       $('theme-preview-reload').onclick = choosePage;
