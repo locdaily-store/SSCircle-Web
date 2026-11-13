@@ -9,7 +9,7 @@
     ['Profile','/my-sscircle']
   ];
   const nav = () => links.map(([name,href]) => {
-    const path = new URL(href,location.href).pathname.replace(new RegExp('/$'),'') || '/';
+    const path = new URL(href,'https://sscircle.pages.dev/').pathname.replace(new RegExp('/$'),'') || '/';
     const active = path === page && (!href.includes('#') || location.hash === '#tentang');
     return '<a class="home-nav-link'+(active?' ssc-nav-active':'')+'" href="'+href+'"'+(active?' aria-current="page"':'')+'>'+name+'</a>';
   }).join('') + '<a class="home-nav-join" href="/registration.html">Pendaftaran <span aria-hidden="true">↗</span></a>';
@@ -39,7 +39,7 @@
     f.innerHTML='<div class="home-container home-footer-content ssc-footer-content"><div class="home-footer-mark"><img id="home-footer-logo" data-site-logo src="/assets/sscircle-logo.png" width="27" height="27" alt=""><span>SSCircle Server</span></div><span id="home-footer-text">One circle. Endless stories.</span>'+
       '<div class="home-footer-links"><a href="/registration.html">Pendaftaran</a><a href="/status.html">Cek Status</a><a href="/my-sscircle">Profile</a><a href="/rules.html">Peraturan Server</a><a href="/events.html">Event</a><a href="/gallery.html">Gallery</a><a href="/announcements.html">Announcement</a><a href="/seasons.html">Seasons</a><a href="https://discord.gg/vQQSgY2GRS" target="_blank" rel="noopener noreferrer">Discord ↗</a></div><small>© 2026 SSCircle Server</small></div>';
     if(previousFooter) previousFooter.replaceWith(f);else document.body.append(f);
-    addEventListener('hashchange',()=>{h.querySelectorAll('.home-nav a').forEach(a=>{const target=new URL(a.href);const on=target.pathname===location.pathname&&(!target.hash||target.hash===location.hash);a.classList.toggle('ssc-nav-active',on);if(on)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current');});});
+    addEventListener('hashchange',()=>{h.querySelectorAll('.home-nav a').forEach(a=>{const target=new URL(a.getAttribute('href')||'/', 'https://sscircle.pages.dev/');const on=target.pathname===location.pathname&&(!target.hash||target.hash===location.hash);a.classList.toggle('ssc-nav-active',on);if(on)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current');});});
     fetch('/api/form',{credentials:'same-origin',cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{
       const s=d?.settings;if(!s)return;
       const logo=s.logoImageUrl|| (s.logoMediaId?'/api/media/'+s.logoMediaId:'/assets/sscircle-logo.png');
