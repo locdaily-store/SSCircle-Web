@@ -37,6 +37,7 @@ window.SSCircleHomeAdmin = (() => {
     notifyDirty();
     setStatus();
     window.SSCircleHomepageBuilder?.updatePreview();
+    window.SSCircleGalleryAdmin?.schedule();
   }
   function textField(container, key, label, { textarea = false, placeholder = '', hint = '' } = {}) {
     const wrap = node('label', 'field-group'), lab = node('span', 'field-label', label);
@@ -1363,6 +1364,13 @@ window.SSCircleHomeAdmin = (() => {
     state.settings.galleryCategories ||= [];drawCategories();
     galleryEditor(gallery);
     const viewGallery=node('a','button secondary','Lihat halaman Gallery ↗');viewGallery.href='gallery.html';viewGallery.target='_blank';viewGallery.rel='noopener';gallery.append(viewGallery);
+    // One editor, one photo collection: move it into the dedicated Gallery tab.
+    const standaloneGallery=document.getElementById('gallery-admin-editor');
+    if(standaloneGallery){
+      standaloneGallery.replaceChildren(gallery);
+      gallery.classList.remove('is-collapsed');
+      gallery.querySelector('.home-admin-section-toggle')?.setAttribute('aria-expanded','true');
+    }
     const upcoming = section('Upcoming Events · Jadwal Homepage', 'Kartu event terdekat otomatis mengambil data dari Atur Event & Jadwal. Tidak perlu menambahkan jadwal dua kali.');
     toggle(upcoming, 'homeUpcomingEnabled', 'Tampilkan Upcoming Events di Homepage', 'Halaman Event khusus tetap tersedia meskipun kartu di Homepage disembunyikan.');
     formGrid(upcoming, [
@@ -1505,7 +1513,7 @@ window.SSCircleHomeAdmin = (() => {
     window.SSCircleHomepageBuilder?.render(data, changed, {
       intro: [basics, welcome, video],
       about: [about],
-      gallery: [gallery],
+      gallery: [],
       upcoming: [upcoming],
       process: [process],
       community: [community],
