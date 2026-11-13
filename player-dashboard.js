@@ -290,7 +290,7 @@
       const revoke=document.createElement('button');revoke.type='button';
       revoke.className='player-action player-action-secondary';revoke.textContent='Cabut sesi';
       revoke.addEventListener('click',async()=>{
-        if(!window.confirm('Cabut akses dashboard pada perangkat ini?'))return;
+        if(!await window.SSCircleDialog.confirm('Cabut akses dashboard pada perangkat ini?'))return;
         revoke.disabled=true;
         try{
           await request('/api/player/security/revoke',{method:'POST',
@@ -436,7 +436,7 @@
     if(oldPassword===newPassword){
       securityMessage('Password baru harus berbeda dari password sebelumnya.');return;
     }
-    if(!window.confirm('Ganti password dan keluarkan perangkat lain?'))return;
+    if(!await window.SSCircleDialog.confirm('Ganti password dan keluarkan perangkat lain?'))return;
     button.disabled=true;securityMessage('Memverifikasi password lama pada perangkat ini...');
     try{
       const old=await window.SSCirclePassword.login(playerCodeForSecureLogin,oldPassword);
@@ -466,7 +466,7 @@
     }catch(error){securityMessage(error.message)}
   });
   $('player-signout-all').addEventListener('click',async()=>{
-    if(!confirm('Keluar dari semua perangkat, termasuk sesi kode pendaftaran?'))return;
+    if(!await window.SSCircleDialog.confirm('Keluar dari semua perangkat, termasuk sesi kode pendaftaran?'))return;
     try{await request('/api/player/security/logout-all',{method:'POST',
       headers:{'Content-Type':'application/json'},body:'{}'});
       location.replace('/status.html#kode-milikku');
@@ -526,7 +526,7 @@
         const primary=document.createElement('button');primary.type='button';
         primary.className='player-action player-action-secondary';primary.textContent='Jadikan utama';
         primary.onclick=async()=>{
-          if(!window.confirm('Jadikan '+account.username+' sebagai akun utama?'))return;
+          if(!await window.SSCircleDialog.confirm('Jadikan '+account.username+' sebagai akun utama?'))return;
           primary.disabled=true;
           try{
             await request('/api/player/minecraft/link/primary',{method:'POST',
@@ -658,7 +658,7 @@
     finally{button.disabled=false;}
   });
   $('player-link-cancel').addEventListener('click',async()=>{
-    if(!window.confirm('Batalkan kode penghubung Minecraft saat ini?'))return;
+    if(!await window.SSCircleDialog.confirm('Batalkan kode penghubung Minecraft saat ini?'))return;
     const button=$('player-link-cancel');button.disabled=true;
     try{
       await request('/api/player/minecraft/link/cancel',{method:'POST',
@@ -668,7 +668,7 @@
     finally{button.disabled=false;}
   });
   $('player-link-confirm').addEventListener('click',async()=>{
-    if(!window.confirm('Identitas Minecraft di atas benar-benar milikmu?'))return;
+    if(!await window.SSCircleDialog.confirm('Identitas Minecraft di atas benar-benar milikmu?'))return;
     const button=$('player-link-confirm');button.disabled=true;
     try{
       await request('/api/player/minecraft/link/confirm',{method:'POST',
@@ -687,7 +687,7 @@
     const selected=$('ssc-mc-unlink-account')?.value;
     const target=minecraftLinkAccounts.find(a=>a.id===selected);
     if(!target)return linkNotice('Pilih akun Minecraft yang ingin diputuskan.');
-    if(!window.confirm('Putuskan tautan '+target.username+'? Akun Minecraft lain tetap terhubung.'))return;
+    if(!await window.SSCircleDialog.confirm('Putuskan tautan '+target.username+'? Akun Minecraft lain tetap terhubung.'))return;
     const button=$('player-link-unlink-submit');button.disabled=true;
     try{
       const payload=await window.SSCirclePassword.login(

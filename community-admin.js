@@ -121,7 +121,7 @@ window.SSCircleCommunityAdmin=(()=>{
             element('small','',(badge.memberName||'Anggota SSCircle')+
               (badge.description?' · '+badge.description:'')));
           const remove=button('Hapus',async()=>{
-            if(!window.confirm('Hapus badge ini dari profil anggota?'))return;
+            if(!await window.SSCircleDialog.confirm('Hapus badge ini dari profil anggota?'))return;
             remove.disabled=true;
             try{
               await api('/api/admin/member-badges',{method:'DELETE',body:JSON.stringify({id:badge.id})});

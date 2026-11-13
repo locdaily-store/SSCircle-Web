@@ -83,7 +83,7 @@
    if(!escapeId(id))return;
    const wording={request:'Kirim permintaan pertemanan',accept:'Terima permintaan',decline:'Tolak permintaan',
      cancel:'Batalkan permintaan',remove:'Hapus pertemanan'};
-   if(['remove','decline'].includes(action)&&!confirm(wording[action]+'?'))return;
+   if(['remove','decline'].includes(action)&&!await window.SSCircleDialog.confirm(wording[action]+'?'))return;
    try{
      const response=await api('/api/player/social/action',{method:'POST',body:JSON.stringify({id,action})});
      message((wording[action]||'Tindakan')+' berhasil.'+(response.noticeDelivered===false?' Namun notifikasi Mail Box belum terkirim.':''));

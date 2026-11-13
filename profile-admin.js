@@ -170,8 +170,8 @@ window.SSCircleProfileAdmin=(()=>{
     status.id='profile-sort-status';status.setAttribute('role','status');
     status.setAttribute('aria-live','polite');section.append(status);
     const reset=create('button','button secondary','Kembalikan tampilan bawaan');
-    reset.type='button';reset.addEventListener('click',()=>{
-      if(!window.confirm('Kembalikan susunan, gaya kartu dan teks Profile ke tampilan awal?'))return;
+    reset.type='button';reset.addEventListener('click',async()=>{
+      if(!await window.SSCircleDialog.confirm('Kembalikan susunan, gaya kartu dan teks Profile ke tampilan awal?'))return;
       Object.assign(state.settings,{profilePageTitle:'Profile',
         profilePageSubtitle:'Ruang pribadimu untuk melihat keanggotaan, aktivitas, dan perjalanan bersama komunitas SSCircle.',
         profilePageLayout:'sidebar',profilePageHeroStyle:'default',profilePageCardStyle:'soft',
