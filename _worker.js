@@ -501,6 +501,11 @@ function publicEvents(settings) {
 }
 // Teks dan kategori aturan awal. Seluruhnya bisa diedit melalui Admin Control.
 const RULES_DEFAULTS = {
+  "mailboxAcceptedTitle": "Selamat, pendaftaranmu diterima",
+  "mailboxAcceptedBody": "Pendaftaranmu telah diterima. Untuk mengaktifkan akun, minta kode aktivasi dari bagian atas Mail Box. Kode dikirim setelah identitasmu diverifikasi oleh pengurus.",
+  "mailboxAcceptedDiscordEnabled": true,
+  "mailboxAcceptedDiscordNote": "IP Address server Minecraft SSCircle tersedia di Discord SSCircle Community. Bergabunglah untuk mendapatkan alamat server dan informasi komunitas.",
+  "mailboxAcceptedDiscordButton": "Gabung SSCircle Community",
   "rulesEnabled": true,
   "rulesBadge": "SEBELUM MENDAFTAR",
   "rulesTitle": "Peraturan SSCircle Server",
@@ -1037,6 +1042,15 @@ function settingsValid(input) {
       startAt:new Date(start).toISOString(), endAt:new Date(end).toISOString(),
       location:s(entry.location,120)};
   });
+  // Messages for accepted applicants are editable in Admin Control.
+  // The invite always derives from the existing validated homepage Discord URL.
+  out.mailboxAcceptedDiscordEnabled=input.mailboxAcceptedDiscordEnabled!==false;
+  for(const [key,max] of Object.entries({mailboxAcceptedTitle:120,mailboxAcceptedBody:1200,
+    mailboxAcceptedDiscordNote:600,mailboxAcceptedDiscordButton:100})){
+    const value=input[key]===undefined?RULES_DEFAULTS[key]:input[key];
+    out[key]=s(value,max);
+    if(!out[key])throw Error('Teks pemberitahuan Mail Box yang diterima tidak boleh kosong.');
+  }
   // Aturan ditulis sebagai teks biasa, tanpa HTML dari editor.
   out.rulesEnabled = input.rulesEnabled !== false;
   for (const [key, max] of Object.entries({
@@ -2819,10 +2833,10 @@ async function mailboxNote(env,memberId,type,title,content,extras={}){
    Pesan ditulis untuk application_id pendaftar (submissions.id), jadi pendaftar
    yang belum menjadi anggota pun sudah dikenali. Pengiriman bersifat best-effort:
    kegagalan notifikasi tidak boleh menggagalkan pendaftaran atau perubahan status. */
-function mailboxStatusMessage(status,reason=''){
+function mailboxStatusMessage(status,reason='',settings={}){
   if(status==='accepted')return {
-    title:'Selamat, pendaftaranmu diterima',
-    content:'Pendaftaranmu telah diterima. Untuk mengaktifkan akun, minta kode aktivasi dari bagian atas halaman Mail Box ini. Kode dikirim setelah identitasmu diverifikasi oleh pengurus.'
+    title:settings.mailboxAcceptedTitle||RULES_DEFAULTS.mailboxAcceptedTitle,
+    content:settings.mailboxAcceptedBody||RULES_DEFAULTS.mailboxAcceptedBody
   };
   if(status==='rejected')return {
     title:'Pendaftaranmu belum dapat diterima',
@@ -2838,8 +2852,11 @@ function mailboxStatusMessage(status,reason=''){
 async function mailboxStatusNote(env,applicationId,status,reason=''){
   try{
     await ensureMailbox(env);
-    const message=mailboxStatusMessage(status,reason);
-    await mailboxNote(env,applicationId,'status',message.title,message.content);
+    const settings=formFrom(await readSettingsRow(env)).settings;
+    const message=mailboxStatusMessage(status,reason,settings);
+    // Type distinguishes accepted status notifications without HTML or new D1 columns.
+    await mailboxNote(env,applicationId,status==='accepted'?'status_accepted':'status',
+      message.title,message.content);
     return true;
   }catch(error){
     console.error('[SSCircle] Mail Box status notification:',error);
@@ -4051,9 +4068,29 @@ async function mailboxAPI(req,env,path,method){
       "WHERE application_id=? AND type='activation' ORDER BY rowid DESC LIMIT 1").bind(account.id).first();
     const prefs=await noticePrefs(env,account.id);
     const virtual=await noticeVirtual(env,account,prefs);
+    const mailSettings=formFrom(await readSettingsRow(env)).settings;
+    const discordUrl=(()=>{
+      try{
+        const value=new URL(mailSettings.homeDiscordUrl||HOME_DEFAULTS.homeDiscordUrl);
+        if(value.protocol==='https:' && !value.username && !value.password &&
+           ['discord.gg','discord.com'].includes(value.hostname.toLowerCase()) &&
+           /^\/(invite\/)?[A-Za-z0-9-]{3,}\/?$/.test(value.pathname))
+          return value.href;
+      }catch{ /* use safe built-in invitation */ }
+      return HOME_DEFAULTS.homeDiscordUrl;
+    })();
+    const acceptedCTA=mailSettings.mailboxAcceptedDiscordEnabled===false?null:{
+      note:mailSettings.mailboxAcceptedDiscordNote||RULES_DEFAULTS.mailboxAcceptedDiscordNote,
+      label:mailSettings.mailboxAcceptedDiscordButton||RULES_DEFAULTS.mailboxAcceptedDiscordButton,
+      url:discordUrl
+    };
     const inbox=(rows.results||[]).filter(row=>
       (!['friend_request','friend_response'].includes(row.type)||prefs.community)&&
-      (row.type!=='badge'||prefs.awards)).map(row=>({id:row.id,type:row.type,
+      (row.type!=='badge'||prefs.awards)).map(row=>({id:row.id,
+      type:row.type==='status_accepted'?'status':row.type,
+      discordCTA:acceptedCTA&&(row.type==='status_accepted'||
+        (row.type==='status'&&row.title==='Selamat, pendaftaranmu diterima'))
+        ?acceptedCTA:null,
       title:row.title,content:row.content,createdAt:row.created_at,
       read:!!row.read_at,expiresAt:row.expires_at?new Date(row.expires_at*1000).toISOString():null,
       friendSenderId:accepted&&row.type==='friend_request'?friendNoticeIds.get(row.id)||null:null,
