@@ -389,6 +389,10 @@ const HOME_DEFAULTS = {
   homeGalleryEyebrow: 'MOMENTS & MEMORIES',
   homeGalleryTitle: 'SSCircle Gallery',
   homeGalleryText: 'Sejumlah sudut dan kenangan dari perjalanan komunitas kami.',
+  galleryPageEnabled: true,
+  galleryPageTitle: 'SSCircle Gallery',
+  galleryPageDescription: 'Semua momen dan kenangan SSCircle Server.',
+  galleryCategories: [],
   homeProcessTitle: 'Join our Circle',
   homeProcessText: 'Daftar, tunggu hasil seleksi, lalu mulai cerita barumu di server.',
   homeDiscordTitle: 'Temukan komunitasmu.',
@@ -1226,6 +1230,7 @@ function settingsValid(input) {
     'homeAboutTagsEnabled',
     'homeShowAbout',
     'homeShowGallery',
+    'galleryPageEnabled',
     'homeShowProcess',
     'homeShowDiscord',
     'homeShowDonate',
@@ -1257,6 +1262,8 @@ function settingsValid(input) {
     homeGalleryEyebrow: 80,
     homeGalleryTitle: 140,
     homeGalleryText: 450,
+    galleryPageTitle: 140,
+    galleryPageDescription: 450,
     homeProcessTitle: 140,
     homeProcessText: 500,
     homeDiscordTitle: 140,
@@ -1320,9 +1327,19 @@ function settingsValid(input) {
   out.homeProfileCardSize = sizesProfile.includes(input.homeProfileCardSize)
     ? input.homeProfileCardSize : 'normal';
   const gallery = input.homeGallery === undefined ? DEFAULT_GALLERY : input.homeGallery;
-  if (!Array.isArray(gallery) || gallery.length > 24)
-    throw Error('Galeri maksimal 24 gambar.');
-  out.homeGallery = gallery.map(item => ({ src: safeImage(item?.src), title: s(item?.title, 110), caption: s(item?.caption, 280) }));
+  if (!Array.isArray(gallery) || gallery.length > 80)
+    throw Error('Galeri maksimal 80 gambar.');
+  const rawCategories = input.galleryCategories === undefined ? [] : input.galleryCategories;
+  if (!Array.isArray(rawCategories) || rawCategories.length > 20) throw Error('Kategori Gallery maksimal 20.');
+  out.galleryCategories = rawCategories.map((item,index) => ({
+    id: s(item?.id || ('kategori-'+(index+1)),40).toLowerCase().replace(/[^a-z0-9-]/g,''),
+    label: s(item?.label,70)
+  })).filter(item=>item.id && item.label);
+  const validCategoryIds = new Set(out.galleryCategories.map(c=>c.id));
+  out.homeGallery = gallery.map(item => ({
+    src: safeImage(item?.src), title: s(item?.title, 110), caption: s(item?.caption, 280),
+    category: validCategoryIds.has(s(item?.category,40)) ? s(item.category,40) : ''
+  }));
   const bookmarks = input.homeExternalImages === undefined ? [] : input.homeExternalImages;
   if (!Array.isArray(bookmarks) || bookmarks.length > 80)
     throw Error('Maksimal 80 bookmark foto eksternal.');
