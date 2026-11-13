@@ -275,3 +275,36 @@ test('Mail Box batch operations require a valid owner session, including status-
  assert.equal((await x.request('/api/player/mailbox/manage',{
    method:'POST',body:{action:'delete',ids:[message.id]}})).status,200);
 });
+
+
+test('Accepted status Mail Box includes custom Discord invite CTA, never for rejected status',async()=>{
+ const x=fixture();
+ const entry=JSON.parse(x.db.prepare('SELECT settings FROM form_config WHERE id=1').get().settings);
+ Object.assign(entry,{
+   mailboxAcceptedTitle:'Pendaftaranmu diterima oleh SSCircle',
+   mailboxAcceptedBody:'Akunmu lolos seleksi. Silakan lakukan aktivasi akun.',
+   mailboxAcceptedDiscordNote:'IP Address server Minecraft ada di Discord SSCircle Community.',
+   mailboxAcceptedDiscordButton:'Gabung Discord untuk melihat IP',
+   mailboxAcceptedDiscordEnabled:true,
+   homeDiscordUrl:'https://discord.gg/vQQSgY2GRS'
+ });
+ x.db.prepare('UPDATE form_config SET settings=? WHERE id=1').run(JSON.stringify(entry));
+ x.db.prepare("UPDATE submissions SET status='pending' WHERE id=?").run(ID);
+ const changed=await x.request('/api/admin/status',{method:'PATCH',cookie:x.admin,
+   body:{id:ID,status:'accepted'}});
+ assert.equal(changed.status,200,JSON.stringify(changed.data));
+ const inbox=await x.request('/api/player/mailbox');
+ assert.equal(inbox.status,200,JSON.stringify(inbox.data));
+ const accepted=inbox.data.items.find(row=>row.type==='status');
+ assert.ok(accepted,JSON.stringify(inbox.data));
+ assert.equal(accepted.title,entry.mailboxAcceptedTitle);
+ assert.equal(accepted.content,entry.mailboxAcceptedBody);
+ assert.equal(accepted.discordCTA.label,entry.mailboxAcceptedDiscordButton);
+ assert.equal(accepted.discordCTA.note,entry.mailboxAcceptedDiscordNote);
+ assert.equal(accepted.discordCTA.url,entry.homeDiscordUrl);
+ const rejected=await x.request('/api/admin/status',{method:'PATCH',cookie:x.admin,
+   body:{id:ID,status:'rejected',reason:'Dokumen belum lengkap'}});
+ assert.equal(rejected.status,200,JSON.stringify(rejected.data));
+ const after=await x.request('/api/player/mailbox');
+ assert.equal(after.data.items.find(row=>row.content.includes('Dokumen belum lengkap')).discordCTA,null);
+});
