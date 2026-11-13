@@ -4,16 +4,21 @@
   const normalizePath = pathname => { const path = (pathname || '/').replace(/\/$/, '') || '/'; return path === '/index.html' ? '/' : path === '/my-sscircle.html' ? '/my-sscircle' : path; };
   const page = normalizePath(location.pathname);
   const links = [
-    ['Beranda','/'],['Tentang','/#tentang'],['Galeri','/gallery.html'],
-    ['Event','/events.html'],['Announcement','/announcements.html'],
-    ['Seasons','/seasons.html'],['Cek Status','/status.html'],
-    ['Profile','/my-sscircle']
+    ['Tentang','/#tentang'],['Galeri','/#galeri'],['Event','/events.html'],
+    ['Announcement','/announcements.html'],['Seasons','/seasons.html'],
+    ['Cek Status','/status.html'],['Profile','/my-sscircle']
   ];
+  const route = path => normalizePath(path).replace(/\\.html$/,'');
+  const isActive = href => {
+    const u=new URL(href,location.origin),target=route(u.pathname),here=route(page);
+    if(target==='/')return here==='/' && location.hash===u.hash;
+    if(target==='/my-sscircle')return here==='/my-sscircle'||here==='/mailbox';
+    return target===here;
+  };
   const nav = () => links.map(([name,href]) => {
-    const path = normalizePath(new URL(href,'https://sscircle.pages.dev/').pathname);
-    const active = path === page && (href.includes('#') ? location.hash === '#tentang' : !(path === '/' && !!location.hash));
+    const active=isActive(href)||(name==='Galeri'&&route(page)==='/gallery');
     return '<a class="home-nav-link'+(active?' ssc-nav-active':'')+'" href="'+href+'"'+(active?' aria-current="page"':'')+'>'+name+'</a>';
-  }).join('') + '<a class="home-nav-join'+(page==='/registration.html'?' ssc-nav-active':'')+'" href="/registration.html"'+(page==='/registration.html'?' aria-current="page"':'')+'>Pendaftaran <span aria-hidden="true">↗</span></a>';
+  }).join('')+'<a class="home-nav-join'+(route(page)==='/registration'?' ssc-nav-active':'')+'" href="/registration.html"'+(route(page)==='/registration'?' aria-current="page"':'')+'>Pendaftaran <span aria-hidden="true">↗</span></a>';
   function assemble() {
     if (document.body.classList.contains('admin-page') || document.body.closest('[data-admin-only]')) return;
     if (/\/admin(?:\.html)?$/.test(page) || /preview|offline/.test(page)) return;
@@ -32,13 +37,20 @@
     old.replaceWith(h);
     if (!document.body.classList.contains('home-page')) document.body.classList.add('ssc-public-shell');
     const menu=h.querySelector('#home-menu-button'),navigation=h.querySelector('.home-nav');
-    menu.addEventListener('click',()=>{const open=document.body.classList.toggle('home-menu-open');menu.setAttribute('aria-expanded',String(open));});
-    navigation.addEventListener('click',e=>{if(e.target.closest('a')){document.body.classList.remove('home-menu-open');menu.setAttribute('aria-expanded','false');}});
-    document.addEventListener('keydown',e=>{if(e.key==='Escape'){document.body.classList.remove('home-menu-open');menu.setAttribute('aria-expanded','false');}});
+    const setMenuOpen=open=>{
+      document.body.classList.toggle('home-menu-open',open);
+      h.classList.toggle('ssc-menu-open',open);
+      navigation.classList.toggle('ssc-menu-visible',open);
+      menu.setAttribute('aria-expanded',String(open));
+    };
+    menu.addEventListener('click',event=>{event.preventDefault();event.stopImmediatePropagation();setMenuOpen(!h.classList.contains('ssc-menu-open'));},true);
+    navigation.addEventListener('click',e=>{if(e.target.closest('a'))setMenuOpen(false);});
+    document.addEventListener('keydown',e=>{if(e.key==='Escape')setMenuOpen(false);});
+    document.addEventListener('click',e=>{if(h.isConnected&&!h.contains(e.target))setMenuOpen(false);});
     const previousFooter = document.querySelector('footer.home-footer,footer.site-footer');
     const f = document.createElement('footer');f.className='home-footer ssc-unified-footer';
     f.innerHTML='<div class="home-container home-footer-content ssc-footer-content"><div class="home-footer-mark"><img id="home-footer-logo" data-site-logo src="/assets/sscircle-logo.png" width="27" height="27" alt=""><span>SSCircle Server</span></div><span id="home-footer-text">One circle. Endless stories.</span>'+
-      '<div class="home-footer-links"><a href="/registration.html">Pendaftaran</a><a href="/status.html">Cek Status</a><a href="/my-sscircle">Profile</a><a href="/rules.html">Peraturan Server</a><a href="/events.html">Event</a><a href="/gallery.html">Gallery</a><a href="/announcements.html">Announcement</a><a href="/seasons.html">Seasons</a><a href="https://discord.gg/vQQSgY2GRS" target="_blank" rel="noopener noreferrer">Discord ↗</a></div><small>© 2026 SSCircle Server</small></div>';
+      '<div class="home-footer-links"><a href="/registration.html">Registration</a><a href="/status.html">Cek Status</a><a href="/my-sscircle">Profile</a><a href="/rules.html">Peraturan Server</a><a href="/events.html">Event</a><a href="/announcements.html">Announcement</a><a href="/seasons.html" data-season-link hidden>Seasons</a><a href="https://discord.gg/vQQSgY2GRS" target="_blank" rel="noopener noreferrer">Discord ↗</a></div><small>© 2026 SSCircle Server</small></div>';
     if(previousFooter) previousFooter.replaceWith(f);else document.body.append(f);
     // Use the same verified primary-account skin source as the Profile dashboard.
     // The SSCircle logo remains the fallback when no linked skin is available.
@@ -80,7 +92,16 @@
       .then(r=>r.ok?r.json():null)
       .then(data=>{if(data)renderMemberAvatar(data.accounts);})
       .catch(()=>{});
-    addEventListener('hashchange',()=>{h.querySelectorAll('.home-nav a').forEach(a=>{const target=new URL(a.getAttribute('href')||'/', 'https://sscircle.pages.dev/');const on=normalizePath(target.pathname)===normalizePath(location.pathname)&&(target.hash ? target.hash===location.hash : !(normalizePath(target.pathname)==='/' && !!location.hash));a.classList.toggle('ssc-nav-active',on);if(on)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current');});});
+    function refreshActiveLinks(){
+      h.querySelectorAll('.home-nav a').forEach(a=>{
+        const href=a.getAttribute('href')||'/';
+        const on=isActive(href)||(href==='/#galeri'&&route(page)==='/gallery')||(href==='/registration.html'&&route(page)==='/registration');
+        a.classList.toggle('ssc-nav-active',on);
+        if(on)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current');
+      });
+    }
+    addEventListener('hashchange',refreshActiveLinks);
+    refreshActiveLinks();
     fetch('/api/form',{credentials:'same-origin',cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{
       const s=d?.settings;if(!s)return;
       const logo=s.logoImageUrl|| (s.logoMediaId?'/api/media/'+s.logoMediaId:'/assets/sscircle-logo.png');
@@ -88,7 +109,7 @@
       f.querySelectorAll('[data-site-logo]').forEach(i=>i.src=logo);
       h.querySelector('.home-brand strong').textContent=s.brandName||'SSCircle';
       f.querySelector('#home-footer-text').textContent=s.homeFooterText||s.footerText||'One circle. Endless stories.';
-      if(s.seasonArchiveEnabled!==true){h.querySelector('a[href="/seasons.html"]')?.remove();f.querySelector('a[href="/seasons.html"]')?.remove();}
+      h.querySelector('a[href="/seasons.html"]')?.toggleAttribute('hidden',s.seasonArchiveEnabled!==true);f.querySelector('a[href="/seasons.html"]')?.toggleAttribute('hidden',s.seasonArchiveEnabled!==true);
       if(/^https:\/\/(?:discord\.gg|discord\.com)\//i.test(s.homeDiscordUrl||'')) f.querySelector('a[href^="https://discord"]').href=s.homeDiscordUrl;
     }).catch(()=>{});
   }
