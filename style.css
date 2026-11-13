@@ -13665,13 +13665,15 @@ body .ssc-unified-footer :is(span, small) {
   display: none;
 }
 
+/* === BAGIAN YANG DIPERBAIKI === */
 .home-profile-dialog-close {
-  position: sticky;
+  position: absolute; /* Memaksa tombol melayang lepas dari alur dokumen */
+  top: 16px;
+  right: 16px;
+  z-index: 10; /* Memastikan tombol selalu ada di atas gambar */
   display: grid;
   place-items: center;
-  margin: 10px 10px -48px auto;
-  top: 10px;
-  z-index: 2;
+  margin: 0; /* Menghapus margin minus yang bikin error layout */
   width: 38px;
   height: 38px;
   border: 1px solid color-mix(in srgb, var(--ssc-border, #62457d) 80%, white);
@@ -13680,10 +13682,12 @@ body .ssc-unified-footer :is(span, small) {
   color: var(--ssc-text, #f5efff);
   font-size: 26px;
   cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
 }
 
 .home-profile-dialog-close:hover {
   border-color: var(--ssc-primary, #bc91f5);
+  background: color-mix(in srgb, var(--ssc-panel, #20142f) 80%, white);
 }
 
 .admin-page .home-admin-profile-detail-settings {
@@ -13988,6 +13992,30 @@ body .ssc-unified-footer :is(span, small) {
   height: 34px;
   min-height: 34px;
   z-index: 4;
+}
+
+/* Tanda X digambar dengan CSS agar tepat di tengah kotak tombol, tidak bergantung pada metrik font. */
+.home-profile-dialog .home-profile-dialog-close {
+  padding: 0;
+  font-size: 0;
+  line-height: 0;
+}
+
+.home-profile-dialog .home-profile-dialog-close::before,
+.home-profile-dialog .home-profile-dialog-close::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 14px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.home-profile-dialog .home-profile-dialog-close::after {
+  transform: translate(-50%, -50%) rotate(-45deg);
 }
 
 @media (max-width: 640px) {
