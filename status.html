@@ -26,22 +26,34 @@
     <script src="pwa-register.js?v=10.53.4" defer></script>
     <link rel="stylesheet" href="ssc-dialog.css?v=10.55.6">
   <script src="ssc-dialog.js?v=10.55.6" defer></script>
+<link rel="stylesheet" href="header-controls.css?v=10.56.2">
+<script src="header-controls.js?v=10.56.2" defer></script>
+<script src="site-shell.js?v=10.56.2" defer></script>
 </head>
-  <body class="status-standalone theme-v3">
+  <body class="home-page status-standalone theme-v3">
     <div class="ambient ambient-a" aria-hidden="true"></div>
     <div class="page-shell">
 
       <!-- Header dan navigasi -->
-      <header class="site-header status-site-header">
-        <a class="brand" href="./">
-          <span class="brand-icon"><img id="status-logo" src="assets/sscircle-logo.png" alt="SSCircle Server" width="42" height="42"></span>
-          <span class="brand-copy"><strong>SSCircle Server</strong><small>APPLICATION TRACKER</small></span>
-        </a>
-        <nav class="status-nav">
-          <a href="./">Beranda</a>
-          <a href="registration.html">Pendaftaran ↗</a>
-        </nav>
-      </header>
+      <header class="home-header" id="top">
+      <a href="./" class="home-brand" aria-label="SSCircle Server beranda">
+        <img id="home-logo" src="assets/sscircle-logo.png" width="41" height="41" alt="Logo SSCircle">
+        <span><strong>SSCircle</strong><small>SERVER</small></span>
+      </a>
+      <nav class="home-nav" aria-label="Navigasi utama">
+        <a class="home-nav-link" href="/#tentang">Tentang</a>
+        <a class="home-nav-link" href="gallery.html">Galeri</a>
+        <a class="home-nav-link" href="gallery.html">Galeri</a>
+        <a class="home-nav-link" href="events.html">Event</a>
+        <a class="home-nav-link" href="announcements.html">Announcement</a>
+          <a class="home-nav-link" data-season-link href="seasons.html" hidden>Seasons</a>
+        <a class="home-nav-link" href="status.html">Cek Status</a>
+        <a class="home-nav-link" href="/my-sscircle">Profile</a>
+        <a class="home-nav-link ssc-mailbox-trigger" href="/mailbox" data-open-mailbox aria-label="Buka Mail Box">✉ <span data-mailbox-count hidden></span></a>
+        <a class="home-nav-join" href="registration.html">Pendaftaran <span aria-hidden="true">↗</span></a>
+      </nav>
+      <button type="button" class="home-menu-button" id="home-menu-button" aria-label="Buka menu navigasi" aria-expanded="false">☰</button>
+    </header>
 
       <!-- Konten utama halaman -->
       <main class="status-main">
@@ -116,23 +128,26 @@
       </main>
 
       <!-- Footer -->
-      <footer class="site-footer ssc-unified-footer status-footer">
-        <div class="ssc-footer-content">
-          <div class="home-footer-mark">
-            <img id="status-footer-logo" src="assets/sscircle-logo.png" alt="" width="27" height="27">
-            <span >SSCircle Server</span>
-          </div>
-          <span id="status-footer-text">One circle. Endless stories.</span>
-          <nav class="home-footer-links" aria-label="Navigasi footer">
-            <a href="announcements.html">Announcement</a>
-            <a href="./">Homepage</a>
-            <a href="registration.html">Registration</a>
-            <a href="status.html">Cek Status</a>
-            <a id="ssc-footer-discord" href="https://discord.gg/vQQSgY2GRS" target="_blank" rel="noopener noreferrer">Discord ↗</a>
-          </nav>
-          <small >© 2026 SSCircle Server</small>
+      <footer class="home-footer ssc-unified-footer">
+      <div class="home-container home-footer-content ssc-footer-content">
+        <div class="home-footer-mark">
+          <img id="home-footer-logo" src="assets/sscircle-logo.png" width="27" height="27" alt="">
+          <span>SSCircle Server</span>
         </div>
-      </footer>
+        <span id="home-footer-text">One circle. Endless stories.</span>
+        <div class="home-footer-links">
+          <a href="registration.html">Registration</a>
+          <a href="status.html">Cek Status</a>
+            <a href="/my-sscircle">Profile</a>
+          <a href="rules.html">Peraturan Server</a>
+          <a href="events.html">Event</a>
+          <a href="announcements.html">Announcement</a>
+          <a href="seasons.html" data-season-link hidden>Seasons</a>
+          <a href="https://discord.gg/vQQSgY2GRS" target="_blank" rel="noopener noreferrer">Discord ↗</a>
+        </div>
+        <small>© 2026 SSCircle Server</small>
+      </div>
+    </footer>
     </div>
   </body>
 </html>

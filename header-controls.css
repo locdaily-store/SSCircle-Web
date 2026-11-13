@@ -1,0 +1,33 @@
+/* Header dan footer publik yang konsisten. */
+.ssc-header-actions{display:flex;align-items:center;gap:12px;flex-shrink:0;margin-left:auto}
+.ssc-header-mailbox,.ssc-header-profile{display:inline-flex;align-items:center;justify-content:center;position:relative;width:42px;height:42px;flex:0 0 42px;border:1px solid rgba(190,146,231,.48);border-radius:11px;background:rgba(43,23,65,.77);color:#fff;text-decoration:none;cursor:pointer}
+.ssc-header-mailbox{font-size:22px}.ssc-header-profile img{width:35px;height:35px;border-radius:8px;object-fit:cover;image-rendering:pixelated}
+.ssc-header-mailbox [data-mailbox-count]{position:absolute;top:-7px;right:-6px;background:#bd4b87;color:#fff;border-radius:20px;min-width:18px;padding:2px 4px;font-size:11px;text-align:center}
+.ssc-header-mailbox [data-mailbox-count][hidden]{display:none}
+.home-page .home-nav .ssc-mailbox-trigger{display:none}
+.home-page .home-header{position:relative;z-index:60}
+.home-page .home-footer{width:100%;margin-top:auto}
+.home-page .home-nav .ssc-nav-current:not(.home-nav-join){position:relative;color:#edcfff!important;background:rgba(164,94,224,.18);border-radius:9px}
+.home-page .home-nav .ssc-nav-current:not(.home-nav-join)::after{content:"";position:absolute;bottom:2px;left:18%;right:18%;height:2px;background:#cc93ff;border-radius:8px}
+.home-page .home-nav .home-nav-join.ssc-nav-current{border-color:#c78fff!important;background:rgba(144,82,207,.38)!important}
+.home-page .home-footer-links .ssc-nav-current{color:#e7c8ff!important;text-decoration:underline;text-underline-offset:5px}
+.home-page .home-nav a:focus-visible,.ssc-header-actions a:focus-visible,.ssc-header-actions button:focus-visible{outline:2px solid #dba5ff;outline-offset:3px}
+.home-gallery-view-all{display:inline-flex;align-items:center;justify-content:center;margin:24px auto 0;padding:12px 20px;border:1px solid rgba(206,160,255,.45);border-radius:12px;color:#f0dbff;text-decoration:none}
+@media(min-width:1181px){body.home-page .home-header{display:grid;grid-template-columns:minmax(155px,1fr) max-content minmax(100px,1fr);column-gap:clamp(22px,2.3vw,42px);align-items:center;padding-inline:clamp(24px,3.5vw,64px)}
+body.home-page .home-header>.home-brand{grid-column:1;justify-self:start;margin:0;white-space:nowrap}
+body.home-page .home-header>.home-nav{grid-column:2;display:flex;align-items:center;flex-wrap:nowrap;justify-self:center;gap:clamp(16px,1.5vw,26px);width:max-content;margin:0}
+body.home-page .home-header>.home-nav .home-nav-link{min-height:42px;padding-inline:3px;white-space:nowrap;font-size:clamp(11px,.81vw,13px)}
+body.home-page .home-header>.home-nav .home-nav-join{white-space:nowrap;flex-shrink:0;margin-left:5px}
+body.home-page .home-header>.ssc-header-actions{grid-column:3;justify-self:end;margin:0}
+body.home-page .home-header .home-menu-button{display:none}}
+@media(max-width:1180px){body.home-page .home-header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-inline:clamp(12px,3vw,28px)}
+body.home-page .home-header>.home-brand{margin:0;flex:0 1 auto;min-width:0}
+body.home-page .home-header>.home-nav{display:none;position:absolute;top:calc(100% - 1px);left:12px;right:12px;width:auto;max-width:none;flex-direction:column;align-items:stretch;gap:6px;margin:0;padding:12px;max-height:70vh;overflow:auto;background:rgba(23,13,39,.98);border:1px solid rgba(187,133,228,.5);border-radius:12px;z-index:80}
+body.home-page.home-menu-open .home-header>.home-nav{display:flex}
+body.home-page .home-header>.home-nav :is(a,button){display:flex;width:100%;padding:11px 13px;min-height:43px;align-items:center;justify-content:flex-start;white-space:normal;margin:0}
+body.home-page .home-header>.ssc-header-actions{display:flex;margin-left:auto;flex-shrink:0;gap:7px}
+body.home-page .home-header .home-menu-button{display:inline-flex;align-items:center;justify-content:center;width:42px;height:42px;flex:0 0 42px;border:1px solid #795c90;border-radius:9px;background:rgba(34,21,48,.84);color:#fff;font-size:24px;margin:0}
+body.home-page .home-nav .ssc-nav-current{border-left:3px solid #cd92ff}
+}
+@media(max-width:380px){body.home-page .home-header{padding-inline:10px;gap:5px}.ssc-header-actions{gap:5px}.ssc-header-mailbox,.ssc-header-profile{width:38px;height:38px;flex-basis:38px}}
+.admin-page .site-header{display:flex;align-items:center;gap:clamp(12px,2.1vw,30px)}.admin-page .site-header>.brand,.admin-page .site-header>.header-back{margin:0;flex-shrink:0}.admin-page .site-header>.ssc-header-actions{margin-left:auto}
