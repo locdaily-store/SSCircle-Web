@@ -81,3 +81,16 @@ test('Homepage Gallery has its own limited controls and keeps the complete Galle
   assert.match(admin,/data-tab="gallery-admin"/);
   assert.match(gallery,/items=\(Array\.isArray\(s\.homeGallery\)/);
 });
+
+
+test('Homepage photo count survives Worker sanitization and accepts direct number input',()=>{
+  const worker=source('_worker.js'),admin=source('homepage-admin.js'),homepage=source('homepage.js');
+  assert.match(worker,/homeGalleryLimit: 6/);
+  assert.match(worker,/out\.homeGalleryLimit = homeGalleryLimit/);
+  assert.match(worker,/homeGalleryLimit < 1 \|\| homeGalleryLimit > 80/);
+  assert.match(admin,/limitInput\.type = 'number'/);
+  assert.match(admin,/limitInput\.min = '1'/);
+  assert.match(admin,/limitInput\.max = '80'/);
+  assert.match(admin,/state\.settings\.homeGalleryLimit = value/);
+  assert.match(homepage,/photos\.slice\(0, limit\)/);
+});
