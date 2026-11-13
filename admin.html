@@ -14,6 +14,8 @@
     <link rel="stylesheet" href="minecraft-sync-admin.css?v=10.54.5">
     <link rel="stylesheet" href="community-admin.css?v=10.52.4">
     <link rel="stylesheet" href="community-events.css?v=10.55.4">
+    <link rel="stylesheet" href="announcements-admin.css?v=10.55.5">
+    <link rel="stylesheet" href="overview-dashboard.css?v=10.55.5">
     <link rel="stylesheet" href="community-pages.css?v=10.37.0">
     <title>Admin Control · SSCircle Server</title>
     <link rel="icon" type="image/png" href="assets/sscircle-logo.png">
@@ -37,7 +39,9 @@
     <script src="member-center-admin.js?v=10.52.4" defer></script>
     <script src="minecraft-sync-admin.js?v=10.54.5" defer></script>
     <script src="profile-admin.js?v=10.51.2" defer></script>
-    <script src="admin.js?v=10.45.5" defer></script>
+    <script src="announcements-admin.js?v=10.55.5" defer></script>
+    <script src="overview-dashboard.js?v=10.55.5" defer></script>
+    <script src="admin.js?v=10.55.5" defer></script>
     <script src="form-insert-rail.js?v=10.26.0" defer></script>
     <script src="spreadsheet.js?v=10.26.0" defer></script>
     <link rel="stylesheet" href="password-visibility.css?v=10.39.0">
@@ -99,6 +103,7 @@
                 <h2 id="sidebar-group-1">KONTEN &amp; KOMUNITAS</h2>
                 <button type="button" class="side-link" data-tab="homepage"><span class="side-icon" aria-hidden="true">⌂</span><span>Homepage</span></button>
                 <button type="button" class="side-link" data-tab="events-admin"><span class="side-icon" aria-hidden="true">▦</span><span>Event &amp; Jadwal</span></button>
+                <button type="button" class="side-link" data-tab="announcements-admin"><span class="side-icon" aria-hidden="true">✦</span><span>Announcement</span></button>
                 <button type="button" class="side-link" data-tab="notifications-admin"><span class="side-icon" aria-hidden="true">♢</span><span>Pusat Notifikasi</span></button>
                 <button type="button" class="side-link" data-tab="seasons-admin"><span class="side-icon" aria-hidden="true">★</span><span>Season &amp; Sejarah</span></button>
                 <button type="button" class="side-link" data-tab="profile-admin"><span class="side-icon" aria-hidden="true">♙</span><span>Profile</span></button>
@@ -138,6 +143,7 @@
                 <span class="season-tag">SSCircle / ADMIN</span>
               </div>
               <div id="stat-cards" class="stat-grid"></div>
+              <div id="overview-insights" class="ssc-overview-insights" aria-label="Analitik dan aktivitas Admin Control"></div>
               <div class="panel overview-panel">
                 <div class="overview-copy">
                   <div class="overline">APPLICATION STATUS</div>
@@ -159,6 +165,17 @@
                   <button class="button primary" id="open-spreadsheet">▦ Buka spreadsheet ↗</button>
                 </div>
               </div>
+            </section>
+            <!-- Editor berita dan pengumuman publik SSCircle -->
+            <section id="announcements-admin" class="tab-page hide">
+              <div class="dashboard-heading heading-with-button">
+                <div><div class="overline">CONTENT EDITOR / SSCIRCLE SERVER</div>
+                  <h1>Announcement<span class="dot-accent">.</span></h1>
+                  <p>Kelola berita publik, gambar, draft, jadwal penerbitan, dan pratinjau secara langsung.</p></div>
+                <a class="button secondary" href="announcements.html" target="_blank" rel="noopener noreferrer">Lihat halaman publik ↗</a>
+              </div>
+              <div id="ann-admin-status" class="ann-admin-status" role="status" aria-live="polite">Buka menu Announcement untuk memuat berita.</div>
+              <div id="ann-admin-root" class="ann-admin-root"></div>
             </section>
             <!-- Player Dashboard: satu pusat pengelolaan anggota dan arsip prestasi. -->
             <section id="members-admin" class="tab-page hide">
@@ -510,7 +527,7 @@
                 </div>
                 <aside class="panel ssc-theme-preview-panel">
                   <h2>Pratinjau warna langsung</h2>
-                  <p>Uji perubahan untuk Homepage, Registration, Voting, dan Cek Status tanpa menyimpan lebih dulu.</p>
+                  <p>Uji perubahan warna semua halaman, termasuk Announcement, tanpa menyimpan lebih dulu.</p>
                   <div class="ssc-theme-preview-controls">
                     <select id="theme-preview-page" aria-label="Halaman pratinjau">
                       <option value="index.html">Homepage</option>
@@ -519,6 +536,7 @@
                       <option value="status.html">Cek Status</option>
                       <option value="rules.html">Server Rules</option>
                       <option value="events.html">Event Calendar</option>
+                      <option value="announcements.html">Announcement &amp; News</option>
                       <option value="seasons.html">Season Archive</option>
                        <option value="profile-preview.html">Profile (pratinjau)</option>
                     </select>

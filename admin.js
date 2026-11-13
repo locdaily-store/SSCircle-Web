@@ -99,6 +99,8 @@ function tab(id) {
     window.SSCircleEventsAdmin?.schedule();
   if (id === 'notifications-admin')
     void window.SSCircleNotificationAdmin?.load();
+  if (id === 'announcements-admin')
+    void window.SSCircleAnnouncementAdmin?.load();
   if (id === 'seasons-admin')
     window.SSCircleSeasonsAdmin?.schedule();
   if (id === 'members-admin')
@@ -171,9 +173,11 @@ async function refresh() {
   window.SSCircleEventsAdmin?.render(data, dirtyMark);
   window.SSCircleSeasonsAdmin?.render(data, dirtyMark);
   window.SSCircleProfileAdmin?.render(data, dirtyMark);
+  window.SSCircleAnnouncementAdmin?.render(data);
   if (data.settings.adminThemeEnabled === true)
     window.SSCircleTheme?.apply(data.settings);
   summary();
+  window.SSCircleOverview?.render(data);
   renderBuilder();
   renderAnswers();
   renderAnalytics();

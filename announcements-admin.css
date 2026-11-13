@@ -1,0 +1,41 @@
+/* Announcement editor / Admin Control. Scoped to prevent theme conflicts. */
+.ann-admin-root{display:grid;gap:20px;min-width:0}
+.ann-admin-root .panel{min-width:0}
+.ann-admin-toolbar,.ann-admin-list-head,.ann-admin-editor-heading,.ann-admin-preview-top{display:flex;justify-content:space-between;align-items:center;gap:15px;flex-wrap:wrap}
+.ann-admin-toolbar h2,.ann-admin-settings h2,.ann-admin-preview-top h2{margin:0 0 5px}
+.ann-admin-toolbar p,.ann-admin-preview-top p{margin:0}
+.ann-admin-layout{display:grid;grid-template-columns:minmax(210px,.7fr) minmax(0,1.6fr);gap:17px;align-items:start}
+.ann-admin-list-panel,.ann-admin-editor-panel,.ann-admin-settings,.ann-admin-preview-panel{padding:clamp(16px,2.2vw,26px)}
+.ann-admin-list-head{padding-bottom:15px;border-bottom:1px solid var(--ssc-border,var(--line))}
+.ann-admin-counts{font-size:.78rem;color:var(--ssc-muted,var(--muted));padding:13px 0}
+.ann-admin-articles{max-height:750px;overflow:auto}
+.ann-admin-item{display:flex;flex-direction:column;text-align:left;gap:7px;width:100%;padding:14px;background:transparent;color:var(--ssc-text,var(--text));border:1px solid transparent;border-bottom-color:var(--ssc-border,var(--line));border-radius:12px;cursor:pointer;overflow-wrap:anywhere}
+.ann-admin-item:hover,.ann-admin-item.is-selected{border-color:var(--ssc-primary,var(--purple));background:color-mix(in srgb,var(--ssc-primary,var(--purple)) 9%,transparent)}
+.ann-admin-item span{font-size:.8rem;color:var(--ssc-muted,var(--muted))}
+.ann-admin-editor-panel{display:grid;gap:20px}
+.ann-admin-editor-heading h2{margin:0}
+.ann-admin-state{font-size:.8rem;color:var(--ssc-primary,var(--purple));border:1px solid var(--ssc-border,var(--line));padding:6px 10px;border-radius:100px}
+.ann-admin-field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px}
+.ann-admin-field-grid .field-group:has(textarea){grid-column:1/-1}
+.ann-admin-field-grid textarea{min-height:90px;resize:vertical}
+.ann-admin-field-grid textarea[maxlength="12000"]{min-height:220px}
+.ann-admin-inline-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px}
+.ann-admin-toggle{display:flex;align-items:center;gap:9px;font-size:.94rem;font-weight:700;cursor:pointer}
+.ann-admin-toggle input{accent-color:var(--ssc-primary,var(--purple))}
+.ann-admin-media-group{border-top:1px solid var(--ssc-border,var(--line));padding-top:16px;display:grid;gap:11px}
+.ann-admin-media-group h3{margin:0}.ann-admin-media-group p{margin:0}
+.ann-admin-cover-preview{max-height:215px;width:min(100%,380px);object-fit:cover;border-radius:13px;border:1px solid var(--ssc-border,var(--line))}
+.ann-admin-gallery-images{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.ann-admin-gallery-photo{display:grid;gap:5px;min-width:0}
+.ann-admin-gallery-photo img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:10px}
+.ann-admin-gallery-photo .button{font-size:.75rem;padding:7px}
+.ann-admin-editor-actions{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap}
+.ann-admin-settings{display:grid;gap:16px}.ann-admin-settings-fields{display:grid;gap:18px}
+.ann-admin-preview-panel{display:grid;gap:15px}.ann-admin-preview-controls{display:flex;gap:8px}
+.ann-admin-viewport{height:550px;max-width:100%;overflow:auto;display:grid;place-items:start center;background:#0e101c;border:1px solid var(--ssc-border,var(--line));border-radius:14px;padding:12px}
+.ann-admin-viewport iframe{width:100%;height:100%;border:0;border-radius:10px;background:#0d0915;min-height:500px}
+.ann-admin-viewport.is-mobile iframe{width:390px;max-width:100%;min-height:690px;height:690px}
+.ann-admin-status{padding:12px 16px;border:1px solid var(--ssc-border,var(--line));background:var(--ssc-panel,var(--panel));border-radius:13px;font-size:.88rem;color:var(--ssc-muted,var(--muted))}
+.ann-admin-status[data-error=true]{color:var(--ssc-danger,#ff9caf)}
+@media(max-width:1050px){.ann-admin-layout{grid-template-columns:1fr}.ann-admin-articles{max-height:350px}.ann-admin-gallery-images{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:650px){.ann-admin-field-grid,.ann-admin-inline-controls{grid-template-columns:1fr}.ann-admin-gallery-images{grid-template-columns:repeat(2,minmax(0,1fr))}.ann-admin-preview-controls .button{padding:8px}.ann-admin-viewport{padding:5px;overflow:auto}}

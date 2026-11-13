@@ -28,7 +28,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for file in index.html admin.html registration.html status.html voting.html seasons.html seasons.js seasons-admin.js mailbox.html mailbox.js mailbox.css _worker.js _routes.json; do
+          for file in index.html admin.html registration.html status.html voting.html seasons.html seasons.js seasons-admin.js mailbox.html mailbox.js mailbox.css announcements.html announcements.js announcements.css announcements-admin.js announcements-admin.css overview-dashboard.js overview-dashboard.css _worker.js _routes.json; do
             test -f "$file" || { echo "File wajib hilang: $file"; exit 1; }
           done
           while IFS= read -r -d '' file; do
