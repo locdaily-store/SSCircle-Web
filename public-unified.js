@@ -9,7 +9,7 @@
     ['Profile','/my-sscircle']
   ];
   const nav = () => links.map(([name,href]) => {
-    const path = new URL(href,location.origin).pathname.replace(new RegExp('/$'),'') || '/';
+    const path = new URL(href,location.href).pathname.replace(new RegExp('/$'),'') || '/';
     const active = path === page && (!href.includes('#') || location.hash === '#tentang');
     return '<a class="home-nav-link'+(active?' ssc-nav-active':'')+'" href="'+href+'"'+(active?' aria-current="page"':'')+'>'+name+'</a>';
   }).join('') + '<a class="home-nav-join" href="/registration.html">Pendaftaran <span aria-hidden="true">↗</span></a>';
