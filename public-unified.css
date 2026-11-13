@@ -115,5 +115,5 @@ body .ssc-site-header .home-menu-button{touch-action:manipulation}
   background:color-mix(in srgb,var(--ssc-button-secondary,var(--ssc-panel,#241831)) 85%,var(--ssc-primary,#b87bea));
 }
 /* Retain homepage hero overlay without using a different header layout. */
-body.home-page .ssc-site-header{position:absolute;top:0;left:0}
-body:not(.home-page) .ssc-site-header{position:relative;top:auto;left:auto}
+body:not(.ssc-public-inner) .ssc-site-header{position:absolute;top:0;left:0}
+body.ssc-public-inner .ssc-site-header{position:relative;top:auto;left:auto}
