@@ -12,12 +12,12 @@ function signed(name,payload,key){const p=Buffer.from(JSON.stringify(payload)).t
  return name+'='+p+'.'+createHmac('sha256',key).update(p).digest('base64url');}
 function fixture(){
  const db=new DatabaseSync(':memory:');
- db.exec(`CREATE TABLE submissions(id TEXT PRIMARY KEY,status TEXT,tracking_code TEXT,submitted_at TEXT);
+ db.exec(`CREATE TABLE submissions(id TEXT PRIMARY KEY,status TEXT,tracking_code TEXT,submitted_at TEXT,rejection_reason TEXT DEFAULT '');
  CREATE TABLE form_config(id INTEGER PRIMARY KEY,settings TEXT,pages TEXT,questions TEXT,updated_at TEXT);
  CREATE TABLE rate_limits(key TEXT PRIMARY KEY,count INTEGER,expires_at INTEGER);
  CREATE TABLE revoked_sessions(token_hash TEXT PRIMARY KEY,expires_at INTEGER);`);
- db.prepare('INSERT INTO submissions VALUES(?,?,?,?)').run(ID,'accepted',CODE,'2026-11-07T00:00:00Z');
- db.prepare('INSERT INTO submissions VALUES(?,?,?,?)').run(OTHER,'accepted','112233445566778899AA','2026-11-07T01:00:00Z');
+ db.prepare('INSERT INTO submissions(id,status,tracking_code,submitted_at) VALUES(?,?,?,?)').run(ID,'accepted',CODE,'2026-11-07T00:00:00Z');
+ db.prepare('INSERT INTO submissions(id,status,tracking_code,submitted_at) VALUES(?,?,?,?)').run(OTHER,'accepted','112233445566778899AA','2026-11-07T01:00:00Z');
  let settings={seasonArchiveEnabled:true,homeVotingEnabled:false,homeVotingPermanent:true,
   homeVotingQuestions:[{id:'q1',title:'A',options:[{id:'o1',label:'One'},{id:'o2',label:'Two'}]}]};
  db.prepare('INSERT INTO form_config VALUES(1,?,?,?,?)').run(JSON.stringify(settings),JSON.stringify([{id:'page-1',title:'Registration',description:'',blocks:[],routes:{}}]),'[]','v1');
