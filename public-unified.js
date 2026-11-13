@@ -40,6 +40,45 @@
     f.innerHTML='<div class="home-container home-footer-content ssc-footer-content"><div class="home-footer-mark"><img id="home-footer-logo" data-site-logo src="/assets/sscircle-logo.png" width="27" height="27" alt=""><span>SSCircle Server</span></div><span id="home-footer-text">One circle. Endless stories.</span>'+
       '<div class="home-footer-links"><a href="/registration.html">Pendaftaran</a><a href="/status.html">Cek Status</a><a href="/my-sscircle">Profile</a><a href="/rules.html">Peraturan Server</a><a href="/events.html">Event</a><a href="/gallery.html">Gallery</a><a href="/announcements.html">Announcement</a><a href="/seasons.html">Seasons</a><a href="https://discord.gg/vQQSgY2GRS" target="_blank" rel="noopener noreferrer">Discord ↗</a></div><small>© 2026 SSCircle Server</small></div>';
     if(previousFooter) previousFooter.replaceWith(f);else document.body.append(f);
+    // Use the same verified primary-account skin source as the Profile dashboard.
+    // The SSCircle logo remains the fallback when no linked skin is available.
+    const profileLink=h.querySelector('.ssc-header-profile');
+    const profileFallback=profileLink.querySelector('img');
+    const avatarCanvas=document.createElement('canvas');
+    avatarCanvas.className='ssc-header-avatar-canvas';
+    avatarCanvas.width=64;avatarCanvas.height=64;avatarCanvas.hidden=true;
+    avatarCanvas.setAttribute('aria-hidden','true');
+    profileLink.append(avatarCanvas);
+    let avatarRequest=0;
+    function renderMemberAvatar(accounts) {
+      const ticket=++avatarRequest;
+      avatarCanvas.hidden=true;
+      profileFallback.hidden=false;
+      const account=Array.isArray(accounts)?(accounts.find(a=>a?.isPrimary)||accounts[0]):null;
+      if(!account||typeof account.id!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(account.id))return;
+      const url='/api/player/minecraft/skin/'+encodeURIComponent(account.id);
+      const skin=new Image();
+      skin.onload=()=>{
+        if(ticket!==avatarRequest||skin.naturalWidth!==64||![32,64].includes(skin.naturalHeight))return;
+        const ctx=avatarCanvas.getContext('2d');
+        if(!ctx)return;
+        ctx.clearRect(0,0,64,64);
+        ctx.imageSmoothingEnabled=false;
+        ctx.drawImage(skin,8,8,8,8,0,0,64,64);
+        if(skin.naturalHeight===64)ctx.drawImage(skin,40,8,8,8,0,0,64,64);
+        avatarCanvas.hidden=false;
+        profileFallback.hidden=true;
+      };
+      skin.onerror=()=>{};
+      skin.src=url+(account.skinUpdatedAt?'?v='+encodeURIComponent(account.skinUpdatedAt):'');
+    }
+    window.SSCirclePublicAvatar=Object.freeze({render:renderMemberAvatar});
+    // The profile page can supply its already loaded account list; other pages
+    // retrieve only the signed-in member's private profile (never public guesses).
+    fetch('/api/player/profile',{credentials:'same-origin',cache:'no-store'})
+      .then(r=>r.ok?r.json():null)
+      .then(data=>{if(data)renderMemberAvatar(data.accounts);})
+      .catch(()=>{});
     addEventListener('hashchange',()=>{h.querySelectorAll('.home-nav a').forEach(a=>{const target=new URL(a.getAttribute('href')||'/', 'https://sscircle.pages.dev/');const on=normalizePath(target.pathname)===normalizePath(location.pathname)&&(target.hash ? target.hash===location.hash : !(normalizePath(target.pathname)==='/' && !!location.hash));a.classList.toggle('ssc-nav-active',on);if(on)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current');});});
     fetch('/api/form',{credentials:'same-origin',cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{
       const s=d?.settings;if(!s)return;
