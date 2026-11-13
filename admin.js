@@ -115,6 +115,8 @@ function tab(id) {
     window.SSCircleProfileAdmin?.schedule();
   if (id === 'theme')
     window.SSCircleThemeEditor?.schedule();
+  if (id === 'gallery-admin')
+    window.SSCircleGalleryAdmin?.schedule();
   if (id === 'analytics')
     renderAnalytics();
   if (id === 'media')
@@ -172,6 +174,7 @@ async function refresh() {
   window.SSCircleThemeEditor?.render(data, dirtyMark);
   window.SSCircleRegistrationPreview?.render(data);
   window.SSCircleHomeAdmin?.render(data, dirtyMark);
+  window.SSCircleGalleryAdmin?.render(data);
   window.SSCircleVoteAdmin?.render(data, dirtyMark);
   window.SSCircleRulesAdmin?.render(data, dirtyMark);
   window.SSCircleEventsAdmin?.render(data, dirtyMark);
@@ -885,6 +888,7 @@ async function save() {
   const btn = $('#save');
   btn.disabled = true;
   const saveButtons = [
+    '#gallery-admin-save',
     '#home-admin-save',
     '#home-admin-save-top',
     '#save',
@@ -906,7 +910,7 @@ async function save() {
     const result = await SSCircle.saveForm(data.settings, data.pages, data.revision);
     data.revision = result.revision;
     dirty = false;
-    ['#save-message', '#appearance-message', '#home-admin-message', '#theme-message'].forEach(selector => {
+    ['#save-message', '#appearance-message', '#home-admin-message', '#theme-message', '#gallery-preview-status'].forEach(selector => {
       const n = $(selector);
       if (n)
         n.replaceChildren();
@@ -931,6 +935,7 @@ async function save() {
   }
 }
 $('#save').onclick = save;
+$('#gallery-admin-save').onclick = save;
 $('#save-bottom').onclick = save;
 $('#save-appearance').onclick = save;
 $('#save-appearance-bottom').onclick = save;
