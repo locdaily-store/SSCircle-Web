@@ -144,7 +144,7 @@ test('V10.47: vanilla statistics are only sampled for verified identities',()=>{
  assert.match(stats,/StandardCopyOption\.ATOMIC_MOVE/);
  assert.match(paper,/statsSync\.start\(\)/);
  assert.match(paper,/statsSync\.stop\(\)/);
- assert.match(worker,/async function minecraftStatsIngest\(req,env\)/);
+ assert.match(worker,/async function minecraftStatsIngest\(req,env(?:,ctx)?\)/);
  assert.match(worker,/STATS_NOT_LINKED/);
  assert.match(worker,/minecraft_stat_receipts/);
 });
