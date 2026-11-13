@@ -8,7 +8,7 @@
     ['Announcement','/announcements.html'],['Seasons','/seasons.html'],
     ['Cek Status','/status.html'],['Profile','/my-sscircle']
   ];
-  const route = path => normalizePath(path).replace(/\\.html$/,'');
+  const route = path => normalizePath(path).replace(/\.html$/,'');
   const isActive = href => {
     const u=new URL(href,location.origin),target=route(u.pathname),here=route(page);
     if(target==='/')return here==='/' && location.hash===u.hash;
