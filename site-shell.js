@@ -7,6 +7,22 @@ window.SSCircleShell = (() => {
     document.body.classList.remove('home-menu-open');
     menu?.setAttribute('aria-expanded', 'false');
   }
+  // Link berita tersedia di seluruh navigasi publik yang memakai shell.
+  if (nav && !nav.querySelector('a[href^="announcements"]')) {
+    const link = document.createElement('a');
+    link.className = 'home-nav-link'; link.href = 'announcements.html'; link.textContent = 'Announcement';
+    const anchor = nav.querySelector('a[href^="events"]');
+    if (anchor) anchor.after(link);
+    else nav.insertBefore(link,nav.querySelector('.home-nav-join'));
+  }
+  const footer = document.querySelector('.home-footer-links');
+  if (footer && !footer.querySelector('a[href^="announcements"]')) {
+    const link = document.createElement('a');
+    link.href = 'announcements.html'; link.textContent = 'Announcement';
+    const anchor = footer.querySelector('a[href^="events"]');
+    if (anchor) anchor.after(link);
+    else footer.append(link);
+  }
   if (menu && nav) {
     menu.addEventListener('click', () => {
       const open = document.body.classList.toggle('home-menu-open');
