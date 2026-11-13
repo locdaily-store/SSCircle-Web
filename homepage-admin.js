@@ -293,6 +293,16 @@ window.SSCircleHomeAdmin = (() => {
           };
           fields.append(input);
         }
+        const categoryField = node('label','field-group');
+        categoryField.append(node('span','field-label','Kategori foto'));
+        const categorySelect = node('select');
+        const emptyChoice=node('option','', 'Tanpa kategori');emptyChoice.value='';categorySelect.append(emptyChoice);
+        for(const cat of state.settings.galleryCategories || []) {
+          const opt=node('option','',cat.label);opt.value=cat.id;categorySelect.append(opt);
+        }
+        categorySelect.value=item.category||'';
+        categorySelect.onchange=()=>{item.category=categorySelect.value;changed();};
+        categoryField.append(categorySelect);fields.append(categoryField);
         const actions = node('div', 'home-admin-gallery-actions');
         const buttons = [
           ['↑', () => {
@@ -342,8 +352,8 @@ window.SSCircleHomeAdmin = (() => {
       });
     }
     helpButton(toolbar, '+ Tambahkan foto bawaan', () => {
-      if (state.settings.homeGallery.length >= 24) {
-        SSCNotice.alert('Galeri maksimal 24 foto.');
+      if (state.settings.homeGallery.length >= 80) {
+        SSCNotice.alert('Galeri maksimal 80 foto.');
         return;
       }
       state.settings.homeGallery.push({ src: 'assets/gallery/sscircle-01.webp', title: 'Foto SSCircle', caption: '' });
@@ -361,8 +371,8 @@ window.SSCircleHomeAdmin = (() => {
       const files = [...(upload.files || [])];
       if (!files.length)
         return;
-      if (state.settings.homeGallery.length + files.length > 24) {
-        info.textContent = 'Jumlah galeri maksimal 24 foto.';
+      if (state.settings.homeGallery.length + files.length > 80) {
+        info.textContent = 'Jumlah galeri maksimal 80 foto.';
         return;
       }
       upload.disabled = true;
@@ -389,7 +399,7 @@ window.SSCircleHomeAdmin = (() => {
     uploadLabel.hidden = true;
     toolbar.append(uploadLabel);
     SSCircleImagePicker.mount(toolbar, {
-      title: 'Tambah foto Galeri', count: () => state.settings.homeGallery.length, max: 24,
+      title: 'Tambah foto Galeri', count: () => state.settings.homeGallery.length, max: 80,
       onAdd: src => {
         state.settings.homeGallery.push({ src, title: 'Foto SSCircle', caption: '' });
         changed();
@@ -1319,7 +1329,40 @@ window.SSCircleHomeAdmin = (() => {
     const gallery = section('05 · SSCircle Gallery', 'Judul dan catatan foto untuk pengelolaan saja; pada Homepage foto ditampilkan bersih tanpa tulisan. Atur urutan atau tambahkan foto dari perangkat.');
     toggle(gallery, 'homeShowGallery', 'Tampilkan galeri', '');
     formGrid(gallery, [['homeGalleryEyebrow', 'Label galeri', 'input'], ['homeGalleryTitle', 'Judul galeri', 'input'], ['homeGalleryText', 'Deskripsi galeri', 'textarea']]);
+    toggle(gallery,'galleryPageEnabled','Aktifkan halaman Gallery lengkap','Halaman terpisah tetap dapat diakses dari menu website.');
+    formGrid(gallery,[['galleryPageTitle','Judul halaman Gallery','input'],['galleryPageDescription','Deskripsi halaman Gallery','textarea']]);
+    const categoriesBox=node('div','home-admin-gallery');
+    const catHeading=node('h3','home-admin-subheading','Kategori Gallery');
+    const catList=node('div','home-admin-gallery');
+    const drawCategories=()=>{
+      catList.replaceChildren();
+      (state.settings.galleryCategories||[]).forEach((cat,index)=>{
+        const row=node('div','home-admin-gallery-row');
+        const label=node('input');label.value=cat.label||'';label.placeholder='Nama kategori';
+        label.maxLength=70;
+        label.oninput=()=>{cat.label=label.value;changed();};
+        const remove=node('button','button secondary','Hapus');
+        remove.type='button';remove.onclick=async()=>{
+          if(!await SSCNotice.confirm('Hapus kategori ini?',{danger:true,confirmText:'Hapus'}))return;
+          state.settings.galleryCategories.splice(index,1);
+          for(const photo of state.settings.homeGallery||[])if(photo.category===cat.id) photo.category='';
+          changed();drawCategories();
+        };
+        row.append(label,remove);catList.append(row);
+      });
+    };
+    const addCat=node('button','button secondary','+ Tambah kategori');addCat.type='button';
+    addCat.onclick=()=>{
+      state.settings.galleryCategories ||= [];
+      if(state.settings.galleryCategories.length >= 20){SSCNotice.alert('Maksimal 20 kategori.');return;}
+      const id='kategori-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,6);
+      state.settings.galleryCategories.push({id,label:'Kategori Baru'});changed();drawCategories();
+    };
+    categoriesBox.append(catHeading,catList,addCat);
+    gallery.append(categoriesBox);
+    state.settings.galleryCategories ||= [];drawCategories();
     galleryEditor(gallery);
+    const viewGallery=node('a','button secondary','Lihat halaman Gallery ↗');viewGallery.href='gallery.html';viewGallery.target='_blank';viewGallery.rel='noopener';gallery.append(viewGallery);
     const upcoming = section('Upcoming Events · Jadwal Homepage', 'Kartu event terdekat otomatis mengambil data dari Atur Event & Jadwal. Tidak perlu menambahkan jadwal dua kali.');
     toggle(upcoming, 'homeUpcomingEnabled', 'Tampilkan Upcoming Events di Homepage', 'Halaman Event khusus tetap tersedia meskipun kartu di Homepage disembunyikan.');
     formGrid(upcoming, [
