@@ -33,8 +33,10 @@
       const list = element('div', 'c55-achievements');
 
       for (const achievement of data.achievements || []) {
-        const card = element('article', 'c55-achievement');
-        card.append(element('strong', '', achievement.title));
+        const card = element('article', 'c55-achievement ssc-medal ' + (achievement.earnedAt ? 'ssc-medal-earned' : 'ssc-medal-progress'));
+        const emblem=element('span','ssc-medal-emblem',achievement.earnedAt?'★':'◇');
+        emblem.setAttribute('aria-hidden','true');
+        card.append(emblem,element('strong', '', achievement.title));
 
         if (achievement.description)
           card.append(element('small', '', achievement.description));
@@ -58,8 +60,10 @@
       if (data.awards?.length) {
         list.append(element('h3', '', 'Hasil Event Saya'));
         for (const award of data.awards) {
-          const card = element('article', 'c55-achievement');
-          card.append(
+          const card = element('article', 'c55-achievement ssc-medal ssc-medal-earned');
+          const emblem=element('span','ssc-medal-emblem','★');
+          emblem.setAttribute('aria-hidden','true');
+          card.append(emblem,
             element('strong', '', 'Juara ' + award.rank),
             element('small', '', award.label)
           );
