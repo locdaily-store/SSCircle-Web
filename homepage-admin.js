@@ -1379,17 +1379,35 @@ window.SSCircleHomeAdmin = (() => {
     toggle(homepageGallery, 'homeShowGallery', 'Tampilkan Gallery di Homepage', 'Nonaktifkan untuk menyembunyikan bagian Gallery dari Homepage tanpa menghapus foto.');
     const limitField = node('label', 'field-group');
     limitField.append(node('span', 'field-label', 'Jumlah foto yang tampil di Homepage'));
-    const limitSelect = node('select');
-    limitSelect.setAttribute('aria-label', 'Batas jumlah foto Gallery di Homepage');
-    for (let n = 1; n <= 80; n++) {
-      const option = node('option', '', n + ' foto');
-      option.value = String(n);
-      limitSelect.append(option);
-    }
+    const limitInput = node('input');
+    limitInput.type = 'number';
+    limitInput.min = '1';
+    limitInput.max = '80';
+    limitInput.step = '1';
+    limitInput.inputMode = 'numeric';
+    limitInput.setAttribute('aria-label', 'Jumlah foto Gallery yang tampil di Homepage');
     const configuredLimit = Number(state.settings.homeGalleryLimit);
-    limitSelect.value = String(Number.isInteger(configuredLimit) && configuredLimit >= 1 && configuredLimit <= 80 ? configuredLimit : 6);
-    limitSelect.onchange = () => { state.settings.homeGalleryLimit = Number(limitSelect.value); changed(); };
-    limitField.append(limitSelect, node('small', 'field-help', 'Foto ditampilkan berdasarkan urutan di koleksi Gallery. Batas ini hanya berlaku untuk Homepage; halaman Gallery tetap menampilkan seluruh foto.'));
+    const initialLimit = Number.isInteger(configuredLimit) && configuredLimit >= 1 && configuredLimit <= 80 ? configuredLimit : 6;
+    state.settings.homeGalleryLimit = initialLimit;
+    limitInput.value = String(initialLimit);
+    const limitHelp = node('small', 'field-help', 'Masukkan angka 1 sampai 80. Batas hanya berlaku untuk Homepage; halaman Gallery tetap menampilkan seluruh foto.');
+    limitInput.oninput = () => {
+      const value = Number(limitInput.value);
+      if (limitInput.value.trim() !== '' && Number.isInteger(value) && value >= 1 && value <= 80) {
+        state.settings.homeGalleryLimit = value;
+        limitInput.setCustomValidity('');
+        changed();
+      } else {
+        limitInput.setCustomValidity('Jumlah foto harus angka bulat antara 1 dan 80.');
+      }
+    };
+    limitInput.onblur = () => {
+      const value = Number(limitInput.value);
+      const valid = limitInput.value.trim() !== '' && Number.isInteger(value) && value >= 1 && value <= 80;
+      if (!valid) limitInput.value = String(state.settings.homeGalleryLimit);
+      limitInput.setCustomValidity('');
+    };
+    limitField.append(limitInput, limitHelp);
     homepageGallery.append(limitField);
     const photoCount = node('p', 'field-help', 'Total foto tersimpan: ' + state.settings.homeGallery.length + ' dari maksimal 80 foto.');
     homepageGallery.append(photoCount);
