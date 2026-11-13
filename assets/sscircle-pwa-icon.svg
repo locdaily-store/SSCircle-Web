@@ -1,35 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 1254 1254" role="img" aria-labelledby="title">
-<title id="title">SSCircle Server</title>
-<defs>
-  <radialGradient id="background" cx="50%" cy="48%" r="76%">
-    <stop offset="0" stop-color="#500d75"/><stop offset=".72" stop-color="#330751"/><stop offset="1" stop-color="#25033f"/>
-  </radialGradient>
-  <linearGradient id="front" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff"/><stop offset="1" stop-color="#f3eafd"/></linearGradient>
-  <linearGradient id="side" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f3eaff"/><stop offset="1" stop-color="#e4d0ff"/></linearGradient>
-</defs>
-<rect width="1254" height="1254" fill="url(#background)"/>
-<g>
-  <path d="M624 143L507 307L624 255Z" fill="#f4eaff"/>
-  <path d="M624 143L742 307L624 255Z" fill="#d7baf4"/>
-  <path d="M507 307L624 255V965L507 909Z" fill="url(#front)"/>
-  <path d="M624 255L742 307V909L624 965Z" fill="url(#side)"/>
-  <path d="M507 909L624 965V1068Z" fill="#e5d3fa"/>
-  <path d="M624 965L742 909L624 1068Z" fill="#c9a5eb"/>
-</g>
-<g>
-  <path d="M355 411L289 502L355 473Z" fill="#f5ecff"/>
-  <path d="M355 411L422 502L355 473Z" fill="#d6b5f4"/>
-  <path d="M289 502L355 473V853L289 821Z" fill="#fff"/>
-  <path d="M355 473L422 502V821L355 853Z" fill="#ebdffb"/>
-  <path d="M289 821L355 853V910Z" fill="#e5d2fb"/>
-  <path d="M355 853L422 821L355 910Z" fill="#cfadeb"/>
-</g>
-<g>
-  <path d="M893 411L826 502L893 473Z" fill="#f5ecff"/>
-  <path d="M893 411L959 502L893 473Z" fill="#d6b5f4"/>
-  <path d="M826 502L893 473V853L826 821Z" fill="#fff"/>
-  <path d="M893 473L959 502V821L893 853Z" fill="#ebdffb"/>
-  <path d="M826 821L893 853V910Z" fill="#e5d2fb"/>
-  <path d="M893 853L959 821L893 910Z" fill="#cfadeb"/>
-</g>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+<title>Logo SSCircle Server</title>
+<image x="0" y="0" width="512" height="512" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABABAMAAABYR2ztAAAAMFBMVEX9/P7m3vizntFCFW89Dmw9Dms9Dmo8Dms8Dmo7Dmo9DWo8DWs8DWo8DWk7DWk2BmRhDYWBAAAF5ElEQVR42m2QfWxVdx3GP7/v/d1etmzccycvAbv29IIjJoyVl4kO6E7ZhRhRdrvwMgmZJQEa4zAF2dAskv1hNBkVSja3sIyuLmhYNmeNgdl6YYebkhnj8IoYRu1uz+0agcT1nvKStvece37+MUt06/ff55Pneb6POjjvduvw/KGebA/xPfFjY8kPbi5N7jz6xRI8WzlCSrO16DHSj6tb3uqK+7NXXbDuvT0YeKTwr1tjNZLFxqY5W4DZKpjtnLcbhHOpzbB+VK2zEBtPcEO3bvBtnLjDI2J8ayfM1qRtMUYgbUurRtgUnnGgZmYpBZm316628SIC8QAk7cT3YoRcpdNZgeMxCw0L2b1JjcJQvedOjk/OdaD75suXw36nJ9icf6rUEHnpSBjtMh5h4ptewcC3X/rG86wNHeVGGIbTA91S8QFanerK9sph3hz174oimyyOB25EqHtura2Tge5Lk4tgmVV69Mb5i567qmfEyT/1Kp5GbjlnvQGMvS8odzozTpTMhp9euRANBUSCDsOM7LChEx2802IlONRkMXJsfE8nDbkCmVD3I8pz7Mf7V3v0V+zQL6PKSXRNNFJuL5JhNVJEwlNro13in8uGL5aMSW4oHN2L3XJIwHZd1bWxs90DgPCVi38lxX0XT6WB4Jx2ANnYnQVwgZkPlQHKE39kspO4ztIBooqMKQsHuG+XB2BaxsEGVGjnENKUTQp4iyLWp1kzJ69m3dBBWzqMPfloIT1+wxD8IahNvDLBXTBX/WlwbEWN3Mo3vTMhEV4SbCLf58794MvvWwvVwtBd0arTxWYwvnvxNx9OTukr9cCxq8P1vlfne7oYidcw5H+9bdX9rwVTxMSL35r3rNfb9FtB0nioNH3lkZN3MkqHmsrtFoU0aIEe441Kqcls+PEUcPVEaWRxkh9GK5eek+KNRkxP4iee8dungJqybzZ8T+GGrJHgPYek80ITfPzQFHC7yXDp+Hs8UXQioVqyfLEMnzsniAvIAxsbR5lGxnTo8k43LiRM3vqM9uk78Xt6ybga44e+/D9glQDaIy+nA1GKTa7xP++gTE1Do39BPGPhTNeB0G/uzlpSwfet6XR04DYSExv6VDitg2p21E7ReFvK0ztEuENosOHMtA6J3vVhTrw+cB0f+MxcRhtxu9aJcvoKXgIAdWcHALxwXShGLFnvOUzzh4rASVf0JydamySaZmqT5vXaokh+W5cQ+NO1fNXGRpRea7zu6SIoFzJjjiD22Ju+Uf/TEcsCa6x38919Q66Yw3TBeN6itmUKiOeVqt13eUFrwfqzrMbbR+LAdluduZOjnrbVqYMV88ay3UZdG4Hev++fWNIwXKh70CcFD9bdHI7mWFhfGGnvlRMq4rEqamzx1v+2UDQ+k0+Sxf/o6Y7HhJOCXk7iuVMHE8/ZAOq0k9/+ayuB2nu8elhCcr1wpLOt5Si78gqo3RQW4vvmzsMSH2RnTPtUK8HL1l5ig/Uppb6TqdbsN634u38OJqY229eKhVTb+/GvcSRX8a3Kr2b8Mni4iWph9VcGxpXEAzJrZHd3tK2T/c+c81m8lcx3fwE1sdycHbF98sRZV2KattbuSc+dsad+7JTFYCKbQ+3RflXPiv3snku/WzMxMHSlzOCT7vUbsm2x1GqrTjizLnX66hIhkTU5x3xQhMU4u/O1bQBIkRiTpUYtEUGbk/vbAVv2Znp5d/vp58EVDgU53Bt2xo1tYcHH99ZV62tHB/7V3PGJnHSwal+/fi2Y4SxM/WPBfOlhONWhnZwpflTARiXBZ1uMNVqbf1/oFAk7oiqE3F1ecL/yIIxweQPrXZW2NbXHpSp0pgE/Nsty20l8/7UOD1v7k6brn1bjLKSFK0TgdD/sqKKi4parrX0Zh/JfrvQTc3boB5atXERIvObx62PJl7K/T8ALcwBVv3nwR+hHYlvs+WUW3Kr/8MryRUtuNjbZ5yH8qvnS5Vrv7PI6Z5ZWxk8zlGKpbXuyHiB1QCWHZlvNNeisUv8BSZiSqTiK7yEAAAAASUVORK5CYII="/>
 </svg>
