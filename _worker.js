@@ -4079,7 +4079,7 @@ async function mailboxAPI(req,env,path,method){
       }catch{ /* use safe built-in invitation */ }
       return HOME_DEFAULTS.homeDiscordUrl;
     })();
-    const acceptedCTA=mailSettings.mailboxAcceptedDiscordEnabled===false?null:{
+    const acceptedCTA=account.status!=='accepted'||mailSettings.mailboxAcceptedDiscordEnabled===false?null:{
       note:mailSettings.mailboxAcceptedDiscordNote||RULES_DEFAULTS.mailboxAcceptedDiscordNote,
       label:mailSettings.mailboxAcceptedDiscordButton||RULES_DEFAULTS.mailboxAcceptedDiscordButton,
       url:discordUrl
