@@ -49,3 +49,23 @@ test('JavaScript entrypoints pass syntax parsing',()=>{
   for(const name of ['gallery-admin.js','gallery.js','homepage-admin.js','admin.js','color-theme-admin.js','community-achievements.js','player-dashboard.js'])
     assert.doesNotThrow(()=>new Function(source(name)),name);
 });
+
+
+test('Compact medals and Profile header spacing remain responsive',()=>{
+  const medals=source('member-badges.css'),spacing=source('profile-workspace.css'),profile=source('my-sscircle.html');
+  assert.match(medals,/min-height:164px/);
+  assert.match(medals,/width:60px;\s*height:60px/);
+  assert.match(medals,/min-height:150px/);
+  assert.match(spacing,/padding-top:clamp\(80px,7vw,96px\)/);
+  assert.match(spacing,/padding-top:76px/);
+  assert.match(profile,/profile-workspace\.css\?v=10\.57\.1/);
+});
+
+test('Gallery editor has a clear sequence and current asset versions',()=>{
+  const home=source('homepage-admin.js'),html=source('admin.html'),layout=source('gallery-admin.css');
+  for(const text of ['01 · Informasi galeri','02 · Kategori foto','03 · Koleksi foto'])assert.ok(home.includes(text));
+  assert.match(layout,/\.ssc-gallery-admin-editor \.home-admin-gallery-photo-row/);
+  assert.match(html,/homepage-admin\.js\?v=10\.57\.1/);
+  assert.match(html,/gallery-admin\.css\?v=10\.57\.1/);
+  assert.match(source('gallery-admin.js'),/aria-pressed/);
+});
