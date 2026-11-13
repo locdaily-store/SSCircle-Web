@@ -1,6 +1,6 @@
 {
   "name": "sscircle-local-development",
-  "version": "10.55.5",
+  "version": "10.55.6",
   "private": true,
   "description": "SSCircle Pages Advanced Mode local development with isolated D1 fixtures",
   "engines": {

@@ -97,6 +97,10 @@ function tab(id) {
     window.SSCircleRulesAdmin?.schedule();
   if (id === 'events-admin')
     window.SSCircleEventsAdmin?.schedule();
+  if (id === 'community-events-admin')
+    void window.SSCircleCommunityV55Admin?.loadEvents();
+  if (id === 'achievements-admin')
+    void window.SSCircleCommunityV55Admin?.loadAchievements();
   if (id === 'notifications-admin')
     void window.SSCircleNotificationAdmin?.load();
   if (id === 'announcements-admin')
@@ -178,6 +182,7 @@ async function refresh() {
     window.SSCircleTheme?.apply(data.settings);
   summary();
   window.SSCircleOverview?.render(data);
+  window.SSCircleCommunityV55Admin?.startBadge();
   renderBuilder();
   renderAnswers();
   renderAnalytics();

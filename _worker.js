@@ -3518,7 +3518,7 @@ async function minecraftIdentityRefresh(req,env){
   return J({ok:true,code:result.meta?.changes>0?'IDENTITY_UPDATED':'IDENTITY_ALREADY_NEWER'});
 }
 
-async function minecraftStatsIngest(req,env){
+async function minecraftStatsIngest(req,env,ctx){
   const secret=await minecraftRequestSigningSecret(req,env);
   if(typeof secret!=='string'||secret.length<32)
     return minecraftLinkError('SERVER_SECRET_MISSING','Layanan sinkronisasi belum diaktifkan.',503);
@@ -3621,6 +3621,10 @@ async function minecraftStatsIngest(req,env){
     await env.DB.prepare('DELETE FROM minecraft_link_nonces WHERE seen_at<?').bind(now-300).run();
     await env.DB.prepare('DELETE FROM minecraft_stat_receipts WHERE received_at<?')
       .bind(new Date(Date.now()-30*86400000).toISOString()).run();
+  }
+  if(results?.[0]?.meta?.changes>0 && ctx?.waitUntil){
+    ctx.waitUntil(community55Evaluate(env,account.application_id)
+      .catch(error=>console.error('[SSCircle achievement sync]',String(error?.message||error))));
   }
   return J({ok:true,code:results?.[0]?.meta?.changes>0?'STATS_SYNCED':'STATS_DUPLICATE'});
 }
@@ -4674,11 +4678,19 @@ async function community55Schema(env){
     "CREATE INDEX IF NOT EXISTS idx_c55_signups_event ON community_event_signups(event_id,state)",
     "CREATE TABLE IF NOT EXISTS community_event_awards(id TEXT PRIMARY KEY,event_id TEXT NOT NULL,member_id TEXT NOT NULL,rank INTEGER NOT NULL,label TEXT NOT NULL,created_at TEXT NOT NULL,UNIQUE(event_id,member_id,rank),FOREIGN KEY(member_id) REFERENCES submissions(id) ON DELETE CASCADE)",
     "CREATE INDEX IF NOT EXISTS idx_c55_awards_member ON community_event_awards(member_id,created_at)",
-    "CREATE TABLE IF NOT EXISTS community_achievement_rules(id TEXT PRIMARY KEY,title TEXT NOT NULL,description TEXT NOT NULL DEFAULT '',metric TEXT NOT NULL,target INTEGER NOT NULL,enabled INTEGER NOT NULL DEFAULT 1)",
+    "CREATE TABLE IF NOT EXISTS community_achievement_rules(id TEXT PRIMARY KEY,title TEXT NOT NULL,description TEXT NOT NULL DEFAULT '',metric TEXT NOT NULL,target INTEGER NOT NULL,enabled INTEGER NOT NULL DEFAULT 1,auto_grant INTEGER NOT NULL DEFAULT 1)",
     "CREATE TABLE IF NOT EXISTS community_achievement_claims(rule_id TEXT NOT NULL,member_id TEXT NOT NULL,achieved_at TEXT NOT NULL,PRIMARY KEY(rule_id,member_id),FOREIGN KEY(member_id) REFERENCES submissions(id) ON DELETE CASCADE)"
   ])await env.DB.prepare(sql).run();
+  // Existing achievement rules keep their IDs and claims. Convert second-based
+  // targets to whole hours once, rounding upward so requirements never become easier.
+  const achievementColumns=(await env.DB.prepare("PRAGMA table_info(community_achievement_rules)").all()).results||[];
+  if(!achievementColumns.some(column=>column.name==='auto_grant')){
+    try{await env.DB.prepare("ALTER TABLE community_achievement_rules ADD COLUMN auto_grant INTEGER NOT NULL DEFAULT 1").run();}
+    catch(error){if(!/duplicate column name/i.test(String(error?.message||error)))throw error;}
+  }
+  await env.DB.prepare("UPDATE community_achievement_rules SET metric='playtime_hours',target=CAST((target+3599)/3600 AS INTEGER) WHERE metric='playtime_seconds'").run();
   for(const [id,title,description,metric,target] of [
-    ['dedicated-player','Dedicated Player','Bermain selama 100 jam','playtime_seconds',360000],
+    ['dedicated-player','Dedicated Player','Bermain selama 100 jam','playtime_hours',100],
     ['monster-hunter','Monster Hunter','Mengalahkan 1000 mob','mob_kills',1000],
     ['event-explorer','Event Explorer','Menghadiri tiga event komunitas','events_attended',3]
   ])await env.DB.prepare("INSERT OR IGNORE INTO community_achievement_rules(id,title,description,metric,target,enabled) VALUES(?,?,?,?,?,1)")
@@ -4711,24 +4723,50 @@ async function community55PublicEvents(env,settings){
   }
   return events;
 }
-async function community55Progress(env,member){
-  await community55Schema(env);
+async function community55Metrics(env,memberId){
   await ensureMemberCenter(env);
-  const stat=await env.DB.prepare("SELECT MAX(playtime_seconds) AS playtime_seconds,MAX(mob_kills) AS mob_kills,MAX(deaths) AS deaths,MAX(blocks_mined) AS blocks_mined FROM player_stat_snapshots WHERE application_id=?").bind(member.id).first();
-  const visited=await env.DB.prepare("SELECT COUNT(*) AS total FROM community_event_signups WHERE member_id=? AND state='attended'").bind(member.id).first();
-  const counts={playtime_seconds:Number(stat?.playtime_seconds)||0,mob_kills:Number(stat?.mob_kills)||0,
-    deaths:Number(stat?.deaths)||0,blocks_mined:Number(stat?.blocks_mined)||0,events_attended:Number(visited?.total)||0};
-  const rules=(await env.DB.prepare("SELECT * FROM community_achievement_rules WHERE enabled=1 ORDER BY id LIMIT 80").all()).results||[];
+  // Current signed Minecraft stats are stored per linked account. Legacy snapshots
+  // are used only as a fallback, not summed with current totals (no double count).
+  const current=await env.DB.prepare(
+    "SELECT COALESCE(SUM(p.total_playtime),0) playtime_seconds,COALESCE(SUM(p.total_mobs),0) mob_kills,COALESCE(SUM(p.total_deaths),0) deaths,COALESCE(SUM(p.total_blocks),0) blocks_mined FROM minecraft_account_stat_progress p JOIN minecraft_accounts a ON a.id=p.account_id WHERE a.application_id=? AND p.season_id=''"
+  ).bind(memberId).first();
+  const legacy=await env.DB.prepare("SELECT MAX(playtime_seconds) playtime_seconds,MAX(mob_kills) mob_kills,MAX(deaths) deaths,MAX(blocks_mined) blocks_mined FROM player_stat_snapshots WHERE application_id=?").bind(memberId).first();
+  const visited=await env.DB.prepare("SELECT COUNT(*) total FROM community_event_signups WHERE member_id=? AND state='attended'").bind(memberId).first();
+  const n=key=>Math.max(0,Number(current?.[key]||0),Number(legacy?.[key]||0));
+  const playtimeSeconds=n('playtime_seconds');
+  return {playtimeSeconds,playtime_hours:playtimeSeconds/3600,
+    mob_kills:n('mob_kills'),deaths:n('deaths'),blocks_mined:n('blocks_mined'),
+    events_attended:Number(visited?.total||0)};
+}
+async function community55Evaluate(env,memberId){
+  await community55Schema(env);
+  const member=await env.DB.prepare("SELECT status FROM submissions WHERE id=?").bind(memberId).first();
+  if(member?.status!=='accepted')return {granted:0};
+  const totals=await community55Metrics(env,memberId);
+  const before=await env.DB.prepare("SELECT COUNT(*) total FROM community_achievement_claims WHERE member_id=?").bind(memberId).first();
   const now=new Date().toISOString();
-  for(const rule of rules)if((counts[rule.metric]||0)>=rule.target)
-    await env.DB.prepare("INSERT OR IGNORE INTO community_achievement_claims(rule_id,member_id,achieved_at) VALUES(?,?,?)").bind(rule.id,member.id,now).run();
+  // One atomic INSERT for every eligible rule. Replay and concurrent evaluation
+  // cannot duplicate claims due to PRIMARY KEY(rule_id,member_id).
+  await env.DB.prepare(
+    "INSERT OR IGNORE INTO community_achievement_claims(rule_id,member_id,achieved_at) SELECT r.id,?,? FROM community_achievement_rules r WHERE r.enabled=1 AND r.auto_grant=1 AND ((r.metric='playtime_hours' AND ?>=r.target*3600) OR (r.metric='mob_kills' AND ?>=r.target) OR (r.metric='deaths' AND ?>=r.target) OR (r.metric='blocks_mined' AND ?>=r.target) OR (r.metric='events_attended' AND ?>=r.target))"
+  ).bind(memberId,now,totals.playtimeSeconds,totals.mob_kills,totals.deaths,totals.blocks_mined,totals.events_attended).run();
+  const after=await env.DB.prepare("SELECT COUNT(*) total FROM community_achievement_claims WHERE member_id=?").bind(memberId).first();
+  return {granted:Math.max(0,Number(after?.total||0)-Number(before?.total||0)),totals};
+}
+async function community55Progress(env,member){
+  const {totals}=await community55Evaluate(env,member.id);
+  const values=totals||await community55Metrics(env,member.id);
+  const rules=(await env.DB.prepare("SELECT * FROM community_achievement_rules WHERE enabled=1 ORDER BY id LIMIT 80").all()).results||[];
   const claims=(await env.DB.prepare("SELECT rule_id,achieved_at FROM community_achievement_claims WHERE member_id=?").bind(member.id).all()).results||[];
   const byId=new Map(claims.map(r=>[r.rule_id,r.achieved_at]));
   const awards=(await env.DB.prepare("SELECT event_id,rank,label,created_at FROM community_event_awards WHERE member_id=? ORDER BY created_at DESC LIMIT 30").bind(member.id).all()).results||[];
   return {achievements:rules.map(r=>({id:r.id,title:r.title,description:r.description,metric:r.metric,target:r.target,
-    progress:Math.min(r.target,counts[r.metric]||0),earnedAt:byId.get(r.id)||null})),awards};
+    progress:r.metric==='playtime_hours'
+      ?Math.min(r.target,Math.floor(values.playtime_hours*10)/10)
+      :Math.min(r.target,values[r.metric]||0),
+    earnedAt:byId.get(r.id)||null,autoGrant:r.auto_grant!==0})),awards};
 }
-async function community55API(req,env,path,method){
+async function community55API(req,env,path,method,ctx){
   await community55Schema(env);
   const isAdmin=path.startsWith('/api/admin/');
   const member=isAdmin?null:await playerSession(req,env);
@@ -4818,6 +4856,10 @@ async function community55API(req,env,path,method){
   }
   if(path==='/api/community/achievements'&&method==='GET')
     return J(await community55Progress(env,member));
+  if(path==='/api/admin/community/events/pending-count'&&method==='GET'){
+    const count=await env.DB.prepare("SELECT COUNT(*) AS total FROM community_event_proposals WHERE status='pending'").first();
+    return J({pending:Number(count?.total||0)},200,{'Cache-Control':'private, no-store'});
+  }
   if(path==='/api/admin/community/events'&&method==='GET'){
     const proposals=(await env.DB.prepare("SELECT p.*,s.status AS member_status FROM community_event_proposals p LEFT JOIN submissions s ON s.id=p.member_id ORDER BY p.created_at DESC LIMIT 100").all()).results||[];
     const answerRows=(await env.DB.prepare("SELECT proposal_id,payload FROM community_event_form_answers ORDER BY proposal_id LIMIT 150").all()).results||[];
@@ -4851,6 +4893,11 @@ async function community55API(req,env,path,method){
     const result=await env.DB.prepare("UPDATE community_event_signups SET state='attended',checked_in_at=? WHERE event_id=? AND member_id=? AND state='registered'")
       .bind(now,id,memberId).run();
     if(!Number(result.meta?.changes))return bad('Peserta belum terdaftar atau sudah check-in.',409);
+    // Evaluation is independent of a member opening their Profile.
+    // A failed optional award check must never undo a valid check-in.
+    const check=community55Evaluate(env,memberId).catch(error=>console.error('[SSCircle achievement check-in]',String(error?.message||error)));
+    if(ctx?.waitUntil)ctx.waitUntil(check);
+    else await check;
     return J({ok:true});
   }
   if(path==='/api/admin/community/events/award'&&method==='POST'){
@@ -4871,14 +4918,48 @@ async function community55API(req,env,path,method){
     return J({ok:true});
   }
   if(path==='/api/admin/community/achievements'&&method==='GET'){
-    return J({rules:(await env.DB.prepare("SELECT * FROM community_achievement_rules ORDER BY id LIMIT 80").all()).results||[]});
+    const [rules,counts]=await Promise.all([
+      env.DB.prepare("SELECT * FROM community_achievement_rules ORDER BY id LIMIT 80").all(),
+      env.DB.prepare("SELECT rule_id,COUNT(*) awarded FROM community_achievement_claims GROUP BY rule_id").all()
+    ]);
+    const byId=new Map((counts.results||[]).map(row=>[row.rule_id,Number(row.awarded||0)]));
+    return J({rules:(rules.results||[]).map(row=>({...row,auto_grant:row.auto_grant,awarded:byId.get(row.id)||0}))});
   }
   if(path==='/api/admin/community/achievements'&&method==='POST'){
-    const x=await body(req,1500),id=s(x.id,60),title=s(x.title,120),description=s(x.description,300),metric=s(x.metric,35),target=Number(x.target);
-    if(!/^[a-z0-9_-]{3,60}$/.test(id)||!title||!['playtime_seconds','mob_kills','deaths','blocks_mined','events_attended'].includes(metric)||!Number.isSafeInteger(target)||target<1||target>1000000000)return bad('Aturan achievement tidak valid.',400);
-    await env.DB.prepare("INSERT INTO community_achievement_rules(id,title,description,metric,target,enabled) VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET title=excluded.title,description=excluded.description,metric=excluded.metric,target=excluded.target,enabled=excluded.enabled")
-      .bind(id,title,description,metric,target,x.enabled===false?0:1).run();
+    const x=await body(req,1800),id=s(x.id,60),title=s(x.title,120),
+      description=s(x.description,300),metric=s(x.metric,35),target=Number(x.target);
+    if(!/^[a-z0-9_-]{3,60}$/.test(id)||!title||
+       !['playtime_hours','mob_kills','deaths','blocks_mined','events_attended'].includes(metric)||
+       !Number.isSafeInteger(target)||target<1||target>1000000000)
+      return bad('Aturan achievement tidak valid. Target playtime menggunakan jam.',400);
+    await env.DB.prepare("INSERT INTO community_achievement_rules(id,title,description,metric,target,enabled,auto_grant) VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET title=excluded.title,description=excluded.description,metric=excluded.metric,target=excluded.target,enabled=excluded.enabled,auto_grant=excluded.auto_grant")
+      .bind(id,title,description,metric,target,x.enabled===false?0:1,x.autoGrant===false?0:1).run();
     return J({ok:true});
+  }
+  if(path==='/api/admin/community/achievements'&&method==='DELETE'){
+    const x=await body(req,400),id=s(x.id,60);
+    if(!/^[a-z0-9_-]{3,60}$/.test(id)||x.confirmation!=='HAPUS ACHIEVEMENT')
+      return bad('Konfirmasi penghapusan achievement diperlukan.',400);
+    const result=await env.DB.batch([
+      env.DB.prepare("DELETE FROM community_achievement_claims WHERE rule_id=?").bind(id),
+      env.DB.prepare("DELETE FROM community_achievement_rules WHERE id=?").bind(id)
+    ]);
+    if(!result[1]?.meta?.changes)return bad('Achievement tidak ditemukan.',404);
+    return J({ok:true,deleted:1});
+  }
+  if(path==='/api/admin/community/achievements/recheck'&&method==='POST'){
+    const x=await body(req,400),cursor=s(x.afterId,48);
+    if(cursor&&!/^[0-9a-f-]{36}$/.test(cursor))return bad('Kursor pemeriksaan tidak valid.',400);
+    // Small batches avoid expensive long-running D1 requests and keep UI responsive.
+    const rows=await env.DB.prepare("SELECT id FROM submissions WHERE status='accepted' AND id>? ORDER BY id LIMIT 12").bind(cursor).all();
+    let granted=0;
+    for(const row of rows.results||[]){
+      const result=await community55Evaluate(env,row.id);
+      granted+=result.granted;
+    }
+    const last=rows.results?.at(-1)?.id||cursor;
+    return J({ok:true,checked:(rows.results||[]).length,granted,
+      nextCursor:last,done:(rows.results||[]).length<12},200,{'Cache-Control':'private, no-store'});
   }
   return bad('Endpoint Community Events tidak ditemukan.',404);
 }
@@ -5073,7 +5154,7 @@ async function noticeAPI(req,env,path,method){
  return bad('Tindakan tidak tersedia.',405);
 }
 
-const SSC_RUNTIME_RELEASE='10.55.5';
+const SSC_RUNTIME_RELEASE='10.55.6';
 const SSC_RUNTIME_ISSUES=new Set();
 function sscRuntimeBindings(env){
   return {
@@ -5315,7 +5396,7 @@ async function sscAnnouncementAPI(req,env,path,method) {
   return bad('Metode tidak tersedia.',405);
 }
 
-async function route(req, env) {
+async function route(req, env, ctx) {
   const url = new URL(req.url), path = url.pathname, method = req.method;
   if (path === '/api/github/database/inspect')
     return sscGithubD1Inspect(req, env, url);
@@ -5496,7 +5577,7 @@ async function route(req, env) {
   if(path==='/api/minecraft/link/diagnose' && method==='POST')
     return await minecraftLinkDiagnose(req,env);
   if(path===MC_STAT_ROUTE && method==='POST')
-    return await minecraftStatsIngest(req,env);
+    return await minecraftStatsIngest(req,env,ctx);
   if(path===MC_SKIN_ROUTE && method==='POST')
     return await minecraftSkinSync(req,env);
   if(path===MC_SKIN_LEGACY_ROUTE && method==='POST')
@@ -5548,8 +5629,8 @@ async function route(req, env) {
     const settings = formFrom(await readSettingsRow(env)).settings;
     return J(await community55PublicEvents(env,settings),200,{'Cache-Control':'private, no-store'});
   }
-  if ((path.startsWith('/api/community/')||path.startsWith('/api/admin/community/')) && ['GET','POST','PUT'].includes(method))
-    return await community55API(req,env,path,method);
+  if ((path.startsWith('/api/community/')||path.startsWith('/api/admin/community/')) && ['GET','POST','PUT','DELETE'].includes(method))
+    return await community55API(req,env,path,method,ctx);
   if (path === '/api/rules' && method === 'GET') {
     const settings = formFrom(await readSettingsRow(env)).settings;
     return J({ ...publicRules(settings), discordInviteUrl:settings.homeDiscordUrl||HOME_DEFAULTS.homeDiscordUrl, discordRequired:true, registrationOpen: settings.open === true,
@@ -6164,9 +6245,9 @@ async function route(req, env) {
   return bad('Endpoint tidak ditemukan.', 404);
 }
 export default {
-  async fetch(req, env) {
+  async fetch(req, env, ctx) {
     try {
-      return await route(req, env);
+      return await route(req, env, ctx);
     }
     catch (e) {
       console.error('[SSCircle]', e);

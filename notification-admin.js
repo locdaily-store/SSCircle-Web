@@ -92,7 +92,7 @@ window.SSCircleNotificationAdmin=(()=>{
      archive.addEventListener('click',async()=>{
        const yes=window.SSCNotice?.confirm
          ?await window.SSCNotice.confirm('Arsipkan pengumuman ini?',{confirmText:'Arsipkan'})
-         :window.confirm('Arsipkan pengumuman ini?');
+         :await window.SSCircleDialog.confirm('Arsipkan pengumuman ini?');
        if(!yes)return;
        archive.disabled=true;
        try{
@@ -108,7 +108,7 @@ window.SSCircleNotificationAdmin=(()=>{
      const message='Hapus permanen pengumuman "'+item.title+'"? Pengumuman dan riwayat bacanya tidak bisa dipulihkan.';
      const yes=window.SSCNotice?.confirm
        ?await window.SSCNotice.confirm(message,{danger:true,confirmText:'Hapus permanen'})
-       :window.confirm(message);
+       :await window.SSCircleDialog.confirm(message);
      if(!yes)return;
      remove.disabled=true;
      try{
@@ -136,7 +136,7 @@ window.SSCircleNotificationAdmin=(()=>{
      const question='Hapus permanen semua pengumuman yang sudah diarsipkan beserta status bacanya?';
      const yes=window.SSCNotice?.confirm
        ?await window.SSCNotice.confirm(question,{danger:true,confirmText:'Hapus seluruh arsip'})
-       :window.confirm(question);
+       :await window.SSCircleDialog.confirm(question);
      if(!yes)return;
      clear.disabled=true;
      try{

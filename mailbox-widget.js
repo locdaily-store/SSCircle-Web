@@ -289,7 +289,7 @@
   async function manageSelected(action){
     if(managing||!selected.size)return;
     const ids=Array.from(selected);
-    if(action==='delete'&&!window.confirm('Hapus '+ids.length+' notifikasi terpilih? Tindakan ini tidak dapat dibatalkan.'))return;
+    if(action==='delete'&&!await window.SSCircleDialog.confirm('Hapus '+ids.length+' notifikasi terpilih? Tindakan ini tidak dapat dibatalkan.'))return;
     managing=true;updateSelection();
     try{
       const response=await api('/api/player/mailbox/manage','POST',{action,ids});
@@ -375,7 +375,7 @@
     if(!current||current.canReveal)return;
     if(deleting)return;
     const id=current.id,button=$('ssc-mailbox-delete');
-    if(!window.confirm('Hapus notifikasi ini dari Mail Box?'))return;
+    if(!await window.SSCircleDialog.confirm('Hapus notifikasi ini dari Mail Box?'))return;
     deleting=true;button.disabled=true;
     try{
       await api('/api/player/mailbox/delete','POST',{id});

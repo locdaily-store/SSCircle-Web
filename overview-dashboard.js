@@ -70,7 +70,8 @@ window.SSCircleOverview = (() => {
     const operations=el('section','panel ssc-overview-card');
     operations.append(el('div','ssc-overview-label','QUICK ACTIONS'),el('h2','','Akses cepat'));
     const shortcuts=el('div','ssc-overview-shortcuts');
-    shortcuts.append(link('✧ Pengumuman','announcements-admin'),link('▦ Event & Jadwal','events-admin'),
+    shortcuts.append(link('✧ Pengumuman','announcements-admin'),link('▦ Pengajuan Event','community-events-admin'),
+      link('✦ Achievement','achievements-admin'),link('▦ Event & Jadwal','events-admin'),
       link('♢ Pusat Notifikasi','notifications-admin'),link('◐ Warna Website','theme'),link('↻ Minecraft Sync','minecraft-sync-admin'));
     operations.append(shortcuts);
     const publication=el('section','panel ssc-overview-card');

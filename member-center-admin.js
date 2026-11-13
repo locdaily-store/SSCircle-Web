@@ -185,7 +185,7 @@ window.SSCircleMemberCenterAdmin = (() => {
   }
   async function issueInvite(member){
     if(member.status!=='accepted')return;
-    const confirmed=window.confirm('Sudah memverifikasi identitas '+memberName(member)+' melalui kontak resmi yang berbeda dari kode pendaftaran? Jika yakin, sistem akan mengirim kode secara otomatis ke Mail Box.');
+    const confirmed=await window.SSCircleDialog.confirm('Sudah memverifikasi identitas '+memberName(member)+' melalui kontak resmi yang berbeda dari kode pendaftaran? Jika yakin, sistem akan mengirim kode secara otomatis ke Mail Box.');
     if(!confirmed)return;
     message('Memproses verifikasi anggota...');
     try{
@@ -205,7 +205,7 @@ window.SSCircleMemberCenterAdmin = (() => {
   async function revoke(member){
     const confirm=window.SSCNotice?.confirm
       ? await window.SSCNotice.confirm('Cabut semua sesi login milik '+memberName(member)+'?',{danger:true,confirmText:'Cabut sesi'})
-      : window.confirm('Cabut semua sesi login milik '+memberName(member)+'?');
+      : await window.SSCircleDialog.confirm('Cabut semua sesi login milik '+memberName(member)+'?');
     if(!confirm)return;
     try{
       await api('/api/admin/member-revoke',{method:'POST',body:JSON.stringify({id:member.id})});
