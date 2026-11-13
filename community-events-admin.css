@@ -23,3 +23,11 @@
 :is(#community-events-admin,#achievements-admin) :is(.c55-field input,.c55-field select,.c55-field textarea){background:var(--ssc-input,var(--panel-raised));border-color:var(--ssc-input-border,var(--ssc-border));color:var(--ssc-input-text,var(--ssc-text));accent-color:var(--ssc-primary)}
 :is(#community-events-admin,#achievements-admin) :is(.c55-field input,.c55-field select,.c55-field textarea):focus-visible{outline:2px solid var(--ssc-input-focus,var(--ssc-primary));outline-offset:2px}
 :is(#community-events-admin,#achievements-admin) .c55-mini-card{background:linear-gradient(140deg,var(--ssc-card-start,var(--ssc-panel)),var(--ssc-card-end,var(--ssc-panel)));border-color:var(--ssc-border)}
+
+/* Match the stacked introduction used by Event & Jadwal. */
+:is(#community-events-admin,#achievements-admin) .dashboard-heading.ssc-stacked-heading{display:flex;align-items:flex-start;justify-content:flex-start;margin:18px 0 27px;min-width:0}
+:is(#community-events-admin,#achievements-admin) .ssc-stacked-heading-copy{display:flex;flex-direction:column;align-items:flex-start;gap:0;width:100%;min-width:0}
+:is(#community-events-admin,#achievements-admin) .ssc-stacked-heading-copy .overline{display:block;margin:0 0 13px;color:var(--ssc-secondary,#bb99d8)}
+:is(#community-events-admin,#achievements-admin) .ssc-stacked-heading-copy h1{display:block;width:100%;max-width:100%;margin:0 0 12px;font-size:clamp(28px,3vw,42px);line-height:1.12;overflow-wrap:break-word;color:var(--ssc-heading,var(--ssc-text,#f5efff))}
+:is(#community-events-admin,#achievements-admin) .ssc-stacked-heading-copy p{display:block;max-width:760px;line-height:1.6;margin:0;color:var(--ssc-muted,#bcaacb)}
+@media(max-width:640px){:is(#community-events-admin,#achievements-admin) .dashboard-heading.ssc-stacked-heading{margin:12px 0 22px}}
