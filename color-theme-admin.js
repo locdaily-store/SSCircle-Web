@@ -28,11 +28,13 @@ window.SSCircleThemeEditor = (() => {
     ['.gallery-eyebrow', 'Gallery: label pembuka'],
     ['.gallery-toolbar', 'Gallery: bar kategori'],
     ['.gallery-tab', 'Gallery: kategori'],
+    ['.gallery-tab.is-active', 'Gallery: kategori aktif'],
     ['.gallery-card', 'Gallery: kartu foto'],
     ['.gallery-card-info', 'Gallery: keterangan foto'],
     ['.gallery-card-info strong', 'Gallery: judul foto'],
     ['.gallery-card-info small', 'Gallery: kategori foto'],
     ['.gallery-viewer', 'Gallery: jendela detail foto'],
+    ['.gallery-viewer figcaption', 'Gallery: deskripsi popup'],
     ['.gallery-viewer-controls button', 'Gallery: tombol detail'],
     ['.events-page', 'Seluruh Event Calendar'], ['.events-hero', 'Pembuka Event'],
     ['.events-card', 'Kartu event'], ['.events-card h2', 'Judul event'],
@@ -124,12 +126,20 @@ window.SSCircleThemeEditor = (() => {
     ['Latar kategori','.gallery-tab','background','#28183d'],
     ['Teks kategori','.gallery-tab','text','#f5efff'],
     ['Bingkai kategori','.gallery-tab','border','#806294'],
+    ['Latar kategori aktif','.gallery-tab.is-active','background','#8050b5'],
+    ['Teks kategori aktif','.gallery-tab.is-active','text','#ffffff'],
+    ['Border kategori aktif','.gallery-tab.is-active','border','#b884eb'],
     ['Latar kartu','.gallery-card','background','#28183d'],
+    ['Latar keterangan foto','.gallery-card-info','background','#28183d'],
+    ['Warna deskripsi halaman','.gallery-main p','text','#cdb7db'],
     ['Bingkai kartu','.gallery-card','border','#78568c'],
     ['Teks judul foto','.gallery-card-info strong','text','#ffffff'],
     ['Teks kategori foto','.gallery-card-info small','text','#cdb7db'],
     ['Latar popup foto','.gallery-viewer','background','#160b24'],
-    ['Bingkai popup','.gallery-viewer','border','#78568c']
+    ['Bingkai popup','.gallery-viewer','border','#78568c'],
+    ['Tombol popup','.gallery-viewer-controls button','background','#28183d'],
+    ['Teks tombol popup','.gallery-viewer-controls button','text','#ffffff'],
+    ['Deskripsi popup','.gallery-viewer figcaption','text','#cdb7db']
   ];
   function renderGalleryColors(){
     const root=$('gallery-color-editor');
