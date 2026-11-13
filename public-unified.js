@@ -35,6 +35,7 @@
       '<button type="button" class="home-menu-button" id="home-menu-button" aria-label="Buka menu" aria-controls="ssc-navigation" aria-expanded="false">☰</button></div>';
     h.querySelector('.home-nav').id='ssc-navigation';
     old.replaceWith(h);
+    if (page !== '/') document.body.classList.add('ssc-public-inner');
     if (!document.body.classList.contains('home-page')) document.body.classList.add('ssc-public-shell');
     const menu=h.querySelector('#home-menu-button'),navigation=h.querySelector('.home-nav');
     const setMenuOpen=open=>{
