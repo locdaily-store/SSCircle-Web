@@ -3,7 +3,8 @@
 
 (() => {
   const root = document.getElementById('community55-admin-root');
-  if (!root) return;
+  const achievementsRoot = document.getElementById('community55-achievements-admin-root');
+  if (!root || !achievementsRoot) return;
 
   const element = (tag, className = '', text) => {
     const node = document.createElement(tag);
@@ -53,6 +54,7 @@
   const feedback = element('p', 'c55-note',
     'Buka Event & Jadwal untuk memuat pengaturan komunitas.');
   const layout = element('div', 'c55-admin-grid');
+  const achievementsFeedback = element('p', 'c55-note', 'Atur pencapaian dan aturan pemberian otomatis di sini.');
 
   function panel(title) {
     const node = element('section', 'c55-admin-card');
@@ -77,8 +79,9 @@
   const rulesList = element('div', 'c55-admin-list');
   achievementsPanel.append(rulesList);
 
-  layout.append(formPanel, proposalsPanel, participantsPanel, achievementsPanel);
+  layout.append(formPanel, proposalsPanel, participantsPanel);
   root.append(feedback, layout);
+  achievementsRoot.append(achievementsFeedback, achievementsPanel);
 
   const CORE_TYPES = {
     executor: 'text',
@@ -101,10 +104,38 @@
   let pendingEdits = false;
   let proposals = [];
   let events = [];
+  let checking = false;
+  let badgeTimer = null;
+  const pendingBadge = document.getElementById('community-event-badge');
+  const noteAchievements = (value, error = false) => {
+    achievementsFeedback.textContent = value;
+    achievementsFeedback.className = 'c55-note' + (error ? ' error' : '');
+  };
 
   function notify(text, error = false) {
     feedback.textContent = text;
     feedback.className = 'c55-note' + (error ? ' error' : '');
+  }
+  async function refreshBadge() {
+    if(!pendingBadge || document.getElementById('dashboard')?.classList.contains('hide'))return;
+    try{
+      const result=await request('/api/admin/community/events/pending-count');
+      const count=Math.max(0,Number(result.pending)||0);
+      pendingBadge.hidden=count===0;
+      pendingBadge.textContent=count>99?'99+':String(count);
+      pendingBadge.setAttribute('aria-label',count+' pengajuan event menunggu');
+      pendingBadge.closest('[data-tab]')?.classList.toggle('has-pending-event',count>0);
+    }catch{
+      // Transient offline states keep the navigation usable without inventing a count.
+      pendingBadge.hidden=true;
+    }
+  }
+  function startBadge() {
+    if(!pendingBadge || badgeTimer)return;
+    void refreshBadge();
+    badgeTimer=setInterval(()=>{if(!document.hidden)void refreshBadge();},45000);
+    document.addEventListener('visibilitychange',()=>{if(!document.hidden)void refreshBadge();});
+    window.addEventListener('focus',()=>void refreshBadge());
   }
 
   function select(options, value) {
@@ -378,7 +409,8 @@
                 reason: reason.input.value
               })
             });
-            await load({keepForm: true});
+            await loadEvents({keepForm: true});
+            await refreshBadge();
           } catch (error) {
             notify(error.message, true);
           }
@@ -477,107 +509,162 @@
   }
   eventSelect.addEventListener('change', loadParticipants);
 
+  async function recheckAll() {
+    if(checking)return;
+    checking=true;
+    let checked=0,granted=0,cursor='',completed=false;
+    try{
+      for(let page=0;page<100;page++){
+        const result=await request('/api/admin/community/achievements/recheck',{
+          method:'POST',body:JSON.stringify({afterId:cursor})
+        });
+        checked+=Number(result.checked||0);
+        granted+=Number(result.granted||0);
+        cursor=result.nextCursor||cursor;
+        noteAchievements('Memeriksa '+checked+' anggota · '+granted+' achievement baru diberikan...');
+        if(result.done){completed=true;break;}
+      }
+      noteAchievements((completed?'Pemeriksaan selesai. ':'Batas pemeriksaan tercapai, jalankan lagi untuk anggota berikutnya. ')+
+        checked+' anggota diperiksa · '+granted+' pencapaian baru diberikan.');
+      const response=await request('/api/admin/community/achievements');
+      renderRules(response.rules||[]);
+    }catch(error){noteAchievements('Pemeriksaan berhenti setelah '+checked+' anggota: '+error.message,true);}
+    finally{checking=false;}
+  }
   function renderRules(rules) {
     rulesList.replaceChildren();
-    const kinds = [
-      ['playtime_seconds', 'Playtime (detik)'],
-      ['mob_kills', 'Mob kills'],
-      ['deaths', 'Deaths'],
-      ['blocks_mined', 'Blocks mined'],
-      ['events_attended', 'Event dihadiri']
+    const help=element('div','c55-achievement-guide');
+    help.append(element('strong','','Pemberian achievement otomatis'),
+      element('p','c55-note','Atur metrik, target, dan aktifkan pemberian otomatis. Pencapaian diproses saat statistik Minecraft masuk, peserta hadir, atau profil anggota dibuka. Aturan yang baru dibuat juga bisa diterapkan kepada anggota yang sudah memenuhi syarat.'));
+    rulesList.append(help);
+    const kinds=[
+      ['playtime_hours','Playtime (jam)'],
+      ['mob_kills','Mob terbunuh'],
+      ['deaths','Jumlah kematian'],
+      ['blocks_mined','Blok ditambang'],
+      ['events_attended','Event dihadiri']
     ];
-
-    const editor = rule => {
-      const form = element('form', 'c55-mini-card');
-      const id = field('ID unik');
-      const title = field('Nama achievement');
-      const description = field('Keterangan');
-      const target = field('Target', 'number');
-
-      id.input.value = rule.id || '';
-      id.input.required = true;
-      id.input.pattern = '[a-z0-9_-]{3,60}';
-      title.input.value = rule.title || '';
-      title.input.required = true;
-      description.input.value = rule.description || '';
-      target.input.value = rule.target || '1';
-      target.input.min = '1';
-      target.input.required = true;
-
-      const metric = select(kinds, rule.metric || 'events_attended');
-      const active = element('input');
-      active.type = 'checkbox';
-      active.checked = rule.enabled !== 0;
-      const activeLabel = element('label', 'c55-field c55-check-row');
-      activeLabel.append(active, element('span', '', 'Aktif'));
-
-      const save = button('Simpan aturan', () => {}, 'primary');
-      save.type = 'submit';
-      form.append(
-        id.wrapper, title.wrapper, description.wrapper,
-        metric, target.wrapper, activeLabel, save
-      );
-      form.addEventListener('submit', async event => {
+    const toolbar=element('div','c55-admin-actions');
+    const recheck=button('↻ Periksa semua anggota',()=>void recheckAll(),'secondary');
+    toolbar.append(recheck,element('span','c55-note','Pemeriksaan menggunakan data anggota Diterima yang tercatat di D1.'));
+    rulesList.append(toolbar);
+    const editor=rule=>{
+      const form=element('form','c55-mini-card c55-achievement-editor');
+      const id=field('ID achievement');
+      const title=field('Nama achievement');
+      const description=field('Deskripsi pencapaian');
+      const target=field('Target (jam jika Playtime)','number');
+      id.input.value=rule.id||'';
+      id.input.required=true;
+      id.input.pattern='[a-z0-9_-]{3,60}';
+      if(rule.id)id.input.readOnly=true;
+      title.input.value=rule.title||'';
+      title.input.required=true;
+      description.input.value=rule.description||'';
+      target.input.value=String(rule.target??1);
+      target.input.min='1';target.input.max='1000000000';target.input.step='1';
+      target.input.required=true;
+      const metricValue=rule.metric==='playtime_seconds'?'playtime_hours':rule.metric;
+      const metric=select(kinds,metricValue||'events_attended');
+      const metricLabel=element('label','c55-field');
+      metricLabel.append(element('span','','Metrik pencapaian'),metric);
+      const updateUnit=()=>{
+        target.wrapper.querySelector('span').textContent=metric.value==='playtime_hours'?'Target playtime (jam)':'Target jumlah';
+      };
+      metric.addEventListener('change',updateUnit);
+      updateUnit();
+      const active=element('input');active.type='checkbox';active.checked=rule.enabled!==0;
+      const activeLabel=element('label','c55-field c55-check-row');
+      activeLabel.append(active,element('span','','Tampilkan achievement ini'));
+      const automatic=element('input');automatic.type='checkbox';automatic.checked=rule.auto_grant!==0;
+      const autoLabel=element('label','c55-field c55-check-row');
+      autoLabel.append(automatic,element('span','','Berikan otomatis ketika target tercapai'));
+      const metrics=element('div','c55-achievement-inputs');
+      metrics.append(id.wrapper,title.wrapper,description.wrapper,metricLabel,target.wrapper);
+      const toggles=element('div','c55-achievement-toggles');
+      toggles.append(activeLabel,autoLabel);
+      const controls=element('div','c55-admin-actions');
+      const save=button('Simpan aturan',()=>{},'primary');
+      save.type='submit';
+      controls.append(save);
+      if(rule.id){
+        const remove=button('Hapus achievement',async()=>{
+          const yes=await window.SSCNotice.confirm(
+            'Hapus achievement "'+rule.title+'" beserta riwayat pencapaiannya? Tindakan ini tidak dapat dibatalkan.',
+            {danger:true,confirmText:'Hapus achievement'});
+          if(!yes)return;
+          remove.disabled=true;
+          try{
+            await request('/api/admin/community/achievements',{
+              method:'DELETE',body:JSON.stringify({id:rule.id,confirmation:'HAPUS ACHIEVEMENT'})
+            });
+            noteAchievements('Achievement dan riwayat pemberiannya dihapus.');
+            await loadAchievements();
+          }catch(error){noteAchievements(error.message,true);remove.disabled=false;}
+        });
+        controls.append(remove);
+      }
+      const count=rule.id?element('small','c55-achievement-awarded','✓ '+(Number(rule.awarded)||0)+' anggota sudah memperoleh achievement ini'):null;
+      form.append(metrics,toggles);
+      if(count)form.append(count);
+      form.append(controls);
+      form.addEventListener('submit',async event=>{
         event.preventDefault();
-        save.disabled = true;
-        try {
-          await request('/api/admin/community/achievements', {
-            method: 'POST',
-            body: JSON.stringify({
-              id: id.input.value,
-              title: title.input.value,
-              description: description.input.value,
-              metric: metric.value,
-              target: Number(target.input.value),
-              enabled: active.checked
+        save.disabled=true;
+        try{
+          await request('/api/admin/community/achievements',{
+            method:'POST',body:JSON.stringify({
+              id:id.input.value,title:title.input.value,description:description.input.value,
+              metric:metric.value,target:Number(target.input.value),
+              enabled:active.checked,autoGrant:automatic.checked
             })
           });
-          notify('Aturan achievement berhasil disimpan.');
-        } catch (error) {
-          notify(error.message, true);
-        } finally {
-          save.disabled = false;
-        }
+          noteAchievements('Aturan berhasil disimpan. Memeriksa anggota yang sudah memenuhi syarat...');
+          await recheckAll();
+        }catch(error){noteAchievements(error.message,true);}
+        finally{save.disabled=false;}
       });
       return form;
     };
-
-    for (const rule of rules) rulesList.append(editor(rule));
-    rulesList.append(button('+ Tambah achievement', () => {
-      const newRule = editor({});
-      rulesList.prepend(newRule);
-      newRule.scrollIntoView({block: 'center', behavior: 'smooth'});
-    }));
+    for(const rule of rules)rulesList.append(editor(rule));
+    const newRuleButton=button('+ Buat achievement baru',()=>{
+      const card=editor({});
+      rulesList.insertBefore(card,newRuleButton);
+      card.scrollIntoView({block:'center',behavior:'smooth'});
+      card.querySelector('input')?.focus();
+    },'secondary');
+    rulesList.append(newRuleButton);
   }
 
-  async function load({keepForm = false} = {}) {
-    try {
-      const [eventsData, publicData, achievementsData, policyData] = await Promise.all([
+  async function loadEvents({keepForm=false}={}){
+    try{
+      const [eventsData,publicData,policyData]=await Promise.all([
         request('/api/admin/community/events'),
         request('/api/events'),
-        request('/api/admin/community/achievements'),
         request('/api/admin/community/events/form')
       ]);
-
-      proposals = eventsData.proposals || [];
-      events = publicData.events || [];
+      proposals=eventsData.proposals||[];
+      events=publicData.events||[];
       renderProposals();
       renderEventSelect();
-      renderRules(achievementsData.rules || []);
-
-      if (!keepForm || !formPolicy || !pendingEdits) {
-        formPolicy = policyData.settings;
-        formRevision = policyData.revision;
-        pendingEdits = false;
+      if(!keepForm||!formPolicy||!pendingEdits){
+        formPolicy=policyData.settings;
+        formRevision=policyData.revision;
+        pendingEdits=false;
         renderFormEditor();
       }
-      notify('Pengaturan komunitas berhasil dimuat.');
-    } catch (error) {
-      notify(error.message, true);
-    }
+      notify('Pengajuan event dan pengaturan form berhasil dimuat.');
+      await refreshBadge();
+    }catch(error){notify(error.message,true);}
   }
 
-  document.querySelector('[data-tab="events-admin"]')
-    ?.addEventListener('click', () => load({keepForm: pendingEdits}));
-  if (location.hash.includes('events-admin')) load();
+  async function loadAchievements(){
+    try{
+      const response=await request('/api/admin/community/achievements');
+      renderRules(response.rules||[]);
+      noteAchievements('Aturan siap dikelola. Perubahan langsung disimpan ke D1.');
+    }catch(error){noteAchievements(error.message,true);}
+  }
+  window.SSCircleCommunityV55Admin={loadEvents,loadAchievements,refreshBadge,startBadge};
+
 })();
