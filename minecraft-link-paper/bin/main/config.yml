@@ -1,0 +1,74 @@
+# SSCircle Player Sync Paper • hanya HTTPS dan domain, tanpa /my-sscircle atau /api.
+# Contoh: https://sscircle-testing.pages.dev
+endpoint: "https://example.pages.dev"
+
+# V10.49.1.7: instalasi baru memakai Auto Server Pairing.
+# Setujui kode server satu kali di Admin Control, tanpa menyalin secret.
+auto-pairing:
+  enabled: true
+  server-name: "SSCircle Paper"
+
+# Kunci lama SSCIRCLE_LINK_SERVER_SECRET tetap didukung.
+# Jika server-secret.txt sudah ada, mekanisme lama tetap dipakai.
+# Jika ada, file privat plugins/SSCirclePlayerSync/server-secret.txt diprioritaskan
+# di atas environment proses Paper. Kedua metode lama tetap kompatibel.
+# Instalasi BARU tanpa secret memakai token bootstrap yang dibuat otomatis
+# di server-pairing.properties, lalu OP menyetujui kode lewat Admin Control.
+# Tidak perlu menyalin token/secret ke Cloudflare untuk Auto Server Pairing.
+# Jangan pernah unggah server-secret.txt, server-pairing.properties, atau
+# credential lain ke GitHub, config.yml maupun ZIP website.
+
+# Mode campuran Java + Bedrock (tanpa Velocity).
+# Default mati agar Paper online-mode saat ini tetap aman dan tidak berubah.
+# Hanya aktifkan setelah AuthMeReloaded + PacketEvents 2.x terpasang
+# dan server staging menggunakan online-mode=false.
+# Status login Java HARUS diverifikasi melalui API resmi AuthMe.
+authme-mixed-mode:
+  enabled: false
+
+# V10.47: statistik asli Vanilla dikirim untuk akun Minecraft yang sudah
+# terhubung ke Profile. Antrean terakhir disimpan di stats-queue.properties
+# secara privat ketika Cloudflare offline; file ini jangan diunggah ke website.
+stats-sync:
+  enabled: true
+  interval-seconds: 300
+  # Saat >=30 pemain online, sinkronisasi berkala menjadi tiap 600 detik.
+  # Join/quit dan /sscircle sync tetap dapat memicu pembacaan sendiri.
+  adaptive-enabled: true
+  busy-player-threshold: 30
+  busy-interval-seconds: 600
+  # Limit 16 pembacaan kategori blok tiap tick (bukan semua pemain sekaligus).
+  block-reads-per-tick: 16
+  # Pembacaan kategori blok dilakukan tiap 2 tick, bukan setiap tick.
+  # Rentang 1-10 tick. Naikkan jika CPU server sedang sibuk.
+  capture-period-ticks: 2
+  # V10.48.5: Saat TPS 1 menit jatuh di bawah batas, kecilkan
+  # pembacaan kategori per tick; tidak menonaktifkan data statistik.
+  tps-aware-enabled: true
+  low-tps-threshold: 18.0
+  low-tps-block-reads-per-tick: 4
+  # Penulisan file antrean dilakukan asynchronous setiap 10 detik.
+  queue-flush-seconds: 10
+
+# V10.48: laporan ringkas untuk Admin Control; tidak membuka port ke Paper.
+# Plugin mengirim heartbeat keluar lewat HTTPS dan menerima permintaan sync
+# singkat dari website. 120 detik = maksimal 720 laporan/hari per server.
+sync-monitor:
+  interval-seconds: 120
+
+# V10.48.2: FastLogin/FastLoginPlus dan ProtocolLib dapat dipasang terpisah.
+# Status PREMIUM/CRACKED dibaca hanya dari sesi FastLogin yang sudah berhasil
+# login melalui AuthMe. Tanpa FastLogin, label Java tetap "belum terverifikasi".
+# Jangan mengubah online-mode maupun UUID/playerdata tanpa migrasi terencana.
+
+# V10.49.1.1: skin Paper yang aktif (termasuk AuthMe/SkinsRestorer).
+# Hanya URL texture CDN Minecraft resmi, bukan pencarian nickname/UUID offline.
+# Polling bertahap: satu pemain per 40 tick, maksimal dua permintaan HTTPS aktif.
+skin-sync:
+  enabled: true
+  # Hanya digunakan jika SSCircle Skin Bridge terpisah tidak aktif.
+  # Satu profil diperiksa setiap 60 tick; tidak memuat semua pemain sekaligus.
+  profile-scan-ticks: 60
+
+# V10.54: jangan hapus stats-queue.properties ataupun .damaged-* tanpa backup.
+# Antrean disk tetap asynchronous dan maksimum satu pekerjaan penulisan aktif.

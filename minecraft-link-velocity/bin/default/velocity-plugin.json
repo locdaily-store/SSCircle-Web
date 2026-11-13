@@ -1,0 +1,1 @@
+{"id":"sscirclelink","name":"SSCircle Account Linking","version":"10.45.0","description":"Verifies Minecraft identities for SSCircle profiles","authors":["RinxAsoy"],"dependencies":[],"main":"id.sscircle.link.SSCircleLinkPlugin"}

@@ -91,14 +91,22 @@
     $('ssc-mailbox-message').textContent=text;
     $('ssc-mailbox-message').dataset.warning=String(error);
   }
-  function updateCount(){
-    const count=items.filter(item=>!item.read).length;
-    $('ssc-mailbox-unread').hidden=count===0;
-    $('ssc-mailbox-unread').textContent=String(count);
+  let unreadCount=null;
+  // Badge pada tombol Mail Box di halaman mana pun (mis. navigasi beranda).
+  // Menulis hanya bila isinya berubah, supaya MutationObserver di bawah tidak berputar sendiri.
+  function paintBadges(){
+    if(unreadCount===null)return;
+    const text=unreadCount>99?'99+':String(unreadCount);
     document.querySelectorAll('[data-mailbox-count]').forEach(badge=>{
-      badge.hidden=count===0;
-      badge.textContent=count>99?'99+':String(count);
+      badge.hidden=unreadCount===0;
+      if(badge.textContent!==text)badge.textContent=text;
     });
+  }
+  function updateCount(){
+    unreadCount=items.filter(item=>!item.read).length;
+    $('ssc-mailbox-unread').hidden=unreadCount===0;
+    $('ssc-mailbox-unread').textContent=String(unreadCount);
+    paintBadges();
   }
   function emptyDetail(){
     current=null;
@@ -263,7 +271,7 @@
     finally{button.disabled=false}
   });
   document.addEventListener('visibilitychange',()=>{
-    if(!document.hidden&&dialog.open)void refresh(true);
+    if(!document.hidden&&(dialog.open||(loaded&&!loadFailed)))void refresh(true);
   });
   $('ssc-mailbox-select-mode').addEventListener('click',()=>{
     if(managing)return;
@@ -383,10 +391,24 @@
     void open(trigger);
   });
   window.SSCircleMailbox={open:()=>open(),refresh};
-  if(document.body.classList.contains('player-page')&&
-     !new URLSearchParams(location.search).has('ssc_theme_preview')){
-    void refresh(true);
-    if(new URLSearchParams(location.search).get('mailbox')==='1')
-      void open();
+  const params=new URLSearchParams(location.search);
+  const onPlayerPage=document.body.classList.contains('player-page');
+  const hasMailboxEntry=()=>!!document.querySelector('[data-mailbox-count],[data-open-mailbox],a[href="/mailbox"]');
+  if(!params.has('ssc_theme_preview')){
+    // Badge ikut terisi sejak halaman dibuka, tanpa menunggu Mail Box diklik. Tombolnya bisa saja
+    // dipasang skrip lain setelah widget ini, jadi dicek lagi setelah DOM, setelah load, dan saat DOM berubah.
+    let started=false;
+    const start=()=>{
+      if(started||!(onPlayerPage||hasMailboxEntry()))return;
+      started=true;void refresh(true);
+    };
+    start();
+    if(!started){
+      if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});
+      window.addEventListener('load',start,{once:true});
+    }
+    if(onPlayerPage&&params.get('mailbox')==='1')void open();
+    if(typeof MutationObserver==='function')
+      new MutationObserver(()=>{start();paintBadges();}).observe(document.body,{childList:true,subtree:true});
   }
 })();

@@ -31,7 +31,10 @@
 .ssc-mailbox-modal::backdrop{background:#070311b7;backdrop-filter:blur(6px)}
 .ssc-mailbox-head{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:17px clamp(16px,3vw,27px);border-bottom:1px solid var(--ssc-border,#62457d);position:sticky;top:0;z-index:2;background:var(--ssc-bg,#150d20)}
 .ssc-mailbox-head h2{margin:4px 0 0;font-size:clamp(21px,3vw,27px)}
-.ssc-mailbox-close{font:inherit;font-size:26px;line-height:1;background:transparent;color:var(--ssc-text,#fff);border:1px solid var(--ssc-border,#62457d);border-radius:9px;cursor:pointer;width:37px;height:37px}
+.ssc-mailbox-close{position:relative;flex:0 0 auto;font:inherit;font-size:0;line-height:0;padding:0;background:transparent;color:var(--ssc-text,#fff);border:1px solid var(--ssc-border,#62457d);border-radius:9px;cursor:pointer;width:37px;height:37px}
+/* Tanda X digambar dengan CSS agar tepat di tengah kotak, berapa pun metrik font perangkatnya. */
+.ssc-mailbox-close::before,.ssc-mailbox-close::after{content:"";position:absolute;left:50%;top:50%;width:15px;height:2px;border-radius:2px;background:currentColor;transform:translate(-50%,-50%) rotate(45deg)}
+.ssc-mailbox-close::after{transform:translate(-50%,-50%) rotate(-45deg)}
 .ssc-mailbox-content{padding:clamp(13px,2vw,22px);display:grid;gap:13px}
 .ssc-mailbox-modal .mailbox-inbox{display:grid;gap:12px}
 .ssc-mailbox-modal .mailbox-detail{min-height:260px}
