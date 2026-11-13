@@ -4982,7 +4982,7 @@ async function noticeMark(env,account,ids,action){
  }
  return true;
 }
-const noticeLinks=new Set(['','/','/events','/events.html','/rules','/rules.html','/seasons','/seasons.html','/mailbox','/my-sscircle']);
+const noticeLinks=new Set(['','/','/announcements','/announcements.html','/events','/events.html','/rules','/rules.html','/seasons','/seasons.html','/mailbox','/my-sscircle']);
 async function noticeAPI(req,env,path,method){
  if(!env.DB||!env.SESSION_SECRET)return bad('Pemberitahuan belum tersedia.',503);
  if(path.startsWith('/api/admin/')){
@@ -5073,7 +5073,7 @@ async function noticeAPI(req,env,path,method){
  return bad('Tindakan tidak tersedia.',405);
 }
 
-const SSC_RUNTIME_RELEASE='10.55.4';
+const SSC_RUNTIME_RELEASE='10.55.5';
 const SSC_RUNTIME_ISSUES=new Set();
 function sscRuntimeBindings(env){
   return {
@@ -5180,6 +5180,120 @@ async function sscGithubD1Inspect(req, env, url) {
   return response({ ok: true, database: 'D1', source: 'live', checkedAt,
     table: { name: selected, rowCount: Number(countResult?.total || 0), columns,
       columnsTruncated: (columnsResult.results || []).length > 200 } });
+}
+
+
+// Public news and announcements are intentionally separate from private Mail Box notices.
+const SSC_ANN_DEFAULTS = Object.freeze({
+  enabled: true, eyebrow: 'SSCIRCLE / LATEST STORIES',
+  title: 'Announcement & News',
+  subtitle: 'Berita server, kabar komunitas, dan cerita terbaru dari SSCircle.',
+  featuredLabel: 'SOROTAN UTAMA',
+  emptyText: 'Belum ada pengumuman yang diterbitkan.'
+});
+const SSC_ANN_ID = /^[0-9a-f-]{36}$/i;
+async function sscAnnouncementSchema(env) {
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS site_announcements (id TEXT PRIMARY KEY, title TEXT NOT NULL, excerpt TEXT NOT NULL DEFAULT '', content TEXT NOT NULL, category TEXT NOT NULL DEFAULT 'Informasi', image_url TEXT NOT NULL DEFAULT '', image_alt TEXT NOT NULL DEFAULT '', gallery_json TEXT NOT NULL DEFAULT '[]', status TEXT NOT NULL DEFAULT 'draft', pinned INTEGER NOT NULL DEFAULT 0, published_at TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)").run();
+  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_site_announcements_public ON site_announcements(status,published_at,pinned)").run();
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS site_announcement_config (id INTEGER PRIMARY KEY CHECK(id=1), settings TEXT NOT NULL, updated_at TEXT NOT NULL)").run();
+  await env.DB.prepare("INSERT OR IGNORE INTO site_announcement_config(id,settings,updated_at) VALUES(1,?,?)")
+    .bind(JSON.stringify(SSC_ANN_DEFAULTS),new Date().toISOString()).run();
+}
+function sscAnnouncementSettings(value) {
+  const v = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  return {
+    enabled: v.enabled !== false,
+    eyebrow: s(v.eyebrow ?? SSC_ANN_DEFAULTS.eyebrow,90),
+    title: s(v.title ?? SSC_ANN_DEFAULTS.title,120) || SSC_ANN_DEFAULTS.title,
+    subtitle: s(v.subtitle ?? SSC_ANN_DEFAULTS.subtitle,450),
+    featuredLabel: s(v.featuredLabel ?? SSC_ANN_DEFAULTS.featuredLabel,80),
+    emptyText: s(v.emptyText ?? SSC_ANN_DEFAULTS.emptyText,240)
+  };
+}
+function sscAnnouncementOutput(row) {
+  return {
+    id:row.id,title:row.title,excerpt:row.excerpt,content:row.content,
+    category:row.category,imageUrl:row.image_url,imageAlt:row.image_alt,
+    images:parse(row.gallery_json)||[],status:row.status,pinned:!!row.pinned,
+    publishedAt:row.published_at,createdAt:row.created_at,updatedAt:row.updated_at
+  };
+}
+function sscAnnouncementInput(v) {
+  if(!v || typeof v !== 'object' || Array.isArray(v))throw Error('Data pengumuman tidak valid.');
+  const title=s(v.title,140),content=s(v.content,12000);
+  if(!title || !content)throw Error('Judul dan isi pengumuman wajib diisi.');
+  if(String(v.title||'').trim().length>140 || String(v.content||'').trim().length>12000)
+    throw Error('Judul atau isi pengumuman terlalu panjang.');
+  if(!['draft','published'].includes(v.status))throw Error('Status pengumuman tidak valid.');
+  const images=Array.isArray(v.images)?v.images:[];
+  if(images.length>8)throw Error('Maksimal 8 gambar tambahan.');
+  const gallery=images.map((src,i)=>imageSource(src,'Gambar galeri '+(i+1)));
+  if(new Set(gallery).size!==gallery.length)throw Error('Gambar galeri tidak boleh duplikat.');
+  const imageUrl=v.imageUrl ? imageSource(v.imageUrl,'Gambar sampul') : '';
+  let publishedAt=s(v.publishedAt,48);
+  if(!publishedAt)publishedAt=new Date().toISOString();
+  if(!Number.isFinite(Date.parse(publishedAt)))throw Error('Tanggal publikasi tidak valid.');
+  publishedAt=new Date(publishedAt).toISOString();
+  return {title,content,excerpt:s(v.excerpt,360),category:s(v.category,48)||'Informasi',
+    imageUrl,imageAlt:s(v.imageAlt,180),images:gallery,status:v.status,
+    pinned:v.pinned===true,publishedAt};
+}
+async function sscAnnouncementAPI(req,env,path,method) {
+  const isAdmin = path.startsWith('/api/admin/');
+  if(isAdmin && !await admin(req,env))return bad('Akses Admin diperlukan.',401);
+  if(method!=='GET' && (!isAdmin || !sameOrigin(req)))return bad('Asal permintaan ditolak.',403);
+  if(!['GET','POST','PUT','DELETE'].includes(method))return bad('Metode tidak tersedia.',405);
+  await sscAnnouncementSchema(env);
+  const cfg=await env.DB.prepare('SELECT settings,updated_at FROM site_announcement_config WHERE id=1').first();
+  const settings=sscAnnouncementSettings(parse(cfg?.settings));
+  if(!isAdmin){
+    if(method!=='GET')return bad('Metode tidak tersedia.',405);
+    const rows=settings.enabled ? await env.DB.prepare("SELECT * FROM site_announcements WHERE status='published' AND published_at<=? ORDER BY pinned DESC,published_at DESC,created_at DESC LIMIT 80").bind(new Date().toISOString()).all() : {results:[]};
+    return J({settings,items:(rows.results||[]).map(sscAnnouncementOutput)},200,{'Cache-Control':'public, max-age=30'});
+  }
+  if(method==='GET'){
+    const rows=await env.DB.prepare('SELECT * FROM site_announcements ORDER BY created_at DESC LIMIT 200').all();
+    const counts=await env.DB.prepare("SELECT COUNT(*) total,SUM(CASE WHEN status='published' THEN 1 ELSE 0 END) published,SUM(CASE WHEN status='draft' THEN 1 ELSE 0 END) draft FROM site_announcements").first();
+    return J({settings,settingsRevision:cfg.updated_at,items:(rows.results||[]).map(sscAnnouncementOutput),
+      counts:{total:Number(counts?.total||0),published:Number(counts?.published||0),draft:Number(counts?.draft||0)}});
+  }
+  if(!await rateLimit(env,req,'site-announcements',60,900))return bad('Terlalu banyak perubahan. Coba lagi nanti.',429);
+  const input=await body(req,20000);
+  const revision=new Date().toISOString()+'-'+uid();
+  if(path==='/api/admin/announcements/settings'){
+    if(method!=='PUT')return bad('Metode tidak tersedia.',405);
+    if(input.revision!==cfg.updated_at)return bad('Pengaturan telah diubah oleh Admin lain. Muat ulang.',409);
+    const next=sscAnnouncementSettings(input.settings);
+    const result=await env.DB.prepare('UPDATE site_announcement_config SET settings=?,updated_at=? WHERE id=1 AND updated_at=?')
+      .bind(JSON.stringify(next),revision,input.revision).run();
+    if(!result.meta?.changes)return bad('Perubahan pengaturan bentrok. Muat ulang.',409);
+    return J({ok:true,settings:next,settingsRevision:revision});
+  }
+  if(path!=='/api/admin/announcements')return bad('Endpoint tidak ditemukan.',404);
+  if(method==='POST'){
+    const article=sscAnnouncementInput(input);
+    const id=uid(),now=new Date().toISOString();
+    await env.DB.prepare('INSERT INTO site_announcements(id,title,excerpt,content,category,image_url,image_alt,gallery_json,status,pinned,published_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)')
+      .bind(id,article.title,article.excerpt,article.content,article.category,article.imageUrl,article.imageAlt,
+        JSON.stringify(article.images),article.status,Number(article.pinned),article.publishedAt,now,revision).run();
+    return J({ok:true,id,updatedAt:revision},201);
+  }
+  if(!SSC_ANN_ID.test(input.id||''))return bad('ID pengumuman tidak valid.',400);
+  if(typeof input.updatedAt!=='string'||!input.updatedAt)return bad('Versi artikel belum tersedia. Muat ulang.',428);
+  if(method==='PUT'){
+    const a=sscAnnouncementInput(input);
+    const result=await env.DB.prepare('UPDATE site_announcements SET title=?,excerpt=?,content=?,category=?,image_url=?,image_alt=?,gallery_json=?,status=?,pinned=?,published_at=?,updated_at=? WHERE id=? AND updated_at=?')
+      .bind(a.title,a.excerpt,a.content,a.category,a.imageUrl,a.imageAlt,JSON.stringify(a.images),
+        a.status,Number(a.pinned),a.publishedAt,revision,input.id,input.updatedAt).run();
+    if(!result.meta?.changes)return bad('Artikel tidak ditemukan atau sudah diperbarui Admin lain.',409);
+    return J({ok:true,id:input.id,updatedAt:revision});
+  }
+  if(method==='DELETE'){
+    const result=await env.DB.prepare('DELETE FROM site_announcements WHERE id=? AND updated_at=?').bind(input.id,input.updatedAt).run();
+    if(!result.meta?.changes)return bad('Artikel tidak ditemukan atau sudah diperbarui Admin lain.',409);
+    return J({ok:true,deleted:1});
+  }
+  return bad('Metode tidak tersedia.',405);
 }
 
 async function route(req, env) {
@@ -5352,6 +5466,9 @@ async function route(req, env) {
     return env.ASSETS.fetch(req);
   if (!env.DB)
     return bad('Layanan pendaftaran sedang tidak tersedia. Silakan coba lagi nanti.', 503);
+  if ((path==='/api/announcements' && method==='GET') ||
+      ((path==='/api/admin/announcements'||path==='/api/admin/announcements/settings') && ['GET','POST','PUT','DELETE'].includes(method)))
+    return await sscAnnouncementAPI(req,env,path,method);
   if((path==='/api/minecraft/server-pair/register'||path==='/api/minecraft/server-pair/poll')&&method==='POST')
     return await minecraftPairPublic(req,env,path);
   // Minecraft claim has a dedicated HMAC + nonce protocol, never browser cookies.
