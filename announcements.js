@@ -104,12 +104,11 @@
   }
   function render() {
     const config=state.settings || fallback.settings;
-    window.SSCircleTheme?.load?.();
     $('ann-eyebrow').textContent=config.eyebrow || fallback.settings.eyebrow;
     $('ann-title').textContent=config.title || fallback.settings.title;
     $('ann-subtitle').textContent=config.subtitle || '';
     const items=Array.isArray(state.items)?state.items:[];
-    const detail=activeId ? items.find(item=>item.id===activeId) : null;
+    const detail=activeId ? (items.find(item=>item.id===activeId) || (state.article?.id===activeId?state.article:null)) : null;
     $('ann-count').textContent=items.length + ' kabar komunitas';
     $('ann-detail').hidden=!activeId;
     $('ann-list-section').hidden=!!activeId;
@@ -164,8 +163,9 @@
     });
     queueMicrotask(()=>{if(parent!==window)parent.postMessage({type:'ssc-announcement-preview-ready'},location.origin);});
   }
+  window.SSCircleTheme?.load?.();
   render();
-  fetch('/api/announcements',{cache:'no-store',credentials:'same-origin'})
+  fetch('/api/announcements'+(activeId?'?id='+encodeURIComponent(activeId):''),{cache:'no-store',credentials:'same-origin'})
     .then(r=>r.ok?r.json():Promise.reject(Error('Berita belum dapat dimuat. Coba lagi nanti.')))
     .then(v=>{if(!preview||state===fallback){state=v;render();}})
     .catch(err=>{if(!preview){$('ann-list').replaceChildren(el('p','ann-empty',err.message));}});

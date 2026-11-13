@@ -169,7 +169,7 @@ window.SSCircleAnnouncementAdmin = (() => {
     stateLabel.append(node('span','field-label','Status artikel'),stateSelect);
     const dateLabel=node('label','field-group'),dateInput=node('input');
     dateInput.type='datetime-local';dateInput.value=toLocalInput(editor.publishedAt);
-    dateInput.onchange=()=>{if(dateInput.value){editor.publishedAt=new Date(dateInput.value).toISOString();preview();}};
+    dateInput.onchange=()=>{if(dateInput.value){const d=new Date(dateInput.value);if(Number.isFinite(d.getTime())){editor.publishedAt=d.toISOString();preview();}else status('Tanggal publikasi tidak valid.',true);}};
     dateLabel.append(node('span','field-label','Tanggal & jam terbit (Waktu perangkat)'),dateInput);
     controls.append(stateLabel,dateLabel);
     root.append(controls,toggle('Jadikan sorotan utama (pin berita)',editor.pinned,v=>{editor.pinned=v;preview();}));

@@ -38,7 +38,7 @@ window.SSCircleOverview = (() => {
     const content=el('div','ssc-overview-chart-content');
     const donut=el('div','ssc-overview-donut');
     const acceptedEnd=pct(accepted),pendingEnd=Math.min(100,acceptedEnd+pct(pending));
-    donut.style.background='conic-gradient(var(--ssc-success,#b6e2ce) 0% '+acceptedEnd+'%, var(--ssc-warning,#dfc589) '+acceptedEnd+'% '+pendingEnd+'%, var(--ssc-danger,#ff9caf) '+pendingEnd+'% 100%)';
+    donut.style.background=total?'conic-gradient(var(--ssc-success,#b6e2ce) 0% '+acceptedEnd+'%, var(--ssc-warning,#dfc589) '+acceptedEnd+'% '+pendingEnd+'%, var(--ssc-danger,#ff9caf) '+pendingEnd+'% 100%)':'var(--ssc-border,#554568)';
     const center=el('div','ssc-overview-donut-middle');
     center.append(el('strong','',String(total)),el('small','','Total akun'));
     donut.append(center);
