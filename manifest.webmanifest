@@ -37,10 +37,10 @@
       "purpose": "any"
     },
     {
-      "src": "/assets/sscircle-logo.png",
+      "src": "/assets/sscircle-pwa-icon.svg",
       "sizes": "any",
-      "type": "image/png",
-      "purpose": "any"
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
     }
   ],
   "shortcuts": [

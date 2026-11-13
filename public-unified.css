@@ -27,3 +27,15 @@ body .ssc-unified-footer .home-footer-links a:hover{opacity:1;color:var(--ssc-sh
 body .ssc-site-header :is(a,button):focus-visible{outline:2px solid var(--ssc-shell-primary);outline-offset:3px}
 @media(max-width:1480px){body .ssc-site-header{display:flex;justify-content:space-between;gap:15px;position:relative}body .ssc-site-header .home-nav{display:none;position:absolute;left:14px;right:14px;top:100%;width:auto;max-width:none;align-items:stretch;flex-direction:column;gap:4px;padding:12px;border:1px solid var(--ssc-shell-stroke);border-radius:12px;background:var(--ssc-shell-bg);box-shadow:0 18px 35px #0008;z-index:90}body.home-menu-open .ssc-site-header .home-nav{display:flex}body .ssc-site-header .home-nav a{display:flex;width:100%;padding:10px 13px}body .ssc-site-header .ssc-header-actions{margin-left:auto}body .ssc-site-header .home-menu-button{display:inline-flex}}
 @media(max-width:480px){body .ssc-site-header{min-height:70px;padding:11px 13px}body .ssc-site-header .ssc-header-actions{gap:8px}body .ssc-unified-footer .ssc-footer-content{justify-content:center;text-align:center}body .ssc-unified-footer .home-footer-links{justify-content:center}}
+
+/* Header controls: predictable spacing, theme tokens and keyboard states. */
+body .ssc-site-header .home-nav{column-gap:clamp(16px,1.45vw,27px)}
+body .ssc-site-header .home-nav .home-nav-link{padding-inline:3px;transition:color .18s ease}
+body .ssc-site-header .home-nav .home-nav-link:hover,body .ssc-site-header .home-nav .home-nav-link:focus-visible{color:var(--ssc-link-hover,var(--ssc-shell-primary))}
+body .ssc-site-header .ssc-header-actions{gap:clamp(12px,1.1vw,20px)}
+body .ssc-site-header .home-nav :is(.home-nav-link,.home-nav-join).ssc-nav-active{color:var(--ssc-selected-text,var(--ssc-shell-primary));border-bottom-color:var(--ssc-primary,var(--ssc-shell-primary));background:color-mix(in srgb,var(--ssc-selected-bg,var(--ssc-shell-primary)) 17%,transparent);border-radius:7px}
+body .ssc-site-header .ssc-header-profile:hover,body .ssc-site-header .ssc-header-mailbox:hover{border-color:var(--ssc-input-focus,var(--ssc-shell-primary))}
+body .ssc-unified-footer{background:var(--ssc-footer-bg,var(--ssc-bg,var(--ssc-shell-bg)))}
+body .ssc-site-header .home-nav-join{background:var(--ssc-button-secondary,color-mix(in srgb,var(--ssc-shell-bg) 85%,var(--ssc-shell-primary)));color:var(--ssc-button-secondary-text,var(--ssc-shell-text))}
+@media(max-width:1480px){body .ssc-site-header .home-nav{gap:6px}body .ssc-site-header .home-nav .home-nav-link{padding:11px 14px}body .ssc-site-header .ssc-header-actions{gap:12px}}
+@media(max-width:480px){body .ssc-site-header .ssc-header-actions{gap:10px}}
