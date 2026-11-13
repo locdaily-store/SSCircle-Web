@@ -46,7 +46,8 @@
 
         const details = achievement.earnedAt
           ? '✓ Tercapai · ' + new Date(achievement.earnedAt).toLocaleDateString('id-ID')
-          : achievement.progress + ' / ' + achievement.target;
+          : achievement.progress + ' / ' + achievement.target +
+            (achievement.metric === 'playtime_hours' ? ' jam' : '');
         card.append(element('small', '', details));
         list.append(card);
       }

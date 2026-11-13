@@ -13,7 +13,7 @@
     <link rel="stylesheet" href="style.css?v=10.49.1.7">
     <link rel="stylesheet" href="minecraft-sync-admin.css?v=10.54.5">
     <link rel="stylesheet" href="community-admin.css?v=10.52.4">
-    <link rel="stylesheet" href="community-events.css?v=10.55.4">
+    <link rel="stylesheet" href="community-events.css?v=10.55.6">
     <link rel="stylesheet" href="announcements-admin.css?v=10.55.5">
     <link rel="stylesheet" href="overview-dashboard.css?v=10.55.5">
     <link rel="stylesheet" href="community-pages.css?v=10.37.0">
@@ -29,7 +29,7 @@
     <script src="vote-admin.js?v=10.31.0" defer></script>
     <script src="rules-admin.js?v=10.31.0" defer></script>
     <script src="events-admin.js?v=10.31.0" defer></script>
-    <script src="community-events-admin.js?v=10.55.4" defer></script>
+    <script src="community-events-admin.js?v=10.55.6" defer></script>
     <script src="notification-admin.js?v=10.53.4" defer></script>
     <link rel="stylesheet" href="notification-center.css?v=10.53.4">
     <script src="seasons-admin.js?v=10.34.0" defer></script>
@@ -103,6 +103,8 @@
                 <h2 id="sidebar-group-1">KONTEN &amp; KOMUNITAS</h2>
                 <button type="button" class="side-link" data-tab="homepage"><span class="side-icon" aria-hidden="true">⌂</span><span>Homepage</span></button>
                 <button type="button" class="side-link" data-tab="events-admin"><span class="side-icon" aria-hidden="true">▦</span><span>Event &amp; Jadwal</span></button>
+                <button type="button" class="side-link" data-tab="community-events-admin"><span class="side-icon" aria-hidden="true">✉</span><span>Pengajuan Event</span><span id="community-event-badge" class="nav-count community-event-badge" hidden>0</span></button>
+                <button type="button" class="side-link" data-tab="achievements-admin"><span class="side-icon" aria-hidden="true">✦</span><span>Achievement</span></button>
                 <button type="button" class="side-link" data-tab="announcements-admin"><span class="side-icon" aria-hidden="true">✦</span><span>Announcement</span></button>
                 <button type="button" class="side-link" data-tab="notifications-admin"><span class="side-icon" aria-hidden="true">♢</span><span>Pusat Notifikasi</span></button>
                 <button type="button" class="side-link" data-tab="seasons-admin"><span class="side-icon" aria-hidden="true">★</span><span>Season &amp; Sejarah</span></button>
@@ -323,7 +325,24 @@
                   <p class="field-help" id="events-admin-preview-status" role="status">Memuat pratinjau event...</p>
                 </aside>
               </div>
-              <section id="community55-admin-root" class="c55-admin-root" aria-label="Persetujuan event dan achievement"></section>
+            </section>
+            <!-- Pengajuan kegiatan member: terpisah dari kalender umum. -->
+            <section id="community-events-admin" class="tab-page hide">
+              <div class="dashboard-heading">
+                <div class="overline">SSCIRCLE / MEMBER EVENTS</div>
+                <h1>Pengajuan Event<span class="dot-accent">.</span></h1>
+                <p>Tinjau usulan anggota, atur formulir pengajuan, dan kelola peserta serta check-in.</p>
+              </div>
+              <div id="community55-admin-root" class="c55-admin-root" aria-label="Formulir dan pengajuan event komunitas"></div>
+            </section>
+            <!-- Achievement memiliki pusat konfigurasi tersendiri. -->
+            <section id="achievements-admin" class="tab-page hide">
+              <div class="dashboard-heading">
+                <div class="overline">SSCIRCLE / MEMBER ACHIEVEMENTS</div>
+                <h1>Achievement<span class="dot-accent">.</span></h1>
+                <p>Atur target dalam jam atau jumlah aktivitas, aktifkan pemberian otomatis, dan periksa pencapaian pemain.</p>
+              </div>
+              <div id="community55-achievements-admin-root" class="c55-admin-root" aria-label="Aturan achievement otomatis"></div>
             </section>
             <!-- Season Archive & Hall of Fame dengan editor ringkas dan live preview. -->
             <section id="seasons-admin" class="tab-page hide">
