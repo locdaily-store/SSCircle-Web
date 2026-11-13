@@ -388,6 +388,7 @@ const HOME_DEFAULTS = {
   homeAboutTags: [{ symbol: '✧', text: 'Survival Community' }, { symbol: '✧', text: 'Java & Bedrock' }, { symbol: '✧', text: 'Petualangan Bersama' }],
   homeGalleryEyebrow: 'MOMENTS & MEMORIES',
   homeGalleryTitle: 'SSCircle Gallery',
+  homeGalleryLimit: 6,
   homeGalleryText: 'Sejumlah sudut dan kenangan dari perjalanan komunitas kami.',
   galleryPageEnabled: true,
   galleryPageTitle: 'SSCircle Gallery',
@@ -1326,6 +1327,10 @@ function settingsValid(input) {
   const sizesProfile = ['compact', 'normal', 'wide'];
   out.homeProfileCardSize = sizesProfile.includes(input.homeProfileCardSize)
     ? input.homeProfileCardSize : 'normal';
+  const homeGalleryLimit = input.homeGalleryLimit === undefined ? HOME_DEFAULTS.homeGalleryLimit : Number(input.homeGalleryLimit);
+  if (!Number.isInteger(homeGalleryLimit) || homeGalleryLimit < 1 || homeGalleryLimit > 80)
+    throw Error('Jumlah foto Homepage harus berupa angka antara 1 dan 80.');
+  out.homeGalleryLimit = homeGalleryLimit;
   const gallery = input.homeGallery === undefined ? DEFAULT_GALLERY : input.homeGallery;
   if (!Array.isArray(gallery) || gallery.length > 80)
     throw Error('Galeri maksimal 80 gambar.');
