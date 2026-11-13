@@ -10,7 +10,8 @@
   ];
   const route = path => normalizePath(path).replace(/\.html$/,'');
   const isActive = href => {
-    const u=new URL(href,location.origin),target=route(u.pathname),here=route(page);
+    const base=/^https?:\/\//.test(location.origin||'')?location.origin:'https://sscircle.pages.dev';
+    const u=new URL(href,base),target=route(u.pathname),here=route(page);
     if(target==='/')return here==='/' && location.hash===u.hash;
     if(target==='/my-sscircle')return here==='/my-sscircle'||here==='/mailbox';
     return target===here;
