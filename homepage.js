@@ -40,6 +40,7 @@
     homeAboutTags: [{ symbol: '✧', text: 'Survival Community' }, { symbol: '✧', text: 'Java & Bedrock' }, { symbol: '✧', text: 'Petualangan Bersama' }],
     homeGalleryEyebrow: 'MOMENTS & MEMORIES',
     homeGalleryTitle: 'SSCircle Gallery',
+    homeGalleryLimit: 6,
     homeGalleryText: 'Sejumlah sudut dan kenangan dari perjalanan komunitas kami.',
     homeProcessTitle: 'Join our Circle',
     homeProcessText: 'Daftar, tunggu hasil seleksi, lalu mulai cerita barumu di server.',
@@ -274,7 +275,11 @@
     }
   }
   function renderGallery(s) {
-    gallery = Array.isArray(s.homeGallery) && s.homeGallery.length ? s.homeGallery : builtInGallery;
+    const collection = Array.isArray(s.homeGallery) ? s.homeGallery : builtInGallery;
+    const photos = collection.filter(item => item && item.src);
+    const requested = Number(s.homeGalleryLimit);
+    const limit = Number.isInteger(requested) && requested >= 1 && requested <= 80 ? requested : 6;
+    gallery = photos.slice(0, limit);
     const grid = $('home-gallery-grid');
     if (!grid)
       return;
