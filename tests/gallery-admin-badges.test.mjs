@@ -69,3 +69,15 @@ test('Gallery editor has a clear sequence and current asset versions',()=>{
   assert.match(html,/gallery-admin\.css\?v=10\.57\.1/);
   assert.match(source('gallery-admin.js'),/aria-pressed/);
 });
+
+
+test('Homepage Gallery has its own limited controls and keeps the complete Gallery collection',()=>{
+  const homepage=source('homepage.js'),admin=source('homepage-admin.js'),gallery=source('gallery.js');
+  assert.match(homepage,/homeGalleryLimit: 6/);
+  assert.match(homepage,/gallery = photos\.slice\(0, limit\)/);
+  assert.match(admin,/Gallery Homepage/);
+  assert.match(admin,/homeGalleryLimit/);
+  assert.match(admin,/gallery: \[homepageGallery\]/);
+  assert.match(admin,/data-tab="gallery-admin"/);
+  assert.match(gallery,/items=\(Array\.isArray\(s\.homeGallery\)/);
+});
