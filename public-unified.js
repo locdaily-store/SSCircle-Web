@@ -56,7 +56,7 @@
       profileFallback.hidden=false;
       const account=Array.isArray(accounts)?(accounts.find(a=>a?.isPrimary)||accounts[0]):null;
       if(!account||typeof account.id!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(account.id))return;
-      const url='/api/player/minecraft/skin/'+encodeURIComponent(account.id);
+      const url=(typeof account.socialSkinUrl==='string' && /^\/api\/player\/social\/skin\?account=[0-9a-f-]{36}$/i.test(account.socialSkinUrl))\n        ? account.socialSkinUrl : '/api/player/minecraft/skin/'+encodeURIComponent(account.id);
       const skin=new Image();
       skin.onload=()=>{
         if(ticket!==avatarRequest||skin.naturalWidth!==64||![32,64].includes(skin.naturalHeight))return;
