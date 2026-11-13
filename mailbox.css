@@ -52,3 +52,10 @@
 .mailbox-empty{padding:15px;background:color-mix(in srgb,var(--ssc-primary,#b58ade) 7%,transparent);border-radius:10px}
 @media(max-width:800px){.mailbox-grid{grid-template-columns:minmax(0,1fr)}.mailbox-hero-icon{position:absolute;right:-15px;top:-12px;opacity:.3}}
 @media(max-width:450px){.mailbox-main{gap:12px}.mailbox-hero{border-radius:15px;padding:20px}.mailbox-surface{border-radius:13px;padding:15px}.mailbox-request>button{width:100%}.mailbox-grid{gap:12px}.mailbox-secret-row .mailbox-primary{width:100%}}
+
+/* Call-to-action for approved applicants; usable in modal and standalone Mail Box. */
+.mailbox-accepted-discord{display:grid;gap:13px;margin:17px 0 20px;padding:20px;border:1px solid var(--ssc-border,var(--line));border-radius:15px;background:color-mix(in srgb,var(--ssc-primary,var(--purple)) 9%,var(--ssc-panel,var(--panel)))}
+.mailbox-accepted-discord[hidden]{display:none!important}
+.mailbox-accepted-discord p{margin:0;line-height:1.7;color:var(--ssc-text,var(--text));white-space:pre-line;overflow-wrap:anywhere}
+.mailbox-accepted-discord-button{display:inline-flex;align-items:center;justify-content:center;text-align:center;max-width:100%;min-height:44px;min-width:0;padding:12px 18px;border-radius:12px;overflow-wrap:anywhere;text-decoration:none}
+@media(max-width:580px){.mailbox-accepted-discord{padding:15px}.mailbox-accepted-discord-button{width:100%}}

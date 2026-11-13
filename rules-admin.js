@@ -96,6 +96,25 @@ window.SSCircleRulesAdmin = (() => {
     ]) settings.append(field(label, s[key], v => { s[key] = v; }, multiline, max));
     root.append(settings);
 
+    const inboxSettings=el('section','panel rules-admin-panel');
+    inboxSettings.append(el('h2','','Mail Box · Status Diterima & Discord'),
+      el('p','field-help','Teks pesan saat pendaftar diterima dan tombol menuju Discord. IP Address server Minecraft tersedia di Discord, bukan ditampilkan secara publik pada website. Tautan undangan mengikuti Atur Homepage → Discord.'));
+    const discordToggle=el('label','rules-admin-switch');
+    const discordEnabled=el('input');
+    discordEnabled.type='checkbox';
+    discordEnabled.checked=s.mailboxAcceptedDiscordEnabled!==false;
+    discordEnabled.onchange=()=>{s.mailboxAcceptedDiscordEnabled=discordEnabled.checked;mark();};
+    discordToggle.append(discordEnabled,el('span','','Tampilkan tombol Discord di Mail Box saat diterima'));
+    inboxSettings.append(discordToggle);
+    for(const [key,label,multiline,max] of [
+      ['mailboxAcceptedTitle','Judul pemberitahuan diterima',false,120],
+      ['mailboxAcceptedBody','Isi pesan status diterima',true,1200],
+      ['mailboxAcceptedDiscordNote','Penjelasan lokasi IP Address server di Discord',true,600],
+      ['mailboxAcceptedDiscordButton','Teks tombol bergabung ke Discord',false,100]
+    ])inboxSettings.append(field(label,s[key],value=>{s[key]=value;},multiline,max));
+    inboxSettings.append(el('p','field-help','Perubahan isi pesan berlaku untuk pemberitahuan baru. Teks penjelasan dan tombol Discord pada pemberitahuan diterima yang lama juga mengikuti pengaturan terbaru.'));
+    root.append(inboxSettings);
+
     const sections = el('section', 'panel rules-admin-panel');
     const toolbar = el('div', 'rules-admin-toolbar');
     toolbar.append(el('div', '', 'Kategori & daftar aturan'));

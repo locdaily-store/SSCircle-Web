@@ -69,6 +69,15 @@
     $('mailbox-detail-title').textContent=item.title;
     $('mailbox-detail-time').textContent=fmt(item.createdAt);
     $('mailbox-detail-body').textContent=item.content;
+    const cta=item.discordCTA;
+    const validDiscord=typeof cta?.url==='string' && /^https:\/\/(?:discord\.gg\/[A-Za-z0-9-]{3,}|discord\.com\/invite\/[A-Za-z0-9-]{3,})\/?$/.test(cta.url);
+    $('mailbox-accepted-discord').hidden=!validDiscord;
+    if(validDiscord){
+      $('mailbox-accepted-discord-note').textContent=String(cta.note||'');
+      const join=$('mailbox-accepted-discord-button');
+      join.textContent=String(cta.label||'Gabung SSCircle Community')+' ↗';
+      join.href=cta.url;
+    }
     const link=$('mailbox-detail-link');
     const allowed=new Set(['/','/events.html','/events','/rules.html','/rules','/seasons','/seasons.html','/mailbox','/my-sscircle']);
     link.hidden=!allowed.has(item.link);
