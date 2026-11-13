@@ -5192,12 +5192,20 @@ const SSC_ANN_DEFAULTS = Object.freeze({
   emptyText: 'Belum ada pengumuman yang diterbitkan.'
 });
 const SSC_ANN_ID = /^[0-9a-f-]{36}$/i;
-async function sscAnnouncementSchema(env) {
-  await env.DB.prepare("CREATE TABLE IF NOT EXISTS site_announcements (id TEXT PRIMARY KEY, title TEXT NOT NULL, excerpt TEXT NOT NULL DEFAULT '', content TEXT NOT NULL, category TEXT NOT NULL DEFAULT 'Informasi', image_url TEXT NOT NULL DEFAULT '', image_alt TEXT NOT NULL DEFAULT '', gallery_json TEXT NOT NULL DEFAULT '[]', status TEXT NOT NULL DEFAULT 'draft', pinned INTEGER NOT NULL DEFAULT 0, published_at TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)").run();
-  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_site_announcements_public ON site_announcements(status,published_at,pinned)").run();
-  await env.DB.prepare("CREATE TABLE IF NOT EXISTS site_announcement_config (id INTEGER PRIMARY KEY CHECK(id=1), settings TEXT NOT NULL, updated_at TEXT NOT NULL)").run();
-  await env.DB.prepare("INSERT OR IGNORE INTO site_announcement_config(id,settings,updated_at) VALUES(1,?,?)")
-    .bind(JSON.stringify(SSC_ANN_DEFAULTS),new Date().toISOString()).run();
+const SSC_ANN_SCHEMA_CACHE = new WeakMap();
+function sscAnnouncementSchema(env) {
+  let pending=SSC_ANN_SCHEMA_CACHE.get(env.DB);
+  if(!pending){
+    pending=(async()=>{
+      await env.DB.prepare("CREATE TABLE IF NOT EXISTS site_announcements (id TEXT PRIMARY KEY, title TEXT NOT NULL, excerpt TEXT NOT NULL DEFAULT '', content TEXT NOT NULL, category TEXT NOT NULL DEFAULT 'Informasi', image_url TEXT NOT NULL DEFAULT '', image_alt TEXT NOT NULL DEFAULT '', gallery_json TEXT NOT NULL DEFAULT '[]', status TEXT NOT NULL DEFAULT 'draft', pinned INTEGER NOT NULL DEFAULT 0, published_at TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)").run();
+      await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_site_announcements_public ON site_announcements(status,published_at,pinned)").run();
+      await env.DB.prepare("CREATE TABLE IF NOT EXISTS site_announcement_config (id INTEGER PRIMARY KEY CHECK(id=1), settings TEXT NOT NULL, updated_at TEXT NOT NULL)").run();
+      await env.DB.prepare("INSERT OR IGNORE INTO site_announcement_config(id,settings,updated_at) VALUES(1,?,?)")
+        .bind(JSON.stringify(SSC_ANN_DEFAULTS),new Date().toISOString()).run();
+    })().catch(error=>{SSC_ANN_SCHEMA_CACHE.delete(env.DB);throw error;});
+    SSC_ANN_SCHEMA_CACHE.set(env.DB,pending);
+  }
+  return pending;
 }
 function sscAnnouncementSettings(value) {
   const v = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
@@ -5248,8 +5256,19 @@ async function sscAnnouncementAPI(req,env,path,method) {
   const settings=sscAnnouncementSettings(parse(cfg?.settings));
   if(!isAdmin){
     if(method!=='GET')return bad('Metode tidak tersedia.',405);
-    const rows=settings.enabled ? await env.DB.prepare("SELECT * FROM site_announcements WHERE status='published' AND published_at<=? ORDER BY pinned DESC,published_at DESC,created_at DESC LIMIT 80").bind(new Date().toISOString()).all() : {results:[]};
-    return J({settings,items:(rows.results||[]).map(sscAnnouncementOutput)},200,{'Cache-Control':'public, max-age=30'});
+    const now=new Date().toISOString();
+    const rows=settings.enabled ? await env.DB.prepare("SELECT * FROM site_announcements WHERE status='published' AND published_at<=? ORDER BY pinned DESC,published_at DESC,created_at DESC LIMIT 80").bind(now).all() : {results:[]};
+    const items=(rows.results||[]).map(sscAnnouncementOutput);
+    const requested=new URL(req.url).searchParams.get('id')||'';
+    let article=null;
+    if(settings.enabled && SSC_ANN_ID.test(requested)){
+      article=items.find(item=>item.id===requested)||null;
+      if(!article){
+        const found=await env.DB.prepare("SELECT * FROM site_announcements WHERE id=? AND status='published' AND published_at<=? LIMIT 1").bind(requested,now).first();
+        if(found)article=sscAnnouncementOutput(found);
+      }
+    }
+    return J({settings,items,article},200,{'Cache-Control':'public, max-age=30'});
   }
   if(method==='GET'){
     const rows=await env.DB.prepare('SELECT * FROM site_announcements ORDER BY created_at DESC LIMIT 200').all();
@@ -6026,6 +6045,14 @@ async function route(req, env) {
         return bad('Maksimal 50 ID gambar yang valid.', 400);
       const row = await env.DB.prepare('SELECT settings,pages FROM form_config WHERE id=1').first();
       const active = activePublicMedia(row);
+      // Also protect photos referenced by Announcement from media cleanup.
+      await sscAnnouncementSchema(env);
+      const announcementMedia=await env.DB.prepare('SELECT image_url,gallery_json FROM site_announcements LIMIT 500').all();
+      for(const post of announcementMedia.results||[]){
+        for(const src of [post.image_url,...(parse(post.gallery_json)||[])])
+          if(typeof src==='string' && /^\/api\/media\/[0-9a-f-]{36}$/.test(src))
+            active.add(src.split('/').pop());
+      }
       const targets = [];
       for (const id of input.ids) {
         if (active.has(id))
