@@ -1,7 +1,7 @@
 /* Shared public header and footer. Admin Control keeps its dedicated shell. */
 'use strict';
 (() => {
-  const page = location.pathname.replace(/\\/$/, '') || '/';
+  const page = location.pathname.replace(new RegExp('/$'), '') || '/';
   const links = [
     ['Beranda','/'],['Tentang','/#tentang'],['Galeri','/gallery.html'],
     ['Event','/events.html'],['Announcement','/announcements.html'],
@@ -9,7 +9,7 @@
     ['Profile','/my-sscircle']
   ];
   const nav = () => links.map(([name,href]) => {
-    const path = new URL(href,location.origin).pathname.replace(/\\/$/,'') || '/';
+    const path = new URL(href,location.origin).pathname.replace(new RegExp('/$'),'') || '/';
     const active = path === page && (!href.includes('#') || location.hash === '#tentang');
     return '<a class="home-nav-link'+(active?' ssc-nav-active':'')+'" href="'+href+'"'+(active?' aria-current="page"':'')+'>'+name+'</a>';
   }).join('') + '<a class="home-nav-join" href="/registration.html">Pendaftaran <span aria-hidden="true">↗</span></a>';
