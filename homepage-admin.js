@@ -1375,6 +1375,29 @@ window.SSCircleHomeAdmin = (() => {
       gallery.classList.remove('is-collapsed');
       gallery.querySelector('.home-admin-section-toggle')?.setAttribute('aria-expanded','true');
     }
+    // Homepage shows a curated subset; full photo/category editing lives in Gallery.
+    const homepageGallery = section('Gallery Homepage', 'Tentukan apakah galeri tampil dan berapa foto yang ditampilkan. Kelola koleksi lengkap di menu Gallery.');
+    toggle(homepageGallery, 'homeShowGallery', 'Tampilkan Gallery di Homepage', 'Nonaktifkan untuk menyembunyikan bagian Gallery dari Homepage tanpa menghapus foto.');
+    const limitField = node('label', 'field-group');
+    limitField.append(node('span', 'field-label', 'Jumlah foto yang tampil di Homepage'));
+    const limitSelect = node('select');
+    limitSelect.setAttribute('aria-label', 'Batas jumlah foto Gallery di Homepage');
+    for (let n = 1; n <= 80; n++) {
+      const option = node('option', '', n + ' foto');
+      option.value = String(n);
+      limitSelect.append(option);
+    }
+    const configuredLimit = Number(state.settings.homeGalleryLimit);
+    limitSelect.value = String(Number.isInteger(configuredLimit) && configuredLimit >= 1 && configuredLimit <= 80 ? configuredLimit : 6);
+    limitSelect.onchange = () => { state.settings.homeGalleryLimit = Number(limitSelect.value); changed(); };
+    limitField.append(limitSelect, node('small', 'field-help', 'Foto ditampilkan berdasarkan urutan di koleksi Gallery. Batas ini hanya berlaku untuk Homepage; halaman Gallery tetap menampilkan seluruh foto.'));
+    homepageGallery.append(limitField);
+    const photoCount = node('p', 'field-help', 'Total foto tersimpan: ' + state.settings.homeGallery.length + ' dari maksimal 80 foto.');
+    homepageGallery.append(photoCount);
+    const openFullGallery = node('button', 'button secondary', 'Kelola semua foto dan kategori di Gallery ↗');
+    openFullGallery.type = 'button';
+    openFullGallery.onclick = () => document.querySelector('[data-tab="gallery-admin"]')?.click();
+    homepageGallery.append(openFullGallery);
     const upcoming = section('Upcoming Events · Jadwal Homepage', 'Kartu event terdekat otomatis mengambil data dari Atur Event & Jadwal. Tidak perlu menambahkan jadwal dua kali.');
     toggle(upcoming, 'homeUpcomingEnabled', 'Tampilkan Upcoming Events di Homepage', 'Halaman Event khusus tetap tersedia meskipun kartu di Homepage disembunyikan.');
     formGrid(upcoming, [
@@ -1517,7 +1540,7 @@ window.SSCircleHomeAdmin = (() => {
     window.SSCircleHomepageBuilder?.render(data, changed, {
       intro: [basics, welcome, video],
       about: [about],
-      gallery: [],
+      gallery: [homepageGallery],
       upcoming: [upcoming],
       process: [process],
       community: [community],
