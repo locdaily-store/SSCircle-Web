@@ -1981,6 +1981,10 @@ function activePublicMedia(row) {
   for (const gallery of settings.homeGallery || [])
     if (typeof gallery.src === 'string' && gallery.src.startsWith('/api/media/'))
       active.add(gallery.src.split('/').pop());
+  for (const category of settings.howToPlay?.categories || [])
+    for (const step of category.steps || [])
+      if (typeof step.image === 'string' && /^\/api\/media\/[0-9a-f-]{36}$/i.test(step.image))
+        active.add(step.image.split('/').pop());
   if (typeof settings.homePoster === 'string' && settings.homePoster.startsWith('/api/media/'))
     active.add(settings.homePoster.split('/').pop());
   for (const link of settings.homeSocialLinks || SOCIAL_DEFAULTS) {
@@ -6049,6 +6053,7 @@ async function route(req, env, ctx) {
           settings.heroMediaId,
           settings.introLogoMediaId,
           ...settings.homeGallery.map(g => g.src.startsWith('/api/media/') ? g.src.split('/').pop() : '').filter(Boolean),
+          ...(settings.howToPlay?.categories || []).flatMap(category => (category.steps || []).map(step => step.image).filter(src => typeof src === 'string' && src.startsWith('/api/media/')).map(src => src.split('/').pop())),
           settings.homePoster.startsWith('/api/media/') ? settings.homePoster.split('/').pop() : '',
           settings.homeDonateIcon?.startsWith('/api/media/') ? settings.homeDonateIcon.split('/').pop() : '',
           settings.homeVotingImage?.startsWith('/api/media/') ? settings.homeVotingImage.split('/').pop() : '',
