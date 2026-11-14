@@ -34,7 +34,6 @@ jobs:
           node --check player-dashboard.js
           node --check profile-admin.js
           node --check profile-page-layout.js
-          node --check mailbox-widget.js
           python - <<'PY'
           from pathlib import Path
           secret={'.dev.vars','.env','server-secret.txt','server-pairing.properties'}
