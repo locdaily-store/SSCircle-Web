@@ -15,6 +15,7 @@ window.SSCircleShell = (() => {
     if (anchor) anchor.after(link);
     else nav.insertBefore(link,nav.querySelector('.home-nav-join'));
   }
+  if(nav && !nav.querySelector('a[href^="how-to-play"]')){const a=document.createElement('a');a.className='home-nav-link';a.href='how-to-play.html';a.textContent='How to Play';nav.append(a);}
   const footer = document.querySelector('.home-footer-links');
   if (footer && !footer.querySelector('a[href^="announcements"]')) {
     const link = document.createElement('a');
@@ -23,6 +24,7 @@ window.SSCircleShell = (() => {
     if (anchor) anchor.after(link);
     else footer.append(link);
   }
+  if (footer && !footer.querySelector('a[href^="how-to-play"]')){const a=document.createElement('a');a.href='how-to-play.html';a.textContent='How to Play';footer.append(a);}
   if (menu && nav) {
     menu.addEventListener('click', () => {
       const open = document.body.classList.toggle('home-menu-open');
