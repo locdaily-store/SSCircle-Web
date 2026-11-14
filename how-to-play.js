@@ -43,7 +43,7 @@ const defaults={enabled:true,title:'How to Play',subtitle:'Getting Started',cate
 window.SSCircleHowToPlayDefaults=defaults;
 const root=document.getElementById('howto-root');if(!root)return;
 const $=id=>document.getElementById(id);
-let data=defaults,selected='registration',stepIndex=0,search='';
+let data=defaults,selected='registration',stepIndex=0,search='',previewApplied=false;
 const el=(tag,cls,txt)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(txt!==undefined)n.textContent=txt;return n;};
 const safeLink=url=>typeof url==='string'&&(/^(?:registration|status|my-sscircle|rules|events|how-to-play)\.html(?:#[a-z0-9-]+)?$/i.test(url)||/^https:\/\/(?:discord\.gg|discord\.com)\/[a-zA-Z0-9/-]+$/.test(url));
 function render(){
@@ -73,8 +73,9 @@ $('howto-step-count').textContent=(stepIndex+1)+' / '+c.steps.length;
 $('howto-search').addEventListener('input',event=>{search=event.target.value.trim().toLowerCase();render();});
 $('howto-prev').onclick=()=>{stepIndex=Math.max(0,stepIndex-1);render();};
 $('howto-next').onclick=()=>{const c=data.categories.find(x=>x.id===selected);if(stepIndex<c.steps.length-1){stepIndex++;render();}else{const i=data.categories.indexOf(c);if(i<data.categories.length-1){selected=data.categories[i+1].id;stepIndex=0;render();}else location.hash='#faq';}};
+window.addEventListener('message',event=>{if(event.origin!==location.origin||event.source!==parent||event.data?.type!=='ssc-howto-preview'||!new URLSearchParams(location.search).has('ssc_theme_preview'))return;const incoming=event.data.howToPlay;if(!incoming||!Array.isArray(incoming.categories))return;previewApplied=true;data={...defaults,...incoming};selected=data.categories[0]?.id||'';stepIndex=0;render();const list=$('howto-faq-list');list.replaceChildren();for(const item of data.faq||[]){const d=el('details');d.append(el('summary','',item.question),el('p','',item.answer));list.append(d);}});
 async function init(){
-try{const r=await window.SSCircle?.getForm?.();if(r?.settings){const raw=r.settings.howToPlay;data=raw&&Array.isArray(raw.categories)?{...defaults,...raw}:defaults;window.SSCircleTheme?.apply?.(r.settings);const discord=r.settings.homeDiscordUrl;if(/^https:\/\/(?:discord\.gg|discord\.com)\//.test(discord||''))$('howto-discord').href=discord;}}catch{}
+try{const r=await window.SSCircle?.getForm?.();if(r?.settings){const raw=r.settings.howToPlay;if(!previewApplied)data=raw&&Array.isArray(raw.categories)?{...defaults,...raw}:defaults;window.SSCircleTheme?.apply?.(r.settings);const discord=r.settings.homeDiscordUrl;if(/^https:\/\/(?:discord\.gg|discord\.com)\//.test(discord||''))$('howto-discord').href=discord;}}catch{}
 if(data.enabled===false){root.replaceChildren(el('p','','Panduan sedang dinonaktifkan oleh pengelola.'));return;}
 const category=new URLSearchParams(location.search).get('category');if(data.categories.some(c=>c.id===category))selected=category;
 render();const host=$('howto-faq-list');host.replaceChildren();for(const item of data.faq||[]){const details=el('details');details.append(el('summary','',item.question),el('p','',item.answer));host.append(details);}
