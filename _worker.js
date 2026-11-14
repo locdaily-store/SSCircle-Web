@@ -1327,6 +1327,43 @@ function settingsValid(input) {
   const sizesProfile = ['compact', 'normal', 'wide'];
   out.homeProfileCardSize = sizesProfile.includes(input.homeProfileCardSize)
     ? input.homeProfileCardSize : 'normal';
+  // Publishable Getting Started content and private administrator draft use the same validation.
+  const validateGuide = (value, label) => {
+    if(value===undefined || value===null)return null;
+    if(!value || typeof value!=='object' || Array.isArray(value))throw Error(label+' tidak valid.');
+    const sections=value.sections;
+    const faq=value.faq;
+    if(!Array.isArray(sections) || sections.length<1 || sections.length>12)
+      throw Error(label+' memerlukan 1–12 kategori.');
+    if(!Array.isArray(faq) || faq.length>30)
+      throw Error(label+' maksimal 30 FAQ.');
+    const ids=new Set();
+    const guideSections=sections.map(section=>{
+      const id=s(section?.id,64), title=s(section?.title,110);
+      if(!/^[a-z0-9_-]{2,64}$/i.test(id)||ids.has(id)||!title)
+        throw Error(label+' memiliki kategori atau ID duplikat.');
+      ids.add(id);
+      if(!Array.isArray(section?.steps)||!section.steps.length||section.steps.length>20)
+        throw Error(label+' membutuhkan 1–20 langkah per kategori.');
+      return {id,title,summary:s(section.summary,260),icon:s(section.icon,16),steps:section.steps.map(step=>{
+        const title=s(step?.title,120),text=s(step?.text,1500);
+        if(!title||!text)throw Error('Langkah tutorial harus mempunyai judul dan deskripsi.');
+        const href=s(step?.href,350),video=s(step?.video,250),image=s(step?.image,700);
+        if(href && !(/^\/(?!\/)[a-z0-9/_#.?=&%-]+$/i.test(href)||/^https:\/\/(discord\.gg|discord\.com)\/[a-z0-9/_?=&%-]+$/i.test(href)))
+          throw Error('Tautan tutorial harus halaman SSCircle atau Discord resmi.');
+        if(video && !/^https:\/\/(www\.)?(youtube\.com|youtu\.be)\//i.test(video))
+          throw Error('Video tutorial harus URL YouTube HTTPS.');
+        if(image)imageSource(image,'Gambar tutorial');
+        return {title,text,href,linkLabel:s(step?.linkLabel,90),video,image};
+      })};
+    });
+    return {enabled:value.enabled!==false,title:s(value.title,110)||'How to Play',
+      subtitle:s(value.subtitle,600),sections:guideSections,
+      faq:faq.map(entry=>({question:s(entry?.question,200),answer:s(entry?.answer,1200)}))
+        .filter(entry=>entry.question&&entry.answer)};
+  };
+  out.gettingStarted=validateGuide(input.gettingStarted,'Panduan publik');
+  out.gettingStartedDraft=validateGuide(input.gettingStartedDraft,'Draft panduan');
   const homeGalleryLimit = input.homeGalleryLimit === undefined ? HOME_DEFAULTS.homeGalleryLimit : Number(input.homeGalleryLimit);
   if (!Number.isInteger(homeGalleryLimit) || homeGalleryLimit < 1 || homeGalleryLimit > 80)
     throw Error('Jumlah foto Homepage harus berupa angka antara 1 dan 80.');
@@ -5719,6 +5756,7 @@ async function route(req, env, ctx) {
   if (path === '/api/form' && method === 'GET') {
     const f = formFrom(await env.DB.prepare('SELECT * FROM form_config WHERE id=1').first());
     delete f.settings.homeVotingVotes;
+    delete f.settings.gettingStartedDraft;
     // Data draft Season Archive hanya untuk admin; ranking lama tetap dapat dipakai di Homepage.
     // Juga cegah metadata arsip bocor melalui API publik saat halaman dinonaktifkan.
     f.settings.homeLeaderboardSeasons = (f.settings.homeLeaderboardSeasons || []).map(season =>
