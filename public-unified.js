@@ -78,12 +78,19 @@
       const mobile=h.querySelector('[data-nav-total]');
       if(mobile){mobile.hidden=total===0;mobile.textContent=total>99?'99+':String(total);mobile.setAttribute('aria-label',total+' pembaruan baru');menu.setAttribute('aria-label',total?'Buka menu, '+total+' pembaruan baru':'Buka menu');}
     };
-    async function refreshUpdates(){
-      try{
-        const response=await fetch('/api/public/nav-updates',{credentials:'same-origin',cache:'no-store'});
-        if(!response.ok)return;
-        displayUpdates(await response.json());
-      }catch{}
+    // Focus, visibility and interval events can fire together. Reuse one request
+    // to avoid redundant D1 reads when a visitor returns to the tab.
+    let updatesInFlight=null;
+    function refreshUpdates(){
+      if(updatesInFlight)return updatesInFlight;
+      updatesInFlight=(async()=>{
+        try{
+          const response=await fetch('/api/public/nav-updates',{credentials:'same-origin',cache:'no-store'});
+          if(!response.ok)return;
+          displayUpdates(await response.json());
+        }catch{}
+      })().finally(()=>{updatesInFlight=null;});
+      return updatesInFlight;
     }
     const isPreview=new URLSearchParams(location.search).has('ssc_preview')||/ssc_(events|announcement|theme|season)_preview/.test(location.search);
     if(!isPreview){
