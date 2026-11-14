@@ -40,6 +40,9 @@ b.setAttribute('aria-label','Pindahkan kategori '+name);
 b.onclick=()=>{const list=model().categories;[list[index],list[index+dir]]=[list[index+dir],list[index]];change();render();};heading.append(b);
 }
 const del=create('button','button secondary','Hapus');del.type='button';del.onclick=async()=>{if(!confirm('Hapus kategori dan semua langkah di dalamnya?'))return;model().categories.splice(index,1);change();render();};heading.append(del);
+const handle=create('span','ssc-guide-drag-handle','⋮⋮ Geser');handle.draggable=true;handle.title='Geser untuk mengurutkan kategori';handle.addEventListener('dragstart',event=>{event.dataTransfer.setData('text/plain',category.id);event.dataTransfer.effectAllowed='move';});heading.prepend(handle);
+card.addEventListener('dragover',event=>{if(event.dataTransfer.types.includes('text/plain'))event.preventDefault();});
+card.addEventListener('drop',event=>{event.preventDefault();const id=event.dataTransfer.getData('text/plain');const list=model().categories,from=list.findIndex(x=>x.id===id),to=list.findIndex(x=>x.id===category.id);if(from<0||to<0||from===to)return;const [moved]=list.splice(from,1);list.splice(to,0,moved);change();render();});
 card.append(heading);
 edit(card,'Judul kategori',category.label,v=>{category.label=v;heading.querySelector('strong').textContent=String(index+1)+'. '+v;});
 edit(card,'Ikon kecil',category.icon,v=>category.icon=v);
@@ -57,7 +60,7 @@ edit(s,'Catatan (opsional)',step.tip,v=>step.tip=v);
 edit(s,'Tautan tombol (opsional)',step.url,v=>step.url=v);
 edit(s,'Teks tombol (opsional)',step.link,v=>step.link=v);
 edit(s,'Gambar tutorial (opsional)',step.image,v=>step.image=v);
-if(window.SSCircleImagePicker){const picker=create('div');s.append(picker);window.SSCircleImagePicker.mount(picker,{compact:true,title:'Pilih / upload screenshot langkah',current:()=>step.image||'',onSelect:src=>{step.image=src;change();render();}});}
+if(window.SSCircleImagePicker){const chooser=create('details','ssc-guide-picker-details');chooser.append(create('summary','','Pilih gambar / upload screenshot'));chooser.addEventListener('toggle',()=>{if(!chooser.open||chooser.dataset.loaded)return;chooser.dataset.loaded='true';const picker=create('div');chooser.append(picker);window.SSCircleImagePicker.mount(picker,{compact:true,title:'Pilih / upload screenshot langkah',current:()=>step.image||'',onSelect:src=>{step.image=src;change();render();}});});s.append(chooser);}
 edit(s,'Link video YouTube (opsional)',step.video,v=>step.video=v);
 steps.append(s);
 });
