@@ -23,9 +23,8 @@ DANGEROUS_SQL = re.compile(
 # Ignore comments and SQL string literals when looking for dangerous keywords.
 # This is a conservative guard, not a complete parser or migration review.
 SQL_NON_EXECUTABLE = re.compile(
-    r"'(?:''|[^'])*'|\\"(?:\\"\\"|[^\\"])*\\"|--[^\\r\\n]*|/\\*[\\s\\S]*?\\*/"
+    r"""'(?:''|[^'])*'|"(?:\"\"|[^"])*"|--[^\r\n]*|/\*[\s\S]*?\*/"""
 )
-
 
 def executable_sql(sql: str) -> str:
     return SQL_NON_EXECUTABLE.sub(" ", sql)
