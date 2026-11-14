@@ -76,6 +76,12 @@ window.SSCircleGettingStartedAdmin=(()=>{
         inputField(card,'Teks tombol (opsional)',step.linkLabel,v=>step.linkLabel=v,{max:90});
         inputField(card,'Link tujuan (opsional)',step.href,v=>step.href=v,{max:350,placeholder:'/registration.html'});
         inputField(card,'URL gambar tutorial (opsional)',step.image,v=>step.image=v,{max:700,placeholder:'assets/... atau /api/media/...'});
+        const picker=node('div','howto-admin-image-picker');
+        if(window.SSCircleImagePicker?.mount)window.SSCircleImagePicker.mount(picker,{
+          title:'Pilih atau unggah gambar tutorial',current:()=>step.image||'',
+          onSelect:src=>{step.image=src;update();renderEditor();}
+        });
+        card.append(picker);
         inputField(card,'URL YouTube (opsional)',step.video,v=>step.video=v,{max:250,placeholder:'https://www.youtube.com/watch?v=...'});
         const actions=node('div','howto-admin-actions');
         actions.append(action('↑',()=>move(section.steps,i,-1)),action('↓',()=>move(section.steps,i,1)),
