@@ -15,7 +15,7 @@
     if(/^https:\/\/(discord\.gg|discord\.com)\/[a-z0-9/_?=&%-]+$/i.test(href))return href;
     return '';
   };
-  const safeImage=src=>typeof src==='string'&&(/^(?:\/api\/media\/[a-f0-9-]{36}|assets\/[a-z0-9/_-]+\.(?:webp|png|jpg|jpeg))$/i.test(src))?src:'';
+  const safeImage=src=>{if(typeof src!=='string')return '';if(/^(?:\/api\/media\/[a-f0-9-]{36}|assets\/[a-z0-9/_-]+\.(?:webp|png|jpg|jpeg))$/i.test(src))return src;try{const u=new URL(src);return u.protocol==='https:'&&!u.username&&!u.password?u.href:'';}catch{return '';}};
   const embedVideo=value=>{
     if(typeof value!=='string')return '';
     try{const u=new URL(value);if(u.protocol!=='https:')return '';
