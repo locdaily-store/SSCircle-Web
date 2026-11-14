@@ -34,8 +34,12 @@ async function save(t,patch){
 
 test('arsip dinonaktifkan secara default dan preview tetap dapat dibuka',async()=>{
   const t=fixture();
-  assert.equal((await t.req('/seasons')).status,404);
-  assert.equal((await t.req('/seasons.html')).status,404);
+  const closed=await t.req('/seasons');
+  assert.equal(closed.status,302);
+  assert.equal(closed.headers.get('location'),'/page-closed.html?section=seasons');
+  const closedHtml=await t.req('/seasons.html');
+  assert.equal(closedHtml.status,302);
+  assert.equal(closedHtml.headers.get('location'),'/page-closed.html?section=seasons');
   assert.equal((await t.req('/seasons?ssc_season_preview=1')).status,200);
   assert.equal((await t.req('/seasons.html?ssc_theme_preview=1')).status,302);
 });
