@@ -55,3 +55,5 @@
 
 .ssc-howto-check{display:flex;align-items:center;gap:10px;margin-top:16px;padding:13px 15px;border-radius:11px;border:1px solid var(--ssc-border,#634677);background:color-mix(in srgb,var(--ssc-primary,#b88ce8) 8%,var(--ssc-panel,#251732));font-size:12px;cursor:pointer}
 .ssc-howto-check input{width:18px;height:18px;accent-color:var(--ssc-primary,#b88ce8)}
+
+.ssc-howto-hero h1 #howto-page-title{color:var(--ssc-text,#faf4ff)}
