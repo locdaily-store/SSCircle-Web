@@ -10,6 +10,9 @@ test('Desktop and mobile navigation show unseen published updates, not draft rec
  assert.match(nav,/localStorage\.setItem/);
  assert.match(nav,/let updatesInFlight=null/);
  assert.match(nav,/if\(updatesInFlight\)return updatesInFlight/);
+ assert.match(nav,/const controller=new AbortController\(\)/);
+ assert.match(nav,/setTimeout\(\(\)=>controller\.abort\(\),12000\)/);
+ assert.match(nav,/clearTimeout\(timeout\)/);
  assert.match(nav,/\.finally\(\(\)=>\{updatesInFlight=null;\}\)/);
  assert.match(nav,/api\/public\/nav-updates/);
  assert.match(nav,/isCurrent\(kind\)/);
