@@ -1,53 +1,11 @@
+# Manual-only: PRs are validated and packaged by validate-and-package.yml.
+# Avoid building two Cloudflare ZIP artifacts for every PR revision.
 name: Paket Cloudflare cepat
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 on:
-  pull_request:
-    paths:
-      - '_worker.js'
-      - 'member-social.js'
-      - 'member-social.css'
-      - 'community-admin.js'
-      - 'community-admin.css'
-      - 'member-center-admin.js'
-      - 'admin.html'
-      - 'player-dashboard.js'
-      - 'package.json'
-      - 'profile-workspace.js'
-      - 'profile-workspace.css'
-      - 'tests/browser_profile_workspace.py'
-      - 'mailbox-widget.js'
-      - 'my-sscircle.html'
-      - 'member-center-admin.js'
-      - 'player-dashboard.js'
-      - 'profile-admin.js'
-      - 'profile-page-layout.js'
-      - 'profile-preview.html'
-      - 'tests/member-center.test.mjs'
-      - 'tests/profile-ui.test.mjs'
-      - 'minecraft-avatars.js'
-      - 'tests/member-social.test.mjs'
-      - '.github/workflows/quick-cloudflare-zip.yml'
-      - '.github/workflows/validate-and-package.yml'
-      - 'community-events-admin.js'
-      - 'community-events.css'
-      - 'community-achievements.js'
-      - 'rules-admin.js'
-      - 'rules.js'
-      - 'community-pages.css'
-      - 'mailbox.js'
-      - 'mailbox.css'
-      - 'announcements.css'
-      - 'ssc-dialog.js'
-      - 'ssc-dialog.css'
-      - 'service-worker.js'
-      - 'tests/community-events.test.mjs'
-      - 'tests/rules-regression.test.mjs'
-      - 'tests/paper-link.test.mjs'
-      - 'tests/layout_regression.py'
-      - 'scripts/package-cloudflare.py'
   workflow_dispatch:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
   package:
     runs-on: ubuntu-latest
