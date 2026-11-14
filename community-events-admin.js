@@ -121,13 +121,21 @@
     try{
       const result=await request('/api/admin/community/events/pending-count');
       const count=Math.max(0,Number(result.pending)||0);
-      pendingBadge.hidden=count===0;
-      pendingBadge.textContent=count>99?'99+':String(count);
-      pendingBadge.setAttribute('aria-label',count+' pengajuan event menunggu');
+      document.getElementById('admin-nav-toggle')?.classList.remove('is-event-status-unavailable');
+      const label=count+' pengajuan event menunggu';
+      const shown=count>99?'99+':String(count);
+      for(const badge of [pendingBadge,document.getElementById('community-event-mobile-badge')]){
+        if(!badge)continue;
+        badge.hidden=count===0;
+        badge.textContent=shown;
+        badge.setAttribute('aria-label',label);
+      }
       pendingBadge.closest('[data-tab]')?.classList.toggle('has-pending-event',count>0);
+      document.getElementById('admin-nav-toggle')?.classList.toggle('has-pending-event',count>0);
+      window.dispatchEvent(new CustomEvent('sscircle:event-proposals-pending',{detail:{count}}));
     }catch{
-      // Transient offline states keep the navigation usable without inventing a count.
-      pendingBadge.hidden=true;
+      // Connection errors do not mean proposals have been reviewed. Keep the last verified count.
+      document.getElementById('admin-nav-toggle')?.classList.toggle('is-event-status-unavailable',true);
     }
   }
   function startBadge() {
