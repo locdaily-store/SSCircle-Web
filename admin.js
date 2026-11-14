@@ -117,6 +117,8 @@ function tab(id) {
     window.SSCircleThemeEditor?.schedule();
   if (id === 'gallery-admin')
     window.SSCircleGalleryAdmin?.schedule();
+  if (id === 'getting-started-admin')
+    window.SSCircleGettingStartedAdmin?.preview();
   if (id === 'analytics')
     renderAnalytics();
   if (id === 'media')
@@ -175,6 +177,7 @@ async function refresh() {
   window.SSCircleRegistrationPreview?.render(data);
   window.SSCircleHomeAdmin?.render(data, dirtyMark);
   window.SSCircleGalleryAdmin?.render(data);
+  window.SSCircleGettingStartedAdmin?.render(data, dirtyMark);
   window.SSCircleVoteAdmin?.render(data, dirtyMark);
   window.SSCircleRulesAdmin?.render(data, dirtyMark);
   window.SSCircleEventsAdmin?.render(data, dirtyMark);
@@ -889,6 +892,8 @@ async function save() {
   btn.disabled = true;
   const saveButtons = [
     '#gallery-admin-save',
+    '#getting-started-save-draft',
+    '#getting-started-publish',
     '#home-admin-save',
     '#home-admin-save-top',
     '#save',
