@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#160c27">
+<meta name="description" content="How to Play SSCircle: panduan pendaftaran, aktivasi akun, link Minecraft, bermain, dan bantuan komunitas.">
+<title>How to Play &amp; Getting Started | SSCircle Server</title>
+<link rel="icon" href="assets/sscircle-logo.png" type="image/png">
+<link rel="stylesheet" href="style.css?v=10.49.1.6">
+<link rel="stylesheet" href="public-unified.css?v=10.58.0">
+<link rel="stylesheet" href="mailbox.css?v=10.55.6">
+<link rel="stylesheet" href="getting-started.css?v=10.58.0">
+<script src="color-theme.js?v=10.26.0" defer></script>
+<script src="cloudflare-api.js?v=10.26.0" defer></script>
+<script src="ssc-dialog.js?v=10.55.6" defer></script>
+<script src="mailbox-widget.js?v=10.55.6" defer></script>
+<script src="public-unified.js?v=10.58.0" defer></script>
+<script src="getting-started-data.js?v=10.58.0" defer></script>
+<script src="getting-started.js?v=10.58.0" defer></script>
+</head>
+<body class="home-page howto-page theme-v3">
+<header class="home-header" id="top">
+  <a href="./" class="home-brand" aria-label="SSCircle Server beranda"><img src="assets/sscircle-logo.png" width="41" height="41" alt="Logo SSCircle"><span><strong>SSCircle</strong><small>SERVER</small></span></a>
+  <nav class="home-nav" aria-label="Navigasi utama"><a href="./" class="home-nav-link">Beranda</a><a href="registration.html" class="home-nav-link">Pendaftaran</a></nav>
+  <button type="button" class="home-menu-button" id="home-menu-button" aria-label="Buka navigasi" aria-expanded="false">☰</button>
+</header>
+<main id="howto-main" class="howto-main">
+  <section class="howto-hero" aria-labelledby="howto-title">
+    <div class="howto-hero-copy">
+      <span class="howto-eyebrow">SSCIRCLE / NEW MEMBER GUIDE</span>
+      <h1 id="howto-title">How to Play<span>.</span></h1>
+      <p id="howto-description">Panduan memulai petualanganmu di SSCircle, dari pendaftaran hingga akun Minecraft terhubung.</p>
+      <div class="howto-hero-actions"><a class="home-button home-button-primary" href="registration.html">Mulai Pendaftaran ↗</a><a class="home-button home-button-secondary" href="#tutorials">Lihat Panduan ↓</a></div>
+    </div>
+    <div class="howto-hero-mark" aria-hidden="true"><img src="assets/sscircle-logo.png" alt=""></div>
+  </section>
+  <section class="howto-overview" aria-label="Ringkasan panduan">
+    <div><strong id="howto-total">6</strong><span>Kategori panduan</span></div>
+    <div><strong id="howto-progress-count">0</strong><span>Langkah dipahami</span></div>
+    <div><strong>Java + Bedrock</strong><span>Jenis akun Minecraft</span></div>
+  </section>
+  <section id="tutorials" class="howto-workspace" aria-label="Tutorial SSCircle">
+    <div class="howto-workspace-head">
+      <div><span class="howto-eyebrow">START HERE</span><h2>Pilih panduanmu</h2><p>Cari topik atau pilih kategori di bawah.</p></div>
+      <label class="howto-search"><span class="sr-only">Cari panduan SSCircle</span><input type="search" id="howto-search" placeholder="Cari panduan, login, Minecraft..." autocomplete="off"><span aria-hidden="true">⌕</span></label>
+    </div>
+    <div id="howto-category-list" class="howto-categories" role="group" aria-label="Kategori tutorial"></div>
+    <p id="howto-no-results" class="howto-no-results" hidden>Tidak ada panduan yang cocok. Coba kata kunci lain.</p>
+    <div class="howto-reader" id="howto-reader">
+      <div class="howto-reader-head"><div><span id="howto-category-kicker" class="howto-eyebrow">PANDUAN</span><h3 id="howto-section-title">Memuat panduan...</h3><p id="howto-section-summary"></p></div><span class="howto-step-position" id="howto-step-position"></span></div>
+      <div class="howto-step-meter" id="howto-step-meter" aria-label="Progres langkah tutorial"></div>
+      <article class="howto-step" id="howto-step">
+        <span class="howto-step-label">LANGKAH <span id="howto-step-number">01</span></span>
+        <h4 id="howto-step-title">Memuat...</h4>
+        <p id="howto-step-description"></p>
+        <div id="howto-step-media" class="howto-step-media" hidden></div>
+        <div id="howto-step-action" class="howto-step-action"></div>
+      </article>
+      <div id="howto-account-guide" class="howto-account-guide" hidden>
+        <h4>Jenis akun Minecraft yang digunakan</h4>
+        <div class="howto-editions" role="group" aria-label="Jenis akun Minecraft">
+          <button type="button" data-edition="premium" aria-pressed="true">Java Premium</button>
+          <button type="button" data-edition="offline" aria-pressed="false">Non-Premium</button>
+          <button type="button" data-edition="bedrock" aria-pressed="false">Bedrock</button>
+        </div>
+        <p id="howto-edition-description"></p>
+      </div>
+      <div class="howto-reader-bottom">
+        <button class="howto-button-quiet" id="howto-back" type="button">← Sebelumnya</button>
+        <label class="howto-check"><input id="howto-complete" type="checkbox"><span>Sudah dipahami</span></label>
+        <button class="howto-button-primary" id="howto-next" type="button">Berikutnya →</button>
+      </div>
+      <p class="howto-progress-note" id="howto-progress-note" role="status" aria-live="polite"></p>
+    </div>
+  </section>
+  <section class="howto-faq" id="faq" aria-labelledby="howto-faq-title">
+    <div class="howto-faq-heading"><span class="howto-eyebrow">HELP CENTER</span><h2 id="howto-faq-title">Pertanyaan yang sering ditanyakan</h2><p>Jawaban singkat untuk kendala yang paling sering muncul.</p></div>
+    <div id="howto-faq-list" class="howto-faq-list"></div>
+  </section>
+  <section class="howto-help"><div><span class="howto-eyebrow">BUTUH BANTUAN?</span><h2>Masih bingung?</h2><p>Tim komunitas dapat membantu memberikan arahan sesuai kondisi server saat ini. Jangan pernah mengirim password atau kode pribadi.</p></div><a class="home-button home-button-primary" href="https://discord.gg/vQQSgY2GRS" target="_blank" rel="noopener noreferrer">Discord SSCircle ↗</a></section>
+</main>
+<footer class="home-footer ssc-unified-footer"><div class="home-container home-footer-content ssc-footer-content"><div class="home-footer-mark"><img src="assets/sscircle-logo.png" width="27" height="27" alt=""><span>SSCircle Server</span></div><span>One circle. Endless stories.</span><div class="home-footer-links"><a href="/">Beranda</a><a href="registration.html">Pendaftaran</a><a href="status.html">Cek Status</a><a href="rules.html">Peraturan Server</a></div><small>© SSCircle Server</small></div></footer>
+</body>
+</html>
