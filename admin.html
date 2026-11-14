@@ -24,7 +24,8 @@
     <script src="admin-notifications.js?v=10.26.0" defer></script>
     <script src="admin-sortable.js?v=10.30.0" defer></script>
     <script src="image-source-picker.js?v=10.26.0" defer></script>
-    <script src="homepage-admin.js?v=10.32.0" defer></script>
+    <script src="homepage-admin.js?v=10.57.3" defer></script>
+    <script src="gallery-admin.js?v=10.57.1" defer></script>
     <script src="homepage-builder.js?v=10.31.0" defer></script>
     <script src="vote-admin.js?v=10.31.0" defer></script>
     <script src="rules-admin.js?v=10.55.6" defer></script>
@@ -51,6 +52,7 @@
     <link rel="stylesheet" href="ssc-dialog.css?v=10.55.6">
   <script src="ssc-dialog.js?v=10.55.6" defer></script>
   <link rel="stylesheet" href="community-events-admin.css?v=10.56.3">
+    <link rel="stylesheet" href="gallery-admin.css?v=10.57.1">
 </head>
   <body class="admin-page theme-v3">
     <div class="ambient ambient-a" aria-hidden="true"></div>
@@ -105,6 +107,7 @@
               <section class="sidebar-group" aria-labelledby="sidebar-group-1">
                 <h2 id="sidebar-group-1">KONTEN &amp; KOMUNITAS</h2>
                 <button type="button" class="side-link" data-tab="homepage"><span class="side-icon" aria-hidden="true">⌂</span><span>Homepage</span></button>
+                <button type="button" class="side-link" data-tab="gallery-admin"><span class="side-icon" aria-hidden="true">▧</span><span>Gallery</span></button>
                 <button type="button" class="side-link" data-tab="events-admin"><span class="side-icon" aria-hidden="true">▦</span><span>Event &amp; Jadwal</span></button>
                 <button type="button" class="side-link" data-tab="community-events-admin"><span class="side-icon" aria-hidden="true">✉</span><span>Pengajuan Event</span><span id="community-event-badge" class="nav-count community-event-badge" hidden>0</span></button>
                 <button type="button" class="side-link" data-tab="achievements-admin"><span class="side-icon" aria-hidden="true">✦</span><span>Achievement</span></button>
@@ -256,6 +259,34 @@
               <div class="home-admin-save-bar">
                 <span class="home-save-caption" aria-hidden="true"></span>
                 <button type="button" id="home-admin-save" class="button primary">Simpan perubahan Homepage ✓</button>
+              </div>
+            </section>
+            <!-- Gallery management shares the same saved photo collection as Homepage. -->
+            <section id="gallery-admin" class="tab-page hide">
+              <div class="dashboard-heading heading-with-button">
+                <div>
+                  <div class="overline">SSCIRCLE / PHOTO LIBRARY</div>
+                  <h1>Atur Gallery<span class="dot-accent">.</span></h1>
+                  <p>Kelola foto, kategori, teks, urutan, dan halaman galeri. Satu koleksi foto untuk Homepage dan Gallery.</p>
+                </div>
+                <button type="button" class="button primary" id="gallery-admin-save">Simpan Gallery ✓</button>
+              </div>
+              <div class="ssc-gallery-admin-layout">
+                <div id="gallery-admin-editor" class="ssc-gallery-admin-editor"></div>
+                <aside class="panel ssc-gallery-admin-preview">
+                  <div class="ssc-gallery-preview-top">
+                    <div><h2>Live preview Gallery</h2><p>Pratinjau tanpa menyimpan, tidak mengubah website publik.</p></div>
+                    <div class="ssc-gallery-preview-actions">
+                      <button type="button" class="button secondary" id="gallery-preview-desktop">Desktop</button>
+                      <button type="button" class="button secondary" id="gallery-preview-mobile">HP</button>
+                    </div>
+                  </div>
+                  <div class="ssc-gallery-preview-viewport" id="gallery-admin-preview-window">
+                    <iframe id="gallery-admin-preview-frame" title="Live preview Gallery" loading="lazy" src="gallery.html?ssc_theme_preview=1"></iframe>
+                  </div>
+                  <p id="gallery-preview-status" class="field-help" role="status">Menyiapkan pratinjau...</p>
+                  <button type="button" class="button secondary" id="gallery-open-colors">Atur warna Gallery ↗</button>
+                </aside>
               </div>
             </section>
             <!-- Pengaturan Voting -->
@@ -544,6 +575,12 @@
                       <label class="ssc-theme-check"><input id="theme-cards-gradient" type="checkbox"> Gunakan gradasi pada kartu dan panel</label>
                       <label class="ssc-theme-check"><input id="theme-admin-enable" type="checkbox"> Terapkan warna juga pada Admin Control</label>
                     </div>
+                    <section class="ssc-gallery-theme-editor">
+                      <h3>Warna halaman Gallery</h3>
+                      <p class="field-help">Atur setiap bagian galeri secara terpisah. Perubahan langsung muncul saat Gallery dipilih pada Live Preview di samping.</p>
+                      <div id="gallery-color-editor" class="ssc-gallery-color-grid"></div>
+                      <button class="button secondary" type="button" id="gallery-colors-preview">Pratinjau warna Gallery ↗</button>
+                    </section>
                     <h3>Warna khusus per komponen</h3>
                     <p class="field-help">Untuk hal spesifik seperti judul, form, kartu, ikon, atau tombol. Aturan di bawah berprioritas lebih tinggi dibanding palet umum.</p>
                     <div id="theme-overrides" class="ssc-theme-overrides"></div>
@@ -562,6 +599,7 @@
                       <option value="status.html">Cek Status</option>
                       <option value="rules.html">Server Rules</option>
                       <option value="events.html">Event Calendar</option>
+                      <option value="gallery.html">Gallery</option>
                       <option value="announcements.html">Announcement &amp; News</option>
                       <option value="seasons.html">Season Archive</option>
                        <option value="profile-preview.html">Profile (pratinjau)</option>

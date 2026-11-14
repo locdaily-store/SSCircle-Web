@@ -1,0 +1,102 @@
+/* Compact award wall: medals rather than a long column of rectangular rows. */
+.player-achievements-list,
+#player-community-awards-list,
+#community55-achievements .c55-achievements{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(min(100%,142px),1fr));
+  gap:12px;
+  align-items:stretch;
+  min-width:0;
+}
+.player-achievements-list>.player-helper,
+#community55-achievements .c55-achievements>h3,
+#community55-achievements .c55-achievements>.player-helper{
+  grid-column:1/-1;
+}
+.player-award.ssc-medal,
+.ssc-community-award.ssc-medal,
+#community55-achievements .c55-achievement.ssc-medal{
+  --medal-ink:var(--ssc-primary,#c7a0ef);
+  --medal-shine:var(--ssc-highlight,#f1d999);
+  box-sizing:border-box;
+  min-width:0;
+  min-height:164px;
+  display:flex;
+  flex-direction:column;
+  justify-content:flex-start;
+  align-items:center;
+  gap:6px;
+  padding:13px 10px 12px;
+  text-align:center;
+  border:1px solid color-mix(in srgb,var(--medal-ink) 48%,var(--ssc-border,#715784));
+  border-radius:16px;
+  background:radial-gradient(circle at 50% -10%,color-mix(in srgb,var(--medal-ink) 18%,transparent),transparent 72%),
+    linear-gradient(150deg,var(--ssc-card-start,var(--ssc-panel,#27172f)),var(--ssc-card-end,var(--ssc-panel,#1b1027)));
+  box-shadow:0 10px 20px color-mix(in srgb,var(--ssc-shadow,#000) 15%,transparent);
+  overflow-wrap:anywhere;
+}
+.player-award.ssc-medal>div{display:contents}
+.ssc-medal .ssc-medal-emblem,
+.ssc-medal .player-award-icon.ssc-medal-emblem{
+  display:grid;
+  place-items:center;
+  position:relative;
+  flex:0 0 auto;
+  width:60px;
+  height:60px;
+  border-radius:50%;
+  border:4px double var(--medal-shine);
+  background:radial-gradient(circle at 35% 25%,color-mix(in srgb,var(--medal-shine) 64%,white),var(--medal-ink) 75%);
+  box-shadow:0 5px 0 color-mix(in srgb,var(--medal-ink) 45%,black),inset 0 0 0 3px color-mix(in srgb,var(--medal-ink) 32%,transparent);
+  color:var(--ssc-bg,#150b20);
+  font-size:26px;
+  line-height:1;
+  isolation:isolate;
+  margin:2px 0 11px;
+}
+.ssc-medal .ssc-medal-emblem::after{
+  content:'';
+  position:absolute;
+  top:calc(100% + 3px);
+  width:32px;
+  height:16px;
+  background:linear-gradient(90deg,var(--medal-ink) 48%,var(--ssc-secondary,#9165bf) 50%);
+  clip-path:polygon(0 0,100% 0,83% 100%,50% 62%,17% 100%);
+  z-index:-1;
+}
+.ssc-medal strong{font-size:clamp(11px,1vw,13px);line-height:1.3;text-wrap:balance;color:var(--ssc-heading,var(--ssc-text,#fff))}
+.ssc-medal small,.ssc-medal p{font-size:10px;line-height:1.4;color:var(--ssc-muted,#c8b7d7);margin:0;max-width:100%}
+.ssc-medal p{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
+#community55-achievements .c55-achievement.ssc-medal-progress{
+  --medal-ink:var(--ssc-muted,#9887ac);
+  --medal-shine:var(--ssc-border,#645176);
+  opacity:.86;
+}
+#community55-achievements .c55-achievement.ssc-medal progress{
+  width:100%;
+  max-width:125px;
+  height:7px;
+  border-radius:10px;
+  accent-color:var(--ssc-primary,#c7a0ef);
+  margin-top:auto;
+}
+#community55-achievements .c55-achievement.ssc-medal>small:last-child{margin-top:auto}
+#community55-achievements .c55-achievements>h3{margin:10px 0 0}
+#player-community-awards[hidden]{display:none!important}
+@media(max-width:620px){
+  .player-achievements-list,
+  #player-community-awards-list,
+  #community55-achievements .c55-achievements{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:10px;
+  }
+  .player-award.ssc-medal,.ssc-community-award.ssc-medal,
+  #community55-achievements .c55-achievement.ssc-medal{min-height:150px;padding:11px 7px;border-radius:14px}
+  .ssc-medal .ssc-medal-emblem,
+  .ssc-medal .player-award-icon.ssc-medal-emblem{width:52px;height:52px;font-size:23px;margin-bottom:9px}
+}
+@media(max-width:340px){
+  .player-achievements-list,#player-community-awards-list,
+  #community55-achievements .c55-achievements{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+  .ssc-medal .ssc-medal-emblem,.ssc-medal .player-award-icon.ssc-medal-emblem{width:46px;height:46px}
+}

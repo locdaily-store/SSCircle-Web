@@ -55,8 +55,8 @@
       list.append(empty);return;
     }
     for (const award of awards) {
-      const row=document.createElement('div');row.className='player-award';
-      const icon=document.createElement('span');icon.className='player-award-icon';icon.textContent='★';
+      const row=document.createElement('article');row.className='player-award ssc-medal';
+      const icon=document.createElement('span');icon.className='player-award-icon ssc-medal-emblem';icon.textContent='★';icon.setAttribute('aria-hidden','true');
       const text=document.createElement('div');
       const title=document.createElement('strong');title.textContent=award.title||'Penghargaan';
       const season=document.createElement('small');season.textContent=award.seasonTitle||'Season SSCircle';
@@ -181,10 +181,11 @@
       list.replaceChildren();
       $('player-community-awards').hidden=!badges.length;
       for(const badge of badges){
-        const card=document.createElement('article');card.className='ssc-community-award';
-        const title=document.createElement('strong');title.textContent='✦ '+badge.title;
-        card.append(title);
-        if(badge.description){const detail=document.createElement('p');detail.textContent=badge.description;card.append(detail);}
+        const card=document.createElement('article');card.className='ssc-community-award ssc-medal';
+        const emblem=document.createElement('span');emblem.className='ssc-medal-emblem';emblem.textContent='✦';emblem.setAttribute('aria-hidden','true');
+        const title=document.createElement('strong');title.textContent=badge.title||'Penghargaan Komunitas';
+        card.append(emblem,title);
+        if(badge.description){const detail=document.createElement('small');detail.textContent=badge.description;card.append(detail);}
         list.append(card);
       }
     } catch(error) {

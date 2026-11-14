@@ -263,7 +263,8 @@ test('Profile workspace has three tabs with all cards visible per category',()=>
  assert.doesNotMatch(nav,/sub\.replaceChildren|player-workspace-sub/);
  assert.match(nav,/hasContent/);
  assert.match(nav,/ssc-profile-layout-change/);
- assert.match(css,/padding-top:clamp\(112px/);
+ assert.match(css,/padding-top:clamp\(80px,7vw,96px\)/);
+ assert.match(css,/@media\(max-width:800px\)\{\s*\.player-page #player-main\{padding-top:76px\}/);
  assert.match(css,/repeat\(3,minmax\(0,1fr\)\)/);
  assert.match(css,/data-workspace-active="true"/);
  assert.match(social,/aria-expanded/);

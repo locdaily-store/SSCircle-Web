@@ -1,5 +1,5 @@
 /* Keep Profile content separated from the sticky/absolute header. */
-.player-page #player-main{padding-top:clamp(112px,9.5vw,128px)}
+.player-page #player-main{padding-top:clamp(80px,7vw,96px)}
 .player-page .player-workspace-nav{
   grid-column:1/-1;display:grid;min-width:0;
   padding:14px;border:1px solid var(--player-border);border-radius:17px;
@@ -26,7 +26,7 @@
   display:none!important;
 }
 @media(max-width:800px){
-  .player-page #player-main{padding-top:96px}
+  .player-page #player-main{padding-top:76px}
   .player-page .player-workspace-nav{padding:11px;scroll-margin-top:84px}
   .player-page .player-workspace-main{gap:6px}
   .player-page .player-workspace-button{min-height:49px;font-size:12px;padding:10px 7px}
