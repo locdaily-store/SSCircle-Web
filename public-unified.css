@@ -117,3 +117,7 @@ body .ssc-site-header .home-menu-button{touch-action:manipulation}
 /* Retain homepage hero overlay without using a different header layout. */
 body:not(.ssc-public-inner) .ssc-site-header{position:absolute;top:0;left:0}
 body.ssc-public-inner .ssc-site-header{position:relative;top:auto;left:auto}
+
+/* Custom envelope brand mark; count badge keeps its existing accessible semantics. */
+body .ssc-site-header .ssc-header-mailbox .ssc-mailbox-icon{width:27px;height:27px;max-width:100%;object-fit:contain;display:block;filter:none}
+body .ssc-site-header .ssc-header-mailbox:hover{border-color:var(--ssc-shell-primary)}
