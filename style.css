@@ -14371,3 +14371,19 @@ body #ssc-mc-unlink-account {
 /* Getting Started shortcut alongside the original homepage hero buttons. */
 .home-page #home-process-guide{display:inline-flex;margin:10px 0 0 9px;min-height:43px;padding:12px 15px;border-radius:9px}
 @media(max-width:600px){.home-page #home-process-guide{margin:10px 0 0}}
+
+
+/* Editable Join Our Circle steps and controls. Keep existing SSCircle theme tokens. */
+.home-page #home-process-button[hidden],.home-page #home-process-guide[hidden],.home-page #home-process-steps[hidden]{display:none!important}
+.home-admin-process-editor,.home-admin-process-buttons{display:grid;gap:12px;margin-top:18px;min-width:0}
+.home-admin-process-editor h3,.home-admin-process-buttons h3{margin:0;font-size:15px}
+.home-admin-process-rows{display:grid;gap:10px}
+.home-admin-process-row{display:grid;grid-template-columns:36px minmax(0,1fr) auto;gap:10px;align-items:center;padding:12px;border:1px solid var(--ssc-border,#59416d);border-radius:12px;background:color-mix(in srgb,var(--ssc-panel,#20132c) 92%,var(--ssc-primary,#b58add) 8%);min-width:0}
+.home-admin-process-row .field-group{min-width:0}
+.home-admin-process-row .field-group input{min-width:0;width:100%}
+.home-admin-process-number{color:var(--ssc-primary,#bc91f5);font-size:16px}
+.home-admin-process-enabled{display:inline-flex;align-items:center;gap:8px;font-size:12px;white-space:nowrap}
+.home-admin-process-enabled input{accent-color:var(--ssc-primary,#bc91f5)}
+.home-admin-process-row .home-admin-gallery-add{grid-column:2/-1;margin:0;display:flex;gap:7px;flex-wrap:wrap}
+.home-admin-process-row .home-admin-gallery-add .button{min-width:39px}
+@media(max-width:640px){.home-admin-process-row{grid-template-columns:30px minmax(0,1fr)}.home-admin-process-enabled{grid-column:2}.home-admin-process-row .home-admin-gallery-add{grid-column:1/-1}}
