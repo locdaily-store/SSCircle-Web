@@ -48,7 +48,7 @@ test('JSON body stops reading once an unknown-length stream crosses the byte cap
       else if(pulls===2)controller.enqueue(encoder.encode('x'.repeat(100)));
       else controller.error(Error('Stream must not be read past the limit'));
     }
-  });
+  },{highWaterMark:0});
   const request=new Request('https://sscircle.test/api/test',{
     method:'POST',body:stream,duplex:'half'
   });
