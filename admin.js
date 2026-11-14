@@ -117,6 +117,8 @@ function tab(id) {
     window.SSCircleThemeEditor?.schedule();
   if (id === 'gallery-admin')
     window.SSCircleGalleryAdmin?.schedule();
+  if (id === 'howto-admin')
+    window.SSCircleHowToPlayAdmin?.preview();
   if (id === 'analytics')
     renderAnalytics();
   if (id === 'media')
@@ -175,6 +177,7 @@ async function refresh() {
   window.SSCircleRegistrationPreview?.render(data);
   window.SSCircleHomeAdmin?.render(data, dirtyMark);
   window.SSCircleGalleryAdmin?.render(data);
+  window.SSCircleHowToPlayAdmin?.render(data, dirtyMark);
   window.SSCircleVoteAdmin?.render(data, dirtyMark);
   window.SSCircleRulesAdmin?.render(data, dirtyMark);
   window.SSCircleEventsAdmin?.render(data, dirtyMark);
@@ -889,6 +892,7 @@ async function save() {
   btn.disabled = true;
   const saveButtons = [
     '#gallery-admin-save',
+    '#howto-admin-save',
     '#home-admin-save',
     '#home-admin-save-top',
     '#save',
@@ -936,6 +940,7 @@ async function save() {
 }
 $('#save').onclick = save;
 $('#gallery-admin-save').onclick = save;
+$('#howto-admin-save').onclick = save;
 $('#save-bottom').onclick = save;
 $('#save-appearance').onclick = save;
 $('#save-appearance-bottom').onclick = save;
