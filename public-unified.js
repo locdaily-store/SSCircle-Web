@@ -66,7 +66,12 @@
     const displayUpdates=(payload)=>{
       let total=0;
       for(const kind of ['events','announcements']){
-        const rows=Array.isArray(payload?.[kind])?payload[kind].filter(x=>x&&typeof x.id==='string'&&x.id.length<130).slice(0,80):[];
+        const ids=new Set();
+        const rows=(Array.isArray(payload?.[kind])?payload[kind]:[]).filter(x=>{
+          if(!x||typeof x.id!=='string'||x.id.length>=130||ids.has(x.id))return false;
+          ids.add(x.id);
+          return true;
+        }).slice(0,80);
         const seen=seenFor(kind);
         const visiting=isCurrent(kind);
         if(visiting)saveSeen(kind,rows);
