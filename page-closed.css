@@ -1,0 +1,14 @@
+/* Page-specific closure, consistent with SSCircle public header/footer and theme. */
+body.ssc-closed-page{background:var(--ssc-bg,#170d25);color:var(--ssc-text,#f4edff);min-height:100vh;display:flex;flex-direction:column}
+.ssc-closed-page .ssc-closed-main{flex:1;display:grid;place-items:center;width:100%;padding:clamp(34px,6vw,100px) 18px}
+.ssc-closed-panel{width:min(720px,100%);padding:clamp(28px,5vw,64px);border-radius:24px;text-align:center;border:1px solid var(--ssc-border,#63477d);background:radial-gradient(ellipse at 50% -15%,color-mix(in srgb,var(--ssc-primary,#ae88ea) 22%,transparent),transparent 65%),var(--ssc-panel,#261631);box-shadow:0 24px 65px #0003}
+.ssc-closed-symbol{display:grid;place-items:center;margin:0 auto 20px;width:65px;height:65px;border-radius:19px;color:var(--ssc-primary,#ae88ea);background:color-mix(in srgb,var(--ssc-primary,#ae88ea) 18%,transparent);font-size:34px}
+.ssc-closed-eyebrow{font-size:11px;letter-spacing:.17em;font-weight:750;color:var(--ssc-primary,#ae88ea)}
+.ssc-closed-panel h1{font-size:clamp(28px,4.5vw,45px);line-height:1.16;letter-spacing:-.035em;margin:15px 0;color:var(--ssc-heading,var(--ssc-text,#fff))}
+.ssc-closed-panel>p:not(.ssc-closed-eyebrow){max-width:540px;margin:14px auto;line-height:1.75;color:var(--ssc-muted,#cebddf);font-size:14px}
+.ssc-closed-actions{display:flex;gap:11px;flex-wrap:wrap;justify-content:center;margin:30px 0 10px}
+.ssc-closed-action{display:inline-flex;justify-content:center;align-items:center;padding:13px 20px;border-radius:11px;text-decoration:none;font-size:13px;font-weight:750;border:1px solid var(--ssc-border,#63477d)}
+.ssc-closed-action.primary{background:var(--ssc-button-start,var(--ssc-primary,#ae88ea));color:var(--ssc-button-text,#20102d)}
+.ssc-closed-action.secondary{background:var(--ssc-button-secondary,#302143);color:var(--ssc-button-secondary-text,#fff)}
+.ssc-closed-action:focus-visible{outline:2px solid var(--ssc-primary,#ae88ea);outline-offset:3px}
+@media(max-width:480px){.ssc-closed-actions{flex-direction:column}.ssc-closed-action{width:100%}.ssc-closed-panel{border-radius:17px}}
