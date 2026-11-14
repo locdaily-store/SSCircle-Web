@@ -396,6 +396,14 @@ const HOME_DEFAULTS = {
   galleryCategories: [],
   homeProcessTitle: 'Join our Circle',
   homeProcessText: 'Daftar, tunggu hasil seleksi, lalu mulai cerita barumu di server.',
+  homeProcessEyebrow: 'JOIN THE CIRCLE',
+  homeProcessPrimaryLabel: 'Daftar Sekarang',
+  homeProcessPrimaryUrl: 'registration.html',
+  homeProcessPrimaryEnabled: true,
+  homeProcessGuideLabel: 'Panduan Memulai',
+  homeProcessGuideUrl: 'how-to-play.html',
+  homeProcessGuideEnabled: true,
+  homeProcessSteps: [{text:'Isi pendaftaran'}, {text:'Tunggu hasil seleksi'}, {text:'Mulai petualanganmu'}],
   homeDiscordTitle: 'Temukan komunitasmu.',
   homeDiscordText: 'Pengumuman, informasi pendaftaran, dan obrolan pemain tersedia di Discord SSCircle Community.',
   homeDiscordUrl: 'https://discord.gg/vQQSgY2GRS',
@@ -1267,6 +1275,9 @@ function settingsValid(input) {
     galleryPageDescription: 450,
     homeProcessTitle: 140,
     homeProcessText: 500,
+    homeProcessEyebrow: 100,
+    homeProcessPrimaryLabel: 90,
+    homeProcessGuideLabel: 90,
     homeDiscordTitle: 140,
     homeDiscordText: 500,
     homeDonateTitle: 160,
@@ -1296,6 +1307,25 @@ function settingsValid(input) {
     symbol: s(item?.symbol === undefined ? '✧' : item.symbol, 8),
     text: s(item?.text, 65)
   })).filter(item => item.text);
+  // Join Our Circle controls are validated and saved with the existing Homepage settings.
+  for (const key of ['homeProcessPrimaryEnabled','homeProcessGuideEnabled'])
+    out[key] = input[key] === undefined ? HOME_DEFAULTS[key] : input[key] === true;
+  const safeJoinHref = (value, key) => {
+    const href=s(value,350);
+    if (/^(?:\/(?!\/))?(?:[a-z0-9-]+\.html(?:#[a-z0-9-]+)?|my-sscircle|#(?:tentang|galeri|proses|komunitas|status-quick))$/i.test(href)
+      || /^https:\/\/discord\.gg\/[a-z0-9-]+\/?$/i.test(href)) return href;
+    throw Error('Tautan '+key+' harus halaman SSCircle atau Discord resmi.');
+  };
+  out.homeProcessPrimaryUrl=safeJoinHref(input.homeProcessPrimaryUrl === undefined ? HOME_DEFAULTS.homeProcessPrimaryUrl : input.homeProcessPrimaryUrl,'tombol pendaftaran');
+  out.homeProcessGuideUrl=safeJoinHref(input.homeProcessGuideUrl === undefined ? HOME_DEFAULTS.homeProcessGuideUrl : input.homeProcessGuideUrl,'tombol panduan');
+  const processSteps=input.homeProcessSteps === undefined ? HOME_DEFAULTS.homeProcessSteps : input.homeProcessSteps;
+  if(!Array.isArray(processSteps) || processSteps.length>8)
+    throw Error('Alur Join Our Circle maksimal 8 langkah.');
+  out.homeProcessSteps=processSteps.map((step,index)=>{
+    const text=s(step?.text,160);
+    if(!text)throw Error('Teks langkah '+(index+1)+' tidak boleh kosong.');
+    return {text,enabled:step?.enabled!==false};
+  });
   if (out.homeProcessTitle === 'Bergabung dalam lingkaran.')
     out.homeProcessTitle = 'Join our Circle';
   const overlay = Number(input.homeVideoOverlay);
