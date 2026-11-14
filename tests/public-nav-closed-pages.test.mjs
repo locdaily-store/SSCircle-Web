@@ -8,8 +8,11 @@ test('Announcement and Event badges are rendered in shared desktop/mobile naviga
  assert.match(nav,/data-nav-update/);
  assert.match(nav,/data-nav-total/);
  assert.match(nav,/\/api\/public\/nav-updates/);
- assert.match(nav,/ssc-nav-seen-v1-/);
+ assert.match(nav,/sscircle-nav-seen-v1-/);
  assert.match(nav,/localStorage\.setItem/);
+ assert.match(nav,/const seenPrefix='sscircle-nav-seen-v1-'/);
+ assert.match(nav,/const unread=visiting\?0:/);
+ assert.match(nav,/mobile\.hidden=total===0/);
  assert.match(nav,/visibilitychange/);
  assert.match(nav,/120000/);
  assert.match(nav,/menu\.setAttribute\('aria-label',total/);
