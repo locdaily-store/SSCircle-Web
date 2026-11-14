@@ -63,3 +63,23 @@ test('Saving the How to Play page publishes the edited guide and verifies public
  assert.match(admin,/served\.sections\?\.length/);
  assert.match(page,/v\.settings\?\.gettingStarted\|\|defaults/);
 });
+
+test('Join Our Circle steps and buttons use persisted Homepage settings',()=>{
+ const worker=src('_worker.js'),homepage=src('homepage.js'),admin=src('homepage-admin.js'),html=src('index.html'),css=src('style.css');
+ for(const key of ['homeProcessEyebrow','homeProcessPrimaryLabel','homeProcessPrimaryUrl','homeProcessGuideLabel','homeProcessGuideUrl','homeProcessSteps','homeProcessPrimaryEnabled','homeProcessGuideEnabled']){
+   assert.ok(worker.includes(key),'worker missing '+key);
+   assert.ok(homepage.includes(key),'homepage missing '+key);
+ }
+ assert.match(worker,/out\.homeProcessSteps=processSteps\.map/);
+ assert.match(worker,/processSteps\.length>8/);
+ assert.match(admin,/redrawProcessSteps\(\)/);
+ assert.match(admin,/entries\.push\(\{ text: 'Langkah baru', enabled: true \}\)/);
+ assert.match(admin,/entries\.splice\(index, 1\)/);
+ assert.match(admin,/state\.settings\.homeProcessSteps/);
+ assert.match(html,/id="home-process-steps"/);
+ assert.match(html,/id="home-process-eyebrow"/);
+ assert.match(homepage,/processList\.replaceChildren\(\)/);
+ assert.match(homepage,/setupProcessLink\('home-process-button'/);
+ assert.match(homepage,/setupProcessLink\('home-process-guide'/);
+ assert.match(css,/#home-process-guide\[hidden\]/);
+});
