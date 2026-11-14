@@ -72,11 +72,11 @@
         if(visiting)saveSeen(kind,rows);
         const unread=visiting?0:rows.filter(x=>seen[x.id]!==String(x.version||'')).length;
         const badge=h.querySelector('[data-nav-update="'+kind+'"]');
-        if(badge){badge.hidden=unread===0;badge.textContent=unread>99?'99+':String(unread);}
+        if(badge){badge.hidden=unread===0;badge.textContent=unread>99?'99+':String(unread);badge.setAttribute('aria-label',unread+' '+(kind==='events'?'event':'announcement')+' baru');}
         total+=unread;
       }
       const mobile=h.querySelector('[data-nav-total]');
-      if(mobile){mobile.hidden=total===0;mobile.textContent=total>99?'99+':String(total);}
+      if(mobile){mobile.hidden=total===0;mobile.textContent=total>99?'99+':String(total);mobile.setAttribute('aria-label',total+' pembaruan baru');menu.setAttribute('aria-label',total?'Buka menu, '+total+' pembaruan baru':'Buka menu');}
     };
     async function refreshUpdates(){
       try{
