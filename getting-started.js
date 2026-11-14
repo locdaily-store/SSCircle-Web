@@ -115,9 +115,9 @@
     }
     $('faq').hidden=!root.childElementCount;
   }
-  function apply(input){
+  function apply(input,theme=input){
     config=normalized(input);
-    window.SSCircleTheme?.apply?.(input||{});
+    window.SSCircleTheme?.apply?.(theme||{});
     $('howto-title').replaceChildren(document.createTextNode(config.title),node('span','','.'));
     $('howto-description').textContent=config.subtitle;
     if(!config.enabled){$('tutorials').hidden=true;$('faq').hidden=true;return;}
@@ -127,5 +127,18 @@
     renderCategories();renderStep();renderFaq();
   }
   apply(defaults);
-  fetch('/api/form',{credentials:'same-origin',cache:'no-store'}).then(r=>r.ok?r.json():Promise.reject()).then(v=>apply({...v.settings,...(v.settings?.gettingStarted||{})})).catch(()=>{});
+  const previewMode=new URLSearchParams(location.search).has('ssc_theme_preview');
+  if(previewMode){
+    window.addEventListener('message',event=>{
+      if(event.origin!==location.origin||event.source!==parent||event.data?.type!=='ssc-howto-preview')return;
+      apply(event.data.guide||defaults,event.data.settings||{});
+      parent.postMessage({type:'ssc-howto-preview-applied'},location.origin);
+    });
+    if(parent!==window)parent.postMessage({type:'ssc-howto-preview-ready'},location.origin);
+  }else{
+    fetch('/api/form',{credentials:'same-origin',cache:'no-store'})
+      .then(r=>r.ok?r.json():Promise.reject())
+      .then(v=>apply(v.settings?.gettingStarted||defaults,v.settings||{}))
+      .catch(()=>{});
+  }
 })();
