@@ -132,12 +132,23 @@ window.SSCircleGettingStartedAdmin=(()=>{
     data.settings.gettingStartedDraft=draft;
     selected=0;renderEditor();setDevice('desktop');preview();
   }
-  function init(){
-    $('getting-started-save-draft')?.addEventListener('click',()=>{$('save')?.click();});
-    $('getting-started-publish')?.addEventListener('click',()=>{
-      if(!data||!draft)return;
+  // The public page reads gettingStarted, not gettingStartedDraft.
+  // Saving from this editor must publish by default; draft-only saving is explicit.
+  function beforeSave({draftOnly=false}={}){
+    if(!data||!draft)return {published:false};
+    data.settings.gettingStartedDraft=clone(draft);
+    if(!draftOnly){
       data.settings.gettingStarted=clone(draft);
-      update();$('save')?.click();
+      return {published:true,guide:clone(draft)};
+    }
+    return {published:false};
+  }
+  function init(){
+    $('getting-started-save-draft')?.addEventListener('click',()=>{
+      window.SSCircleSaveGettingStarted?.({draftOnly:true});
+    });
+    $('getting-started-publish')?.addEventListener('click',()=>{
+      window.SSCircleSaveGettingStarted?.({draftOnly:false});
     });
     $('getting-started-reset')?.addEventListener('click',async()=>{
       if(!await window.SSCNotice.confirm('Pulihkan draft tutorial bawaan? Perubahan draft saat ini akan diganti.',{danger:true,confirmText:'Pulihkan'}))return;
@@ -151,5 +162,5 @@ window.SSCircleGettingStartedAdmin=(()=>{
     });
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
-  return {render,preview};
+  return {render,preview,beforeSave};
 })();
