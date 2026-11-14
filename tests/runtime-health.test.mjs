@@ -76,3 +76,21 @@ test('public readiness never includes secret values or applicant rows',async()=>
     assert.equal(text.includes(val),false);
   assert.equal(text.includes('submissions'),false);
 });
+
+test('unexpected Worker errors log only safe reference metadata',async()=>{
+ const env=ready();
+ env.DB.prepare=()=>{throw Error('private database detail should never reach logs');};
+ const recorded=[],original=console.error;
+ console.error=(...args)=>recorded.push(args);
+ try{
+   const response=await call(env,'/api/public/nav-updates');
+   assert.equal(response.status,503);
+   const body=await response.json();
+   assert.match(body.supportCode,/^[0-9a-f]{8}$/i);
+   assert.ok(recorded.some(args=>args[0]==='[SSCircle request-failed]'));
+   assert.doesNotMatch(JSON.stringify(recorded),/private database detail/);
+   assert.doesNotMatch(JSON.stringify(body),/private database detail/);
+ }finally{
+   console.error=original;
+ }
+});

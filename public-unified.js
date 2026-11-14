@@ -66,7 +66,12 @@
     const displayUpdates=(payload)=>{
       let total=0;
       for(const kind of ['events','announcements']){
-        const rows=Array.isArray(payload?.[kind])?payload[kind].filter(x=>x&&typeof x.id==='string'&&x.id.length<130).slice(0,80):[];
+        const ids=new Set();
+        const rows=(Array.isArray(payload?.[kind])?payload[kind]:[]).filter(x=>{
+          if(!x||typeof x.id!=='string'||x.id.length>=130||ids.has(x.id))return false;
+          ids.add(x.id);
+          return true;
+        }).slice(0,80);
         const seen=seenFor(kind);
         const visiting=isCurrent(kind);
         if(visiting)saveSeen(kind,rows);
@@ -78,12 +83,23 @@
       const mobile=h.querySelector('[data-nav-total]');
       if(mobile){mobile.hidden=total===0;mobile.textContent=total>99?'99+':String(total);mobile.setAttribute('aria-label',total+' pembaruan baru');menu.setAttribute('aria-label',total?'Buka menu, '+total+' pembaruan baru':'Buka menu');}
     };
-    async function refreshUpdates(){
-      try{
-        const response=await fetch('/api/public/nav-updates',{credentials:'same-origin',cache:'no-store'});
-        if(!response.ok)return;
-        displayUpdates(await response.json());
-      }catch{}
+    // Focus, visibility and interval events can fire together. Reuse one request
+    // to avoid redundant D1 reads when a visitor returns to the tab.
+    let updatesInFlight=null;
+    function refreshUpdates(){
+      if(updatesInFlight)return updatesInFlight;
+      updatesInFlight=(async()=>{
+        const controller=new AbortController();
+        const timeout=setTimeout(()=>controller.abort(),12000);
+        try{
+          const response=await fetch('/api/public/nav-updates',{
+            credentials:'same-origin',cache:'no-store',signal:controller.signal
+          });
+          if(!response.ok)return;
+          displayUpdates(await response.json());
+        }catch{}finally{clearTimeout(timeout);}
+      })().finally(()=>{updatesInFlight=null;});
+      return updatesInFlight;
     }
     const isPreview=new URLSearchParams(location.search).has('ssc_preview')||/ssc_(events|announcement|theme|season)_preview/.test(location.search);
     if(!isPreview){

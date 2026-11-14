@@ -8,6 +8,12 @@ test('Desktop and mobile navigation show unseen published updates, not draft rec
  assert.match(nav,/data-nav-total/);
  assert.match(nav,/sscircle-nav-seen-v1-/);
  assert.match(nav,/localStorage\.setItem/);
+ assert.match(nav,/let updatesInFlight=null/);
+ assert.match(nav,/if\(updatesInFlight\)return updatesInFlight/);
+ assert.match(nav,/const controller=new AbortController\(\)/);
+ assert.match(nav,/setTimeout\(\(\)=>controller\.abort\(\),12000\)/);
+ assert.match(nav,/clearTimeout\(timeout\)/);
+ assert.match(nav,/\.finally\(\(\)=>\{updatesInFlight=null;\}\)/);
  assert.match(nav,/api\/public\/nav-updates/);
  assert.match(nav,/isCurrent\(kind\)/);
  assert.match(css,/ssc-hamburger-notice/);
@@ -39,4 +45,20 @@ test('Closed and extensionless public routes are handled by Worker',()=>{
  for(const path of checked)assert.ok(routes.include.includes(path),'Worker route missing: '+path);
  assert.match(source('page-closed.js'),/textContent/);
  for(const name of ['public-unified.js','page-closed.js'])assert.doesNotThrow(()=>new Function(source(name)),name);
+});
+
+test('duplicated navigation IDs are counted once, including on mobile',()=>{
+ const nav=source('public-unified.js');
+ const start=nav.indexOf('        const ids=new Set();');
+ const end=nav.indexOf('        const seen=seenFor(kind);',start);
+ assert.ok(start>=0&&end>start,'Navigation deduplication is missing');
+ const dedupe=new Function('payload','kind',nav.slice(start,end)+';return rows;');
+ const rows=dedupe({events:[
+  {id:'event-a',version:'first'},{id:'event-a',version:'duplicate'},
+  {id:'event-b',version:'active'},null,{id:'x'.repeat(130),version:'invalid'}
+ ]},'events');
+ assert.deepEqual(rows.map(x=>x.id),['event-a','event-b']);
+ assert.equal(rows[0].version,'first');
+ const many=dedupe({announcements:Array.from({length:90},(_,i)=>({id:'news-'+i}))},'announcements');
+ assert.equal(many.length,80);
 });

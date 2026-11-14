@@ -200,9 +200,32 @@ const sameOrigin = req => !req.headers.get('Origin') || req.headers.get('Origin'
 async function body(req, limit = 250000) {
   if (Number(req.headers.get('Content-Length') || 0) > limit)
     throw Error('Data terlalu besar.');
-  const t = await req.text();
-  if (t.length > limit)
-    throw Error('Data terlalu besar.');
+  // Read at most limit bytes, including when the client omits Content-Length.
+  // req.text() alone buffers the full untrusted request before size validation.
+  let t = '';
+  if (req.body?.getReader) {
+    const reader = req.body.getReader(), decoder = new TextDecoder('utf-8', {fatal:true});
+    let bytes = 0;
+    try {
+      while (true) {
+        const {value,done} = await reader.read();
+        if (done) break;
+        bytes += value.byteLength;
+        if (bytes > limit) {
+          void reader.cancel().catch(()=>{});
+          throw Error('Data terlalu besar.');
+        }
+        t += decoder.decode(value,{stream:true});
+      }
+      t += decoder.decode();
+    } finally {
+      reader.releaseLock();
+    }
+  } else {
+    t = await req.text();
+    if (new TextEncoder().encode(t).byteLength > limit)
+      throw Error('Data terlalu besar.');
+  }
   const v = parse(t);
   if (!v || typeof v !== 'object' || Array.isArray(v))
     throw Error('Data yang dikirim tidak sesuai.');
@@ -6429,16 +6452,18 @@ export default {
       return await route(req, env, ctx);
     }
     catch (e) {
-      console.error('[SSCircle]', e);
+      // Never log raw exceptions: SQL/HTTP errors can include private input.
+      const reference=uid().slice(0,8);
+      const category=new URL(req.url).pathname.startsWith('/api/')?'api':'page';
+      const errorType=['Error','TypeError','SyntaxError','RangeError'].includes(e?.name)?e.name:'Unhandled';
+      console.error('[SSCircle request-failed]',{reference,category,errorType});
       if (/tidak valid|Wajib|Gambar|gambar|Pertanyaan|pertanyaan|Blok|blok|Pilihan|pilihan|Opsi|opsi|halaman|Halaman|Homepage|kartu|Kartu|Bagian|bagian|warna|Warna|gradasi|Selector|Tautan|tautan|Data terlalu|Jumlah|Maksimal|harus|Format|percabangan|Percabangan|Unggah|Unggah|Jawaban|jawaban|diperlukan|besar|video|Video|Judul|Alasan|alasan|File|File gambar|aturan|Aturan|peraturan|Peraturan|kategori|Kategori/.test(e.message || ''))
         return bad(e.message, 400);
       if (new URL(req.url).pathname === '/api/player/security/activate') {
-        const reference=uid().slice(0,8);
-        console.error('[SSCircle activation / unexpected]',reference);
         return J({error:'Aktivasi belum dapat dipastikan. Periksa dahulu apakah akun sudah aktif. Jika belum, coba kode yang masih berlaku atau hubungi admin dengan kode bantuan '+reference+'.',
           supportCode:reference,canRetry:true},503);
       }
-      return bad('Layanan sedang mengalami gangguan. Silakan coba lagi nanti.', 503);
+      return J({error:'Layanan sedang mengalami gangguan. Silakan coba lagi nanti.',supportCode:reference},503);
     }
   }
 };
