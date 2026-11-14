@@ -43,7 +43,13 @@ const defaults={enabled:true,title:'How to Play',subtitle:'Getting Started',cate
 window.SSCircleHowToPlayDefaults=defaults;
 const root=document.getElementById('howto-root');if(!root)return;
 const $=id=>document.getElementById(id);
-let data=defaults,selected='registration',stepIndex=0,search='',previewApplied=false;
+let data=defaults,selected='registration',stepIndex=0,search='',previewApplied=false,completed=new Set(),accountProgress=false;
+const progressKey='ssc-howto-completed-v1';
+const markKey=(id,index)=>id+':'+index;
+function loadLocal(){try{const v=JSON.parse(localStorage.getItem(progressKey)||'[]');if(Array.isArray(v))completed=new Set(v.filter(x=>typeof x==='string'));}catch{completed=new Set();}}
+async function loadAccountProgress(){try{const response=await fetch('/api/player/how-to-play-progress',{credentials:'same-origin',cache:'no-store'});if(!response.ok)return;const body=await response.json();if(Array.isArray(body.items)){completed=new Set(body.items);accountProgress=true;}}catch{}}
+async function saveProgress(){try{localStorage.setItem(progressKey,JSON.stringify([...completed]));}catch{}if(accountProgress)try{await fetch('/api/player/how-to-play-progress',{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:[...completed]})});}catch{}}
+function renderHead(){$('howto-page-title').textContent=data.title||defaults.title;$('howto-page-subtitle').textContent=data.subtitle||defaults.subtitle;}
 const el=(tag,cls,txt)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(txt!==undefined)n.textContent=txt;return n;};
 const safeLink=url=>typeof url==='string'&&(/^(?:registration|status|my-sscircle|rules|events|how-to-play)\.html(?:#[a-z0-9-]+)?$/i.test(url)||/^https:\/\/(?:discord\.gg|discord\.com)\/[a-zA-Z0-9/-]+$/.test(url));
 function render(){
@@ -59,12 +65,13 @@ stepIndex=Math.min(stepIndex,c.steps.length-1);
 out.append(el('span','ssc-howto-eyebrow',c.label.toUpperCase()),el('h3','',c.label),el('p','ssc-howto-intro',c.intro||''));
 const bar=el('div','ssc-howto-progress');for(let i=0;i<c.steps.length;i++)bar.append(el('span',i<=stepIndex?'is-done':''));out.append(bar);
 const s=c.steps[stepIndex],body=el('section','ssc-howto-step');
+const mark=el('label','ssc-howto-check'),check=el('input');check.type='checkbox';check.checked=completed.has(markKey(c.id,stepIndex));check.onchange=()=>{const id=markKey(c.id,stepIndex);if(check.checked)completed.add(id);else completed.delete(id);void saveProgress();};mark.append(check,el('span','','Saya sudah memahami langkah ini'));
 body.append(el('span','ssc-howto-eyebrow','LANGKAH '+(stepIndex+1)),el('h4','',s.title),el('p','',s.body));
 if(s.image&&/^(?:assets\/|\/api\/media\/)/.test(s.image)){const img=el('img');img.src=s.image;img.alt=s.title;img.loading='lazy';body.append(img);}
 if(s.video&&/^https:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)[\w-]{11}/.test(s.video)){const a=el('a','ssc-howto-secondary','Tonton video ↗');a.href=s.video;a.target='_blank';a.rel='noopener noreferrer';body.append(a);}
 if(s.tip)body.append(el('div','ssc-howto-tip','ⓘ '+s.tip));
 if(safeLink(s.url)){const a=el('a','ssc-howto-primary',s.link||'Buka halaman ↗');a.href=s.url;if(s.url.startsWith('https://')){a.target='_blank';a.rel='noopener noreferrer';}body.append(a);}
-out.append(body);
+body.append(mark);out.append(body);
 $('howto-prev').hidden=$('howto-next').hidden=false;
 $('howto-prev').disabled=stepIndex===0;
 $('howto-next').textContent=stepIndex===c.steps.length-1?'Selesai ✓':'Berikutnya →';
@@ -73,10 +80,11 @@ $('howto-step-count').textContent=(stepIndex+1)+' / '+c.steps.length;
 $('howto-search').addEventListener('input',event=>{search=event.target.value.trim().toLowerCase();render();});
 $('howto-prev').onclick=()=>{stepIndex=Math.max(0,stepIndex-1);render();};
 $('howto-next').onclick=()=>{const c=data.categories.find(x=>x.id===selected);if(stepIndex<c.steps.length-1){stepIndex++;render();}else{const i=data.categories.indexOf(c);if(i<data.categories.length-1){selected=data.categories[i+1].id;stepIndex=0;render();}else location.hash='#faq';}};
-window.addEventListener('message',event=>{if(event.origin!==location.origin||event.source!==parent||event.data?.type!=='ssc-howto-preview'||!new URLSearchParams(location.search).has('ssc_theme_preview'))return;const incoming=event.data.howToPlay;if(!incoming||!Array.isArray(incoming.categories))return;previewApplied=true;data={...defaults,...incoming};selected=data.categories[0]?.id||'';stepIndex=0;render();const list=$('howto-faq-list');list.replaceChildren();for(const item of data.faq||[]){const d=el('details');d.append(el('summary','',item.question),el('p','',item.answer));list.append(d);}});
+window.addEventListener('message',event=>{if(event.origin!==location.origin||event.source!==parent||event.data?.type!=='ssc-howto-preview'||!new URLSearchParams(location.search).has('ssc_theme_preview'))return;const incoming=event.data.howToPlay;if(!incoming||!Array.isArray(incoming.categories))return;previewApplied=true;data={...defaults,...incoming};renderHead();selected=data.categories[0]?.id||'';stepIndex=0;render();const list=$('howto-faq-list');list.replaceChildren();for(const item of data.faq||[]){const d=el('details');d.append(el('summary','',item.question),el('p','',item.answer));list.append(d);}});
 async function init(){
 try{const r=await window.SSCircle?.getForm?.();if(r?.settings){const raw=r.settings.howToPlay;if(!previewApplied)data=raw&&Array.isArray(raw.categories)?{...defaults,...raw}:defaults;window.SSCircleTheme?.apply?.(r.settings);const discord=r.settings.homeDiscordUrl;if(/^https:\/\/(?:discord\.gg|discord\.com)\//.test(discord||''))$('howto-discord').href=discord;}}catch{}
 if(data.enabled===false){root.replaceChildren(el('p','','Panduan sedang dinonaktifkan oleh pengelola.'));return;}
+if(!previewApplied){loadLocal();await loadAccountProgress();}renderHead();
 const category=new URLSearchParams(location.search).get('category');if(data.categories.some(c=>c.id===category))selected=category;
 render();const host=$('howto-faq-list');host.replaceChildren();for(const item of data.faq||[]){const details=el('details');details.append(el('summary','',item.question),el('p','',item.answer));host.append(details);}
 }
