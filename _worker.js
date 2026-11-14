@@ -1331,6 +1331,51 @@ function settingsValid(input) {
   if (!Number.isInteger(homeGalleryLimit) || homeGalleryLimit < 1 || homeGalleryLimit > 80)
     throw Error('Jumlah foto Homepage harus berupa angka antara 1 dan 80.');
   out.homeGalleryLimit = homeGalleryLimit;
+  // Public How to Play content: stored with the existing revision-protected form settings.
+  // Restrict sizes and URLs so the public tutorial cannot become an HTML/script injection surface.
+  if (input.howToPlay === undefined) {
+    out.howToPlay = null; // Public client supplies the bundled starter guide for existing installs.
+  } else {
+    const guide = input.howToPlay;
+    if (!guide || typeof guide !== 'object' || !Array.isArray(guide.categories) ||
+        !Array.isArray(guide.faq) || guide.categories.length > 12 || guide.faq.length > 24)
+      throw Error('Pengaturan How to Play tidak valid atau terlalu banyak kategori/FAQ.');
+    const allowedLinks = /^(?:registration|status|my-sscircle|rules|events|how-to-play)\.html(?:#[a-z0-9-]+)?$/i;
+    const allowedDiscord = /^https:\/\/(?:discord\.gg|discord\.com)\/[a-z0-9/-]+$/i;
+    const allowedYoutube = /^https:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)[\w-]{11}(?:[&#?][a-zA-Z0-9=_&-]+)?$/;
+    const taken = new Set();
+    out.howToPlay = {
+      enabled: guide.enabled !== false,
+      title: s(guide.title || 'How to Play', 100),
+      subtitle: s(guide.subtitle || 'Getting Started', 130),
+      categories: guide.categories.map((category,index) => {
+        const id = s(category?.id || ('guide-'+index),40).toLowerCase().replace(/[^a-z0-9-]/g,'');
+        if (!id || taken.has(id) || !Array.isArray(category?.steps) ||
+            category.steps.length < 1 || category.steps.length > 12)
+          throw Error('ID atau jumlah langkah How to Play tidak valid.');
+        taken.add(id);
+        return {
+          id, label:s(category.label,75), icon:s(category.icon || '✦',4),
+          intro:s(category.intro,420),
+          steps:category.steps.map(step => {
+            const url = s(step?.url,350), video = s(step?.video,250);
+            if (url && !allowedLinks.test(url) && !allowedDiscord.test(url))
+              throw Error('Tautan tombol tutorial harus menuju halaman SSCircle atau Discord resmi.');
+            if (video && !allowedYoutube.test(video))
+              throw Error('Video tutorial harus menggunakan tautan YouTube yang valid.');
+            const image = s(step?.image,600);
+            if (image && !image.startsWith('assets/') && !/^\/api\/media\/[0-9a-f-]{36}$/i.test(image))
+              throw Error('Gunakan gambar dari assets/ atau Penyimpanan Media.');
+            return {
+              title:s(step?.title,120),body:s(step?.body,1400),
+              tip:s(step?.tip,380),url,link:s(step?.link,90),image,video
+            };
+          })
+        };
+      }),
+      faq:guide.faq.map(item=>({question:s(item?.question,220),answer:s(item?.answer,1400)}))
+    };
+  }
   const gallery = input.homeGallery === undefined ? DEFAULT_GALLERY : input.homeGallery;
   if (!Array.isArray(gallery) || gallery.length > 80)
     throw Error('Galeri maksimal 80 gambar.');
