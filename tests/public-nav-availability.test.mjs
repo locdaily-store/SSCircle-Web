@@ -8,6 +8,9 @@ test('Desktop and mobile navigation show unseen published updates, not draft rec
  assert.match(nav,/data-nav-total/);
  assert.match(nav,/sscircle-nav-seen-v1-/);
  assert.match(nav,/localStorage\.setItem/);
+ assert.match(nav,/let updatesInFlight=null/);
+ assert.match(nav,/if\(updatesInFlight\)return updatesInFlight/);
+ assert.match(nav,/\.finally\(\(\)=>\{updatesInFlight=null;\}\)/);
  assert.match(nav,/api\/public\/nav-updates/);
  assert.match(nav,/isCurrent\(kind\)/);
  assert.match(css,/ssc-hamburger-notice/);
