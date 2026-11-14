@@ -120,7 +120,9 @@
     window.SSCircleTheme?.apply?.(theme||{});
     $('howto-title').replaceChildren(document.createTextNode(config.title),node('span','','.'));
     $('howto-description').textContent=config.subtitle;
-    if(!config.enabled){$('tutorials').hidden=true;$('faq').hidden=true;return;}
+    $('tutorials').hidden=!config.enabled;
+    $('faq').hidden=!config.enabled;
+    if(!config.enabled)return;
     sections=config.sections.filter(s=>s&&typeof s.id==='string'&&Array.isArray(s.steps)&&s.steps.length>0);
     if(!sections.length)sections=defaults.sections;
     if(!sections.some(s=>s.id===sections[active]?.id))active=0;
