@@ -5,7 +5,7 @@
   const page = normalizePath(location.pathname);
   const links = [
     ['Tentang','/#tentang'],['Galeri','/#galeri'],['Event','/events.html'],
-    ['Announcement','/announcements.html'],['Seasons','/seasons.html'],
+    ['Announcement','/announcements.html'],['How to Play','/how-to-play.html'],['Seasons','/seasons.html'],
     ['Cek Status','/status.html'],['Profile','/my-sscircle']
   ];
   const route = path => normalizePath(path).replace(/\.html$/,'');
@@ -31,7 +31,7 @@
     h.id='top';
     h.innerHTML='<a href="/" class="home-brand" aria-label="SSCircle Server beranda"><img id="home-logo" data-site-logo src="'+brandLogo.replace(/[^a-zA-Z0-9_/.?-]/g,'')+'" width="41" height="41" alt="Logo SSCircle"><span><strong>SSCircle</strong><small>SERVER</small></span></a>'+
       '<nav class="home-nav" aria-label="Navigasi utama">'+nav()+'</nav>'+
-      '<div class="ssc-header-actions"><button type="button" class="ssc-header-mailbox" data-open-mailbox aria-label="Buka Mail Box">✉<span data-mailbox-count hidden></span></button>'+
+      '<div class="ssc-header-actions"><button type="button" class="ssc-header-mailbox" data-open-mailbox aria-label="Buka Mail Box"><img class="ssc-mailbox-icon" src="/assets/mailbox-icon.svg" alt="" width="23" height="23"><span data-mailbox-count hidden></span></button>'+
       '<a class="ssc-header-profile" href="/my-sscircle" aria-label="Buka Profile"><img src="/assets/sscircle-logo.png" alt="" width="34" height="34"></a>'+
       '<button type="button" class="home-menu-button" id="home-menu-button" aria-label="Buka menu" aria-controls="ssc-navigation" aria-expanded="false">☰</button></div>';
     h.querySelector('.home-nav').id='ssc-navigation';
@@ -52,7 +52,7 @@
     const previousFooter = document.querySelector('footer.home-footer,footer.site-footer');
     const f = document.createElement('footer');f.className='home-footer ssc-unified-footer';
     f.innerHTML='<div class="home-container home-footer-content ssc-footer-content"><div class="home-footer-mark"><img id="home-footer-logo" data-site-logo src="/assets/sscircle-logo.png" width="27" height="27" alt=""><span>SSCircle Server</span></div><span id="home-footer-text">One circle. Endless stories.</span>'+
-      '<div class="home-footer-links"><a href="/registration.html">Registration</a><a href="/status.html">Cek Status</a><a href="/my-sscircle">Profile</a><a href="/rules.html">Peraturan Server</a><a href="/events.html">Event</a><a href="/announcements.html">Announcement</a><a href="/seasons.html" data-season-link hidden>Seasons</a><a href="https://discord.gg/vQQSgY2GRS" target="_blank" rel="noopener noreferrer">Discord ↗</a></div><small>© 2026 SSCircle Server</small></div>';
+      '<div class="home-footer-links"><a href="/registration.html">Registration</a><a href="/status.html">Cek Status</a><a href="/my-sscircle">Profile</a><a href="/rules.html">Peraturan Server</a><a href="/how-to-play.html">How to Play</a><a href="/events.html">Event</a><a href="/announcements.html">Announcement</a><a href="/seasons.html" data-season-link hidden>Seasons</a><a href="https://discord.gg/vQQSgY2GRS" target="_blank" rel="noopener noreferrer">Discord ↗</a></div><small>© 2026 SSCircle Server</small></div>';
     if(previousFooter) previousFooter.replaceWith(f);else document.body.append(f);
     // Use the same verified primary-account skin source as the Profile dashboard.
     // The SSCircle logo remains the fallback when no linked skin is available.
