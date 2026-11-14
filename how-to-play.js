@@ -67,7 +67,7 @@ const bar=el('div','ssc-howto-progress');for(let i=0;i<c.steps.length;i++)bar.ap
 const s=c.steps[stepIndex],body=el('section','ssc-howto-step');
 const mark=el('label','ssc-howto-check'),check=el('input');check.type='checkbox';check.checked=completed.has(markKey(c.id,stepIndex));check.onchange=()=>{const id=markKey(c.id,stepIndex);if(check.checked)completed.add(id);else completed.delete(id);void saveProgress();};mark.append(check,el('span','','Saya sudah memahami langkah ini'));
 body.append(el('span','ssc-howto-eyebrow','LANGKAH '+(stepIndex+1)),el('h4','',s.title),el('p','',s.body));
-if(s.image&&/^(?:assets\/|\/api\/media\/)/.test(s.image)){const img=el('img');img.src=s.image;img.alt=s.title;img.loading='lazy';body.append(img);}
+if(s.image&&(/^(?:assets\/|\/api\/media\/)/.test(s.image)||/^https:\/\//.test(s.image))){const img=el('img');img.src=s.image;img.alt=s.title;img.loading='lazy';body.append(img);}
 if(s.video&&/^https:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)[\w-]{11}/.test(s.video)){const a=el('a','ssc-howto-secondary','Tonton video ↗');a.href=s.video;a.target='_blank';a.rel='noopener noreferrer';body.append(a);}
 if(s.tip)body.append(el('div','ssc-howto-tip','ⓘ '+s.tip));
 if(safeLink(s.url)){const a=el('a','ssc-howto-primary',s.link||'Buka halaman ↗');a.href=s.url;if(s.url.startsWith('https://')){a.target='_blank';a.rel='noopener noreferrer';}body.append(a);}
