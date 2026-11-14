@@ -49,14 +49,19 @@ function fixture(network){
 }
 
 test('PWA fetches fresh JS even if a previous version is cached',async()=>{
-  let calls=0;
-  const app=fixture(async()=>{calls++;return basic('new-code')});
+  let calls=0,cachePolicy;
+  const app=fixture(async(_request,options)=>{
+    calls++;
+    cachePolicy=options?.cache;
+    return basic('new-code');
+  });
   const previous=await app.cache.open('sscircle-public-v10.55.6-readiness-1');
   const asset=new Request(origin+'/public-unified.js?v=9');
   await previous.put(asset,basic('old-code'));
   const res=await app.request('/public-unified.js?v=9');
   assert.equal(res.label,'new-code');
   assert.equal(calls,1);
+  assert.equal(cachePolicy,'no-cache');
   assert.ok(app.writes.length>=2);
 });
 
