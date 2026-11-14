@@ -35,7 +35,7 @@ self.addEventListener('fetch',event=>{
   // Never store arbitrary query parameters which could contain private tokens.
   if([...url.searchParams.keys()].some(key=>key!=='v')||url.search.length>100)return;
   const update=async()=>{
-    const response=await fetch(req);
+    const response=await fetch(req,{cache:CODE.test(path)?'no-cache':'default'});
     if(canCache(response)){
       const copy=response.clone();
       event.waitUntil(caches.open(CACHE).then(cache=>cache.put(req,copy)));
