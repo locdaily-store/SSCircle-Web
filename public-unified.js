@@ -84,11 +84,15 @@
     function refreshUpdates(){
       if(updatesInFlight)return updatesInFlight;
       updatesInFlight=(async()=>{
+        const controller=new AbortController();
+        const timeout=setTimeout(()=>controller.abort(),12000);
         try{
-          const response=await fetch('/api/public/nav-updates',{credentials:'same-origin',cache:'no-store'});
+          const response=await fetch('/api/public/nav-updates',{
+            credentials:'same-origin',cache:'no-store',signal:controller.signal
+          });
           if(!response.ok)return;
           displayUpdates(await response.json());
-        }catch{}
+        }catch{}finally{clearTimeout(timeout);}
       })().finally(()=>{updatesInFlight=null;});
       return updatesInFlight;
     }
