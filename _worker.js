@@ -5585,6 +5585,7 @@ async function route(req, env, ctx) {
       if (!env.DB || !env.SESSION_SECRET)
         return new Response('Pendaftaran sedang tidak tersedia.', { status: 503 });
       const settings = formFrom(await readSettingsRow(env)).settings;
+      if (!settings.open) return new Response(null,{status:302,headers:{Location:'/page-closed.html?section=registration','Cache-Control':'no-store'}});
       if (settings.open && settings.rulesEnabled && !await rulesAgreed(req, env, settings))
         return new Response(null, { status: 302, headers: { Location: '/rules', 'Cache-Control': 'no-store' } });
     }
