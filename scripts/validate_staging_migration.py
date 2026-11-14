@@ -10,6 +10,16 @@ MIGRATION_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,90}\.sql\Z")
 DATABASE_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,100}\Z")
 MAX_BYTES = 2_000_000
 
+# Automatic staging deploys accept additive migrations only. Any destructive
+# operation needs an explicit, separately reviewed backup/restore procedure.
+DANGEROUS_SQL = re.compile(
+    r"\b(?:DROP\s+(?:TABLE|INDEX|VIEW|TRIGGER|COLUMN)|"
+    r"DELETE\s+FROM|TRUNCATE\s+TABLE|"
+    r"ATTACH\s+(?:DATABASE\s+)?|DETACH\s+(?:DATABASE\s+)?|"
+    r"PRAGMA\s+(?:writable_schema|foreign_keys\s*=\s*(?:OFF|0)))\b",
+    re.IGNORECASE,
+)
+
 
 def validate(database: str, migration: str, root: Path = Path(".")) -> Path:
     if not DATABASE_RE.fullmatch(database or ""):
@@ -29,10 +39,16 @@ def validate(database: str, migration: str, root: Path = Path(".")) -> Path:
     if not 0 < size <= MAX_BYTES:
         raise ValueError("File migrasi kosong atau terlalu besar (batas 2 MB).")
     try:
-        if not path.read_text(encoding="utf-8").strip():
-            raise ValueError("File migrasi hanya berisi spasi.")
+        sql = path.read_text(encoding="utf-8")
     except UnicodeError as error:
         raise ValueError("File migrasi wajib UTF-8.") from error
+    if not sql.strip():
+        raise ValueError("File migrasi hanya berisi spasi.")
+    if DANGEROUS_SQL.search(sql):
+        raise ValueError(
+            "Migrasi mengandung operasi destruktif. Gunakan jalur review manual "
+            "dengan backup dan uji pemulihan, bukan workflow staging otomatis."
+        )
     return path
 
 
