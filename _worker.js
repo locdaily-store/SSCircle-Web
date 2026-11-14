@@ -5532,6 +5532,52 @@ async function route(req, env, ctx) {
   // Safe read-only diagnostic, available even if sessions or D1 are missing.
   if(path==='/api/health' && method==='GET')
     return J(await sscServiceHealth(env));
+  // Public navigation badges expose only published announcement IDs and active/upcoming events.
+  // Read status uses small metadata; no article bodies or private admin drafts.
+  if(path==='/api/public/nav-updates' && method==='GET'){
+    if(!env.DB)return bad('Informasi pembaruan belum tersedia.',503);
+    const now=new Date().toISOString();
+    const formSettings=formFrom(await readSettingsRow(env)).settings;
+    const eventItems=formSettings.eventsEnabled!==false
+      ? (Array.isArray(formSettings.eventsItems)?formSettings.eventsItems:[])
+        .filter(e=>e && e.id && Number.isFinite(Date.parse(e.endAt)) && Date.parse(e.endAt)>Date.now())
+        .slice(0,80).map(e=>({id:e.id,version:[e.title,e.startAt,e.endAt,e.description].map(v=>String(v||'')).join('|')}))
+      : [];
+    await sscAnnouncementSchema(env);
+    const cfg=await env.DB.prepare('SELECT settings FROM site_announcement_config WHERE id=1').first();
+    const enabled=sscAnnouncementSettings(parse(cfg?.settings)).enabled;
+    const articles=enabled
+      ? await env.DB.prepare("SELECT id,updated_at FROM site_announcements WHERE status='published' AND published_at<=? ORDER BY published_at DESC LIMIT 80").bind(now).all()
+      : {results:[]};
+    return J({announcements:(articles.results||[]).map(row=>({id:row.id,version:row.updated_at||''})),
+      events:eventItems},200,{'Cache-Control':'private, no-store'});
+  }
+  // Separate content availability from membership access. Disabled public pages
+  // show a clear page-specific notice instead of falling through to Cek Status.
+  const closedSection={
+    '/events':'events','/events.html':'events',
+    '/announcements':'announcements','/announcements.html':'announcements',
+    '/gallery':'gallery','/gallery.html':'gallery',
+    '/how-to-play':'guide','/how-to-play.html':'guide'
+  }[path];
+  if(closedSection && ['GET','HEAD'].includes(method)){
+    const isPreview=['ssc_events_preview','ssc_announcements_preview','ssc_theme_preview','ssc_preview'].some(key=>url.searchParams.has(key));
+    if(!isPreview && env.DB){
+      const settings=formFrom(await readSettingsRow(env)).settings;
+      let closed=closedSection==='events' ? settings.eventsEnabled===false
+        : closedSection==='gallery' ? settings.galleryPageEnabled===false
+        : closedSection==='guide' ? settings.gettingStarted?.enabled===false : false;
+      if(closedSection==='announcements'){
+        await sscAnnouncementSchema(env);
+        const row=await env.DB.prepare('SELECT settings FROM site_announcement_config WHERE id=1').first();
+        closed=!sscAnnouncementSettings(parse(row?.settings)).enabled;
+      }
+      if(closed)return new Response(null,{status:302,headers:{
+        Location:'/page-closed.html?section='+closedSection,'Cache-Control':'no-store'
+      }});
+    }
+    return env.ASSETS.fetch(req);
+  }
   // Semua jalur pendaftaran harus melalui Rules, termasuk URL langsung.
   if (['/registration', '/registration.html'].includes(path) && ['GET', 'HEAD'].includes(method)) {
     const preview = url.searchParams.has('ssc_registration_preview') || url.searchParams.has('ssc_theme_preview');
@@ -5562,7 +5608,7 @@ async function route(req, env, ctx) {
     if(!preview) {
       if(!env.DB) return bad('Halaman arsip belum tersedia.',503);
       const settings=formFrom(await readSettingsRow(env)).settings;
-      if(settings.seasonArchiveEnabled!==true) return new Response('Season Archive belum dibuka.',{status:404,headers:{'Content-Type':'text/plain; charset=utf-8','Cache-Control':'no-store'}});
+      if(settings.seasonArchiveEnabled!==true) return new Response(null,{status:302,headers:{Location:'/page-closed.html?section=seasons','Cache-Control':'no-store'}});
     }
     if(path==='/seasons.html') return new Response(null,{status:302,headers:{Location:'/seasons'+url.search,'Cache-Control':'no-store'}});
     return env.ASSETS.fetch(req);
@@ -5636,10 +5682,10 @@ async function route(req, env, ctx) {
   // Proteksi juga dokumen HTML, bukan hanya tombol UI: URL voting langsung tidak bisa dibuka oleh kode Pending/Rejected.
   if ((path === '/voting.html' || path === '/voting') && (method === 'GET' || method === 'HEAD')) {
     if (!env.DB || !env.SESSION_SECRET)
-      return Response.redirect(new URL('/status.html?akses-voting=belum-tersedia#kode-milikku', url), 302);
+      return Response.redirect(new URL('/page-closed.html?section=voting', url), 302);
     const voteSettings=formFrom(await readSettingsRow(env)).settings;
     if(voteSettings.homeVotingEnabled!==true) return new Response(null,{status:302,headers:{
-      Location:'/status.html?akses-voting=ditutup#kode-milikku',
+      Location:'/page-closed.html?section=voting',
       'Cache-Control':'private, no-store',Vary:'Cookie'
     }});
     const application = await playerSession(req, env);
