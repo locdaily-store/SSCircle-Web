@@ -119,7 +119,7 @@ body:not(.ssc-public-inner) .ssc-site-header{position:absolute;top:0;left:0}
 body.ssc-public-inner .ssc-site-header{position:relative;top:auto;left:auto}
 
 /* SSCircle Mail Box: recognizable envelope mark, never substitute font glyphs. */
-body .ssc-site-header .ssc-header-mailbox .ssc-mailbox-icon{width:23px;height:23px;object-fit:contain;display:block}
+body .ssc-site-header .ssc-header-mailbox .ssc-mailbox-icon{width:27px;height:27px;object-fit:contain;display:block}
 body .ssc-site-header .ssc-header-mailbox:hover .ssc-mailbox-icon{transform:translateY(-1px)}
 /* In-page onboarding links alongside existing primary actions. */
 .home-page .ssc-journey-actions{display:flex;flex-wrap:wrap;gap:11px;align-items:center;margin-top:13px}
