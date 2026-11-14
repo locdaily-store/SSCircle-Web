@@ -201,7 +201,9 @@ async function body(req, limit = 250000) {
   if (Number(req.headers.get('Content-Length') || 0) > limit)
     throw Error('Data terlalu besar.');
   const t = await req.text();
-  if (t.length > limit)
+  // The limit is in UTF-8 bytes, not JavaScript UTF-16 code units.
+  // Multibyte characters must not bypass the same payload cap.
+  if (new TextEncoder().encode(t).byteLength > limit)
     throw Error('Data terlalu besar.');
   const v = parse(t);
   if (!v || typeof v !== 'object' || Array.isArray(v))
