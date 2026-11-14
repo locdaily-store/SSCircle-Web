@@ -30,3 +30,18 @@ Uji sedikitnya keadaan idle, pemain bergabung/keluar, 20–50 pemain simulasi (j
 ## Catatan gate terakhir sebelum perbaikan
 
 Pada PR #71, workflow lengkap gagal 1 dari 247 tes: nama kunci localStorage pada tes navigasi lama berbeda dari implementasi (`ssc-nav-seen-v1-` vs `sscircle-nav-seen-v1-`). Perbaikan assertion ini mengoreksi kontrak tes, **tidak** sendiri membuktikan fitur bebas bug. Uji browser dan CI lengkap tetap wajib.
+
+## Prosedur staging dan rollback
+
+1. Catat SHA branch, status keempat job GitHub Actions, nama artifact, dan daftar migrasi yang akan diterapkan.
+2. Ambil backup D1 dengan metode resmi yang tersedia pada akun Cloudflare dan verifikasi backup dapat dibaca. Jangan menyimpan dump produksi di Git.
+3. Terapkan migrasi pada salinan database **staging** terlebih dahulu. Verifikasi jumlah data penting sebelum dan sesudah migrasi, lalu uji login, pendaftaran, voting, Mail Box, dan pairing.
+4. Uji paket website pada lingkungan staging yang menggunakan bindings dan secrets terpisah dari produksi. Lakukan pemeriksaan HTTP, sesi, pembatasan akses, dan cache PWA setelah deploy.
+5. Lakukan deploy produksi hanya setelah persetujuan dan semua gate lulus. Simpan versi deploy sebelumnya untuk rollback.
+6. Jika halaman/API gagal, kembalikan deployment website ke revisi sehat terakhir. **Rollback kode tidak otomatis membatalkan migrasi D1**: jangan melakukan rollback skema destruktif tanpa rencana restore yang telah diuji.
+7. Jika plugin Minecraft harus diganti, backup folder konfigurasi dan antrean statistik privat; matikan server secara bersih melalui panel, pasang JAR kompatibel, lalu jalankan kembali dan pantau log, TPS/MSPT, serta progres antrean.
+8. Jika sinkronisasi gagal, hentikan perubahan lebih lanjut dan periksa kode status serta antrean sebelum mengulang pengiriman. Jangan hapus `stats-queue.properties` untuk "memperbaiki" keadaan.
+
+## Bukti penerimaan rilis
+
+Rekam hasil per-SHA: tes unit, browser, Java build, pemeriksaan secret, hasil migrasi staging, smoke test deployment, pengukuran TPS/MSPT, dan cara kembali ke versi sehat. Status **siap rilis** hanya boleh diberikan setelah seluruh bukti tersedia. Proses administrasi berbasis dokumen ini tidak menggantikan pengujian nyata.
