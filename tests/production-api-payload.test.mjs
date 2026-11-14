@@ -37,3 +37,38 @@ test('JSON helper rejects arrays and invalid JSON',async()=>{
   await assert.rejects(decode(make('[]'),100),/tidak sesuai/);
   await assert.rejects(decode(make('{oops}'),100),/tidak sesuai/);
 });
+
+test('JSON body stops reading once an unknown-length stream crosses the byte cap',async()=>{
+  const encoder=new TextEncoder();
+  let pulls=0;
+  const stream=new ReadableStream({
+    pull(controller){
+      pulls++;
+      if(pulls===1)controller.enqueue(encoder.encode('{"note":"'));
+      else if(pulls===2)controller.enqueue(encoder.encode('x'.repeat(100)));
+      else controller.error(Error('Stream must not be read past the limit'));
+    }
+  });
+  const request=new Request('https://sscircle.test/api/test',{
+    method:'POST',body:stream,duplex:'half'
+  });
+  await assert.rejects(decode(request,24),/Data terlalu besar/);
+  assert.equal(pulls,2);
+});
+
+test('JSON body accepts split multibyte UTF-8 across streaming chunks',async()=>{
+  const bytes=new TextEncoder().encode(JSON.stringify({note:'🎮'}));
+  const pivot=bytes.indexOf(0xF0)+2;
+  assert.ok(pivot>2);
+  const stream=new ReadableStream({
+    start(controller){
+      controller.enqueue(bytes.slice(0,pivot));
+      controller.enqueue(bytes.slice(pivot));
+      controller.close();
+    }
+  });
+  const request=new Request('https://sscircle.test/api/test',{
+    method:'POST',body:stream,duplex:'half'
+  });
+  assert.deepEqual(await decode(request,bytes.length),{note:'🎮'});
+});
