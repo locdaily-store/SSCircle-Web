@@ -17,7 +17,13 @@
     "/events.html",
     "/announcements.html",
     "/gallery.html",
-    "/how-to-play.html"
+    "/how-to-play.html",
+    "/events",
+    "/announcements",
+    "/gallery",
+    "/how-to-play",
+    "/page-closed.html",
+    "/page-closed"
   ],
   "exclude": []
 }
