@@ -29,7 +29,7 @@ test('Guide editor is wired to Admin Control and publishes only intentionally',(
  assert.match(html,/id="getting-started-preview-frame"/);
  assert.match(admin,/SSCircleGettingStartedAdmin\?\.render\(data, dirtyMark\)/);
  assert.match(editor,/settings\.gettingStartedDraft/);
- assert.match(editor,/settings\.gettingStarted=clone\(draft\)/);
+ assert.match(editor,/data\.settings\.gettingStarted=clone\(draft\)/);
  assert.match(editor,/SSCircleImagePicker\.mount/);
 });
 test('Worker validates guide contents and keeps drafts off public API',()=>{
@@ -49,4 +49,17 @@ test('Public guide has accessible progress controls and safe media handling',()=
  for(const path of ['getting-started-data.js','getting-started.js','getting-started-admin.js','public-unified.js']){
    assert.doesNotThrow(()=>new Function(src(path)),path);
  }
+});
+
+test('Saving the How to Play page publishes the edited guide and verifies public API',()=>{
+ const editor=src('getting-started-admin.js'),admin=src('admin.js'),page=src('getting-started.js');
+ assert.match(editor,/function beforeSave\(\{draftOnly=false\}=\{\}\)/);
+ assert.match(editor,/if\(!draftOnly\)/);
+ assert.match(editor,/data\.settings\.gettingStarted=clone\(draft\)/);
+ assert.match(editor,/SSCIRCLESaveGettingStarted|SSCircleSaveGettingStarted/);
+ assert.match(admin,/SSCIRCLEGettingStartedAdmin|SSCircleGettingStartedAdmin/);
+ assert.match(admin,/beforeSave\(\{draftOnly: options\?\.draftOnly === true\}\)/);
+ assert.match(admin,/SSCIRCLE\.getForm|SSCircle\.getForm/);
+ assert.match(admin,/served\.sections\?\.length/);
+ assert.match(page,/v\.settings\?\.gettingStarted\|\|defaults/);
 });
