@@ -127,7 +127,7 @@ test('Voting yang dimatikan tidak dapat dibuka melalui URL ataupun API',async()=
  const state=await x.request('/api/voting/status',{cookie:''});
  assert.equal(state.status,200);assert.equal(state.data.enabled,false);
  const html=await x.request('/voting');assert.equal(html.status,302);
- assert.match(html.response.headers.get('Location'),/akses-voting=ditutup/);
+ assert.equal(html.response.headers.get('Location'),'/page-closed.html?section=voting');
  assert.equal((await x.request('/voting.html')).status,302);
  const api=await x.request('/api/voting');assert.equal(api.status,403);
  assert.equal((await x.request('/api/voting/vote',{method:'POST',body:{questionId:'q1',optionId:'o1'}})).status>=400,true);

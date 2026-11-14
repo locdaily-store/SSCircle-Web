@@ -34,8 +34,12 @@ async function save(t,patch){
 
 test('arsip dinonaktifkan secara default dan preview tetap dapat dibuka',async()=>{
   const t=fixture();
-  assert.equal((await t.req('/seasons')).status,404);
-  assert.equal((await t.req('/seasons.html')).status,404);
+  const closed=await t.req('/seasons');
+  assert.equal(closed.status,302);
+  assert.equal(closed.headers.get('location'),'/page-closed.html?section=seasons');
+  const closedHtml=await t.req('/seasons.html');
+  assert.equal(closedHtml.status,302);
+  assert.equal(closedHtml.headers.get('location'),'/page-closed.html?section=seasons');
   assert.equal((await t.req('/seasons?ssc_season_preview=1')).status,200);
   assert.equal((await t.req('/seasons.html?ssc_theme_preview=1')).status,302);
 });
@@ -135,4 +139,24 @@ test('V10.47.2: Admin selects a valid stats season; activation time is server-co
  const after=JSON.parse(t.db.prepare('SELECT settings FROM form_config WHERE id=1').get().settings);
  assert.equal(after.statSeasonId,'');
  assert.equal(after.statSeasonActivatedAt,'');
+});
+
+
+test('badge navigasi hanya memuat event aktif/mendatang dan pengumuman terbit',async()=>{
+  const t=fixture();
+  const now=Date.now();
+  const settings={
+    eventsEnabled:true,
+    eventsItems:[
+      {id:'event-baru',title:'Event baru',description:'Kegiatan',startAt:new Date(now+86400000).toISOString(),endAt:new Date(now+172800000).toISOString()},
+      {id:'event-lama',title:'Event lama',startAt:new Date(now-172800000).toISOString(),endAt:new Date(now-86400000).toISOString()}
+    ]
+  };
+  t.db.prepare('UPDATE form_config SET settings=? WHERE id=1').run(JSON.stringify(settings));
+  const result=await t.req('/api/public/nav-updates');
+  assert.equal(result.status,200);
+  assert.deepEqual(result.data.announcements,[]);
+  assert.equal(result.data.events.length,1);
+  assert.equal(result.data.events[0].id,'event-baru');
+  assert.match(result.data.events[0].version,/Event baru/);
 });

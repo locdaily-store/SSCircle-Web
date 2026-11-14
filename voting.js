@@ -69,6 +69,11 @@
     return gallery;
   }
   function renderVoting(payload) {
+    // A disabled or expired session must show the dedicated closed-page notice.
+    if(payload?.enabled===false || payload?.active===false){
+      location.replace('/page-closed.html?section=voting');
+      return;
+    }
     votingData=payload;
     $('vote-title').textContent=payload.title||'Voting Komunitas';
     $('vote-question').textContent=(payload.questions?.length||0)>1?'Pilih sesuai pertanyaan':'Pertanyaan Voting';

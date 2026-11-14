@@ -396,6 +396,14 @@ const HOME_DEFAULTS = {
   galleryCategories: [],
   homeProcessTitle: 'Join our Circle',
   homeProcessText: 'Daftar, tunggu hasil seleksi, lalu mulai cerita barumu di server.',
+  homeProcessEyebrow: 'JOIN THE CIRCLE',
+  homeProcessPrimaryLabel: 'Daftar Sekarang',
+  homeProcessPrimaryUrl: 'registration.html',
+  homeProcessPrimaryEnabled: true,
+  homeProcessGuideLabel: 'Panduan Memulai',
+  homeProcessGuideUrl: 'how-to-play.html',
+  homeProcessGuideEnabled: true,
+  homeProcessSteps: [{text:'Isi pendaftaran'}, {text:'Tunggu hasil seleksi'}, {text:'Mulai petualanganmu'}],
   homeDiscordTitle: 'Temukan komunitasmu.',
   homeDiscordText: 'Pengumuman, informasi pendaftaran, dan obrolan pemain tersedia di Discord SSCircle Community.',
   homeDiscordUrl: 'https://discord.gg/vQQSgY2GRS',
@@ -1267,6 +1275,9 @@ function settingsValid(input) {
     galleryPageDescription: 450,
     homeProcessTitle: 140,
     homeProcessText: 500,
+    homeProcessEyebrow: 100,
+    homeProcessPrimaryLabel: 90,
+    homeProcessGuideLabel: 90,
     homeDiscordTitle: 140,
     homeDiscordText: 500,
     homeDonateTitle: 160,
@@ -1296,6 +1307,25 @@ function settingsValid(input) {
     symbol: s(item?.symbol === undefined ? '✧' : item.symbol, 8),
     text: s(item?.text, 65)
   })).filter(item => item.text);
+  // Join Our Circle controls are validated and saved with the existing Homepage settings.
+  for (const key of ['homeProcessPrimaryEnabled','homeProcessGuideEnabled'])
+    out[key] = input[key] === undefined ? HOME_DEFAULTS[key] : input[key] === true;
+  const safeJoinHref = (value, key) => {
+    const href=s(value,350);
+    if (/^(?:\/(?!\/))?(?:[a-z0-9-]+\.html(?:#[a-z0-9-]+)?|my-sscircle|#(?:tentang|galeri|proses|komunitas|status-quick))$/i.test(href)
+      || /^https:\/\/discord\.gg\/[a-z0-9-]+\/?$/i.test(href)) return href;
+    throw Error('Tautan '+key+' harus halaman SSCircle atau Discord resmi.');
+  };
+  out.homeProcessPrimaryUrl=safeJoinHref(input.homeProcessPrimaryUrl === undefined ? HOME_DEFAULTS.homeProcessPrimaryUrl : input.homeProcessPrimaryUrl,'tombol pendaftaran');
+  out.homeProcessGuideUrl=safeJoinHref(input.homeProcessGuideUrl === undefined ? HOME_DEFAULTS.homeProcessGuideUrl : input.homeProcessGuideUrl,'tombol panduan');
+  const processSteps=input.homeProcessSteps === undefined ? HOME_DEFAULTS.homeProcessSteps : input.homeProcessSteps;
+  if(!Array.isArray(processSteps) || processSteps.length>8)
+    throw Error('Alur Join Our Circle maksimal 8 langkah.');
+  out.homeProcessSteps=processSteps.map((step,index)=>{
+    const text=s(step?.text,160);
+    if(!text)throw Error('Teks langkah '+(index+1)+' tidak boleh kosong.');
+    return {text,enabled:step?.enabled!==false};
+  });
   if (out.homeProcessTitle === 'Bergabung dalam lingkaran.')
     out.homeProcessTitle = 'Join our Circle';
   const overlay = Number(input.homeVideoOverlay);
@@ -1327,6 +1357,43 @@ function settingsValid(input) {
   const sizesProfile = ['compact', 'normal', 'wide'];
   out.homeProfileCardSize = sizesProfile.includes(input.homeProfileCardSize)
     ? input.homeProfileCardSize : 'normal';
+  // Publishable Getting Started content and private administrator draft use the same validation.
+  const validateGuide = (value, label) => {
+    if(value===undefined || value===null)return null;
+    if(!value || typeof value!=='object' || Array.isArray(value))throw Error(label+' tidak valid.');
+    const sections=value.sections;
+    const faq=value.faq;
+    if(!Array.isArray(sections) || sections.length<1 || sections.length>12)
+      throw Error(label+' memerlukan 1–12 kategori.');
+    if(!Array.isArray(faq) || faq.length>30)
+      throw Error(label+' maksimal 30 FAQ.');
+    const ids=new Set();
+    const guideSections=sections.map(section=>{
+      const id=s(section?.id,64), title=s(section?.title,110);
+      if(!/^[a-z0-9_-]{2,64}$/i.test(id)||ids.has(id)||!title)
+        throw Error(label+' memiliki kategori atau ID duplikat.');
+      ids.add(id);
+      if(!Array.isArray(section?.steps)||!section.steps.length||section.steps.length>20)
+        throw Error(label+' membutuhkan 1–20 langkah per kategori.');
+      return {id,title,summary:s(section.summary,260),icon:s(section.icon,16),steps:section.steps.map(step=>{
+        const title=s(step?.title,120),text=s(step?.text,1500);
+        if(!title||!text)throw Error('Langkah tutorial harus mempunyai judul dan deskripsi.');
+        const href=s(step?.href,350),video=s(step?.video,250),image=s(step?.image,700);
+        if(href && !(/^\/(?!\/)[a-z0-9/_#.?=&%-]+$/i.test(href)||/^https:\/\/(discord\.gg|discord\.com)\/[a-z0-9/_?=&%-]+$/i.test(href)))
+          throw Error('Tautan tutorial harus halaman SSCircle atau Discord resmi.');
+        if(video && !/^https:\/\/(www\.)?(youtube\.com|youtu\.be)\//i.test(video))
+          throw Error('Video tutorial harus URL YouTube HTTPS.');
+        if(image)imageSource(image,'Gambar tutorial');
+        return {title,text,href,linkLabel:s(step?.linkLabel,90),video,image};
+      })};
+    });
+    return {enabled:value.enabled!==false,title:s(value.title,110)||'How to Play',
+      subtitle:s(value.subtitle,600),sections:guideSections,
+      faq:faq.map(entry=>({question:s(entry?.question,200),answer:s(entry?.answer,1200)}))
+        .filter(entry=>entry.question&&entry.answer)};
+  };
+  out.gettingStarted=validateGuide(input.gettingStarted,'Panduan publik');
+  out.gettingStartedDraft=validateGuide(input.gettingStartedDraft,'Draft panduan');
   const homeGalleryLimit = input.homeGalleryLimit === undefined ? HOME_DEFAULTS.homeGalleryLimit : Number(input.homeGalleryLimit);
   if (!Number.isInteger(homeGalleryLimit) || homeGalleryLimit < 1 || homeGalleryLimit > 80)
     throw Error('Jumlah foto Homepage harus berupa angka antara 1 dan 80.');
@@ -5465,6 +5532,53 @@ async function route(req, env, ctx) {
   // Safe read-only diagnostic, available even if sessions or D1 are missing.
   if(path==='/api/health' && method==='GET')
     return J(await sscServiceHealth(env));
+  // Public navigation badges expose only published announcement IDs and active/upcoming events.
+  // Read status uses small metadata; no article bodies or private admin drafts.
+  if(path==='/api/public/nav-updates' && method==='GET'){
+    if(!env.DB)return bad('Informasi pembaruan belum tersedia.',503);
+    const now=new Date().toISOString();
+    const formSettings=formFrom(await readSettingsRow(env)).settings;
+    const eventItems=formSettings.eventsEnabled!==false
+      ? (Array.isArray(formSettings.eventsItems)?formSettings.eventsItems:[])
+        .filter(e=>e && e.id && Number.isFinite(Date.parse(e.endAt)) && Date.parse(e.endAt)>Date.now())
+        .slice(0,80).map(e=>({id:e.id,version:[e.title,e.startAt,e.endAt,e.description].map(v=>String(v||'')).join('|')}))
+      : [];
+    await sscAnnouncementSchema(env);
+    const cfg=await env.DB.prepare('SELECT settings FROM site_announcement_config WHERE id=1').first();
+    const enabled=sscAnnouncementSettings(parse(cfg?.settings)).enabled;
+    const articles=enabled
+      ? await env.DB.prepare("SELECT id,updated_at FROM site_announcements WHERE status='published' AND published_at<=? ORDER BY published_at DESC LIMIT 80").bind(now).all()
+      : {results:[]};
+    return J({announcements:(articles.results||[]).map(row=>({id:row.id,version:row.updated_at||''})),
+      events:eventItems},200,{'Cache-Control':'private, no-store'});
+  }
+  // Separate content availability from membership access. Disabled public pages
+  // show a clear page-specific notice instead of falling through to Cek Status.
+  const closedSection={
+    '/events':'events','/events.html':'events',
+    '/announcements':'announcements','/announcements.html':'announcements',
+    '/gallery':'gallery','/gallery.html':'gallery',
+    '/how-to-play':'guide','/how-to-play.html':'guide'
+  }[path];
+  if(closedSection && ['GET','HEAD'].includes(method)){
+    const isPreview=['ssc_events_preview','ssc_announcements_preview','ssc_theme_preview','ssc_preview'].some(key=>url.searchParams.has(key));
+    if(!isPreview && !env.DB) return new Response(null,{status:302,headers:{Location:'/page-closed.html?section='+closedSection,'Cache-Control':'no-store'}});
+    if(!isPreview && env.DB){
+      const settings=formFrom(await readSettingsRow(env)).settings;
+      let closed=closedSection==='events' ? settings.eventsEnabled===false
+        : closedSection==='gallery' ? settings.galleryPageEnabled===false
+        : closedSection==='guide' ? settings.gettingStarted?.enabled===false : false;
+      if(closedSection==='announcements'){
+        await sscAnnouncementSchema(env);
+        const row=await env.DB.prepare('SELECT settings FROM site_announcement_config WHERE id=1').first();
+        closed=!sscAnnouncementSettings(parse(row?.settings)).enabled;
+      }
+      if(closed)return new Response(null,{status:302,headers:{
+        Location:'/page-closed.html?section='+closedSection,'Cache-Control':'no-store'
+      }});
+    }
+    return env.ASSETS.fetch(req);
+  }
   // Semua jalur pendaftaran harus melalui Rules, termasuk URL langsung.
   if (['/registration', '/registration.html'].includes(path) && ['GET', 'HEAD'].includes(method)) {
     const preview = url.searchParams.has('ssc_registration_preview') || url.searchParams.has('ssc_theme_preview');
@@ -5472,6 +5586,7 @@ async function route(req, env, ctx) {
       if (!env.DB || !env.SESSION_SECRET)
         return new Response('Pendaftaran sedang tidak tersedia.', { status: 503 });
       const settings = formFrom(await readSettingsRow(env)).settings;
+      if (!settings.open) return new Response(null,{status:302,headers:{Location:'/page-closed.html?section=registration','Cache-Control':'no-store'}});
       if (settings.open && settings.rulesEnabled && !await rulesAgreed(req, env, settings))
         return new Response(null, { status: 302, headers: { Location: '/rules', 'Cache-Control': 'no-store' } });
     }
@@ -5495,7 +5610,7 @@ async function route(req, env, ctx) {
     if(!preview) {
       if(!env.DB) return bad('Halaman arsip belum tersedia.',503);
       const settings=formFrom(await readSettingsRow(env)).settings;
-      if(settings.seasonArchiveEnabled!==true) return new Response('Season Archive belum dibuka.',{status:404,headers:{'Content-Type':'text/plain; charset=utf-8','Cache-Control':'no-store'}});
+      if(settings.seasonArchiveEnabled!==true) return new Response(null,{status:302,headers:{Location:'/page-closed.html?section=seasons','Cache-Control':'no-store'}});
     }
     if(path==='/seasons.html') return new Response(null,{status:302,headers:{Location:'/seasons'+url.search,'Cache-Control':'no-store'}});
     return env.ASSETS.fetch(req);
@@ -5569,10 +5684,11 @@ async function route(req, env, ctx) {
   // Proteksi juga dokumen HTML, bukan hanya tombol UI: URL voting langsung tidak bisa dibuka oleh kode Pending/Rejected.
   if ((path === '/voting.html' || path === '/voting') && (method === 'GET' || method === 'HEAD')) {
     if (!env.DB || !env.SESSION_SECRET)
-      return Response.redirect(new URL('/status.html?akses-voting=belum-tersedia#kode-milikku', url), 302);
+      return Response.redirect(new URL('/page-closed.html?section=voting', url), 302);
     const voteSettings=formFrom(await readSettingsRow(env)).settings;
-    if(voteSettings.homeVotingEnabled!==true) return new Response(null,{status:302,headers:{
-      Location:'/status.html?akses-voting=ditutup#kode-milikku',
+    // Disabled or expired voting is a closed public page, not an account-status problem.
+    if(!votingRuntime(voteSettings).active) return new Response(null,{status:302,headers:{
+      Location:'/page-closed.html?section=voting',
       'Cache-Control':'private, no-store',Vary:'Cookie'
     }});
     const application = await playerSession(req, env);
@@ -5719,6 +5835,7 @@ async function route(req, env, ctx) {
   if (path === '/api/form' && method === 'GET') {
     const f = formFrom(await env.DB.prepare('SELECT * FROM form_config WHERE id=1').first());
     delete f.settings.homeVotingVotes;
+    delete f.settings.gettingStartedDraft;
     // Data draft Season Archive hanya untuk admin; ranking lama tetap dapat dipakai di Homepage.
     // Juga cegah metadata arsip bocor melalui API publik saat halaman dinonaktifkan.
     f.settings.homeLeaderboardSeasons = (f.settings.homeLeaderboardSeasons || []).map(season =>

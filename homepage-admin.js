@@ -1439,9 +1439,82 @@ window.SSCircleHomeAdmin = (() => {
     const upcomingOpen=node('a','button secondary','Buka Atur Event & Jadwal ↗');upcomingOpen.href='#events-admin';
     upcomingOpen.onclick=(event)=>{event.preventDefault();document.querySelector('[data-tab="events-admin"]')?.click();};
     upcoming.append(upcomingOpen);
-    const process = section('06 · Alur bergabung', 'Penjelasan singkat langkah bergabung ke SSCircle.');
-    toggle(process, 'homeShowProcess', 'Tampilkan alur pendaftaran', '');
-    formGrid(process, [['homeProcessTitle', 'Judul bagian', 'input'], ['homeProcessText', 'Deskripsi alur', 'textarea']]);
+    const process = section('06 · Join Our Circle', 'Kelola judul, deskripsi, tombol, dan seluruh urutan langkah pendaftaran dari satu tempat.');
+    toggle(process, 'homeShowProcess', 'Tampilkan Join Our Circle', 'Sembunyikan tanpa menghapus pengaturan dan daftar langkah.');
+    formGrid(process, [
+      ['homeProcessEyebrow', 'Label kecil di atas bagian', 'input'],
+      ['homeProcessTitle', 'Judul bagian', 'input'],
+      ['homeProcessText', 'Deskripsi alur', 'textarea']
+    ]);
+    const processButtons = node('div', 'home-admin-process-buttons');
+    processButtons.append(node('h3', '', 'Tombol pada Join Our Circle'));
+    toggle(processButtons, 'homeProcessPrimaryEnabled', 'Tampilkan tombol utama', 'Tombol pendaftaran di Join Our Circle, terpisah dari tombol hero.');
+    formGrid(processButtons, [
+      ['homeProcessPrimaryLabel', 'Tulisan tombol utama', 'input'],
+      ['homeProcessPrimaryUrl', 'Tautan tombol utama', 'input']
+    ]);
+    toggle(processButtons, 'homeProcessGuideEnabled', 'Tampilkan tombol panduan', 'Tombol How to Play pada Join Our Circle.');
+    formGrid(processButtons, [
+      ['homeProcessGuideLabel', 'Tulisan tombol panduan', 'input'],
+      ['homeProcessGuideUrl', 'Tautan tombol panduan', 'input']
+    ]);
+    processButtons.append(node('p', 'field-help', 'Tautan menggunakan halaman SSCircle (misalnya registration.html, how-to-play.html, status.html) atau undangan discord.gg resmi.'));
+    process.append(processButtons);
+    const processEditor = node('div', 'home-admin-process-editor');
+    processEditor.append(node('h3', '', 'Tahapan bergabung'), node('p', 'field-help', 'Ubah teks tiap langkah, sembunyikan yang tidak diperlukan, tambah atau hapus, lalu atur urutannya. Nomor akan mengikuti urutan yang tampil.'));
+    if (!Array.isArray(state.settings.homeProcessSteps))
+      state.settings.homeProcessSteps = [
+        { text: 'Isi pendaftaran', enabled: true },
+        { text: 'Tunggu hasil seleksi', enabled: true },
+        { text: 'Mulai petualanganmu', enabled: true }
+      ];
+    const processRows = node('div', 'home-admin-process-rows');
+    processEditor.append(processRows);
+    function redrawProcessSteps() {
+      const entries = state.settings.homeProcessSteps;
+      processRows.replaceChildren();
+      entries.forEach((entry, index) => {
+        const row = node('div', 'home-admin-process-row');
+        const number = node('strong', 'home-admin-process-number', String(index + 1).padStart(2, '0'));
+        const field = node('label', 'field-group');
+        field.append(node('span', 'field-label', 'Teks langkah ' + (index + 1)));
+        const input = node('input');
+        input.type = 'text'; input.maxLength = 160; input.value = entry.text || '';
+        input.oninput = () => { entry.text = input.value; changed(); };
+        field.append(input);
+        const enabled = node('label', 'home-admin-process-enabled');
+        const check = node('input'); check.type = 'checkbox'; check.checked = entry.enabled !== false;
+        check.onchange = () => { entry.enabled = check.checked; changed(); };
+        enabled.append(check, node('span', '', 'Tampilkan'));
+        const actions = node('div', 'home-admin-gallery-add');
+        const move = offset => {
+          const target = index + offset;
+          if (target < 0 || target >= entries.length) return;
+          [entries[index], entries[target]] = [entries[target], entries[index]];
+          changed(); redrawProcessSteps();
+        };
+        const up = helpButton(actions, '↑', () => move(-1)); up.disabled = index === 0;
+        const down = helpButton(actions, '↓', () => move(1)); down.disabled = index === entries.length - 1;
+        helpButton(actions, 'Hapus', async () => {
+          if (!await window.SSCNotice.confirm('Hapus langkah ini dari Join Our Circle?', {danger:true,confirmText:'Hapus langkah'})) return;
+          entries.splice(index, 1);
+          changed(); redrawProcessSteps();
+        });
+        row.append(number, field, enabled, actions);
+        processRows.append(row);
+      });
+      const add = node('button', 'button secondary', '+ Tambah langkah');
+      add.type = 'button'; add.disabled = entries.length >= 8;
+      add.onclick = () => {
+        if (entries.length >= 8) return;
+        entries.push({ text: 'Langkah baru', enabled: true });
+        changed(); redrawProcessSteps();
+        processRows.lastElementChild?.previousElementSibling?.querySelector('input[type=text]')?.focus();
+      };
+      processRows.append(add);
+    }
+    redrawProcessSteps();
+    process.append(processEditor);
     const community = section('07 · Stay Connected', 'Pengaturan untuk bagian 04 · Stay Connected di Homepage, termasuk Discord dan semua tautan media sosial.');
     toggle(community, 'homeShowDiscord', 'Tampilkan Stay Connected di Homepage', 'Bagian Discord dan tautan media sosial tampil bersama.');
     formGrid(community, [

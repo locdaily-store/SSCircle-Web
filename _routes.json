@@ -13,7 +13,17 @@
     "/my-sscircle",
     "/my-sscircle.html",
     "/mailbox",
-    "/mailbox.html"
+    "/mailbox.html",
+    "/events.html",
+    "/announcements.html",
+    "/gallery.html",
+    "/how-to-play.html",
+    "/events",
+    "/announcements",
+    "/gallery",
+    "/how-to-play",
+    "/page-closed.html",
+    "/page-closed"
   ],
   "exclude": []
 }

@@ -6,7 +6,7 @@
   const links = [
     ['Tentang','/#tentang'],['Galeri','/#galeri'],['Event','/events.html'],
     ['Announcement','/announcements.html'],['Seasons','/seasons.html'],
-    ['Cek Status','/status.html'],['Profile','/my-sscircle']
+    ['Cek Status','/status.html'],['How to Play','/how-to-play.html'],['Profile','/my-sscircle']
   ];
   const route = path => normalizePath(path).replace(/\.html$/,'');
   const isActive = href => {
@@ -18,7 +18,9 @@
   };
   const nav = () => links.map(([name,href]) => {
     const active=isActive(href)||(name==='Galeri'&&route(page)==='/gallery');
-    return '<a class="home-nav-link'+(active?' ssc-nav-active':'')+'" href="'+href+'"'+(active?' aria-current="page"':'')+'>'+name+'</a>';
+    const kind=name==='Event'?'events':name==='Announcement'?'announcements':'';
+    const badge=kind?'<span class="ssc-nav-notice" data-nav-update="'+kind+'" hidden aria-label="Pemberitahuan baru"></span>':'';
+    return '<a class="home-nav-link'+(active?' ssc-nav-active':'')+'" href="'+href+'"'+(active?' aria-current="page"':'')+'>'+name+badge+'</a>';
   }).join('')+'<a class="home-nav-join'+(route(page)==='/registration'?' ssc-nav-active':'')+'" href="/registration.html"'+(route(page)==='/registration'?' aria-current="page"':'')+'>Pendaftaran <span aria-hidden="true">↗</span></a>';
   function assemble() {
     if (document.body.classList.contains('admin-page') || document.body.closest('[data-admin-only]')) return;
@@ -31,9 +33,9 @@
     h.id='top';
     h.innerHTML='<a href="/" class="home-brand" aria-label="SSCircle Server beranda"><img id="home-logo" data-site-logo src="'+brandLogo.replace(/[^a-zA-Z0-9_/.?-]/g,'')+'" width="41" height="41" alt="Logo SSCircle"><span><strong>SSCircle</strong><small>SERVER</small></span></a>'+
       '<nav class="home-nav" aria-label="Navigasi utama">'+nav()+'</nav>'+
-      '<div class="ssc-header-actions"><button type="button" class="ssc-header-mailbox" data-open-mailbox aria-label="Buka Mail Box">✉<span data-mailbox-count hidden></span></button>'+
+      '<div class="ssc-header-actions"><button type="button" class="ssc-header-mailbox" data-open-mailbox aria-label="Buka Mail Box"><img class="ssc-mailbox-icon" src="/assets/mailbox-envelope.svg" alt="" aria-hidden="true"><span data-mailbox-count hidden></span></button>'+
       '<a class="ssc-header-profile" href="/my-sscircle" aria-label="Buka Profile"><img src="/assets/sscircle-logo.png" alt="" width="34" height="34"></a>'+
-      '<button type="button" class="home-menu-button" id="home-menu-button" aria-label="Buka menu" aria-controls="ssc-navigation" aria-expanded="false">☰</button></div>';
+      '<button type="button" class="home-menu-button" id="home-menu-button" aria-label="Buka menu" aria-controls="ssc-navigation" aria-expanded="false">☰<span class="ssc-hamburger-notice" data-nav-total hidden></span></button></div>';
     h.querySelector('.home-nav').id='ssc-navigation';
     old.replaceWith(h);
     if (page !== '/') document.body.classList.add('ssc-public-inner');
@@ -49,10 +51,52 @@
     navigation.addEventListener('click',e=>{if(e.target.closest('a'))setMenuOpen(false);});
     document.addEventListener('keydown',e=>{if(e.key==='Escape')setMenuOpen(false);});
     document.addEventListener('click',e=>{if(h.isConnected&&!h.contains(e.target))setMenuOpen(false);});
+    // Counts represent content not yet visited in this browser, not Mail Box messages.
+    // A successful visit acknowledges only its own section and leaves other badges intact.
+    const seenPrefix='sscircle-nav-seen-v1-';
+    const seenFor=kind=>{
+      try{const value=JSON.parse(localStorage.getItem(seenPrefix+kind)||'{}');
+        return value&&typeof value==='object'&&!Array.isArray(value)?value:{};
+      }catch{return {};}
+    };
+    const saveSeen=(kind,rows)=>{
+      try{localStorage.setItem(seenPrefix+kind,JSON.stringify(Object.fromEntries(rows.slice(0,80).map(x=>[x.id,String(x.version||'')]))));}catch{}
+    };
+    const isCurrent=kind=>route(page)===(kind==='events'?'/events':'/announcements');
+    const displayUpdates=(payload)=>{
+      let total=0;
+      for(const kind of ['events','announcements']){
+        const rows=Array.isArray(payload?.[kind])?payload[kind].filter(x=>x&&typeof x.id==='string'&&x.id.length<130).slice(0,80):[];
+        const seen=seenFor(kind);
+        const visiting=isCurrent(kind);
+        if(visiting)saveSeen(kind,rows);
+        const unread=visiting?0:rows.filter(x=>seen[x.id]!==String(x.version||'')).length;
+        const badge=h.querySelector('[data-nav-update="'+kind+'"]');
+        if(badge){badge.hidden=unread===0;badge.textContent=unread>99?'99+':String(unread);badge.setAttribute('aria-label',unread+' '+(kind==='events'?'event':'announcement')+' baru');}
+        total+=unread;
+      }
+      const mobile=h.querySelector('[data-nav-total]');
+      if(mobile){mobile.hidden=total===0;mobile.textContent=total>99?'99+':String(total);mobile.setAttribute('aria-label',total+' pembaruan baru');menu.setAttribute('aria-label',total?'Buka menu, '+total+' pembaruan baru':'Buka menu');}
+    };
+    async function refreshUpdates(){
+      try{
+        const response=await fetch('/api/public/nav-updates',{credentials:'same-origin',cache:'no-store'});
+        if(!response.ok)return;
+        displayUpdates(await response.json());
+      }catch{}
+    }
+    const isPreview=new URLSearchParams(location.search).has('ssc_preview')||/ssc_(events|announcement|theme|season)_preview/.test(location.search);
+    if(!isPreview){
+      void refreshUpdates();
+      document.addEventListener('visibilitychange',()=>{if(!document.hidden)void refreshUpdates();});
+      window.addEventListener('focus',()=>void refreshUpdates());
+      const cadence=setInterval(()=>{if(!document.hidden)void refreshUpdates();},120000);
+      window.addEventListener('pagehide',()=>clearInterval(cadence),{once:true});
+    }
     const previousFooter = document.querySelector('footer.home-footer,footer.site-footer');
     const f = document.createElement('footer');f.className='home-footer ssc-unified-footer';
     f.innerHTML='<div class="home-container home-footer-content ssc-footer-content"><div class="home-footer-mark"><img id="home-footer-logo" data-site-logo src="/assets/sscircle-logo.png" width="27" height="27" alt=""><span>SSCircle Server</span></div><span id="home-footer-text">One circle. Endless stories.</span>'+
-      '<div class="home-footer-links"><a href="/registration.html">Registration</a><a href="/status.html">Cek Status</a><a href="/my-sscircle">Profile</a><a href="/rules.html">Peraturan Server</a><a href="/events.html">Event</a><a href="/announcements.html">Announcement</a><a href="/seasons.html" data-season-link hidden>Seasons</a><a href="https://discord.gg/vQQSgY2GRS" target="_blank" rel="noopener noreferrer">Discord ↗</a></div><small>© 2026 SSCircle Server</small></div>';
+      '<div class="home-footer-links"><a href="/registration.html">Registration</a><a href="/status.html">Cek Status</a><a href="/my-sscircle">Profile</a><a href="/rules.html">Peraturan Server</a><a href="/how-to-play.html">How to Play</a><a href="/events.html">Event</a><a href="/announcements.html">Announcement</a><a href="/seasons.html" data-season-link hidden>Seasons</a><a href="https://discord.gg/vQQSgY2GRS" target="_blank" rel="noopener noreferrer">Discord ↗</a></div><small>© 2026 SSCircle Server</small></div>';
     if(previousFooter) previousFooter.replaceWith(f);else document.body.append(f);
     // Use the same verified primary-account skin source as the Profile dashboard.
     // The SSCircle logo remains the fallback when no linked skin is available.

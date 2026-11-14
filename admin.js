@@ -117,6 +117,8 @@ function tab(id) {
     window.SSCircleThemeEditor?.schedule();
   if (id === 'gallery-admin')
     window.SSCircleGalleryAdmin?.schedule();
+  if (id === 'getting-started-admin')
+    window.SSCircleGettingStartedAdmin?.preview();
   if (id === 'analytics')
     renderAnalytics();
   if (id === 'media')
@@ -175,6 +177,7 @@ async function refresh() {
   window.SSCircleRegistrationPreview?.render(data);
   window.SSCircleHomeAdmin?.render(data, dirtyMark);
   window.SSCircleGalleryAdmin?.render(data);
+  window.SSCircleGettingStartedAdmin?.render(data, dirtyMark);
   window.SSCircleVoteAdmin?.render(data, dirtyMark);
   window.SSCircleRulesAdmin?.render(data, dirtyMark);
   window.SSCircleEventsAdmin?.render(data, dirtyMark);
@@ -884,11 +887,18 @@ function addBlock(type, page = selectedPage()) {
 }
 for (const [id, type] of [['add-question', 'question'], ['add-text', 'text'], ['add-image', 'image'], ['add-video', 'video']])
   $('#' + id).onclick = () => addBlock(type);
-async function save() {
+async function save(options = {}) {
+  const guideActive = !!document.querySelector('#getting-started-admin:not(.hide)');
+  // General Save in How to Play publishes the edited guide. The separate Draft button does not.
+  const guideSave = guideActive
+    ? window.SSCircleGettingStartedAdmin?.beforeSave({draftOnly: options?.draftOnly === true})
+    : null;
   const btn = $('#save');
   btn.disabled = true;
   const saveButtons = [
     '#gallery-admin-save',
+    '#getting-started-save-draft',
+    '#getting-started-publish',
     '#home-admin-save',
     '#home-admin-save-top',
     '#save',
@@ -920,7 +930,25 @@ async function save() {
       b.classList.add('save-flash');
       setTimeout(() => b.classList.remove('save-flash'), 1150);
     });
-    SSCNotice.toast('Perubahan berhasil disimpan.', 'success');
+    if (guideSave?.published) {
+      // Verify that the public API actually serves the newly saved guide, not default content.
+      try {
+        const publicData = await SSCircle.getForm();
+        const served = publicData?.settings?.gettingStarted;
+        const expected = guideSave.guide;
+        if (!served || served.title !== expected.title
+            || served.sections?.length !== expected.sections.length
+            || served.sections?.[0]?.title !== expected.sections[0]?.title) {
+          SSCNotice.toast('Pengaturan tersimpan, tetapi isi How to Play dari API publik belum sesuai. Periksa deployment Worker dan muat ulang.', 'warning', 8500);
+        } else {
+          SSCNotice.toast('Panduan berhasil disimpan dan diterbitkan. Perubahan tersedia pada halaman How to Play.', 'success');
+        }
+      } catch {
+        SSCNotice.toast('Panduan tersimpan. Verifikasi halaman publik belum berhasil; periksa koneksi atau refresh halaman.', 'warning', 7500);
+      }
+    } else {
+      SSCNotice.toast(guideActive ? 'Draft panduan berhasil disimpan, belum diterbitkan.' : 'Perubahan berhasil disimpan.', 'success');
+    }
     renderBuilder();
     summary();
   }
@@ -934,6 +962,7 @@ async function save() {
     });
   }
 }
+window.SSCircleSaveGettingStarted = options => save(options);
 $('#save').onclick = save;
 $('#gallery-admin-save').onclick = save;
 $('#save-bottom').onclick = save;

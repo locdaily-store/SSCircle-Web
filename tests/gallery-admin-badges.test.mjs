@@ -9,7 +9,7 @@ test('Gallery has a dedicated Admin Control tab and preserves unified photo stor
   assert.match(html,/id="gallery-admin-editor"/);
   assert.match(html,/id="gallery-admin-preview-frame"/);
   assert.match(home,/standaloneGallery\.replaceChildren\(gallery\)/);
-  assert.match(home,/gallery: \[\]/);
+  assert.match(home,/gallery: \[homepageGallery\]/);
   assert.match(home,/state\.settings\.homeGallery/);
   assert.match(admin,/SSCircleGalleryAdmin\?\.render\(data\)/);
   assert.match(admin,/'#gallery-admin-save'/);
@@ -65,7 +65,7 @@ test('Gallery editor has a clear sequence and current asset versions',()=>{
   const home=source('homepage-admin.js'),html=source('admin.html'),layout=source('gallery-admin.css');
   for(const text of ['01 · Informasi galeri','02 · Kategori foto','03 · Koleksi foto'])assert.ok(home.includes(text));
   assert.match(layout,/\.ssc-gallery-admin-editor \.home-admin-gallery-photo-row/);
-  assert.match(html,/homepage-admin\.js\?v=10\.57\.1/);
+  assert.match(html,/homepage-admin\.js\?v=10\.57\.3/);
   assert.match(html,/gallery-admin\.css\?v=10\.57\.1/);
   assert.match(source('gallery-admin.js'),/aria-pressed/);
 });

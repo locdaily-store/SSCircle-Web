@@ -9,6 +9,9 @@ window.SSCircleOverview = (() => {
     return n;
   };
   let requestCount=0;
+  let lastPendingEvents=null;
+  const stateText=el=>el;
+  const fmt=new Intl.NumberFormat('id-ID');
   const labels={pending:'Menunggu review',accepted:'Diterima',rejected:'Ditolak'};
   const go = id => document.querySelector('.dashboard-sidebar [data-tab="'+id+'"]')?.click();
   function link(label,id) {
@@ -30,10 +33,35 @@ window.SSCircleOverview = (() => {
     const rejected=list.filter(s=>s.status==='rejected').length;
     const pct=n=>total?Math.round(n/total*100):0;
     root.replaceChildren();
+    const headline=el('section','ssc-overview-operational');
+    const headlineHead=el('div','ssc-overview-operational-head');
+    headlineHead.append(el('div','ssc-overview-label','OPERATIONAL STATUS'),el('strong','','Pusat aktivitas admin'));
+    headline.append(headlineHead);
+    const statusTiles=el('div','ssc-overview-operational-tiles');
+    const statusTile=(label,value,hint,className,to)=>{
+      const item=el('button','ssc-overview-operational-tile '+className);
+      item.type='button';
+      const top=el('span','ssc-overview-operational-label',label);
+      const number=el('strong','ssc-overview-operational-value',value);
+      const subtitle=el('small','',hint);
+      item.append(top,number,subtitle);
+      item.onclick=()=>go(to);
+      return item;
+    };
+    statusTiles.append(
+      statusTile('Pendaftaran',data.settings?.open?'Dibuka':'Ditutup','Kelola akses pendaftar','is-registration','appearance'),
+      statusTile('Menunggu review',fmt.format(pending),'Pengajuan keanggotaan','is-pending','answers')
+    );
+    const eventTile=statusTile('Pengajuan Event',lastPendingEvents===null?'…':fmt.format(lastPendingEvents),
+      'Menunggu persetujuan pengurus','is-events','community-events-admin');
+    eventTile.id='ssc-overview-event-pending';
+    statusTiles.append(eventTile);
+    headline.append(statusTiles);
+    root.append(headline);
     const area=el('div','ssc-overview-grid');
     const chartCard=el('section','panel ssc-overview-card');
     const chartTop=el('div','ssc-overview-card-head');
-    chartTop.append(el('div','ssc-overview-label','MEMBERSHIP ANALYTICS'),el('span','ssc-overview-pill','Real-time snapshot'));
+    chartTop.append(el('div','ssc-overview-label','MEMBERSHIP ANALYTICS'),el('span','ssc-overview-pill','Data pendaftaran terbaru'));
     chartCard.append(chartTop,el('h2','','Komposisi pendaftaran'));
     const content=el('div','ssc-overview-chart-content');
     const donut=el('div','ssc-overview-donut');
@@ -82,6 +110,8 @@ window.SSCircleOverview = (() => {
     publication.append(numbers,link('Buka editor Announcement →','announcements-admin'));
     second.append(operations,publication);
     root.append(area,second);
+    root.append(el('p','ssc-overview-dashboard-note','Jumlah pendaftar berdasarkan data Admin Control. Pengajuan Event diperbarui otomatis dari antrean persetujuan.'));
+    window.SSCircleCommunityV55Admin?.refreshBadge?.();
     const turn=++requestCount;
     fetch('/api/admin/announcements',{credentials:'same-origin',cache:'no-store'})
       .then(r=>r.ok?r.json():Promise.reject(Error('Tidak tersedia')))
@@ -93,5 +123,18 @@ window.SSCircleOverview = (() => {
       })
       .catch(()=>{if(turn===requestCount && document.contains(numbers))numbers.replaceChildren(el('span','field-help','Status artikel belum tersedia.'));});
   }
+  function eventPendingChanged(event) {
+    const value=Number(event?.detail?.count);
+    if(!Number.isFinite(value)||value<0)return;
+    lastPendingEvents=value;
+    const tile=$('ssc-overview-event-pending');
+    if(!tile)return;
+    const number=tile.querySelector('.ssc-overview-operational-value');
+    if(number)number.textContent=fmt.format(value);
+    tile.classList.toggle('has-pending',value>0);
+    const note=tile.querySelector('small');
+    if(note)note.textContent=value>0?'Perlu ditinjau sekarang':'Tidak ada pengajuan tertunda';
+  }
+  window.addEventListener('sscircle:event-proposals-pending',eventPendingChanged);
   return {render};
 })();

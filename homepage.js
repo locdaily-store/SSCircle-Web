@@ -44,6 +44,14 @@
     homeGalleryText: 'Sejumlah sudut dan kenangan dari perjalanan komunitas kami.',
     homeProcessTitle: 'Join our Circle',
     homeProcessText: 'Daftar, tunggu hasil seleksi, lalu mulai cerita barumu di server.',
+    homeProcessEyebrow: 'JOIN THE CIRCLE',
+    homeProcessPrimaryLabel: 'Daftar Sekarang',
+    homeProcessPrimaryUrl: 'registration.html',
+    homeProcessPrimaryEnabled: true,
+    homeProcessGuideLabel: 'Panduan Memulai',
+    homeProcessGuideUrl: 'how-to-play.html',
+    homeProcessGuideEnabled: true,
+    homeProcessSteps: [{ text: 'Isi pendaftaran' }, { text: 'Tunggu hasil seleksi' }, { text: 'Mulai petualanganmu' }],
     homeDiscordTitle: 'Temukan komunitasmu.',
     homeDiscordText: 'Pengumuman, informasi pendaftaran, dan obrolan pemain tersedia di Discord SSCircle Community.',
     homeDiscordUrl: 'https://discord.gg/vQQSgY2GRS',
@@ -725,9 +733,41 @@
     paint('home-gallery-eyebrow', s.homeGalleryEyebrow);
     paint('home-gallery-title', s.homeGalleryTitle);
     paint('home-gallery-description', s.homeGalleryText);
+    paint('home-process-eyebrow', s.homeProcessEyebrow);
     paint('home-process-title', s.homeProcessTitle);
     paint('home-process-description', s.homeProcessText);
-    paint('home-process-button', s.homePrimaryCTA + ' ↗');
+    const setupProcessLink = (id, label, href, enabled) => {
+      const link = $(id);
+      if (!link) return;
+      link.textContent = (String(label || '').trim() || 'Selengkapnya') + ' ↗';
+      const linkValue = String(href || '');
+      const validInternal = /^(?:\/(?!\/))?(?:[a-z0-9-]+\.html(?:#[a-z0-9-]+)?|my-sscircle|#(?:tentang|galeri|proses|komunitas|status-quick))$/i.test(linkValue);
+      const validDiscord = /^https:\/\/discord\.gg\/[a-z0-9-]+\/?$/i.test(linkValue);
+      link.href = validInternal || validDiscord ? linkValue : 'how-to-play.html';
+      if (validDiscord) { link.target = '_blank'; link.rel = 'noopener noreferrer'; }
+      else { link.removeAttribute('target'); link.removeAttribute('rel'); }
+      link.hidden = enabled === false;
+    };
+    setupProcessLink('home-process-button', s.homeProcessPrimaryLabel, s.homeProcessPrimaryUrl, s.homeProcessPrimaryEnabled);
+    setupProcessLink('home-process-guide', s.homeProcessGuideLabel, s.homeProcessGuideUrl, s.homeProcessGuideEnabled);
+    const processList = document.getElementById('home-process-steps');
+    if (processList) {
+      processList.replaceChildren();
+      const steps = Array.isArray(s.homeProcessSteps) ? s.homeProcessSteps : defaults.homeProcessSteps;
+      steps.slice(0, 8).forEach((item, index) => {
+        if (item?.enabled === false || !String(item?.text || '').trim()) return;
+        const row = document.createElement('div');
+        const number = document.createElement('b');
+        number.textContent = String(index + 1).padStart(2, '0');
+        const title = document.createElement('span');
+        title.textContent = String(item.text);
+        row.append(number, title);
+        processList.append(row);
+      });
+      let shown = 0;
+      processList.querySelectorAll('b').forEach(b => { b.textContent = String(++shown).padStart(2, '0'); });
+      processList.hidden = shown === 0;
+    }
     paint('home-discord-title', s.homeDiscordTitle);
     paint('home-discord-description', s.homeDiscordText);
     paint('home-donate-title', s.homeDonateTitle);
