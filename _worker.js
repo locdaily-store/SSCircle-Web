@@ -1333,7 +1333,7 @@ function settingsValid(input) {
   out.homeGalleryLimit = homeGalleryLimit;
   // Public How to Play content: stored with the existing revision-protected form settings.
   // Restrict sizes and URLs so the public tutorial cannot become an HTML/script injection surface.
-  if (input.howToPlay === undefined) {
+  if (input.howToPlay === undefined || input.howToPlay === null) {
     out.howToPlay = null; // Public client supplies the bundled starter guide for existing installs.
   } else {
     const guide = input.howToPlay;
