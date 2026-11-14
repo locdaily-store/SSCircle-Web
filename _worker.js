@@ -5798,6 +5798,22 @@ async function route(req, env, ctx) {
     return getMedia(req, env, path.split('/')[3], false);
   if (path.startsWith('/api/admin/media/') && ['GET', 'HEAD'].includes(method))
     return getMedia(req, env, path.split('/')[4], true);
+  // Per-member How to Play checklist. Guests use local browser storage only.
+  if (path === '/api/player/how-to-play-progress' && ['GET','PUT'].includes(method)) {
+    const member=await playerSession(req,env);
+    if(!member)return bad('Masuk sebagai anggota untuk menyimpan progres di akun.',401);
+    await env.DB.prepare("CREATE TABLE IF NOT EXISTS member_onboarding_progress (application_id TEXT PRIMARY KEY, completed_json TEXT NOT NULL DEFAULT '[]', updated_at TEXT NOT NULL)").run();
+    if(method==='GET'){
+      const row=await env.DB.prepare('SELECT completed_json FROM member_onboarding_progress WHERE application_id=?').bind(member.id).first();
+      return J({items:Array.isArray(parse(row?.completed_json))?parse(row.completed_json):[]});
+    }
+    const input=await body(req,6500);
+    if(!Array.isArray(input.items)||input.items.length>144||input.items.some(v=>typeof v!=='string'||!/^[a-z0-9-]{1,40}:[0-9]{1,2}$/.test(v))||new Set(input.items).size!==input.items.length)
+      return bad('Data progres tutorial tidak valid.',400);
+    await env.DB.prepare('INSERT INTO member_onboarding_progress(application_id,completed_json,updated_at) VALUES(?,?,?) ON CONFLICT(application_id) DO UPDATE SET completed_json=excluded.completed_json,updated_at=excluded.updated_at')
+      .bind(member.id,JSON.stringify(input.items),new Date().toISOString()).run();
+    return J({ok:true,items:input.items});
+  }
   if (path === '/api/player/me' && method === 'GET') {
     const application = await playerSession(req, env);
     if (!application)
