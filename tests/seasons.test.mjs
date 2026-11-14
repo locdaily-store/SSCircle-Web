@@ -140,3 +140,23 @@ test('V10.47.2: Admin selects a valid stats season; activation time is server-co
  assert.equal(after.statSeasonId,'');
  assert.equal(after.statSeasonActivatedAt,'');
 });
+
+
+test('badge navigasi hanya memuat event aktif/mendatang dan pengumuman terbit',async()=>{
+  const t=fixture();
+  const now=Date.now();
+  const settings={
+    eventsEnabled:true,
+    eventsItems:[
+      {id:'event-baru',title:'Event baru',description:'Kegiatan',startAt:new Date(now+86400000).toISOString(),endAt:new Date(now+172800000).toISOString()},
+      {id:'event-lama',title:'Event lama',startAt:new Date(now-172800000).toISOString(),endAt:new Date(now-86400000).toISOString()}
+    ]
+  };
+  t.db.prepare('UPDATE form_config SET settings=? WHERE id=1').run(JSON.stringify(settings));
+  const result=await t.req('/api/public/nav-updates');
+  assert.equal(result.status,200);
+  assert.deepEqual(result.data.announcements,[]);
+  assert.equal(result.data.events.length,1);
+  assert.equal(result.data.events[0].id,'event-baru');
+  assert.match(result.data.events[0].version,/Event baru/);
+});
