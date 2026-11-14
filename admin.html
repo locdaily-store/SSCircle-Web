@@ -15,7 +15,7 @@
     <link rel="stylesheet" href="community-admin.css?v=10.52.4">
     <link rel="stylesheet" href="community-events.css?v=10.55.6">
     <link rel="stylesheet" href="announcements-admin.css?v=10.55.5">
-    <link rel="stylesheet" href="overview-dashboard.css?v=10.55.5">
+    <link rel="stylesheet" href="overview-dashboard.css?v=10.61.0">
     <link rel="stylesheet" href="community-pages.css?v=10.55.6">
     <title>Admin Control · SSCircle Server</title>
     <link rel="icon" type="image/png" href="assets/sscircle-logo.png">
@@ -32,7 +32,7 @@
     <script src="vote-admin.js?v=10.31.0" defer></script>
     <script src="rules-admin.js?v=10.55.6" defer></script>
     <script src="events-admin.js?v=10.31.0" defer></script>
-    <script src="community-events-admin.js?v=10.55.6" defer></script>
+    <script src="community-events-admin.js?v=10.61.0" defer></script>
     <script src="notification-admin.js?v=10.55.6" defer></script>
     <link rel="stylesheet" href="notification-center.css?v=10.53.4">
     <script src="seasons-admin.js?v=10.34.0" defer></script>
@@ -43,7 +43,7 @@
     <script src="minecraft-sync-admin.js?v=10.55.6" defer></script>
     <script src="profile-admin.js?v=10.55.6" defer></script>
     <script src="announcements-admin.js?v=10.55.6" defer></script>
-    <script src="overview-dashboard.js?v=10.55.6" defer></script>
+    <script src="overview-dashboard.js?v=10.61.0" defer></script>
     <script src="admin.js?v=10.55.6" defer></script>
     <script src="form-insert-rail.js?v=10.26.0" defer></script>
     <script src="spreadsheet.js?v=10.26.0" defer></script>
@@ -100,6 +100,7 @@
             <button type="button" class="sidebar-mobile-toggle" id="admin-nav-toggle" aria-expanded="false" aria-controls="admin-nav-groups">
               <span class="sidebar-mobile-glyph" aria-hidden="true">☷</span>
               <span class="sidebar-mobile-label">Menu pengelolaan <strong id="admin-nav-current">Ringkasan</strong></span>
+              <span id="community-event-mobile-badge" class="nav-count community-event-mobile-badge" hidden aria-label="Pengajuan event baru">0</span>
               <span class="sidebar-mobile-chevron" aria-hidden="true">⌄</span>
             </button>
             <nav class="sidebar-nav" id="admin-nav-groups" aria-label="Menu pengelolaan SSCircle">
