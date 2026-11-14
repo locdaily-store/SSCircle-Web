@@ -5562,6 +5562,7 @@ async function route(req, env, ctx) {
   }[path];
   if(closedSection && ['GET','HEAD'].includes(method)){
     const isPreview=['ssc_events_preview','ssc_announcements_preview','ssc_theme_preview','ssc_preview'].some(key=>url.searchParams.has(key));
+    if(!isPreview && !env.DB) return new Response(null,{status:302,headers:{Location:'/page-closed.html?section='+closedSection,'Cache-Control':'no-store'}});
     if(!isPreview && env.DB){
       const settings=formFrom(await readSettingsRow(env)).settings;
       let closed=closedSection==='events' ? settings.eventsEnabled===false
@@ -5685,7 +5686,8 @@ async function route(req, env, ctx) {
     if (!env.DB || !env.SESSION_SECRET)
       return Response.redirect(new URL('/page-closed.html?section=voting', url), 302);
     const voteSettings=formFrom(await readSettingsRow(env)).settings;
-    if(voteSettings.homeVotingEnabled!==true) return new Response(null,{status:302,headers:{
+    // Disabled or expired voting is a closed public page, not an account-status problem.
+    if(!votingRuntime(voteSettings).active) return new Response(null,{status:302,headers:{
       Location:'/page-closed.html?section=voting',
       'Cache-Control':'private, no-store',Vary:'Cookie'
     }});
