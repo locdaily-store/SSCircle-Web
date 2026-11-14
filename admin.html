@@ -26,6 +26,8 @@
     <script src="image-source-picker.js?v=10.26.0" defer></script>
     <script src="homepage-admin.js?v=10.57.3" defer></script>
     <script src="gallery-admin.js?v=10.57.1" defer></script>
+    <script src="how-to-play.js?v=10.58.0" defer></script>
+    <script src="how-to-play-admin.js?v=10.58.0" defer></script>
     <script src="homepage-builder.js?v=10.31.0" defer></script>
     <script src="vote-admin.js?v=10.31.0" defer></script>
     <script src="rules-admin.js?v=10.55.6" defer></script>
@@ -53,6 +55,7 @@
   <script src="ssc-dialog.js?v=10.55.6" defer></script>
   <link rel="stylesheet" href="community-events-admin.css?v=10.56.3">
     <link rel="stylesheet" href="gallery-admin.css?v=10.57.1">
+    <link rel="stylesheet" href="how-to-play-admin.css?v=10.58.0">
 </head>
   <body class="admin-page theme-v3">
     <div class="ambient ambient-a" aria-hidden="true"></div>
@@ -108,6 +111,7 @@
                 <h2 id="sidebar-group-1">KONTEN &amp; KOMUNITAS</h2>
                 <button type="button" class="side-link" data-tab="homepage"><span class="side-icon" aria-hidden="true">⌂</span><span>Homepage</span></button>
                 <button type="button" class="side-link" data-tab="gallery-admin"><span class="side-icon" aria-hidden="true">▧</span><span>Gallery</span></button>
+                <button type="button" class="side-link" data-tab="howto-admin"><span class="side-icon" aria-hidden="true">?</span><span>How to Play</span></button>
                 <button type="button" class="side-link" data-tab="events-admin"><span class="side-icon" aria-hidden="true">▦</span><span>Event &amp; Jadwal</span></button>
                 <button type="button" class="side-link" data-tab="community-events-admin"><span class="side-icon" aria-hidden="true">✉</span><span>Pengajuan Event</span><span id="community-event-badge" class="nav-count community-event-badge" hidden>0</span></button>
                 <button type="button" class="side-link" data-tab="achievements-admin"><span class="side-icon" aria-hidden="true">✦</span><span>Achievement</span></button>
@@ -287,6 +291,17 @@
                   <p id="gallery-preview-status" class="field-help" role="status">Menyiapkan pratinjau...</p>
                   <button type="button" class="button secondary" id="gallery-open-colors">Atur warna Gallery ↗</button>
                 </aside>
+              </div>
+            </section>
+            <section id="howto-admin" class="tab-page hide">
+              <div class="dashboard-heading heading-with-button"><div><div class="overline">SSCIRCLE / GETTING STARTED</div><h1>How to Play<span class="dot-accent">.</span></h1><p>Atur panduan pendaftaran, aktivasi, Minecraft, FAQ, gambar dan video. Semua perubahan memerlukan Simpan sebelum diterbitkan.</p></div><button type="button" class="button primary" id="howto-admin-save">Simpan Panduan ✓</button></div>
+              <div class="ssc-guide-layout">
+                <div class="ssc-guide-editor">
+                  <section class="ssc-guide-panel"><h2>Pengaturan halaman</h2><div id="howto-admin-general"></div><button type="button" id="howto-admin-reset" class="button secondary">Pulihkan panduan bawaan</button></section>
+                  <section class="ssc-guide-panel"><h2>Kategori dan langkah</h2><p>Pilih judul, urutan, teks, media dan tombol tujuan. Gunakan panah untuk mengurutkan kategori serta langkah.</p><div id="howto-admin-categories"></div><button type="button" id="howto-admin-add-category" class="button secondary">+ Tambah kategori</button></section>
+                  <section class="ssc-guide-panel"><h2>Pertanyaan umum (FAQ)</h2><div id="howto-admin-faq"></div><button type="button" id="howto-admin-add-faq" class="button secondary">+ Tambah pertanyaan</button></section>
+                </div>
+                <aside class="ssc-guide-panel ssc-guide-admin-preview"><h2>Live Preview</h2><p>Perubahan langsung terlihat di sini tanpa menayangkan draft kepada pengunjung.</p><div class="ssc-guide-preview-actions"><button type="button" class="button secondary" id="howto-preview-desktop">Desktop</button><button type="button" class="button secondary" id="howto-preview-mobile">HP</button><a class="button secondary" href="how-to-play.html" target="_blank" rel="noopener">Lihat halaman ↗</a></div><div id="howto-preview-shell" class="ssc-guide-preview-shell" data-device="desktop"><iframe id="howto-preview-frame" src="how-to-play.html?ssc_theme_preview=1" title="Pratinjau How to Play" loading="lazy"></iframe></div></aside>
               </div>
             </section>
             <!-- Pengaturan Voting -->
