@@ -200,11 +200,32 @@ const sameOrigin = req => !req.headers.get('Origin') || req.headers.get('Origin'
 async function body(req, limit = 250000) {
   if (Number(req.headers.get('Content-Length') || 0) > limit)
     throw Error('Data terlalu besar.');
-  const t = await req.text();
-  // The limit is in UTF-8 bytes, not JavaScript UTF-16 code units.
-  // Multibyte characters must not bypass the same payload cap.
-  if (new TextEncoder().encode(t).byteLength > limit)
-    throw Error('Data terlalu besar.');
+  // Read at most limit bytes, including when the client omits Content-Length.
+  // req.text() alone buffers the full untrusted request before size validation.
+  let t = '';
+  if (req.body?.getReader) {
+    const reader = req.body.getReader(), decoder = new TextDecoder('utf-8', {fatal:true});
+    let bytes = 0;
+    try {
+      while (true) {
+        const {value,done} = await reader.read();
+        if (done) break;
+        bytes += value.byteLength;
+        if (bytes > limit) {
+          void reader.cancel().catch(()=>{});
+          throw Error('Data terlalu besar.');
+        }
+        t += decoder.decode(value,{stream:true});
+      }
+      t += decoder.decode();
+    } finally {
+      reader.releaseLock();
+    }
+  } else {
+    t = await req.text();
+    if (new TextEncoder().encode(t).byteLength > limit)
+      throw Error('Data terlalu besar.');
+  }
   const v = parse(t);
   if (!v || typeof v !== 'object' || Array.isArray(v))
     throw Error('Data yang dikirim tidak sesuai.');
