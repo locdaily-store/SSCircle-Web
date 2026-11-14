@@ -121,3 +121,20 @@ body.ssc-public-inner .ssc-site-header{position:relative;top:auto;left:auto}
 /* Custom envelope brand mark; count badge keeps its existing accessible semantics. */
 body .ssc-site-header .ssc-header-mailbox .ssc-mailbox-icon{width:27px;height:27px;max-width:100%;object-fit:contain;display:block;filter:none}
 body .ssc-site-header .ssc-header-mailbox:hover{border-color:var(--ssc-shell-primary)}
+
+
+/* New published announcements / events: desktop nav and folded mobile hamburger. */
+body .ssc-site-header .home-nav a.home-nav-link{gap:7px}
+body .ssc-site-header .ssc-nav-notice,
+body .ssc-site-header .ssc-hamburger-notice{
+  display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;
+  min-width:19px;height:19px;padding:0 5px;border-radius:999px;
+  background:var(--ssc-danger,#fa5277);color:#fff;font-size:10px;font-weight:800;
+  line-height:1;letter-spacing:0;box-shadow:0 0 0 2px var(--ssc-header-bg,#160c27);
+}
+body .ssc-site-header .ssc-nav-notice[hidden],
+body .ssc-site-header .ssc-hamburger-notice[hidden]{display:none!important}
+body .ssc-site-header .home-menu-button{overflow:visible}
+body .ssc-site-header .ssc-hamburger-notice{position:absolute;right:-7px;top:-8px;pointer-events:none;z-index:2}
+@media(min-width:1481px){body .ssc-site-header .ssc-hamburger-notice{display:none!important}}
+@media(max-width:1480px){body .ssc-site-header .home-nav .ssc-nav-notice{margin-left:auto}body .ssc-site-header .ssc-hamburger-notice:not([hidden]){display:inline-flex!important}}
