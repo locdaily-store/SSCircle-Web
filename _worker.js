@@ -1364,8 +1364,7 @@ function settingsValid(input) {
             if (video && !allowedYoutube.test(video))
               throw Error('Video tutorial harus menggunakan tautan YouTube yang valid.');
             const image = s(step?.image,600);
-            if (image && !image.startsWith('assets/') && !/^\/api\/media\/[0-9a-f-]{36}$/i.test(image))
-              throw Error('Gunakan gambar dari assets/ atau Penyimpanan Media.');
+            if (image) imageSource(image, 'Gambar tutorial');
             return {
               title:s(step?.title,120),body:s(step?.body,1400),
               tip:s(step?.tip,380),url,link:s(step?.link,90),image,video
