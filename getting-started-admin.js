@@ -61,8 +61,8 @@ window.SSCircleGettingStartedAdmin=(()=>{
       inputField(detail,'Ringkasan kategori',section.summary,v=>section.summary=v,{max:260});
       inputField(detail,'Simbol / nomor pendek',section.icon,v=>section.icon=v,{max:16});
       const controls=node('div','howto-admin-actions');
-      controls.append(action('↑ Naik',()=>{move(draft.sections,selected,-1);selected=Math.max(0,selected-1);}),
-        action('↓ Turun',()=>{move(draft.sections,selected,1);selected=Math.min(draft.sections.length-1,selected+1);}),
+      controls.append(action('↑ Naik',()=>{move(draft.sections,selected,-1);selected=Math.max(0,selected-1);renderEditor();}),
+        action('↓ Turun',()=>{move(draft.sections,selected,1);selected=Math.min(draft.sections.length-1,selected+1);renderEditor();}),
         action('Hapus kategori',async()=>{
           if(draft.sections.length<=1)return;
           if(!await window.SSCNotice.confirm('Hapus kategori ini dari draft?',{danger:true,confirmText:'Hapus'}))return;
