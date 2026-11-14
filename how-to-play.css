@@ -52,3 +52,6 @@
 @media(max-width:760px){.ssc-howto-layout{grid-template-columns:minmax(0,1fr)}.ssc-howto-sidebar{position:static}.ssc-howto-sidehead{display:none}#howto-list{display:flex;overflow-x:auto}#howto-list button{min-width:170px}.ssc-howto-main{padding-top:80px}.ssc-howto-step-actions{justify-content:center}}
 @media(max-width:460px){.ssc-howto-hero{padding:26px 20px}.ssc-howto-heading{align-items:start;flex-direction:column}.ssc-howto-step-actions button{flex:1}.ssc-howto-step-actions #howto-step-count{order:-1;width:100%;text-align:center}}
 @media(prefers-reduced-motion:reduce){.ssc-howto-primary,.ssc-howto-secondary{transition:none}}
+
+.ssc-howto-check{display:flex;align-items:center;gap:10px;margin-top:16px;padding:13px 15px;border-radius:11px;border:1px solid var(--ssc-border,#634677);background:color-mix(in srgb,var(--ssc-primary,#b88ce8) 8%,var(--ssc-panel,#251732));font-size:12px;cursor:pointer}
+.ssc-howto-check input{width:18px;height:18px;accent-color:var(--ssc-primary,#b88ce8)}
