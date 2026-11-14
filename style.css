@@ -14053,7 +14053,7 @@ body .ssc-unified-footer :is(span, small) {
 /* SSCircle V10.23 | Restore the original cinematic hero-button treatment.
    Scope to these three links so admin-selected colors for other buttons stay intact. */
 
-.home-page .home-hero-buttons > :is(#home-registration-button,#home-explore-button,#home-hero-voting-button) {
+.home-page .home-hero-buttons > :is(#home-registration-button,#home-explore-button,#home-guide-button,#home-hero-voting-button) {
   display: inline-flex;
   align-items: center;
   justify-content: space-between;
@@ -14079,7 +14079,7 @@ body .ssc-unified-footer :is(span, small) {
   box-shadow: 0 10px 35px color-mix(in srgb,var(--ssc-button-start,#bc91f5) 25%,transparent);
 }
 
-.home-page .home-hero-buttons > :is(#home-explore-button,#home-hero-voting-button) {
+.home-page .home-hero-buttons > :is(#home-explore-button,#home-guide-button,#home-hero-voting-button) {
   background: color-mix(in srgb,var(--ssc-button-secondary,#20142f) 47%,transparent) !important;
   border-color: color-mix(in srgb,var(--ssc-border,#b897d9) 58%,transparent);
   color: var(--ssc-button-secondary-text,#f5efff) !important;
@@ -14090,7 +14090,7 @@ body .ssc-unified-footer :is(span, small) {
   border-color: color-mix(in srgb,var(--ssc-primary,#bc91f5) 45%,transparent);
 }
 
-.home-page .home-hero-buttons > :is(#home-registration-button,#home-explore-button,#home-hero-voting-button):is(:hover,:focus-visible) {
+.home-page .home-hero-buttons > :is(#home-registration-button,#home-explore-button,#home-guide-button,#home-hero-voting-button):is(:hover,:focus-visible) {
   transform: translateY(-3px);
 }
 
@@ -14098,7 +14098,7 @@ body .ssc-unified-footer :is(span, small) {
   box-shadow: 0 14px 41px color-mix(in srgb,var(--ssc-button-start,#bc91f5) 36%,transparent);
 }
 
-.home-page .home-hero-buttons > :is(#home-explore-button,#home-hero-voting-button):is(:hover,:focus-visible) {
+.home-page .home-hero-buttons > :is(#home-explore-button,#home-guide-button,#home-hero-voting-button):is(:hover,:focus-visible) {
   background: color-mix(in srgb,var(--ssc-button-secondary,#20142f) 77%,transparent) !important;
   border-color: color-mix(in srgb,var(--ssc-primary,#bc91f5) 64%,transparent);
   box-shadow: 0 11px 27px rgba(0,0,0,.17);
@@ -14129,7 +14129,7 @@ body .ssc-unified-footer :is(span, small) {
 }
 
 @media (max-width: 600px) {
-  .home-page .home-hero-buttons > :is(#home-registration-button,#home-explore-button,#home-hero-voting-button) {
+  .home-page .home-hero-buttons > :is(#home-registration-button,#home-explore-button,#home-guide-button,#home-hero-voting-button) {
     padding: 12px 16px;
     gap: 12px;
   }
@@ -14369,7 +14369,5 @@ body #ssc-mc-unlink-account {
 }
 
 /* Getting Started shortcut alongside the original homepage hero buttons. */
-.home-page .home-hero-buttons>#home-guide-button{display:inline-flex;align-items:center;justify-content:space-between;gap:16px;min-height:51px;padding:13px 21px;border-radius:10px;border:1px solid color-mix(in srgb,var(--ssc-border,#b897d9) 58%,transparent);font-size:13px;font-weight:750;white-space:nowrap;text-decoration:none;background:color-mix(in srgb,var(--ssc-button-secondary,#20142f) 47%,transparent);color:var(--ssc-button-secondary-text,#f5efff);backdrop-filter:blur(12px);transition:transform .2s,border-color .2s}
-.home-page .home-hero-buttons>#home-guide-button:hover{transform:translateY(-3px);border-color:var(--ssc-primary,#bc91f5)}
 .home-page #home-process-guide{display:inline-flex;margin:10px 0 0 9px;min-height:43px;padding:12px 15px;border-radius:9px}
 @media(max-width:600px){.home-page #home-process-guide{margin:10px 0 0}}
