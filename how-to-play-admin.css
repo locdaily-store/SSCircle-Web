@@ -18,3 +18,9 @@
 .ssc-guide-preview-shell[data-device=mobile]{max-width:390px;margin:auto}
 .ssc-guide-preview-actions{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
 @media(max-width:1200px){.ssc-guide-layout{grid-template-columns:1fr}.ssc-guide-admin-preview{position:static}}
+
+.ssc-guide-drag-handle{cursor:grab;font-size:12px;color:var(--ssc-muted,#cdbbdc);padding:7px 9px;border:1px dashed var(--ssc-border,#654c79);border-radius:7px;margin-right:auto;user-select:none}
+.ssc-guide-drag-handle:active{cursor:grabbing}
+.ssc-guide-picker-details{margin-top:10px;padding:10px;border:1px solid var(--ssc-border,#654c79);border-radius:10px}
+.ssc-guide-picker-details>summary{cursor:pointer;font-size:12px;font-weight:700}
+@media(max-width:620px){.ssc-guide-card-head .button{font-size:11px}.ssc-guide-panel{padding:12px}}
