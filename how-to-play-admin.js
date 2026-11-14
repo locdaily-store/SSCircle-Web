@@ -56,7 +56,8 @@ edit(s,'Penjelasan',step.body,v=>step.body=v,true);
 edit(s,'Catatan (opsional)',step.tip,v=>step.tip=v);
 edit(s,'Tautan tombol (opsional)',step.url,v=>step.url=v);
 edit(s,'Teks tombol (opsional)',step.link,v=>step.link=v);
-edit(s,'Gambar: assets/ atau /api/media/ (opsional)',step.image,v=>step.image=v);
+edit(s,'Gambar tutorial (opsional)',step.image,v=>step.image=v);
+if(window.SSCircleImagePicker){const picker=create('div');s.append(picker);window.SSCircleImagePicker.mount(picker,{compact:true,title:'Pilih / upload screenshot langkah',current:()=>step.image||'',onSelect:src=>{step.image=src;change();render();}});}
 edit(s,'Link video YouTube (opsional)',step.video,v=>step.video=v);
 steps.append(s);
 });
