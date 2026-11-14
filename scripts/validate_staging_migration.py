@@ -20,6 +20,16 @@ DANGEROUS_SQL = re.compile(
     re.IGNORECASE,
 )
 
+# Ignore comments and SQL string literals when looking for dangerous keywords.
+# This is a conservative guard, not a complete parser or migration review.
+SQL_NON_EXECUTABLE = re.compile(
+    r"'(?:''|[^'])*'|\\"(?:\\"\\"|[^\\"])*\\"|--[^\\r\\n]*|/\\*[\\s\\S]*?\\*/"
+)
+
+
+def executable_sql(sql: str) -> str:
+    return SQL_NON_EXECUTABLE.sub(" ", sql)
+
 
 def validate(database: str, migration: str, root: Path = Path(".")) -> Path:
     if not DATABASE_RE.fullmatch(database or ""):
@@ -44,7 +54,7 @@ def validate(database: str, migration: str, root: Path = Path(".")) -> Path:
         raise ValueError("File migrasi wajib UTF-8.") from error
     if not sql.strip():
         raise ValueError("File migrasi hanya berisi spasi.")
-    if DANGEROUS_SQL.search(sql):
+    if DANGEROUS_SQL.search(executable_sql(sql)):
         raise ValueError(
             "Migrasi mengandung operasi destruktif. Gunakan jalur review manual "
             "dengan backup dan uji pemulihan, bukan workflow staging otomatis."
