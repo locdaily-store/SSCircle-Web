@@ -864,6 +864,22 @@ async function seasonClosingPreview(env,seasonId,activatedAt){
     ${display} AS username FROM player_stat_snapshots ps WHERE ps.season_id=?
     ORDER BY ps.playtime_seconds DESC,ps.mob_kills DESC LIMIT 20`).bind(key).all();
   const positive=value=>Math.max(0,Number(value)||0);
+  const awardCandidates=[];
+  for(const item of [
+    {metric:'playtime_seconds',title:'Pemain Teraktif',unit:'detik bermain'},
+    {metric:'mob_kills',title:'Pembasmi Monster',unit:'mob dikalahkan'},
+    {metric:'blocks_mined',title:'Penambang Terbaik',unit:'blok ditambang'}
+  ]){
+    const leader=await env.DB.prepare(`SELECT ps.application_id,
+      ps.${item.metric} AS value,${display} AS username
+      FROM player_stat_snapshots ps WHERE ps.season_id=?
+        AND ps.${item.metric}>0
+      ORDER BY ps.${item.metric} DESC,ps.playtime_seconds DESC LIMIT 1`).bind(key).first();
+    if(!leader)continue;
+    awardCandidates.push({title:item.title,player:s(leader.username,100)||'Pemain SSCircle',
+      description:positive(leader.value)+' '+item.unit,
+      memberId:/^[0-9a-f-]{36}$/.test(leader.application_id||'')?leader.application_id:''});
+  }
   const entries=(rows.results||[]).map((row,index)=>{
     const seconds=positive(row.playtime_seconds);
     const hours=Math.floor(seconds/3600),minutes=Math.floor(seconds%3600/60);
@@ -873,7 +889,7 @@ async function seasonClosingPreview(env,seasonId,activatedAt){
   return {available:true,playerCount:positive(totals?.players),
     playtimeSeconds:positive(totals?.playtime),deaths:positive(totals?.deaths),
     mobKills:positive(totals?.mobs),blocksMined:positive(totals?.blocks),
-    lastSyncedAt:totals?.last_sync||'',entries};
+    lastSyncedAt:totals?.last_sync||'',entries,awardCandidates};
 }
 function seasonTimelineEvent(season,kind,title,now){
   const timeline=Array.isArray(season.archiveTimeline)?season.archiveTimeline:[];
@@ -6200,6 +6216,8 @@ async function route(req, env, ctx) {
           return bad('Season yang telah diarsipkan tidak dapat dibuka ulang.',409);
         if(!['planned','active'].includes(season.archiveStatus))
           return bad('Hanya Season yang sudah disiapkan yang dapat dimulai.',409);
+        if(active===id&&Number.isFinite(Date.parse(settings.statSeasonActivatedAt)))
+          return bad('Season ini sudah memiliki periode statistik aktif.',409);
         if(active&&active!==id)
           return bad('Akhiri Season statistik aktif terlebih dahulu.',409);
         if((settings.homeLeaderboardSeasons||[]).some(x=>x.id!==id&&x.archiveStatus==='active'))
@@ -6235,7 +6253,15 @@ async function route(req, env, ctx) {
           season.archiveSnapshot={capturedAt:now,playerCount:snapshot.playerCount,
             playtimeSeconds:snapshot.playtimeSeconds,deaths:snapshot.deaths,
             mobKills:snapshot.mobKills,blocksMined:snapshot.blocksMined};
-          season.entries=snapshot.entries;
+          if(snapshot.playerCount>0)season.entries=snapshot.entries;
+          if(input.autoAwards===true){
+            const awards=Array.isArray(season.archiveAwards)?season.archiveAwards:[];
+            for(const award of snapshot.awardCandidates||[]){
+              if(awards.length>=12)break;
+              if(!awards.some(existing=>existing.title===award.title))awards.push(award);
+            }
+            season.archiveAwards=awards;
+          }
           season.archiveFinalizedAt=now;
           season.archiveEndDate=now.slice(0,10);
           season.archiveStatus='ended';
@@ -6277,6 +6303,7 @@ async function route(req, env, ctx) {
         const old=historical.get(season.id);
         if(old?.archiveFinalizedAt&&season.archiveStatus!=='ended')
           return bad('Season yang telah diarsipkan tidak boleh dibuka ulang.',409);
+        if(old?.archiveFinalizedAt)season.entries=old.entries||[];
         for(const key of ['archivePreparedAt','archiveFinalizedAt','archiveSnapshot']){
           season[key]=old?.[key]??(key==='archiveSnapshot'?null:'');
         }
