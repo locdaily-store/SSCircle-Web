@@ -251,8 +251,56 @@ async function updateDevices(){
     }
   }catch{}
 }
+const labels={
+  id:{
+    subtitle:'Bicara dengan teman Minecraft Java dan Bedrock di sekitar kamu.',
+    pairTitle:'Hubungkan akun Minecraft',
+    pairInfo:'Masuk ke server melalui Bedrock, ketik <code>/voice link</code> di chat Minecraft, lalu masukkan kode sekali pakai yang muncul.',
+    pairLabel:'Kode pairing (8 karakter)',pairHint:'Kode berlaku 2 menit dan hanya bisa dipakai sekali. Jangan membagikannya.',
+    near:'Pemain yang terdengar',talk:'Mode bicara',ptt:'Tahan untuk berbicara',
+    mic:'Input mikrofon',speaker:'Output speaker',sensitivity:'Sensitivitas mikrofon',
+    input:'Volume input',output:'Volume output',meter:'Level mikrofon',
+    noise:'Peredam kebisingan (jika didukung)',testMic:'Uji mikrofon',
+    testSpeaker:'Uji speaker',mode:'Mode suara',group:'Gabung grup',
+    notice:'Android/iOS dapat membatasi mikrofon dan audio browser saat Minecraft ada di layar depan. Audio latar belakang tidak dijamin; gunakan dua perangkat jika diperlukan.'
+  },
+  en:{
+    subtitle:'Talk to nearby Minecraft Java and Bedrock friends.',
+    pairTitle:'Link your Minecraft account',
+    pairInfo:'Join the server using Bedrock, type <code>/voice link</code> in Minecraft chat, then enter the one-time code shown.',
+    pairLabel:'Pairing code (8 characters)',pairHint:'Codes expire after 2 minutes and can only be used once. Never share yours.',
+    near:'Players you can hear',talk:'Speaking mode',ptt:'Hold to speak',
+    mic:'Microphone input',speaker:'Speaker output',sensitivity:'Microphone sensitivity',
+    input:'Input volume',output:'Output volume',meter:'Microphone level',
+    noise:'Noise suppression (if available)',testMic:'Test microphone',
+    testSpeaker:'Test speaker',mode:'Voice mode',group:'Join group',
+    notice:'Android/iOS may suspend microphone or browser audio when Minecraft is in the foreground. Background audio is not guaranteed; use a second device if needed.'
+  }
+};
+const put=(selector,value,html=false)=>{
+  const target=document.querySelector(selector);
+  if(target){if(html)target.innerHTML=value;else target.textContent=value;}
+};
+function translateInterface(){
+  const a=labels[lang];
+  put('#subtitle',a.subtitle);put('#pair-title',a.pairTitle);
+  put('#pair-info',a.pairInfo,true);put('#pair-label',a.pairLabel);
+  put('.voice-hint',a.pairHint);put('#nearby-title',a.near);
+  put('#talk-mode-label',a.talk);put('#ptt',a.ptt);
+  put('label[for="mic-select"]',a.mic);
+  put('label[for="speaker-select"]',a.speaker);
+  put('label[for="sensitivity"]',a.sensitivity);
+  put('label[for="mic-volume"]',a.input);
+  put('label[for="output-volume"]',a.output);
+  put('label[for="mic-meter"]',a.meter);
+  put('label[for="noise-suppression"]',a.noise);
+  put('#test-mic',a.testMic);put('#test-speaker',a.testSpeaker);
+  put('.voice-groups h3',a.mode);put('#join-group',a.group);
+  put('.voice-mobile-warning',a.notice);
+}
 function setLanguage(){
   lang=$('language').value;document.documentElement.lang=lang;
+  translateInterface();
   $('start-mic').textContent=stream?translation('stop'):translation('start');
   if(!me)status(translation('status'),false);
   $('join-group').textContent=translation('group');
