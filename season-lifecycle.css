@@ -1,0 +1,66 @@
+/* Shared Season Lifecycle controls and public timeline. No duplicate season state. */
+.season-lifecycle-panel {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid var(--border, rgba(170,150,220,.3));
+  border-radius: 16px;
+  background: var(--card-bg, rgba(120,100,160,.07));
+  color: inherit;
+}
+.season-lifecycle-actions {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.season-lifecycle-actions > .field-help,
+.season-lifecycle-actions > .season-lifecycle-snapshot {
+  flex: 1 1 100%;
+}
+.season-lifecycle-snapshot {
+  margin: 0;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.season-lifecycle-schedule { flex: 1 1 220px; max-width: 360px; }
+.season-lifecycle-schedule input { width: 100%; max-width: 100%; box-sizing: border-box; }
+.season-lifecycle-check {
+  display: flex;
+  flex: 1 1 100%;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: .9rem;
+  line-height: 1.45;
+}
+.season-lifecycle-check input { flex: 0 0 auto; margin-top: 3px; }
+.season-lifecycle-panel button:disabled { opacity: .55; cursor: not-allowed; }
+.season-timeline-list {
+  position: relative;
+  list-style: none;
+  padding: 4px 0 4px 23px;
+  margin: 12px 0;
+  border-left: 2px solid var(--primary, #9177d2);
+}
+.season-timeline-entry { position: relative; padding: 0 0 23px 8px; }
+.season-timeline-entry:last-child { padding-bottom: 0; }
+.season-timeline-entry::before {
+  content: '';
+  position: absolute;
+  top: 5px; left: -30px;
+  width: 11px; height: 11px;
+  border-radius: 50%;
+  background: var(--primary, #9177d2);
+  border: 2px solid var(--card-bg, #21172c);
+}
+.season-timeline-entry strong { display: block; font-size: 1rem; }
+.season-timeline-entry p { margin: 6px 0 0; line-height: 1.6; overflow-wrap: anywhere; }
+.season-timeline-date { display: block; margin-bottom: 5px; font-size: .82rem; opacity: .8; }
+.season-archive-final { border-radius: 14px; padding: 14px; background: rgba(130,106,170,.09); }
+.season-archive-final p { line-height: 1.6; }
+@media(max-width:600px) {
+  .season-lifecycle-panel { padding: 13px; }
+  .season-lifecycle-actions { flex-direction: column; align-items: stretch; }
+  .season-lifecycle-actions > button { width: 100%; }
+  .season-lifecycle-schedule { width: 100%; max-width: none; }
+}
