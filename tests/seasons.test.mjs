@@ -517,4 +517,5 @@ test('Cloudflare Cron requires secret and only starts one explicitly scheduled S
  const actual=(await t.req('/api/admin/form',{admin:true})).data.settings;
  assert.equal(actual.statSeasonId,'season-1');
  assert.equal(actual.homeLeaderboardSeasons[0].archiveAutoOpen,false);
+ assert.equal(actual.homeLeaderboardSeasons[0].archivePublished,false,'Cron must not force publish a private Season');
 });
