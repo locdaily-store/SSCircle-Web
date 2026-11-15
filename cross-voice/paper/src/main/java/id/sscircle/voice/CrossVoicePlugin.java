@@ -55,6 +55,7 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
     private final SecureRandom random=new SecureRandom();
     private final Map<UUID,Settings> settings=new ConcurrentHashMap<>();
     private final Set<UUID> forcedOff=ConcurrentHashMap.newKeySet();
+    private final Set<UUID> webConnected=ConcurrentHashMap.newKeySet();
     private final Map<UUID,Long> lastPairing= new ConcurrentHashMap<>();
     private final Map<String,Group> groups=new HashMap<>();
     private ArrayBlockingQueue<Frame> audioQueue=new ArrayBlockingQueue<>(256);
@@ -224,7 +225,7 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
     }
     @EventHandler public void quit(PlayerQuitEvent e){
         UUID id=e.getPlayer().getUniqueId();
-        settings.remove(id);forcedOff.remove(id);lastPairing.remove(id);
+        settings.remove(id);forcedOff.remove(id);webConnected.remove(id);lastPairing.remove(id);
         JsonObject m=new JsonObject();m.addProperty("t","kick");m.addProperty("uuid",id.toString());send(m);
         // The audio worker owns all codec instances.
         audioWorker.submit(()->closeCodec(id));
@@ -330,6 +331,13 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
                     if(!audioQueue.offer(new Frame(uuid,pcm,false,whisper)))dropped++;
                 }catch(Exception ignored){dropped++;}
             }
+            case "session" -> {
+                try{
+                    UUID uuid=UUID.fromString(msg.get("uuid").getAsString());
+                    if(msg.has("connected")&&msg.get("connected").getAsBoolean())webConnected.add(uuid);
+                    else webConnected.remove(uuid);
+                }catch(RuntimeException ignored){}
+            }
             case "control" -> {
                 if(!isEnabled())return;
                 Bukkit.getScheduler().runTask(this,()->{
@@ -411,10 +419,10 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
             ws.request(1);return null;
         }
         @Override public CompletionStage<?> onClose(WebSocket ws,int code,String reason){
-            if(socket==ws)socket=null;connecting=false;return null;
+            if(socket==ws){socket=null;webConnected.clear();}connecting=false;return null;
         }
         @Override public void onError(WebSocket ws,Throwable error){
-            if(socket==ws)socket=null;connecting=false;
+            if(socket==ws){socket=null;webConnected.clear();}connecting=false;
         }
     }
     @Override public boolean onCommand(CommandSender sender,Command cmd,String label,String[] args){
@@ -432,7 +440,8 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
                 Player p=Bukkit.getPlayerExact(args[1]);
                 if(p==null){tell(sender,"Pemain tidak online.");return true;}
                 Settings s=prefs(p.getUniqueId());
-                tell(sender,p.getName()+" | Bedrock="+bedrock(p.getUniqueId())+
+                tell(sender,p.getName()+" | Web voice="+(webConnected.contains(p.getUniqueId())?"ONLINE":"OFFLINE")+
+                    " | Bedrock="+bedrock(p.getUniqueId())+
                     " | muted="+(s.muted||s.adminMuted)+" | deafen="+s.deafened+
                     " | group="+(s.group.isEmpty()?"proximity":s.group));return true;
             }
@@ -485,7 +494,8 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
         if(action.equals("status")){
             tell(sender,"Gateway "+(socket!=null?"terhubung":"offline")+
                 "; Simple Voice Chat "+(voiceReady?"aktif":"tidak tersedia")+
-                "; Bedrock "+bedrock(player.getUniqueId()));return true;
+                "; Bedrock "+bedrock(player.getUniqueId())+
+                "; Web Voice "+(webConnected.contains(player.getUniqueId())?"CONNECTED":"NOT CONNECTED"));return true;
         }
         if(List.of("mute","unmute","deafen","undeafen","whisper","normal").contains(action)){
             apply(player,action,"");tell(sender,"Pengaturan "+action+" disimpan.");return true;
@@ -532,6 +542,6 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
         for(UUID uuid:new ArrayList<>(senders.keySet()))closeCodec(uuid);
         for(OpusDecoder decoder:decoders.values())decoder.close();
         for(OpusEncoder encoder:encoders.values())encoder.close();
-        decoders.clear();encoders.clear();senders.clear();settings.clear();forcedOff.clear();lastPairing.clear();groups.clear();audioQueue.clear();
+        decoders.clear();encoders.clear();senders.clear();settings.clear();forcedOff.clear();webConnected.clear();lastPairing.clear();groups.clear();audioQueue.clear();
     }
 }
