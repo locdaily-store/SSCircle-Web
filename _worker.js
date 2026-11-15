@@ -5548,6 +5548,19 @@ async function sscAnnouncementAPI(req,env,path,method) {
   return bad('Metode tidak tersedia.',405);
 }
 
+// SSCircle Voice is the ONLY Pages route allowed to request a microphone.
+// Pages advanced-mode _worker.js owns these headers; _headers is not enough.
+function sscVoiceGatewayOrigin(env){
+  const text=typeof env.VOICE_PUBLIC_URL==='string'?env.VOICE_PUBLIC_URL.trim():'';
+  if(!text)return '';
+  try{
+    const parsed=new URL(text);
+    if(parsed.protocol!=='https:'||parsed.username||parsed.password||
+       parsed.pathname!=='/'||parsed.search||parsed.hash||!parsed.hostname||
+       parsed.hostname==='voice.example.com')return '';
+    return parsed.origin;
+  }catch{return '';}
+}
 async function route(req, env, ctx) {
   const url = new URL(req.url), path = url.pathname, method = req.method;
   if (path === '/api/github/database/inspect')
@@ -5762,6 +5775,38 @@ async function route(req, env, ctx) {
     headers.set('Cache-Control', 'private, no-store');
     headers.set('Vary', 'Cookie');
     return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+  }
+  if (path==='/voice-config.js' && ['GET','HEAD'].includes(method)){
+    const gateway=sscVoiceGatewayOrigin(env);
+    const js='window.SSCIRCLE_VOICE_GATEWAY = '+JSON.stringify(gateway)+';\\n';
+    return new Response(method==='HEAD'?null:js,{status:200,headers:{
+      'Content-Type':'application/javascript; charset=utf-8',
+      'Cache-Control':'no-store','X-Content-Type-Options':'nosniff',
+      'Cross-Origin-Resource-Policy':'same-origin'
+    }});
+  }
+  if (['/voice','/voice.html'].includes(path) && ['GET','HEAD'].includes(method)){
+    const response=await env.ASSETS.fetch(req);
+    if(response.status>=300&&response.status<400)return response;
+    const gateway=sscVoiceGatewayOrigin(env);
+    // No wildcard external endpoints. Gateway is explicitly set in Pages vars.
+    const websocket=gateway?gateway.replace(/^https:/,'wss:'):'';
+    const connect=["'self'"];
+    if(gateway)connect.push(gateway,websocket);
+    const headers=new Headers(response.headers);
+    headers.set('Permissions-Policy','camera=(), microphone=(self), geolocation=()');
+    headers.set('Content-Security-Policy',[
+      "default-src 'self'","script-src 'self'","style-src 'self'",
+      "img-src 'self' data: https:","frame-src 'none'",
+      'connect-src '+connect.join(' '),"media-src 'self' https:",
+      "object-src 'none'","base-uri 'self'","frame-ancestors 'self'",
+      "form-action 'self'"
+    ].join('; '));
+    headers.set('Cache-Control','no-store');
+    headers.set('X-Content-Type-Options','nosniff');
+    return new Response(method==='HEAD'?null:response.body,{
+      status:response.status,statusText:response.statusText,headers
+    });
   }
   if (!path.startsWith('/api/'))
     return env.ASSETS.fetch(req);
