@@ -128,7 +128,7 @@ public final class SSCircleSkinBridge extends JavaPlugin implements Listener, Co
     private static void say(CommandSender sender,String text){sender.sendMessage(P+text);}
     static String explainCode(String raw){
         if(raw==null||raw.isBlank())return "Belum ada aktivitas skin. Tunggu pemain login atau jalankan /ssb sync.";
-        String code=raw.split(" \\| ")[0];
+        String code=raw.split(" ",2)[0];
         int time=code.indexOf(" (");
         if(time>=0)code=code.substring(0,time);
         return switch(code){
