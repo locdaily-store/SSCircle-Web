@@ -29,7 +29,15 @@ function fixture(){
   const DB={prepare(sql){const statement=db.prepare(sql);let args=[];
     return {bind(...a){args=a;return this;},async first(){return statement.get(...args)||null;},
       async run(){const r=statement.run(...args);return {meta:{changes:r.changes}};},
-      async all(){return {results:statement.all(...args)}}};}};
+      async all(){return {results:statement.all(...args)}}};},
+    async batch(statements){
+      db.exec('BEGIN');
+      const result=[];
+      try{
+        for(const statement of statements)result.push(await statement.run());
+        db.exec('COMMIT');return result;
+      }catch(error){db.exec('ROLLBACK');throw error;}
+    }};
   const env={DB,SESSION_SECRET:SECRET,ADMIN_PASSWORD:PASS,
     ASSETS:{fetch:async()=>new Response('asset',{status:200})}};
   const exp=Math.floor(Date.now()/1000)+3600;
