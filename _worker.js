@@ -864,13 +864,37 @@ function validLeaderboard(input) {
     const memories=season?.archiveMemories===undefined?[]:season.archiveMemories;
     const builds=season?.archiveBuilds===undefined?[]:season.archiveBuilds;
     const awards=season?.archiveAwards===undefined?[]:season.archiveAwards;
+    const timeline=season?.archiveTimeline===undefined?[]:season.archiveTimeline;
+    if(!Array.isArray(timeline)||timeline.length>24)throw Error('Maksimal 24 tonggak timeline per Season.');
+    const iso=value=>{
+      const raw=s(value,40);
+      return raw&&Number.isFinite(Date.parse(raw))&&new Date(raw).toISOString()===raw?raw:'';
+    };
     if(!Array.isArray(memories)||memories.length>12) throw Error('Maksimal 12 foto kenangan per season.');
     if(!Array.isArray(builds)||builds.length>8) throw Error('Maksimal 8 bangunan terbaik per season.');
     if(!Array.isArray(awards)||awards.length>12) throw Error('Maksimal 12 penghargaan per season.');
     return {id,title,entries,
       archivePublished:season?.archivePublished===true,
-      archiveStatus:season?.archiveStatus==='active'?'active':'ended',
+      archiveStatus:['planned','active','ended'].includes(season?.archiveStatus)?season.archiveStatus:'ended',
       archiveStartDate:startDate,archiveEndDate:endDate,
+      archivePreparedAt:iso(season?.archivePreparedAt),
+      archiveFinalizedAt:iso(season?.archiveFinalizedAt),
+      archiveScheduledAt:iso(season?.archiveScheduledAt),
+      archiveSnapshot:season?.archiveSnapshot&&typeof season.archiveSnapshot==='object'
+        ?{capturedAt:iso(season.archiveSnapshot.capturedAt),
+          playerCount:Math.max(0,Math.min(100000,Number(season.archiveSnapshot.playerCount)||0)),
+          playtimeSeconds:Math.max(0,Number(season.archiveSnapshot.playtimeSeconds)||0),
+          deaths:Math.max(0,Number(season.archiveSnapshot.deaths)||0),
+          mobKills:Math.max(0,Number(season.archiveSnapshot.mobKills)||0),
+          blocksMined:Math.max(0,Number(season.archiveSnapshot.blocksMined)||0)}
+        :null,
+      archiveTimeline:timeline.map(entry=>({
+        id:s(entry?.id,64)||uid(),
+        date:date(entry?.date,'timeline Season'),
+        title:s(entry?.title,120),
+        description:s(entry?.description,450),
+        kind:['opening','closing','event','build','award','milestone'].includes(entry?.kind)?entry.kind:'milestone'
+      })).filter(entry=>entry.title),
       archiveSummary:s(season?.archiveSummary,1200),
       archiveCover:img(season?.archiveCover),
       archiveMemories:memories.map(m=>({src:img(m?.src),caption:s(m?.caption,240)})).filter(m=>m.src),
@@ -6094,6 +6118,15 @@ async function route(req, env, ctx) {
         return bad('Season statistik yang dipilih tidak ditemukan. Pilih Season yang tersedia.',400);
       const settings = settingsValid(input.settings), pages = pagesValid(input.pages);
       const persistedVoting = parse(current.settings) || {};
+      // Final snapshots and lifecycle timestamps are server-owned. A normal
+      // editor save must not overwrite them or forge an archived result.
+      const historical=new Map((persistedVoting.homeLeaderboardSeasons||[]).map(item=>[item.id,item]));
+      for(const season of settings.homeLeaderboardSeasons){
+        const old=historical.get(season.id);
+        for(const key of ['archivePreparedAt','archiveFinalizedAt','archiveSnapshot']){
+          season[key]=old?.[key]??(key==='archiveSnapshot'?null:'');
+        }
+      }
       settings.statSeasonActivatedAt=settings.statSeasonId
         ? settings.statSeasonId===persistedVoting.statSeasonId &&
           Number.isFinite(Date.parse(persistedVoting.statSeasonActivatedAt))
