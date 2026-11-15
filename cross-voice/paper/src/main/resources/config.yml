@@ -1,0 +1,20 @@
+# SSCircle Cross Voice - Paper 26.3 (Java 25)
+# Memerlukan Simple Voice Chat server plugin dan Floodgate.
+# Tidak ada audio yang direkam ke penyimpanan.
+gateway:
+  # Gunakan WSS di produksi, atau WS hanya untuk localhost saat pengujian.
+  websocket-url: "wss://voice.example.com/bridge"
+  # Simpan secret setidaknya 32 karakter, SAMA dengan VOICE_BRIDGE_SECRET pada gateway.
+  # Jangan masukkan secret asli dalam GitHub atau file publik.
+  secret: ""
+  reconnect-seconds: 5
+audio:
+  distance: 32.0
+  whisper-distance: 8.0
+  max-queued-frames: 256
+  allow-groups: true
+  max-player-sessions: 50
+  # Audio native Java tidak dimodifikasi; format PCM 48kHz 16-bit mono 20ms.
+  # Safari/iOS/Android bisa membatasi audio browser saat Minecraft di depan.
+security:
+  pairing-expiry-seconds: 120
