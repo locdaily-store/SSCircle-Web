@@ -58,6 +58,36 @@ mempertahankan leaderboard manual dan tidak membuat statistik palsu.
 - **Publikasikan season ini** menentukan apakah seluruh leaderboard dapat
   dilihat pengunjung melalui halaman arsip.
 
+### Memilih leaderboard utama untuk Homepage
+
+- Di **Season & Sejarah → Prestasi & pemain → Leaderboard Season**, pilih
+  **Leaderboard utama di Homepage** pada Season yang bersangkutan.
+- Homepage tetap menampilkan slider per Season. Papan peringkat yang dipilih
+  akan langsung muncul ketika slide Season tersebut dibuka, beserta judul
+  kategorinya. Setiap Season boleh memiliki pilihan yang berbeda.
+- Papan pertama tetap menjadi referensi snapshot statistik resmi dan
+  `season.entries` lama; pilihan Homepage **tidak mengubah** snapshot itu.
+- Jika papan pilihan dihapus, sistem memilih papan pertama yang masih ada.
+- **Atur Homepage** menampilkan ringkasan kategori dan tautan ke editor
+  Season & Sejarah, bukan menyimpan editor leaderboard kedua.
+- Data arsip Draft yang belum dipublikasikan tetap tidak dibuka ke publik;
+  hanya kategori yang memang dipilih sebagai tampilan Homepage yang
+  dikirim untuk slider Homepage.
+
+### Membuka detail Season dari kartu arsip
+
+- Pengunjung dapat menekan seluruh kartu Season Archive. Tombol Enter/Space
+  juga membuka pop-up, sedangkan Escape, tombol Tutup, atau area backdrop
+  menutupnya.
+- Pop-up menampilkan ringkasan Season, foto sampul, milestone timeline,
+  kenangan, bangunan, penghargaan dan semua papan leaderboard berjudul.
+- Gambar memakai skala **contain** atau dimensi alami. Rasio panorama,
+  persegi, potret hingga tangkapan layar tinggi tidak dipotong; pada kartu
+  sampul mungkin muncul ruang kosong di sekitar gambar untuk menjaga
+  keseluruhan fotonya terlihat.
+- Konten pop-up dapat digulir pada layar HP dan fokus keyboard dikembalikan
+  ke kartu sesudah pop-up ditutup.
+
 ## Mencari anggota penerima penghargaan
 
 - Di bagian **Penghargaan** gunakan kolom pencarian anggota.
