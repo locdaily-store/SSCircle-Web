@@ -268,6 +268,7 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
                         JsonObject packet=new JsonObject();
                         packet.addProperty("t","audio");packet.addProperty("uuid",frame.uuid().toString());
                         packet.addProperty("pcm",Base64.getEncoder().encodeToString(toBytes(chunk)));
+                        packet.addProperty("whisper",frame.whisper());
                         send(packet);sent++;
                     }
                 }else{
