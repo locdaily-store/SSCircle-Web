@@ -67,7 +67,7 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
     private volatile WebSocket socket;
     private volatile VoicechatServerApi voice;
     private volatile boolean connecting;
-    private volatile long dropped,received,sent;
+    private volatile long dropped,received,sent,lastGatewayWarning;
     private volatile boolean voiceReady;
     private volatile float distance=32f;
     private volatile boolean groupsAllowed=true;
@@ -142,8 +142,11 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
                 .buildAsync(URI.create(getConfig().getString("gateway.websocket-url")),new SocketListener())
                 .whenComplete((ws,error)->{
                     connecting=false;
-                    if(error!=null&&running.get())getLogger().warning(
-                        "Gateway belum tersambung. Periksa domain WSS, secret, dan firewall.");
+                    if(error!=null&&running.get()&&
+                        System.currentTimeMillis()-lastGatewayWarning>60000L){
+                        lastGatewayWarning=System.currentTimeMillis();
+                        getLogger().warning("Gateway belum tersambung. Periksa domain WSS, secret, dan firewall.");
+                    }
                     else if(error==null)socket=ws;
                 });
         }catch(Exception e){connecting=false;getLogger().warning("Alamat WSS gateway tidak dapat digunakan.");}
@@ -365,7 +368,10 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
                     if(group==null){
                         group=api.getGroups().stream().filter(g->g.getName().equals(value)
                             &&!g.hasPassword()).findFirst().orElse(null);
-                        if(group==null)group=api.groupBuilder().setName(value).build();
+                        if(group==null){
+                            if(groups.size()>=32)return; // Prevent unbounded server group creation.
+                            group=api.groupBuilder().setName(value).build();
+                        }
                         groups.put(value,group);
                     }
                     if(group.hasPassword())return; // Private groups require SVC authentication.
