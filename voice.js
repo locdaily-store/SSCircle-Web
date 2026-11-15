@@ -359,8 +359,8 @@ const labels={
     input:'Volume input',output:'Volume output',meter:'Level mikrofon',
     noise:'Peredam kebisingan (jika didukung)',testMic:'Uji mikrofon',
     testSpeaker:'Uji speaker',mode:'Mode suara',group:'Gabung grup',
-    notice:'Mode latar belakang bersifat upaya terbaik. Android/iOS bisa membekukan tab, mikrofon, atau WebSocket ketika Minecraft dibuka. Jika terhenti, kembali ke halaman dan tekan Pulihkan Voice. Jangan tutup tab atau hentikan paksa browser.',
-    recover:'Pulihkan Voice',backgroundReady:'Voice diusahakan tetap aktif saat pindah aplikasi. Jangan tutup tab.',
+    notice:'Pilih Voice Activation untuk bicara saat membuka Minecraft; Push-to-Talk hanya berfungsi ketika halaman aktif. Android/iOS bisa membekukan tab, mikrofon, atau WebSocket. Pulihkan Voice jika terhenti. Jangan tutup tab atau hentikan paksa browser.',
+    backgroundTitle:'Voice saat pindah aplikasi',recover:'Pulihkan Voice',backgroundReady:'Voice diusahakan tetap aktif saat pindah aplikasi. Jangan tutup tab.',
     backgroundHidden:'Halaman berjalan di latar belakang jika diizinkan perangkat.',
     micInterrupted:'Mikrofon dihentikan perangkat. Kembali ke halaman lalu tekan Pulihkan Voice.',
     audioInterrupted:'Audio ditangguhkan. Tekan Pulihkan Voice untuk melanjutkan.'
@@ -375,8 +375,8 @@ const labels={
     input:'Input volume',output:'Output volume',meter:'Microphone level',
     noise:'Noise suppression (if available)',testMic:'Test microphone',
     testSpeaker:'Test speaker',mode:'Voice mode',group:'Join group',
-    notice:'Background mode is best effort. Android/iOS may suspend the tab, microphone, or WebSocket while Minecraft is open. Return and tap Restore Voice if interrupted. Do not close the tab or force-stop the browser.',
-    recover:'Restore Voice',backgroundReady:'Voice stays active when supported. Keep this tab open.',
+    notice:'Use Voice Activation while Minecraft is in front; Push-to-Talk only works when this page is active. Android/iOS may suspend the tab, mic, or WebSocket. Tap Restore Voice if interrupted. Keep the tab open.',
+    backgroundTitle:'Voice when switching apps',recover:'Restore Voice',backgroundReady:'Voice stays active when supported. Keep this tab open.',
     backgroundHidden:'Background voice continues if your device permits it.',
     micInterrupted:'The device stopped the microphone. Return and tap Restore Voice.',
     audioInterrupted:'Audio was suspended. Tap Restore Voice to resume.'
@@ -401,7 +401,7 @@ function translateInterface(){
   put('#noise-label',a.noise);
   put('#test-mic',a.testMic);put('#test-speaker',a.testSpeaker);
   put('.voice-groups h3',a.mode);put('#join-group',a.group);
-  put('.voice-mobile-warning',a.notice);put('#recover-voice',a.recover);
+  put('.voice-mobile-warning',a.notice);put('#background-title',a.backgroundTitle);put('#recover-voice',a.recover);
   if(!document.hidden)backgroundInfo(a.backgroundReady);
 }
 function setLanguage(){
