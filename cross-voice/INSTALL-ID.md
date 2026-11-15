@@ -107,7 +107,9 @@ Bedrock:
 5. Gunakan Push-to-Talk atau Voice Activation; dekati pemain Java/Bedrock lain dan uji dua arah.
 6. Coba mute, deafen, whisper, grup dan pindah world.
 
-Browser Android/iOS bisa ditangguhkan ketika Minecraft sedang di depan. **Tidak ada jaminan** voice latar belakang bisa berjalan; perangkat kedua dapat menjadi solusi.
+Browser Android/iOS dapat ditangguhkan ketika Minecraft sedang di depan. **Tidak ada jaminan** voice latar belakang bisa berjalan; perangkat kedua dapat menjadi solusi.
+
+**Ketahanan background (PR #74):** WebSocket dan mikrofon tidak sengaja ditutup ketika halaman berpindah ke background. Gunakan **Voice Activation** untuk mencoba berbicara sambil membuka Minecraft (PTT hanya ketika halaman dapat ditekan). Saat kembali ke tab, halaman mencoba menyambung ulang WebSocket dan AudioContext. Jika browser menghentikan mikrofon, tekan tombol **Pulihkan Voice** untuk meminta akses ulang. Jangan tutup tab. Browser/OS tetap dapat menangguhkan proses dan tidak bisa dipaksa aktif oleh JavaScript atau PWA.
 
 ## 7. Port dan jaringan
 
