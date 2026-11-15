@@ -128,6 +128,10 @@ function renderState(msg){
   const myself=msg.self;
   if(!myself){message('Minecraft offline. Login ke server terlebih dahulu.',true);return;}
   $('room-status').textContent=translation('connected');
+  if(muted!==!!myself.muted||deafened!==!!myself.deafened||whisper!==!!myself.whisper){
+    muted=!!myself.muted;deafened=!!myself.deafened;whisper=!!myself.whisper;
+    updateButtons();
+  }
   if(Number.isFinite(myself.volume)&&Number($('output-volume').value)!==myself.volume){
     $('output-volume').value=String(myself.volume);outputVolume=myself.volume/100;
     if(speakerGain)speakerGain.gain.value=outputVolume;
@@ -164,15 +168,20 @@ function receiveAudio(msg){
   for(let i=0;i<960;i++)samples[i]=view.getInt16(i*2,true)/32768;
   let state=audioStreams.get(msg.uuid);
   if(!state){
-    const pan=ctx.createStereoPanner(),gain=ctx.createGain();
-    gain.connect(pan);pan.connect(speakerGain);
-    state={pan,gain,next:ctx.currentTime};audioStreams.set(msg.uuid,state);
+    const panner=ctx.createPanner(),gain=ctx.createGain();
+    panner.panningModel='HRTF';panner.distanceModel='inverse';
+    panner.refDistance=2;panner.maxDistance=100;panner.rolloffFactor=1.3;
+    gain.connect(panner);panner.connect(speakerGain);
+    state={panner,gain,next:ctx.currentTime};audioStreams.set(msg.uuid,state);
   }
-  const dx=Number(msg.dx)||0,dz=Number(msg.dz)||0;
-  const distance=Math.hypot(dx,dz),attenuation=Math.max(.08,1-distance/48);
+  const dx=Number(msg.dx)||0,dy=Number(msg.dy)||0,dz=Number(msg.dz)||0;
   const yaw=(Number(msg.yaw)||0)*Math.PI/180;
-  state.pan.pan.value=Math.max(-1,Math.min(1,-(dx*Math.cos(yaw)+dz*Math.sin(yaw))/Math.max(1,distance)));
-  state.gain.gain.value=attenuation;
+  const x=-(dx*Math.cos(yaw)+dz*Math.sin(yaw));
+  const z=-(dz*Math.cos(yaw)-dx*Math.sin(yaw));
+  state.panner.positionX.setTargetAtTime(x,ctx.currentTime,.03);
+  state.panner.positionY.setTargetAtTime(dy,ctx.currentTime,.03);
+  state.panner.positionZ.setTargetAtTime(z,ctx.currentTime,.03);
+  state.gain.gain.value=1;
   const buffer=ctx.createBuffer(1,960,48000);
   buffer.copyToChannel(samples,0);
   const source=ctx.createBufferSource();source.buffer=buffer;source.connect(state.gain);
