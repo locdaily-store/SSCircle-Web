@@ -971,7 +971,8 @@ async function seasonScheduledTick(req,env){
   season.archiveEndDate='';
   season.archiveScheduledAt='';
   season.archiveAutoOpen=false;
-  season.archivePublished=true;
+  // Scheduling is not permission to publish a private draft.
+  season.archivePublished=season.archivePublished===true;
   settings.statSeasonId=season.id;
   settings.statSeasonActivatedAt=now;
   seasonTimelineEvent(season,'opening','Season dimulai',now);
