@@ -20,12 +20,12 @@ function fixture(){
     ASSETS:{fetch:async req=>new Response('ASSET '+new URL(req.url).pathname,{status:200})}};
   const e=Buffer.from(JSON.stringify({exp:Math.floor(Date.now()/1000)+3600})).toString('base64url');
   const cookie='ssc_s6_admin='+e+'.'+createHmac('sha256',secret+'|'+password).update(e).digest('base64url');
-  async function req(path,{method='GET',payload,admin=false}={}){
-    const r=await worker.fetch(new Request('https://sscircle.test'+path,{method,headers:{Origin:'https://sscircle.test',...(admin?{Cookie:cookie}:{}),...(payload?{'Content-Type':'application/json'}:{})},...(payload?{body:JSON.stringify(payload)}:{})}),env);
+  async function req(path,{method='GET',payload,admin=false,headers={}}={}){
+    const r=await worker.fetch(new Request('https://sscircle.test'+path,{method,headers:{Origin:'https://sscircle.test',...(admin?{Cookie:cookie}:{}),...(payload?{'Content-Type':'application/json'}:{}),...headers},...(payload?{body:JSON.stringify(payload)}:{})}),env);
     let data;try{data=await r.json();}catch{data=null;}
     return {status:r.status,data,headers:r.headers};
   }
-  return {req,db};
+  return {req,db,env};
 }
 async function save(t,patch){
   const form=await t.req('/api/admin/form',{admin:true});assert.equal(form.status,200);
@@ -115,33 +115,32 @@ test('foto arsip yang masih digunakan dilindungi dari penghapusan',async()=>{
   assert.match(source,/\.\.\.settings\.homeLeaderboardSeasons\.flatMap\(season=>/);
 });
 
-test('V10.47.2: Admin selects a valid stats season; activation time is server-controlled',async()=>{
+test('period is server-owned and cannot be switched using the general admin form',async()=>{
  const t=fixture();
  const rejected=await save(t,s=>{s.statSeasonId='season-does-not-exist';});
- assert.equal(rejected.status,400,JSON.stringify(rejected.data));
- const valid=await save(t,s=>{
+ assert.equal(rejected.status,409,JSON.stringify(rejected.data));
+ const bypass=await save(t,s=>{
    s.statSeasonId='season-1';
-   s.statSeasonActivatedAt='2001-01-01T00:00:00Z'; // Browser cannot backdate the epoch.
- });
- assert.equal(valid.status,200,JSON.stringify(valid.data));
- const first=JSON.parse(t.db.prepare('SELECT settings FROM form_config WHERE id=1').get().settings);
- const activated=Date.parse(first.statSeasonActivatedAt);
- assert.ok(Number.isFinite(activated));
- assert.ok(Math.abs(activated-Date.now())<10_000);
- const again=await save(t,s=>{
-   s.homeSeasonHighlightsEnabled=true;
    s.statSeasonActivatedAt='2001-01-01T00:00:00Z';
  });
- assert.equal(again.status,200,JSON.stringify(again.data));
- const second=JSON.parse(t.db.prepare('SELECT settings FROM form_config WHERE id=1').get().settings);
- assert.equal(second.statSeasonActivatedAt,first.statSeasonActivatedAt);
+ assert.equal(bypass.status,409);
+ const planned=await save(t,s=>{s.homeLeaderboardSeasons[0].archiveStatus='planned';});
+ assert.equal(planned.status,200);
+ const before=await t.req('/api/admin/form',{admin:true});
+ const opened=await seasonAction(t,'start',before.data.revision);
+ assert.equal(opened.status,200);
+ const activated=Date.parse(opened.data.settings.statSeasonActivatedAt);
+ assert.ok(Number.isFinite(activated));
+ assert.ok(Math.abs(activated-Date.now())<10_000);
+ const edit=await save(t,s=>{s.homeSeasonHighlightsEnabled=true;s.statSeasonActivatedAt='2001-01-01T00:00:00Z';});
+ assert.equal(edit.status,200);
+ const read=(await t.req('/api/admin/form',{admin:true})).data.settings;
+ assert.equal(read.statSeasonActivatedAt,opened.data.settings.statSeasonActivatedAt);
  const disabled=await save(t,s=>{s.statSeasonId='';});
- assert.equal(disabled.status,200,JSON.stringify(disabled.data));
- const after=JSON.parse(t.db.prepare('SELECT settings FROM form_config WHERE id=1').get().settings);
- assert.equal(after.statSeasonId,'');
- assert.equal(after.statSeasonActivatedAt,'');
+ assert.equal(disabled.status,409);
+ const statusChange=await save(t,s=>{s.homeLeaderboardSeasons[0].archiveStatus='ended';});
+ assert.equal(statusChange.status,409);
 });
-
 
 test('badge navigasi hanya memuat event aktif/mendatang dan pengumuman terbit',async()=>{
   const t=fixture();
@@ -196,12 +195,25 @@ test('lifecycle starts a dedicated stats period and freezes the final leaderboar
    mob_kills INTEGER NOT NULL DEFAULT 0,blocks_mined INTEGER NOT NULL DEFAULT 0,
    last_synced_at TEXT NOT NULL DEFAULT '');
    CREATE TABLE minecraft_accounts (
-     application_id TEXT, username TEXT, verified_at TEXT);
+     id TEXT PRIMARY KEY,application_id TEXT,username TEXT,verified_at TEXT);
+   CREATE TABLE minecraft_account_stat_progress (
+     account_id TEXT,season_id TEXT,total_playtime INTEGER,total_deaths INTEGER,
+     total_mobs INTEGER,total_blocks INTEGER,last_captured_at TEXT);
+   CREATE TABLE minecraft_sync_status (
+     id INTEGER PRIMARY KEY,seen_at TEXT,pending_count INTEGER,capture_backlog INTEGER,
+     delivery_code TEXT);
  `);
  const member='11111111-1111-4111-8111-111111111111';
+ const account='22222222-2222-4222-8222-222222222222';
+ t.db.prepare('INSERT INTO minecraft_accounts VALUES(?,?,?,?)')
+   .run(account,member,'BuilderA',new Date().toISOString());
+ // Legacy member snapshot is intentionally stale; modern per-account data wins.
  t.db.prepare('INSERT INTO player_stat_snapshots VALUES(?,?,?,?,?,?,?)')
-   .run(member,activeKey,7380,2,44,90,new Date().toISOString());
- t.db.prepare('INSERT INTO minecraft_accounts VALUES(?,?,?)').run(member,'BuilderA',new Date().toISOString());
+   .run(member,activeKey,15,1,1,1,new Date().toISOString());
+ t.db.prepare('INSERT INTO minecraft_account_stat_progress VALUES(?,?,?,?,?,?,?)')
+   .run(account,activeKey,7380,2,44,90,new Date().toISOString());
+ t.db.prepare('INSERT INTO minecraft_sync_status VALUES(?,?,?,?,?)')
+   .run(1,new Date().toISOString(),0,0,'SYNC_OK');
  const preview=await t.req('/api/admin/seasons/lifecycle?seasonId=season-1',{admin:true});
  assert.equal(preview.status,200);
  assert.equal(preview.data.preview.playerCount,1);
@@ -210,6 +222,17 @@ test('lifecycle starts a dedicated stats period and freezes the final leaderboar
  assert.equal(premature.status,400);
  const prepared=await seasonAction(t,'prepare',started.data.revision);
  assert.equal(prepared.status,200,JSON.stringify(prepared.data));
+ const beforeAck=await seasonAction(t,'end',prepared.data.revision,{autoAwards:true});
+ assert.equal(beforeAck.status,409,'must wait for signed Paper acknowledgement');
+ const commandId=prepared.data.season.archiveSyncCommandId;
+ t.db.prepare('UPDATE minecraft_sync_commands SET completed_at=? WHERE id=?')
+   .run(new Date().toISOString(),commandId);
+ t.db.prepare('UPDATE minecraft_sync_status SET seen_at=?,pending_count=1 WHERE id=1')
+   .run(new Date().toISOString());
+ const busy=await seasonAction(t,'end',prepared.data.revision,{autoAwards:true});
+ assert.equal(busy.status,409,'must wait for empty Paper upload queue');
+ t.db.prepare('UPDATE minecraft_sync_status SET seen_at=?,pending_count=0 WHERE id=1')
+   .run(new Date().toISOString());
  const finished=await seasonAction(t,'end',prepared.data.revision,{autoAwards:true});
  assert.equal(finished.status,200,JSON.stringify(finished.data));
  assert.equal(finished.data.season.archiveAwards.length,3);
@@ -466,4 +489,32 @@ test('Homepage featured board does not publish other Draft archive boards',async
  assert.equal(season.homeFeaturedLeaderboard.entries[0].name,'Juara B');
  assert.equal(season.archiveLeaderboards,undefined);
  assert.equal(JSON.stringify(season).includes('Catatan privat'),false);
+});
+
+test('Cloudflare Cron requires secret and only starts one explicitly scheduled Season',async()=>{
+ const t=fixture();
+ const planned=await save(t,s=>{s.homeLeaderboardSeasons[0].archiveStatus='planned';});
+ assert.equal(planned.status,200);
+ const form=await t.req('/api/admin/form',{admin:true});
+ const future=new Date(Date.now()+60000).toISOString();
+ const unconfigured=await seasonAction(t,'schedule',form.data.revision,{scheduledAt:future,autoStart:true});
+ assert.equal(unconfigured.status,503,'auto open is rejected before Cloudflare configuration');
+ const token='a-very-long-secret-unique-to-season-cron-2026';
+ t.env.SEASON_CRON_TOKEN=token;
+ const scheduled=await seasonAction(t,'schedule',form.data.revision,{scheduledAt:future,autoStart:true});
+ assert.equal(scheduled.status,200,JSON.stringify(scheduled.data));
+ assert.equal((await t.req('/api/internal/seasons/tick',{method:'POST',headers:{Authorization:'Bearer bad-secret'}})).status,401);
+ const early=await t.req('/api/internal/seasons/tick',{method:'POST',headers:{Authorization:'Bearer '+token}});
+ assert.equal(early.data.started,0,'Cron must not open before the deadline');
+ const settings=JSON.parse(t.db.prepare('SELECT settings FROM form_config WHERE id=1').get().settings);
+ settings.homeLeaderboardSeasons[0].archiveScheduledAt=new Date(Date.now()-2000).toISOString();
+ t.db.prepare('UPDATE form_config SET settings=? WHERE id=1').run(JSON.stringify(settings));
+ const opened=await t.req('/api/internal/seasons/tick',{method:'POST',headers:{Authorization:'Bearer '+token}});
+ assert.equal(opened.status,200,JSON.stringify(opened.data));
+ assert.equal(opened.data.started,1);
+ const repeated=await t.req('/api/internal/seasons/tick',{method:'POST',headers:{Authorization:'Bearer '+token}});
+ assert.equal(repeated.data.started,0,'Cron replay cannot open Season twice');
+ const actual=(await t.req('/api/admin/form',{admin:true})).data.settings;
+ assert.equal(actual.statSeasonId,'season-1');
+ assert.equal(actual.homeLeaderboardSeasons[0].archiveAutoOpen,false);
 });
