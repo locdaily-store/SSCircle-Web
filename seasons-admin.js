@@ -15,6 +15,52 @@ window.SSCircleSeasonsAdmin = (() => {
     if(help)wrap.append(el('small','field-help',help));return wrap;
   };
   const action=(label,onClick,primary=false)=>{const b=el('button','button '+(primary?'primary':'secondary'),label);b.type='button';b.onclick=onClick;return b;};
+  async function lifecycleRequest(season,actionName,extra={}){
+    const titles={
+      prepare:'Persiapkan penutupan Season ini? Pastikan statistik Minecraft sudah tersinkron.',
+      end:'Akhiri Season sekarang? Snapshot akhir akan disimpan dan statistik periode Season dinonaktifkan.',
+      start:'Mulai Season ini? Periode statistik baru akan aktif dan Season lainnya harus sudah selesai.',
+      schedule:'Simpan rencana pembukaan Season? Jadwal adalah pengingat, bukan aktivasi otomatis.'
+    };
+    const yes=await window.SSCNotice.confirm(
+      titles[actionName]+' Perubahan lain yang belum disimpan di editor perlu disimpan terlebih dahulu.',
+      {danger:actionName==='end',confirmText:actionName==='end'?'Akhiri Season':'Lanjutkan'}
+    );
+    if(!yes)return;
+    const confirmation={prepare:'PREPARE SEASON',end:'END SEASON',start:'START SEASON'}[actionName];
+    try{
+      const response=await fetch('/api/admin/seasons/lifecycle',{
+        method:'POST',credentials:'same-origin',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({action:actionName,seasonId:season.id,
+          revision:model.revision,confirmation,...extra})
+      });
+      const payload=await response.json();
+      if(!response.ok)throw Error(payload.error||payload.message||'Aksi Season gagal.');
+      model.settings=payload.settings;
+      model.revision=payload.revision;
+      expanded.add(season.id);
+      renderEditor();
+      window.SSCNotice.toast('Perubahan Season berhasil disimpan.','success');
+    }catch(error){
+      window.SSCNotice.toast('Gagal mengubah Season: '+error.message,'error',7000);
+    }
+  }
+  async function lifecyclePreview(season,output){
+    output.textContent='Memeriksa snapshot statistik...';
+    try{
+      const response=await fetch('/api/admin/seasons/lifecycle?seasonId='+encodeURIComponent(season.id),{
+        credentials:'same-origin',cache:'no-store'
+      });
+      const data=await response.json();
+      if(!response.ok)throw Error(data.error||'Tidak dapat mengambil statistik.');
+      const preview=data.preview;
+      const when=preview.lastSyncedAt?'Terakhir disinkron: '+preview.lastSyncedAt:'Belum ada sinkronisasi';
+      output.textContent=preview.available
+        ?`Snapshot saat ini: ${preview.playerCount} pemain · ${Math.floor(preview.playtimeSeconds/3600)} jam total · ${preview.deaths} deaths · ${preview.mobKills} mob kills. ${when}. Leaderboard final hanya diambil saat Season benar-benar diakhiri.`
+        :'Belum ada snapshot periode Season ini. Penutupan kosong memerlukan konfirmasi tambahan.';
+    }catch(error){output.textContent='Gagal memuat snapshot: '+error.message;}
+  }
   // A dedicated switch keeps the control beside its label even in a wide editor.
   const toggle=(label,checked,change,help='')=>{
     const wrapper=el('label','rules-admin-switch season-admin-toggle');
@@ -54,7 +100,9 @@ window.SSCircleSeasonsAdmin = (() => {
         const card=el('details','season-admin-mini');card.append(el('summary','',`${index+1}. ${item.title||item.caption||item.player||title}`));
         const inner=el('div','season-admin-mini-body');
         for(const [field,label,type,maxLen] of fields)
-          inner.append(inputField(label,item[field],v=>item[field]=v,{multiline:type==='textarea',max:maxLen||300}));
+          inner.append(inputField(label,item[field],v=>item[field]=v,{
+            multiline:type==='textarea',type:type==='date'?'date':'text',max:maxLen||300
+          }));
         if(key==='archiveAwards'){
           const target=el('label','field-group season-admin-recipient');
           target.append(el('span','field-label','Penerima anggota SSCircle'));
