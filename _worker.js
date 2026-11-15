@@ -6198,6 +6198,8 @@ async function route(req, env, ctx) {
           return bad('Konfirmasi pembukaan Season tidak sesuai.',400);
         if(season.archiveFinalizedAt)
           return bad('Season yang telah diarsipkan tidak dapat dibuka ulang.',409);
+        if(!['planned','active'].includes(season.archiveStatus))
+          return bad('Hanya Season yang sudah disiapkan yang dapat dimulai.',409);
         if(active&&active!==id)
           return bad('Akhiri Season statistik aktif terlebih dahulu.',409);
         if((settings.homeLeaderboardSeasons||[]).some(x=>x.id!==id&&x.archiveStatus==='active'))
@@ -6268,6 +6270,9 @@ async function route(req, env, ctx) {
       // Final snapshots and lifecycle timestamps are server-owned. A normal
       // editor save must not overwrite them or forge an archived result.
       const historical=new Map((persistedVoting.homeLeaderboardSeasons||[]).map(item=>[item.id,item]));
+      if([...historical.values()].some(item=>item.archiveFinalizedAt&&
+        !settings.homeLeaderboardSeasons.some(season=>season.id===item.id)))
+        return bad('Season yang sudah selesai tidak boleh dihapus dari arsip.',409);
       for(const season of settings.homeLeaderboardSeasons){
         const old=historical.get(season.id);
         if(old?.archiveFinalizedAt&&season.archiveStatus!=='ended')
