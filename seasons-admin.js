@@ -56,8 +56,14 @@ window.SSCircleSeasonsAdmin = (() => {
       if(!response.ok)throw Error(data.error||'Tidak dapat mengambil statistik.');
       const preview=data.preview;
       const when=preview.lastSyncedAt?'Terakhir disinkron: '+preview.lastSyncedAt:'Belum ada sinkronisasi';
+      const top=(preview.entries||[]).slice(0,5).map((entry,index)=>
+        (index+1)+'. '+entry.name+' ('+entry.score+')').join(' · ');
+      const awards=(preview.awardCandidates||[]).map(item=>item.title+': '+item.player).join(' · ');
       output.textContent=preview.available
-        ?`Snapshot saat ini: ${preview.playerCount} pemain · ${Math.floor(preview.playtimeSeconds/3600)} jam total · ${preview.deaths} deaths · ${preview.mobKills} mob kills. ${when}. Leaderboard final hanya diambil saat Season benar-benar diakhiri.`
+        ?`Snapshot saat ini: ${preview.playerCount} pemain · ${Math.floor(preview.playtimeSeconds/3600)} jam total · ${preview.deaths} deaths · ${preview.mobKills} mob kills. ${when}. `+
+          (top?'Peringkat teratas: '+top+'. ':'')+
+          (awards?'Kandidat Hall of Fame: '+awards+'. ':'')+
+          'Snapshot final diambil kembali saat penutupan dikonfirmasi.'
         :'Belum ada snapshot periode Season ini. Penutupan kosong memerlukan konfirmasi tambahan.';
     }catch(error){output.textContent='Gagal memuat snapshot: '+error.message;}
   }
@@ -244,8 +250,13 @@ window.SSCircleSeasonsAdmin = (() => {
         empty.append(allow,el('span','',
           'Izinkan penutupan tanpa data statistik jika snapshot pemain kosong.'));
         actions.append(empty);
+        const rewards=el('label','season-lifecycle-check');
+        const auto=el('input');auto.type='checkbox';auto.checked=true;
+        rewards.append(auto,el('span','',
+          'Tambahkan otomatis penghargaan pemain teraktif, pembasmi monster dan penambang terbaik tanpa menggandakan kategori lama.'));
+        actions.append(rewards);
         actions.append(action('Akhiri Season',()=>lifecycleRequest(season,'end',{
-          publish:season.archivePublished,allowEmpty:allow.checked
+          publish:season.archivePublished,allowEmpty:allow.checked,autoAwards:auto.checked
         }),true));
       }
       actions.append(preview);
@@ -279,15 +290,18 @@ window.SSCircleSeasonsAdmin = (() => {
         const row=el('div','season-admin-rank');
         const top=el('div','season-admin-rank-top');
         top.append(el('strong','season-admin-rank-number','Pemain '+String(i+1).padStart(2,'0')));
-        top.append(action('Hapus',()=>{season.entries.splice(i,1);mark();repaint();}));
+        if(!season.archiveFinalizedAt)
+          top.append(action('Hapus',()=>{season.entries.splice(i,1);mark();repaint();}));
         const fields=el('div','season-admin-rank-fields');
         fields.append(inputField('Nama pemain',entry.name,v=>entry.name=v,{max:80}));
         fields.append(inputField('Peringkat / skor',entry.score,v=>entry.score=v,{max:80}));
+        if(season.archiveFinalizedAt)fields.querySelectorAll('input').forEach(input=>input.disabled=true);
         row.append(top,fields);list.append(row);
       });
-      window.SSCircleSort?.attach(list,{item:'.season-admin-rank',handleTarget:'.season-admin-rank-top',onMove:(from,to)=>{
-        season.entries.splice(to,0,season.entries.splice(from,1)[0]);mark();repaint();
-      }});
+      if(!season.archiveFinalizedAt)window.SSCircleSort?.attach(list,{
+        item:'.season-admin-rank',handleTarget:'.season-admin-rank-top',onMove:(from,to)=>{
+          season.entries.splice(to,0,season.entries.splice(from,1)[0]);mark();repaint();
+        }});
     };
     repaint();
     const addPlayer=action('+ Tambah pemain',()=>{
@@ -295,7 +309,8 @@ window.SSCircleSeasonsAdmin = (() => {
       season.entries.push({name:'',score:''});mark();repaint();ranking.open=true;
     });
     addPlayer.classList.add('season-admin-add-player');
-    inner.append(addPlayer);
+    if(!season.archiveFinalizedAt)inner.append(addPlayer);
+    else inner.append(el('p','field-help','Leaderboard final sudah dikunci saat penutupan. Data snapshot tetap tersimpan.'));
     achievement.content.append(ranking);
     body.append(achievement.section);
 
@@ -369,6 +384,7 @@ window.SSCircleSeasonsAdmin = (() => {
       const id='season-'+crypto.randomUUID().replace(/-/g,'').slice(0,12);
       s.homeLeaderboardSeasons.push({id,title:'Season '+(s.homeLeaderboardSeasons.length+1),entries:[],archivePublished:false,archiveStatus:'planned',archiveTimeline:[],archiveScheduledAt:'',archiveStartDate:'',archiveEndDate:'',archiveSummary:'',archiveCover:'',archiveMemories:[],archiveBuilds:[],archiveAwards:[]});
       expanded.add(id);mark();renderEditor();
+      window.SSCNotice.toast('Season baru masih Draft. Tekan Simpan Season sebelum menjalankan Lifecycle.','info');
     },true));root.append(bar);
     const list=el('div','season-admin-list');root.append(list);
     s.homeLeaderboardSeasons.forEach((season,index)=>{
