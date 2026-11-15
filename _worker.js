@@ -944,6 +944,9 @@ function validLeaderboard(input) {
       })).filter(e=>e.name||e.score)};
     });
     const entries=archiveLeaderboards[0]?.entries||[];
+    const requestedBoard=s(season?.homeFeaturedLeaderboardId,64);
+    const homeFeaturedLeaderboardId=archiveLeaderboards.some(board=>board.id===requestedBoard)
+      ?requestedBoard:(archiveLeaderboards[0]?.id||'');
     const startDate=date(season?.archiveStartDate,'mulai season');
     const endDate=date(season?.archiveEndDate,'akhir season');
     if(startDate&&endDate&&endDate<startDate) throw Error('Tanggal akhir season harus setelah tanggal mulai.');
@@ -959,7 +962,7 @@ function validLeaderboard(input) {
     if(!Array.isArray(memories)||memories.length>12) throw Error('Maksimal 12 foto kenangan per season.');
     if(!Array.isArray(builds)||builds.length>8) throw Error('Maksimal 8 bangunan terbaik per season.');
     if(!Array.isArray(awards)||awards.length>12) throw Error('Maksimal 12 penghargaan per season.');
-    return {id,title,entries,archiveLeaderboards,
+    return {id,title,entries,archiveLeaderboards,homeFeaturedLeaderboardId,
       archivePublished:season?.archivePublished===true,
       archiveStatus:['planned','active','ended'].includes(season?.archiveStatus)?season.archiveStatus:'ended',
       archiveStartDate:startDate,archiveEndDate:endDate,
