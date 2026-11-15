@@ -39,6 +39,12 @@
       if(dates.length)headText.append(el('p','season-archive-dates',dates.join(' – ')));
       const summary=typeof season.archiveSummary==='string'?season.archiveSummary.trim():'';
       if(summary)headText.append(el('p','season-archive-summary',summary));
+      if(season.archiveStatus==='planned'&&season.archiveScheduledAt){
+        const when=new Date(season.archiveScheduledAt);
+        if(Number.isFinite(when.getTime()))
+          headText.append(el('p','season-archive-dates',
+            'Rencana pembukaan: '+when.toLocaleString('id-ID')));
+      }
       const badge=el('span','season-archive-state',season.archiveStatus==='active'
         ?'Sedang Berlangsung':season.archiveStatus==='planned'?'Akan Datang':'Arsip Season');
       heading.append(headText,badge);card.append(heading);
@@ -53,6 +59,9 @@
         for(const item of [...timeline].sort((a,b)=>(a.date||'').localeCompare(b.date||''))){
           const entry=el('li','season-timeline-entry');
           if(item.date)entry.append(el('time','season-timeline-date',dateLabel(item.date)));
+          const labels={opening:'Pembukaan',closing:'Penutupan',event:'Event',
+            build:'Pembangunan',award:'Penghargaan',milestone:'Milestone'};
+          entry.append(el('span','season-timeline-type',labels[item.kind]||'Milestone'));
           entry.append(el('strong','',item.title));
           if(item.description)entry.append(el('p','',item.description));
           list.append(entry);
