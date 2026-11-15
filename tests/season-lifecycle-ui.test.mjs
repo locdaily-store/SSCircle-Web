@@ -35,7 +35,7 @@ test('Timeline and awards use the same shared Season Archive source',()=>{
 
 test('Season Lifecycle CSS is shared and provides narrow-screen controls',()=>{
  for(const page of ['admin.html','seasons.html'])
-   assert.match(read(page),/season-lifecycle\.css\?v=10\.63\.1/);
+   assert.match(read(page),/season-lifecycle\.css\?v=10\.63\.2/);
  const css=read('season-lifecycle.css');
  assert.match(css,/@media\(max-width:600px\)/);
  assert.match(css,/\.season-timeline-entry/);
