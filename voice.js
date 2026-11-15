@@ -28,7 +28,9 @@ const t={
 };
 let lang='id',token='',socket=null,me=null,latest=null,ctx=null,stream=null,worklet=null,
   micSource=null,micGain=1,speakerGain=null,pttDown=false,muted=false,deafened=false,
-  whisper=false,closing=false,reconnectTry=0,sendLevel=0,outputVolume=1,playing=new Map(),pendingMic=[];
+  whisper=false,closing=false,reconnectTry=0,retryTimer=null,joining=false,lastVoiceState=0,
+  micWanted=false,micStarting=false,workletLoaded=false,recovering=false,
+  sendLevel=0,outputVolume=1,playing=new Map(),pendingMic=[];
 const translation=k=>t[lang][k]||k;
 function message(text,error=false){$('room-message').textContent=text;$('room-message').style.color=error?'#ffb1b7':'';}
 function pairMessage(text,error=false){$('pair-message').textContent=text;$('pair-message').style.color=error?'#ffb1b7':'';}
@@ -58,12 +60,24 @@ async function request(path,options={}){
   return value;
 }
 function closeSocket(){
-  if(socket){const old=socket;socket=null;old.onclose=null;old.onmessage=null;old.close(1000,'user');}
+  if(socket){
+    const old=socket;socket=null;old.onclose=null;old.onmessage=null;
+    try{old.close(1000,'user');}catch{}
+  }
+}
+function cancelReconnect(){
+  if(retryTimer!==null){clearTimeout(retryTimer);retryTimer=null;}
+}
+function scheduleReconnect(){
+  if(closing||!token||retryTimer!==null)return;
+  // Mobile background timers may pause. Retain a bounded retry when the page resumes.
+  const delay=Math.min(30000,1200*Math.pow(1.6,Math.min(8,++reconnectTry)));
+  retryTimer=setTimeout(()=>{retryTimer=null;if(!closing&&token)void join();},delay);
 }
 async function disconnect(){
-  closing=true;closeSocket();
+  closing=true;cancelReconnect();closeSocket();micWanted=false;
   if(token)try{await request('/api/disconnect',{method:'POST',headers:{Authorization:'Bearer '+token}});}catch{}
-  token='';me=null;latest=null;reconnectTry=0;
+  token='';me=null;latest=null;reconnectTry=0;lastVoiceState=0;
   stopMic();clearPlayback();setRoom(false);status(translation('disconnected'),false);
 }
 function control(action,value=''){
@@ -92,37 +106,45 @@ function setMode(){
   updateButtons();
 }
 async function join(){
-  closing=false;setRoom(true);$('room-status').textContent=translation('connecting');
+  if(closing||!token||joining||socket?.readyState===WebSocket.OPEN||
+     socket?.readyState===WebSocket.CONNECTING)return;
+  joining=true;setRoom(true);$('room-status').textContent=translation('connecting');
   try{
     const value=await request('/api/ticket',{method:'POST',
       headers:{Authorization:'Bearer '+token},body:'{}'});
-    if(closing)return;
+    if(closing||!token)return;
     const ws=API.replace(/^http/i,'ws')+'/ws?ticket='+encodeURIComponent(value.ticket);
     const current=new WebSocket(ws);socket=current;
     current.onopen=()=>{
-      reconnectTry=0;$('room-status').textContent=translation('connected');
-      status(translation('connected'),true);message('Voice room terhubung. Aktifkan mikrofon untuk mulai berbicara.');
+      if(socket!==current||closing)return;
+      reconnectTry=0;cancelReconnect();lastVoiceState=Date.now();
+      $('room-status').textContent=translation('connected');
+      status(translation('connected'),true);
+      message('Voice room terhubung. Latar belakang diusahakan aktif bila browser mengizinkan.');
       updateButtons();
     };
     current.onmessage=e=>{
+      if(socket!==current)return;
       let msg;try{msg=JSON.parse(e.data);}catch{return;}
-      if(msg.t==='state'){latest=msg;renderState(msg);}
+      if(msg.t==='state'){lastVoiceState=Date.now();latest=msg;renderState(msg);}
       if(msg.t==='audio'||msg.t==='audioBatch')receiveAudio(msg);
       if(msg.t==='error')message(msg.code,true);
     };
     current.onclose=()=>{
       if(socket!==current||closing)return;
-      socket=null;$('room-status').textContent=translation('reconnecting');
+      socket=null;lastVoiceState=0;clearPlayback();
+      $('room-status').textContent=translation('reconnecting');
       status(translation('reconnecting'),false);
-      if(++reconnectTry>8){message('Koneksi terputus. Gunakan /voice link lagi.',true);return;}
-      setTimeout(()=>{if(!closing&&token)join();},Math.min(15000,1000*Math.pow(1.6,reconnectTry)));
+      scheduleReconnect();
     };
-    current.onerror=()=>{$('room-status').textContent=translation('disconnected');};
+    current.onerror=()=>{$('room-status').textContent=translation('reconnecting');};
   }catch(error){
     message(error.message,true);
-    if(/SESSION_EXPIRED|Sesi habis|unauthorized/i.test(error.message)){await disconnect();return;}
-    if(!closing&&++reconnectTry<=8)setTimeout(join,Math.min(15000,1200*Math.pow(1.6,reconnectTry)));
-  }
+    if(/SESSION_EXPIRED|Sesi habis|unauthorized/i.test(error.message)){
+      await disconnect();return;
+    }
+    scheduleReconnect();
+  }finally{joining=false;}
 }
 function renderState(msg){
   if(msg.status!=='connected'){status(translation('offline'),false);return;}
@@ -157,7 +179,7 @@ async function ensureContext(){
     ctx=new Audio({sampleRate:48000,latencyHint:'interactive'});
     speakerGain=ctx.createGain();speakerGain.gain.value=outputVolume;speakerGain.connect(ctx.destination);
   }
-  if(ctx.state==='suspended')await ctx.resume();
+  if(ctx.state!=='running')await ctx.resume();
   return ctx;
 }
 function receiveAudio(msg){
@@ -329,7 +351,7 @@ $('pair-form').onsubmit=async e=>{
   try{
     const out=await request('/api/pair',{method:'POST',
       body:JSON.stringify({code:$('pair-code').value})});
-    token=out.token;me=out.player;
+    token=out.token;me=out.player;closing=false;cancelReconnect();reconnectTry=0;
     pairMessage(translation('paired'));setRoom(true);await join();
   }catch(error){pairMessage(error.message,true);}
   finally{$('pair-submit').disabled=false;}
