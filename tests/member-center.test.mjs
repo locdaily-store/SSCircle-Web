@@ -112,6 +112,35 @@ test('status pending/rejected tidak dapat mengakses data anggota',async()=>{
   }
 });
 
+test('only rejected members can be permanently purged with a typed code',async()=>{
+ const t=fixture();
+ const route='/api/admin/member-purge?memberId='+ID;
+ assert.equal((await t.req(route,{cookie:t.player})).status,401);
+ assert.equal((await t.req(route,{cookie:t.admin})).status,409);
+ t.db.prepare("UPDATE submissions SET status='rejected' WHERE id=?").run(ID);
+ const preview=await t.req(route,{cookie:t.admin});
+ assert.equal(preview.status,200,JSON.stringify(preview.data));
+ assert.equal(preview.data.confirmation,'HAPUS DATA 11111111');
+ const request={id:ID,confirmation:preview.data.confirmation,revision:preview.data.revision};
+ assert.equal((await t.req('/api/admin/member-purge',{method:'POST',cookie:t.admin,
+   payload:{...request,confirmation:'invalid'}})).status,409);
+ const setup=await t.req('/api/admin/member-center',{cookie:t.admin});
+ assert.equal(setup.status,200);
+ const account='22222222-2222-4222-8222-222222222222';
+ t.db.prepare('INSERT INTO minecraft_accounts (id,application_id,provider,provider_id,username,verified_at) VALUES(?,?,?,?,?,?)')
+   .run(account,ID,'java_premium','33333333-3333-4333-8333-333333333333','ErasedUser',new Date().toISOString());
+ t.db.prepare('INSERT INTO minecraft_account_stat_progress (account_id,season_id,last_captured_at,total_playtime) VALUES(?,?,?,?)')
+   .run(account,'',new Date().toISOString(),3600);
+ const result=await t.req('/api/admin/member-purge',{method:'POST',cookie:t.admin,payload:request});
+ assert.equal(result.status,200,JSON.stringify(result.data));
+ assert.equal(t.db.prepare('SELECT COUNT(*) AS n FROM submissions').get().n,0);
+ assert.equal(t.db.prepare('SELECT COUNT(*) AS n FROM minecraft_accounts').get().n,0);
+ assert.equal(t.db.prepare('SELECT COUNT(*) AS n FROM minecraft_account_stat_progress').get().n,0);
+ const settings=JSON.parse(t.db.prepare('SELECT settings FROM form_config WHERE id=1').get().settings);
+ assert.equal(settings.homeLeaderboardSeasons[0].archiveAwards.some(a=>a.memberId===ID),false);
+ assert.equal(settings.homeLeaderboardSeasons[0].archiveAwards.length,1);
+});
+
 test('saved seven-section Profile layout preserves its order after adding Social',async()=>{
  const t=fixture();
  const previous=['explore','stats','achievements','linking','security','welcome','preferences'];
