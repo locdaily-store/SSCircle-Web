@@ -20,14 +20,16 @@ window.SSCircleSeasonsAdmin = (() => {
       prepare:'Persiapkan penutupan Season ini? Pastikan statistik Minecraft sudah tersinkron.',
       end:'Akhiri Season sekarang? Snapshot akhir akan disimpan dan statistik periode Season dinonaktifkan.',
       start:'Mulai Season ini? Periode statistik baru akan aktif dan Season lainnya harus sudah selesai.',
-      schedule:'Simpan rencana pembukaan Season? Jadwal adalah pengingat, bukan aktivasi otomatis.'
+      schedule:'Simpan rencana pembukaan Season? Jadwal adalah pengingat, bukan aktivasi otomatis.',
+      archiveLegacy:'Arsipkan Season lama tanpa statistik aktif? Data leaderboard manual akan dipertahankan.'
     };
     const yes=await window.SSCNotice.confirm(
       titles[actionName]+' Perubahan lain yang belum disimpan di editor perlu disimpan terlebih dahulu.',
       {danger:actionName==='end',confirmText:actionName==='end'?'Akhiri Season':'Lanjutkan'}
     );
     if(!yes)return;
-    const confirmation={prepare:'PREPARE SEASON',end:'END SEASON',start:'START SEASON'}[actionName];
+    const confirmation={prepare:'PREPARE SEASON',end:'END SEASON',start:'START SEASON',
+      archiveLegacy:'ARCHIVE SEASON'}[actionName];
     try{
       const response=await fetch('/api/admin/seasons/lifecycle',{
         method:'POST',credentials:'same-origin',
@@ -207,10 +209,12 @@ window.SSCircleSeasonsAdmin = (() => {
       box.append(time);
     }
     if(season.archiveFinalizedAt){
-      const snap=season.archiveSnapshot||{};
+      const snap=season.archiveSnapshot;
       box.append(el('p','season-lifecycle-snapshot',
-        'Ditutup '+season.archiveFinalizedAt+' · '+(snap.playerCount||0)+' pemain · '+
-        Math.floor((snap.playtimeSeconds||0)/3600)+' jam total · '+(snap.deaths||0)+' deaths.'));
+        snap
+          ?'Ditutup '+season.archiveFinalizedAt+' · '+(snap.playerCount||0)+' pemain · '+
+            Math.floor((snap.playtimeSeconds||0)/3600)+' jam total · '+(snap.deaths||0)+' deaths.'
+          :'Diarsipkan '+season.archiveFinalizedAt+' tanpa snapshot otomatis. Leaderboard manual tetap dipertahankan.'));
     }
     const actions=el('div','season-lifecycle-actions');
     if((planned||activeStatus&&!active)&&!season.archiveFinalizedAt){
@@ -218,6 +222,11 @@ window.SSCircleSeasonsAdmin = (() => {
         publish:season.archivePublished,
         overrideSchedule:!!season.archiveScheduledAt&&Date.parse(season.archiveScheduledAt)>Date.now()
       }),true));
+    }
+    if(activeStatus&&!active&&!season.archiveFinalizedAt){
+      actions.append(action('Arsipkan Season lama',()=>lifecycleRequest(season,'archiveLegacy',{
+        publish:season.archivePublished
+      })));
     }
     if(planned){
       const field=el('label','field-group season-lifecycle-schedule');
