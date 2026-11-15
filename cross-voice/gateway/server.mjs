@@ -25,7 +25,8 @@ export function createGateway(options = config) {
   const cfg = {...config,...options};
   if(cfg.bridgeSecret.length<32)throw Error('VOICE_BRIDGE_SECRET minimal 32 karakter');
   const pairing = new Map(),sessions=new Map(),clients=new Map(),players=new Map(),attempts=new Map();
-  let bridge=null, svcReady=false, counters={up:0,down:0,dropped:0}, generation=0;
+  let bridge=null, svcReady=false, lastSnapshotAt=0,
+    counters={up:0,down:0,dropped:0}, generation=0;
   const now=()=>Date.now();
   const clientAddress=req=>{
     const forwarded=String(req.headers['cf-connecting-ip']||'');
@@ -75,7 +76,8 @@ export function createGateway(options = config) {
     if(current){clients.delete(uuid);try{current.close(4001,reason);}catch{}}
   }
   function detachBridge(){
-    const old=bridge;bridge=null;svcReady=false;players.clear();pairing.clear();sessions.clear();generation++;
+    const old=bridge;bridge=null;svcReady=false;lastSnapshotAt=0;
+    players.clear();pairing.clear();sessions.clear();generation++;
     for(const [uuid,ws] of clients){tell(ws,{t:'error',code:'BRIDGE_OFFLINE'});ws.close(1012,'Minecraft offline');}
     clients.clear();
     if(old&&old.readyState===WebSocket.OPEN)old.close(1012,'replaced');
@@ -85,7 +87,7 @@ export function createGateway(options = config) {
   }
   function handleBridge(msg){
     if(msg.t==='snapshot'){
-      svcReady=msg.voiceReady===true;
+      lastSnapshotAt=now();svcReady=msg.voiceReady===true;
       if(!Array.isArray(msg.players)||msg.players.length>cfg.maxClients+30)return;
       const updated=new Map();
       for(const p of msg.players){
@@ -213,7 +215,7 @@ export function createGateway(options = config) {
     wss.handleUpgrade(req,socket,head,ws=>{
       if(isBridge){
         if(bridge)detachBridge();
-        bridge=ws;generation++;
+        bridge=ws;generation++;lastSnapshotAt=now();
         ws.on('message',(bytes,binary)=>{if(binary||bytes.length>8192)return;
           try{handleBridge(JSON.parse(bytes.toString()));}catch{counters.dropped++;}});
         ws.on('close',()=>{if(bridge===ws)detachBridge();});
@@ -253,6 +255,7 @@ export function createGateway(options = config) {
     });
   });
   const prune=setInterval(()=>{
+    if(bridge&&now()-lastSnapshotAt>15000)detachBridge();
     for(const [key,v] of sessions)if(v.expires<now())sessions.delete(key);
     for(const [key,v] of pairing)if(v.expires<now())pairing.delete(key);
     for(const [key,v] of attempts)if(v.until<now())attempts.delete(key);
