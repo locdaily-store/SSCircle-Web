@@ -305,3 +305,89 @@ test('legacy active Season can be archived without a live stats period',async()=
  });
  assert.equal(repeated.status,409);
 });
+
+test('multi-board Season leaderboards keep legacy homepage results and stay isolated',async()=>{
+ const t=fixture();
+ const result=await save(t,settings=>{
+   settings.seasonArchiveEnabled=true;
+   const season=settings.homeLeaderboardSeasons[0];
+   season.archivePublished=true;
+   season.archiveLeaderboards=[
+     {id:'main',title:'Pemain Teraktif',entries:[
+       {name:'Pemain Lama',score:'12'},{name:'Pemain Baru',score:'10'}]},
+     {id:'builder',title:'Builder Terbaik',entries:[
+       {name:'Kreator A',score:'Castle'},{name:'Kreator B',score:'Village'}]},
+     {id:'event',title:'Pemenang Event',entries:[{name:'Juara A',score:'1st'}]}
+   ];
+ });
+ assert.equal(result.status,200,JSON.stringify(result.data));
+ const saved=(await t.req('/api/admin/form',{admin:true})).data.settings.homeLeaderboardSeasons[0];
+ assert.equal(saved.archiveLeaderboards.length,3);
+ assert.deepEqual(saved.archiveLeaderboards.map(board=>board.title),
+   ['Pemain Teraktif','Builder Terbaik','Pemenang Event']);
+ assert.deepEqual(saved.entries,saved.archiveLeaderboards[0].entries,
+   'first titled board mirrors legacy homepage entries');
+ assert.equal(saved.archiveLeaderboards[1].entries[0].name,'Kreator A');
+ const publicSettings=(await t.req('/api/form')).data.settings.homeLeaderboardSeasons[0];
+ assert.equal(publicSettings.archiveLeaderboards.length,3);
+ assert.equal(publicSettings.archiveLeaderboards[2].entries[0].score,'1st');
+ const changed=await save(t,settings=>{
+   settings.homeLeaderboardSeasons[0].archiveLeaderboards[1].entries[0].score='Grand Castle';
+ });
+ assert.equal(changed.status,200);
+ const after=(await t.req('/api/admin/form',{admin:true})).data.settings.homeLeaderboardSeasons[0];
+ assert.equal(after.entries[0].score,'12');
+ assert.equal(after.archiveLeaderboards[1].entries[0].score,'Grand Castle');
+});
+
+test('legacy single-board rankings migrate without duplication after a normal edit',async()=>{
+ const t=fixture();
+ const initial=(await t.req('/api/admin/form',{admin:true})).data.settings.homeLeaderboardSeasons[0];
+ assert.equal(initial.archiveLeaderboards,undefined);
+ assert.equal(initial.entries.length,1);
+ const saved=await save(t,settings=>{settings.seasonArchiveEnabled=true;});
+ assert.equal(saved.status,200,JSON.stringify(saved.data));
+ const season=(await t.req('/api/admin/form',{admin:true})).data.settings.homeLeaderboardSeasons[0];
+ assert.deepEqual(season.archiveLeaderboards,[{
+   id:'main',title:'Leaderboard Season',entries:[{name:'Pemain Lama',score:'12'}]
+ }]);
+ assert.deepEqual(season.entries,season.archiveLeaderboards[0].entries);
+ const second=await save(t,settings=>{settings.seasonArchiveDescription='Test';});
+ assert.equal(second.status,200);
+ const check=(await t.req('/api/admin/form',{admin:true})).data.settings.homeLeaderboardSeasons[0];
+ assert.equal(check.archiveLeaderboards.length,1);
+});
+
+test('multi-board validation rejects duplicate IDs, blank titles and overflow',async()=>{
+ const invalid=[
+   [{id:'main',title:'Peringkat',entries:[]},{id:'main',title:'Duplikat',entries:[]}],
+   [{id:'main',title:' ',entries:[]}],
+   Array.from({length:9},(_,i)=>({id:'board-'+i,title:'Board '+i,entries:[]})),
+   [{id:'main',title:'Leaderboard',entries:Array.from({length:21},(_,i)=>({
+     name:'Pemain '+i,score:String(i)
+   }))}],
+   [{id:'main',title:'Leaderboard',entries:'bukan-array'}]
+ ];
+ for(const archiveLeaderboards of invalid){
+   const t=fixture();
+   const outcome=await save(t,settings=>{
+     settings.homeLeaderboardSeasons[0].archiveLeaderboards=archiveLeaderboards;
+   });
+   assert.equal(outcome.status,400,JSON.stringify({archiveLeaderboards,outcome}));
+ }
+});
+
+test('unpublished boards stay hidden from public form metadata',async()=>{
+ const t=fixture();
+ const result=await save(t,settings=>{
+   settings.seasonArchiveEnabled=true;
+   const season=settings.homeLeaderboardSeasons[0];
+   season.archivePublished=false;
+   season.archiveLeaderboards=[{id:'main',title:'Draft rahasia',entries:[
+     {name:'Pemain Lama',score:'12'}]}];
+ });
+ assert.equal(result.status,200);
+ const publicSeason=(await t.req('/api/form')).data.settings.homeLeaderboardSeasons[0];
+ assert.equal(publicSeason.archiveLeaderboards,undefined);
+ assert.equal(publicSeason.entries[0].name,'Pemain Lama');
+});
