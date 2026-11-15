@@ -4,7 +4,7 @@
 gateway:
   # Pakai WSS URL Cloudflare Worker (workers.dev atau custom domain). Tidak perlu VPS/Tunnel.
   websocket-url: "wss://voice.example.com/bridge"
-  # Simpan secret setidaknya 32 karakter, SAMA dengan VOICE_BRIDGE_SECRET pada gateway.
+  # Secret minimal 32 karakter, sama dengan Wrangler secret VOICE_BRIDGE_SECRET.
   # Jangan masukkan secret asli dalam GitHub atau file publik.
   secret: ""
   reconnect-seconds: 5
