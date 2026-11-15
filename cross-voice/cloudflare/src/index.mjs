@@ -114,6 +114,7 @@ export class VoiceRoom extends DurableObject {
     this.bridgeEpoch='';
     this.svcReady=false;
     this.lastSnapshot=0;
+    this.lastPrune=0;
     this.radius=32;
     this.whisperRadius=8;
     this.groupsAllowed=true;
@@ -315,13 +316,13 @@ export class VoiceRoom extends DurableObject {
     return error(404,'NOT_FOUND',this.origin);
   }
   // Avoid storing audio payloads in SQL, KV, logs or WebSocket attachments.
-  webSocketMessage(ws,raw){
+  async webSocketMessage(ws,raw){
     if(typeof raw!=='string'||raw.length>MAX_WS){this.counters.dropped++;return;}
     const message=parseJson(raw);
     if(!message||typeof message.t!=='string')return;
     const attachment=this.event(ws);
     if(attachment.type==='bridge'&&ws===this.bridge){
-      this.bridgeMessage(message);
+      await this.bridgeMessage(message);
     }else if(attachment.type==='browser'){
       if(ws!==this.clients.get(attachment.uuid))return;
       if(attachment.expires<now()||attachment.epoch!==this.bridgeEpoch||
@@ -331,7 +332,7 @@ export class VoiceRoom extends DurableObject {
       this.browserMessage(ws,attachment,message);
     }
   }
-  bridgeMessage(m){
+  async bridgeMessage(m){
     if(m.t==='snapshot'){
       if(!Array.isArray(m.players)||m.players.length>this.maxClients+30)return;
       const fresh=new Map();
@@ -349,7 +350,7 @@ export class VoiceRoom extends DurableObject {
       for(const uuid of this.clients.keys())if(!fresh.get(uuid)?.bedrock)
         this.clientOut(uuid,'player offline');
       // Sessions have a fixed lifetime. A snapshot is a cheap cleanup cadence.
-      this.sqlPrune();
+      if(now()-this.lastPrune>60000){this.sqlPrune();this.lastPrune=now();}
       for(const [id,sock]of this.clients){
         if(this.event(sock).expires<=now())this.clientOut(id,'session expired');
       }
@@ -363,12 +364,12 @@ export class VoiceRoom extends DurableObject {
       if(!CODE.test(m.code||'')||!UUID.test(m.uuid||'')||!this.players.get(m.uuid)?.bedrock)return;
       const expiry=Number(m.expires);
       if(!Number.isFinite(expiry)||expiry<=now()||expiry>now()+180000)return;
-      void digest('code:'+m.code).then(hash=>{
-        if(!this.bridge||this.bridgeEpoch==='')return;
-        this.sql.exec('DELETE FROM voice_pairing WHERE uuid=?',m.uuid);
-        this.sql.exec('INSERT INTO voice_pairing (code_hash,uuid,expires,epoch) VALUES (?,?,?,?) ON CONFLICT(code_hash) DO UPDATE SET uuid=excluded.uuid,expires=excluded.expires,epoch=excluded.epoch',
-          hash,m.uuid,expiry,this.bridgeEpoch);
-      });
+      const epoch=this.bridgeEpoch;
+      const hash=await digest('code:'+m.code);
+      if(!this.bridge||this.bridgeEpoch!==epoch)return;
+      this.sql.exec('DELETE FROM voice_pairing WHERE uuid=?',m.uuid);
+      this.sql.exec('INSERT INTO voice_pairing (code_hash,uuid,expires,epoch) VALUES (?,?,?,?) ON CONFLICT(code_hash) DO UPDATE SET uuid=excluded.uuid,expires=excluded.expires,epoch=excluded.epoch',
+        hash,m.uuid,expiry,epoch);
     }else if(m.t==='kick'&&UUID.test(m.uuid||'')){
       this.sql.exec('DELETE FROM voice_sessions WHERE uuid=?',m.uuid);
       this.sql.exec('DELETE FROM voice_tickets WHERE uuid=?',m.uuid);
