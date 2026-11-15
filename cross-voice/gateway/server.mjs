@@ -117,7 +117,7 @@ export function createGateway(options = config) {
         const recipient=players.get(uuid);
         if(recipient&&!recipient.deafened&&nearby(sender,recipient,msg.whisper===true))
           tell(ws,{t:'audio',uuid:msg.uuid,pcm:msg.pcm,
-            dx:sender.x-recipient.x,dz:sender.z-recipient.z,yaw:recipient.yaw});
+            dx:sender.x-recipient.x,dy:sender.y-recipient.y,dz:sender.z-recipient.z,yaw:recipient.yaw});
       }
       counters.down++;
     }else if(msg.t==='config'){
@@ -239,7 +239,7 @@ export function createGateway(options = config) {
               const recipient=players.get(id);
               if(id!==uuid&&recipient&&!recipient.deafened&&nearby(sender,recipient))
                 tell(recipientWs,{t:'audio',uuid,pcm:msg.pcm,
-                  dx:sender.x-recipient.x,dz:sender.z-recipient.z,yaw:recipient.yaw});
+                  dx:sender.x-recipient.x,dy:sender.y-recipient.y,dz:sender.z-recipient.z,yaw:recipient.yaw});
             }
             counters.up++;
           }else if(msg.t==='control'&&typeof msg.action==='string'&&
