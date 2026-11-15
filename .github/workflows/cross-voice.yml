@@ -9,6 +9,7 @@ on:
       - 'voice-config.js'
       - 'voice-worklet.js'
       - 'tests/voice-page.test.mjs'
+      - 'tests/voice-background.test.mjs'
       - '_worker.js'
       - 'scripts/package_cross_voice.py'
       - '.github/workflows/cross-voice.yml'
@@ -34,7 +35,7 @@ jobs:
       - name: Uji audio dua arah, pairing dan keamanan WebSocket
         run: npm test --prefix cross-voice/gateway
       - name: Uji Permissions Policy, CSP dan konfigurasi Cloudflare Pages Voice
-        run: node --test tests/voice-page.test.mjs
+        run: node --test tests/voice-page.test.mjs tests/voice-background.test.mjs
   cloudflare:
     name: Uji gateway Cloudflare Durable Object asli
     runs-on: ubuntu-latest
