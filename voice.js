@@ -293,7 +293,7 @@ function translateInterface(){
   put('label[for="mic-volume"]',a.input);
   put('label[for="output-volume"]',a.output);
   put('label[for="mic-meter"]',a.meter);
-  put('label[for="noise-suppression"]',a.noise);
+  put('#noise-label',a.noise);
   put('#test-mic',a.testMic);put('#test-speaker',a.testSpeaker);
   put('.voice-groups h3',a.mode);put('#join-group',a.group);
   put('.voice-mobile-warning',a.notice);
