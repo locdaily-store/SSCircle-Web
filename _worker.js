@@ -2428,6 +2428,16 @@ async function ensureMemberCenter(env) {
   ];
   for (const sql of statements) await env.DB.prepare(sql).run();
 
+  // Additive migration: the epoch is scoped to the signed Paper snapshot.
+  // A missing epoch from an older JAR remains compatible with existing ledgers.
+  const statCols=await env.DB.prepare('PRAGMA table_info(minecraft_account_stat_progress)').all();
+  if(!(statCols.results||[]).some(col=>col.name==='last_world_epoch')){
+    try{
+      await env.DB.prepare("ALTER TABLE minecraft_account_stat_progress ADD COLUMN last_world_epoch TEXT NOT NULL DEFAULT ''").run();
+    }catch(error){
+      if(!/duplicate column name/i.test(String(error?.message||'')))throw error;
+    }
+  }
   // Existing D1 databases need the new permission without dropping any rows.
   const policyCols=await env.DB.prepare('PRAGMA table_info(member_policy)').all();
   if(!(policyCols.results||[]).some(col=>col.name==='allow_members')){
@@ -3883,6 +3893,9 @@ async function minecraftStatsIngest(req,env,ctx){
   if(!payload||typeof payload!=='object'||!mcStatIdentityValid(payload)||
     !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(payload.eventId||'')||
     !metrics||typeof metrics!=='object'||
+    (payload.worldEpoch!==undefined&&payload.worldEpoch!==''&&
+      (typeof payload.worldEpoch!=='string'||!
+        /^[0-9a-f-]{36}:[A-Za-z0-9_-]{1,32}$/.test(payload.worldEpoch)))||
     !['playtimeSeconds','deaths','mobKills','blocksMined'].every(k=>validMetric(metrics[k]))||
     !Number.isFinite(stamp)||stamp>Date.now()+300000||stamp<Date.now()-30*86400000)
     return minecraftLinkError('STATS_INVALID','Statistik tidak valid atau terlalu lama.',400);
@@ -3922,21 +3935,28 @@ async function minecraftStatsIngest(req,env,ctx){
   // Preserve old member-wide snapshots read-only because their account attribution is unknown.
   const names=['playtime','deaths','mobs','blocks'];
   const vals=[metrics.playtimeSeconds,metrics.deaths,metrics.mobKills,metrics.blocksMined];
+  const worldEpoch=payload.worldEpoch||'';
   const upsert=`INSERT INTO minecraft_account_stat_progress
     (account_id,season_id,last_captured_at,last_playtime,last_deaths,last_mobs,last_blocks,
-      total_playtime,total_deaths,total_mobs,total_blocks)
-    VALUES(?,?,?,?,?,?,?,?,?,?,?)
+      last_world_epoch,total_playtime,total_deaths,total_mobs,total_blocks)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
     ON CONFLICT(account_id,season_id) DO UPDATE SET
       ${names.map(name=>`total_${name}=MIN(2147483647,
         minecraft_account_stat_progress.total_${name}+
-        CASE WHEN excluded.last_${name}>=minecraft_account_stat_progress.last_${name}
+        CASE WHEN minecraft_account_stat_progress.last_world_epoch<>'' 
+             AND excluded.last_world_epoch<>'' 
+             AND excluded.last_world_epoch<>minecraft_account_stat_progress.last_world_epoch
+          THEN 0
+          WHEN excluded.last_${name}>=minecraft_account_stat_progress.last_${name}
           THEN excluded.last_${name}-minecraft_account_stat_progress.last_${name}
           ELSE excluded.last_${name} END)`).join(',\n      ')},
       ${names.map(name=>`last_${name}=excluded.last_${name}`).join(',\n      ')},
+      last_world_epoch=CASE WHEN excluded.last_world_epoch<>''
+        THEN excluded.last_world_epoch ELSE minecraft_account_stat_progress.last_world_epoch END,
       last_captured_at=excluded.last_captured_at
     WHERE excluded.last_captured_at>minecraft_account_stat_progress.last_captured_at`;
   const save=(season,initial)=>env.DB.prepare(upsert).bind(
-    account.id,season,capturedAt,...vals,...initial);
+    account.id,season,capturedAt,...vals,worldEpoch,...initial);
   const transaction=[
     env.DB.prepare(`INSERT OR IGNORE INTO minecraft_stat_receipts
       (event_id,application_id,provider,provider_id,received_at) VALUES(?,?,?,?,?)`)
