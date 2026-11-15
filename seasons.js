@@ -105,12 +105,30 @@
           if(award.description)tile.append(el('p','',award.description));grid.append(tile);
         }section.append(grid);body.append(section);
       }
-      const ranking=(Array.isArray(season.entries)?season.entries:[]).filter(r=>r?.name||r?.score);
-      if(ranking.length){const section=el('section','season-archive-group');section.append(el('h3','','Leaderboard Season'));
-        const list=el('ol','season-archive-ranking');
-        for(const entry of ranking){const li=el('li');li.append(el('strong','',entry.name||'Pemain'));
-          li.append(el('span','',entry.score||''));list.append(li);}
-        section.append(list);body.append(section);
+      const boards=Array.isArray(season.archiveLeaderboards)?season.archiveLeaderboards:
+        (Array.isArray(season.entries)&&season.entries.length
+          ?[{id:'main',title:'Leaderboard Season',entries:season.entries}]:[]);
+      if(boards.length){
+        const section=el('section','season-archive-group season-archive-leaderboards');
+        section.append(el('h3','','Leaderboard Season'));
+        const collection=el('div','season-archive-leaderboard-grid');
+        for(const board of boards){
+          const panel=el('article','season-archive-leaderboard');
+          panel.append(el('h4','',board.title||'Leaderboard'));
+          const ranking=(Array.isArray(board.entries)?board.entries:[]).filter(r=>r?.name||r?.score);
+          if(ranking.length){
+            const list=el('ol','season-archive-ranking');
+            for(const entry of ranking){
+              const li=el('li');
+              li.append(el('strong','',entry.name||'Pemain'));
+              li.append(el('span','',entry.score||''));
+              list.append(li);
+            }
+            panel.append(list);
+          }else panel.append(el('p','season-archive-note','Belum ada peringkat yang ditampilkan.'));
+          collection.append(panel);
+        }
+        section.append(collection);body.append(section);
       }
       if(!body.children.length)body.append(el('p','season-archive-note','Cerita season ini sedang dilengkapi oleh pengelola.'));
       detail.append(body);card.append(detail);root.append(card);
