@@ -994,8 +994,8 @@ function seasonTimelineEvent(season,kind,title,now){
 }
 // Satu sumber data season untuk Leaderboard lama sekaligus Season Archive.
 function validLeaderboard(input) {
-  if (!Array.isArray(input) || input.length > 12)
-    throw Error('Maksimal 12 season SSCircle.');
+  if (!Array.isArray(input))
+    throw Error('Daftar Season harus berupa array.');
   const seen = new Set();
   const date = (value, label) => {
     const raw = s(value, 10);
@@ -6475,7 +6475,7 @@ async function route(req, env, ctx) {
         season:settings.homeLeaderboardSeasons.find(item=>item.id===id)});
     }
     if (path === '/api/admin/form' && method === 'PUT') {
-      const input = await body(req, 280000);
+      const input = await body(req, 1800000);
       if (typeof input.revision !== 'string' || input.revision.length > 100)
         return bad('Versi pengaturan tidak tersedia. Muat ulang Admin Control lalu coba lagi.', 428);
       const current = await env.DB.prepare('SELECT settings, updated_at FROM form_config WHERE id=1').first();
