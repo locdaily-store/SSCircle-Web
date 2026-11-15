@@ -46,12 +46,13 @@ import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabExecutor {
     private static final String ALPHABET="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     private final SecureRandom random=new SecureRandom();
-    private final Map<UUID,Settings> settings=new HashMap<>();
+    private final Map<UUID,Settings> settings=new ConcurrentHashMap<>();
     private final Map<String,Group> groups=new HashMap<>();
     private final ArrayBlockingQueue<Frame> audioQueue=new ArrayBlockingQueue<>(256);
     private final AtomicBoolean running=new AtomicBoolean(false);
@@ -69,9 +70,9 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
     private volatile boolean groupsAllowed=true;
 
     private static final class Settings {
-        boolean muted, deafened, whisper, adminMuted;
-        int volume=100;
-        String group="";
+        volatile boolean muted, deafened, whisper, adminMuted;
+        volatile int volume=100;
+        volatile String group="";
     }
     private record Frame(UUID uuid,byte[] audio,boolean javaSource,boolean whisper) {}
 
@@ -175,13 +176,16 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
                 try{
                     VoicechatConnection connection=api.getConnectionOf(p.getUniqueId());
                     if(connection!=null&&connection.getGroup()!=null)
-                        group=connection.getGroup().getName();
+                        group=connection.getGroup().getId().toString();
                 }catch(RuntimeException ignored){}
             }
             item.addProperty("group",group);
             array.add(item);
         }
         packet.add("players",array);send(packet);
+        JsonObject cfg=new JsonObject();cfg.addProperty("t","config");
+        cfg.addProperty("radius",distance);cfg.addProperty("groupsAllowed",groupsAllowed);
+        send(cfg);
     }
     private String pairingCode(){
         StringBuilder b=new StringBuilder(8);
@@ -246,11 +250,14 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
                     // per sender preserves codec history; no blocking work on main tick.
                     OpusDecoder decoder=decoders.computeIfAbsent(frame.uuid(),k->api.createDecoder());
                     short[] samples=decoder.decode(frame.audio());
-                    if(samples==null||samples.length!=960)continue;
-                    JsonObject packet=new JsonObject();
-                    packet.addProperty("t","audio");packet.addProperty("uuid",frame.uuid().toString());
-                    packet.addProperty("pcm",Base64.getEncoder().encodeToString(toBytes(samples)));
-                    send(packet);sent++;
+                    if(samples==null||samples.length<960)continue;
+                    for(int start=0;start+960<=samples.length;start+=960){
+                        short[] chunk=java.util.Arrays.copyOfRange(samples,start,start+960);
+                        JsonObject packet=new JsonObject();
+                        packet.addProperty("t","audio");packet.addProperty("uuid",frame.uuid().toString());
+                        packet.addProperty("pcm",Base64.getEncoder().encodeToString(toBytes(chunk)));
+                        send(packet);sent++;
+                    }
                 }else{
                     // Bedrock browser PCM -> Opus -> official AudioSender.
                     VoicechatConnection connection=api.getConnectionOf(frame.uuid());
@@ -324,10 +331,17 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
                     // One named SVC group shared with Java users using voicechat group selection.
                     VoicechatServerApi api=voice;
                     if(api==null)return;
-                    Group group=groups.computeIfAbsent(value,k->api.groupBuilder().setName(k).build());
+                    Group group=groups.get(value);
+                    if(group==null){
+                        group=api.getGroups().stream().filter(g->g.getName().equals(value)
+                            &&!g.hasPassword()).findFirst().orElse(null);
+                        if(group==null)group=api.groupBuilder().setName(value).build();
+                        groups.put(value,group);
+                    }
+                    if(group.hasPassword())return; // Private groups require SVC authentication.
                     VoicechatConnection connection=api.getConnectionOf(player.getUniqueId());
                     if(connection!=null)connection.setGroup(group);
-                    s.group=value;
+                    s.group=group.getId().toString();
                 }
             }
             case "leave-group" -> {
@@ -403,6 +417,8 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
                 }catch(NumberFormatException e){tell(sender,"Masukkan angka 2 sampai 100.");}
                 if(action.equals("groups")&&args.length>=2){
                     groupsAllowed=args[1].equalsIgnoreCase("on");tell(sender,"Group "+(groupsAllowed?"AKTIF":"NONAKTIF"));
+                    if(!groupsAllowed)for(Player p:Bukkit.getOnlinePlayers())
+                        if(bedrock(p.getUniqueId()))apply(p,"leave-group","");
                 }
                 return true;
             }
@@ -411,6 +427,10 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
         }
         if(!(sender instanceof Player player)){tell(sender,"Gunakan perintah ini dalam Minecraft.");return true;}
         if(action.equals("link")){link(sender);return true;}
+        if(!bedrock(player.getUniqueId())){
+            tell(sender,"Untuk Java gunakan menu mod Simple Voice Chat. Perintah ini mengatur web Bedrock.");
+            return true;
+        }
         if(action.equals("status")){
             tell(sender,"Gateway "+(socket!=null?"terhubung":"offline")+
                 "; Simple Voice Chat "+(voiceReady?"aktif":"tidak tersedia")+
