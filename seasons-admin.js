@@ -436,7 +436,35 @@ window.SSCircleSeasonsAdmin = (() => {
     const inner=el('div','season-admin-subsection-content');
     ranking.append(inner);
     inner.append(el('p','field-help',
-      'Buat leaderboard berjudul terlebih dahulu, kemudian tambahkan pemain pada leaderboard yang dipilih. Leaderboard pertama juga dipakai untuk kompatibilitas Homepage dan snapshot statistik.'));
+      'Buat leaderboard berjudul, lalu tambahkan pemain di dalamnya. Papan pertama tetap menjadi snapshot statistik resmi, tetapi kamu bebas memilih papan mana yang ditampilkan pada Homepage.'));
+    const featuredField=el('label','field-group season-featured-board');
+    featuredField.append(el('span','field-label','Leaderboard utama di Homepage'));
+    const featuredSelect=el('select');
+    featuredSelect.setAttribute('aria-label','Pilih leaderboard utama untuk Homepage');
+    featuredSelect.onchange=()=>{
+      season.homeFeaturedLeaderboardId=featuredSelect.value;
+      mark();schedule();
+    };
+    featuredField.append(featuredSelect,
+      el('small','field-help','Pilihan ini menentukan kategori yang langsung ditampilkan untuk Season ini di slider leaderboard Homepage. Hasil snapshot final tetap tidak berubah.'));
+    inner.append(featuredField);
+    const updateFeaturedOptions=()=>{
+      const previous=season.homeFeaturedLeaderboardId;
+      const valid=boards.some(board=>board.id===previous);
+      season.homeFeaturedLeaderboardId=valid?previous:(boards[0]?.id||'');
+      featuredSelect.replaceChildren();
+      if(!boards.length){
+        const empty=el('option','','Belum ada leaderboard');
+        empty.value='';featuredSelect.append(empty);featuredSelect.disabled=true;
+      }else{
+        featuredSelect.disabled=false;
+        for(const board of boards){
+          const option=el('option','',board.title||'Leaderboard tanpa judul');
+          option.value=board.id;featuredSelect.append(option);
+        }
+      }
+      featuredSelect.value=season.homeFeaturedLeaderboardId;
+    };
     const list=el('div','season-admin-leaderboards');
     inner.append(list);
     const openBoards=new Set();
@@ -499,8 +527,16 @@ window.SSCircleSeasonsAdmin = (() => {
             'Hapus leaderboard '+(board.title||'ini')+' beserta seluruh peringkat di dalamnya?',
             {danger:true,confirmText:'Hapus leaderboard'});
           if(!ok)return;
+          const removedId=board.id;
           boards.splice(boardIndex,1);
-          if(boardIndex===0&&boards.length)boards[0].id='main';
+          if(boardIndex===0&&boards.length){
+            const previousId=boards[0].id;
+            boards[0].id='main';
+            if(season.homeFeaturedLeaderboardId===previousId)
+              season.homeFeaturedLeaderboardId='main';
+          }
+          if(season.homeFeaturedLeaderboardId===removedId)
+            season.homeFeaturedLeaderboardId=boards[0]?.id||'';
           syncPrimary();mark();repaintBoards();
         }));
         controls.append(actions);
@@ -508,6 +544,7 @@ window.SSCircleSeasonsAdmin = (() => {
       });
       if(!boards.length)list.append(el('p','field-help',
         'Belum ada leaderboard. Klik Tambah leaderboard untuk membuat kategori pertama.'));
+      updateFeaturedOptions();
     };
     repaintBoards();
     inner.append(action('+ Tambah leaderboard',()=>{
