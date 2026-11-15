@@ -98,12 +98,21 @@ window.fetch=async url => {
   print('Home',w,vals)
   page.set_content(seasons,wait_until='domcontentloaded')
   page.evaluate('settings=>window.SSCircleSeasonArchive.render(settings)',settings)
-  page.locator('.season-archive-details > summary').first.click()
-  vals=page.evaluate('''() => ({viewport:innerWidth,scrollWidth:document.documentElement.scrollWidth,
-    ranks:document.querySelectorAll('.season-archive-ranking li').length,
-    rankWidth:document.querySelector('.season-archive-ranking li').getBoundingClientRect().width})''')
-  assert vals['ranks']==3
+  page.locator('.season-archive-card[role="button"]').first.click()
+  page.locator('#season-archive-dialog').wait_for(state='visible')
+  vals=page.evaluate('''() => ({
+    viewport:innerWidth,scrollWidth:document.documentElement.scrollWidth,
+    ranks:document.querySelectorAll('#season-archive-dialog .season-archive-ranking li').length,
+    rankWidth:document.querySelector('#season-archive-dialog .season-archive-ranking li').getBoundingClientRect().width,
+    modalWidth:document.getElementById('season-archive-dialog').getBoundingClientRect().width,
+    photoFit:getComputedStyle(document.querySelector('.season-archive-cover img')).objectFit
+  })''')
+  assert vals['ranks']==3,('Season popup leaderboard missing',w,vals)
   assert vals['scrollWidth']<=w+2,('Season Archive overflow',w,vals)
+  assert vals['modalWidth']<=w,('Season popup too wide',w,vals)
+  assert vals['photoFit']=='contain',('Season photo cropped',w,vals)
+  page.keyboard.press('Escape')
+  assert not page.locator('#season-archive-dialog').evaluate('(dialog)=>dialog.open'),('Season popup did not close with Escape',w)
   # Compact card: state badge remains near its title, not at bottom of empty space.
   gap=page.evaluate('''() => {
     const h=document.querySelector('.season-archive-card-head');
