@@ -1033,7 +1033,7 @@ function validLeaderboard(input) {
       const title=s(board?.title,120);
       if(!title)throw Error('Judul leaderboard Season wajib diisi.');
       return {id:boardId,title,entries:boardEntries.map(e=>({
-        memberId:/^[0-9a-f-]{36}$/.test(e?.memberId||'')?e.memberId:'',
+        ...(/^[0-9a-f-]{36}$/.test(e?.memberId||'')?{memberId:e.memberId}:{}),
         name:s(e?.name,80),score:s(e?.score,80)
       })).filter(e=>e.name||e.score)};
     });
