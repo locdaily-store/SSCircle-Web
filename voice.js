@@ -232,16 +232,27 @@ function asPCM(samples){
   let str='';for(const b of bytes)str+=String.fromCharCode(b);
   return btoa(str);
 }
-async function startMic(){
-  if(stream){stopMic();return;}
+function backgroundInfo(text){
+  const state=$('background-state');
+  if(state)state.textContent=text;
+}
+async function activateMic(){
+  if(micStarting||!micWanted||stream)return;
+  micStarting=true;
+  let acquired=null;
   try{
     const context=await ensureContext();
     if(!context.audioWorklet)throw Error(translation('audioUnavailable'));
     const device=$('mic-select').value;
-    stream=await navigator.mediaDevices.getUserMedia({audio:{
+    acquired=await navigator.mediaDevices.getUserMedia({audio:{
       deviceId:device?{exact:device}:undefined,echoCancellation:true,
       noiseSuppression:$('noise-suppression').checked,autoGainControl:true},video:false});
-    await context.audioWorklet.addModule('voice-worklet.js');
+    if(!micWanted){acquired.getTracks().forEach(track=>track.stop());return;}
+    stream=acquired;
+    if(!workletLoaded){
+      await context.audioWorklet.addModule('voice-worklet.js');
+      workletLoaded=true;
+    }
     micSource=context.createMediaStreamSource(stream);
     worklet=new AudioWorkletNode(context,'sscircle-microphone',{numberOfInputs:1,numberOfOutputs:1});
     worklet.port.onmessage=e=>{
@@ -253,21 +264,69 @@ async function startMic(){
       }
     };
     micSource.connect(worklet);worklet.connect(context.destination);
+    for(const track of acquired.getAudioTracks()){
+      track.addEventListener('ended',()=>{
+        if(!micWanted||stream!==acquired)return;
+        stopMic(true);
+        backgroundInfo(translation('micInterrupted'));
+        message(translation('micInterrupted'),true);
+      });
+      track.addEventListener('mute',()=>{
+        if(stream===acquired)backgroundInfo(translation('micInterrupted'));
+      });
+      track.addEventListener('unmute',()=>{
+        if(stream===acquired)backgroundInfo(translation('backgroundReady'));
+      });
+    }
     $('start-mic').textContent=translation('stop');$('start-mic').classList.add('is-active');
     worklet.port.postMessage({t:'sensitivity',value:$('talk-mode').value==='ptt'?0:Number($('sensitivity').value)/1000});
-    updateButtons();await updateDevices();
+    updateButtons();await updateDevices();backgroundInfo(translation('backgroundReady'));
   }catch(e){
-    stopMic();message(e.name==='NotAllowedError'?translation('micDenied'):e.message,true);
-  }
+    micWanted=false;stopMic();
+    message(e.name==='NotAllowedError'?translation('micDenied'):e.message,true);
+    backgroundInfo(translation('micInterrupted'));
+  }finally{micStarting=false;}
 }
-function stopMic(){
-  flushMic();
+async function startMic(){
+  if(micStarting)return;
+  if(stream){micWanted=false;stopMic();backgroundInfo(translation('backgroundReady'));return;}
+  micWanted=true;
+  await activateMic();
+}
+function stopMic(preserveIntent=false){
+  if(!preserveIntent)micWanted=false;
+  pendingMic=[];
   if(stream)stream.getTracks().forEach(track=>track.stop());
   stream=null;if(micSource)try{micSource.disconnect();}catch{}
   if(worklet)try{worklet.disconnect();}catch{}
   micSource=null;worklet=null;pttDown=false;
   $('start-mic').textContent=translation('start');$('start-mic').classList.remove('is-active');
   $('mic-meter').value=0;
+}
+async function recoverVoice(manual=false){
+  if(recovering)return;
+  recovering=true;
+  try{
+    // After an OS suspension, a stale WebSocket may still report OPEN.
+    if(token&&!closing){
+      if(socket?.readyState===WebSocket.OPEN&&lastVoiceState&&
+         Date.now()-lastVoiceState>15000){
+        closeSocket();clearPlayback();lastVoiceState=0;
+      }
+      if(!socket||socket.readyState===WebSocket.CLOSED){
+        cancelReconnect();void join();
+      }
+    }
+    if(ctx&&ctx.state!=='running'){
+      void ctx.resume().catch(()=>backgroundInfo(translation('audioInterrupted')));
+    }
+    if(micWanted&&(!stream||stream.getAudioTracks().every(t=>t.readyState==='ended'))){
+      if(manual)await activateMic();
+      else backgroundInfo(translation('micInterrupted'));
+    }else if(ctx?.state==='running'){
+      backgroundInfo(translation('backgroundReady'));
+    }
+  }finally{recovering=false;}
 }
 async function updateDevices(){
   if(!navigator.mediaDevices?.enumerateDevices)return;
@@ -300,7 +359,11 @@ const labels={
     input:'Volume input',output:'Volume output',meter:'Level mikrofon',
     noise:'Peredam kebisingan (jika didukung)',testMic:'Uji mikrofon',
     testSpeaker:'Uji speaker',mode:'Mode suara',group:'Gabung grup',
-    notice:'Android/iOS dapat membatasi mikrofon dan audio browser saat Minecraft ada di layar depan. Audio latar belakang tidak dijamin; gunakan dua perangkat jika diperlukan.'
+    notice:'Mode latar belakang bersifat upaya terbaik. Android/iOS bisa membekukan tab, mikrofon, atau WebSocket ketika Minecraft dibuka. Jika terhenti, kembali ke halaman dan tekan Pulihkan Voice. Jangan tutup tab atau hentikan paksa browser.',
+    recover:'Pulihkan Voice',backgroundReady:'Voice diusahakan tetap aktif saat pindah aplikasi. Jangan tutup tab.',
+    backgroundHidden:'Halaman berjalan di latar belakang jika diizinkan perangkat.',
+    micInterrupted:'Mikrofon dihentikan perangkat. Kembali ke halaman lalu tekan Pulihkan Voice.',
+    audioInterrupted:'Audio ditangguhkan. Tekan Pulihkan Voice untuk melanjutkan.'
   },
   en:{
     subtitle:'Talk to nearby Minecraft Java and Bedrock friends.',
@@ -312,7 +375,11 @@ const labels={
     input:'Input volume',output:'Output volume',meter:'Microphone level',
     noise:'Noise suppression (if available)',testMic:'Test microphone',
     testSpeaker:'Test speaker',mode:'Voice mode',group:'Join group',
-    notice:'Android/iOS may suspend microphone or browser audio when Minecraft is in the foreground. Background audio is not guaranteed; use a second device if needed.'
+    notice:'Background mode is best effort. Android/iOS may suspend the tab, microphone, or WebSocket while Minecraft is open. Return and tap Restore Voice if interrupted. Do not close the tab or force-stop the browser.',
+    recover:'Restore Voice',backgroundReady:'Voice stays active when supported. Keep this tab open.',
+    backgroundHidden:'Background voice continues if your device permits it.',
+    micInterrupted:'The device stopped the microphone. Return and tap Restore Voice.',
+    audioInterrupted:'Audio was suspended. Tap Restore Voice to resume.'
   }
 };
 const put=(selector,value,html=false)=>{
@@ -334,7 +401,8 @@ function translateInterface(){
   put('#noise-label',a.noise);
   put('#test-mic',a.testMic);put('#test-speaker',a.testSpeaker);
   put('.voice-groups h3',a.mode);put('#join-group',a.group);
-  put('.voice-mobile-warning',a.notice);
+  put('.voice-mobile-warning',a.notice);put('#recover-voice',a.recover);
+  if(!document.hidden)backgroundInfo(a.backgroundReady);
 }
 function setLanguage(){
   lang=$('language').value;document.documentElement.lang=lang;
@@ -407,10 +475,22 @@ $('join-group').onclick=()=>{
   if(!/^[A-Za-z0-9_-]{1,24}$/.test(name)){message('Nama grup hanya huruf, angka, - atau _.',true);return;}
   control('group',name);message('Permintaan gabung grup '+name+' dikirim.');
 };
+$('recover-voice').onclick=()=>void recoverVoice(true);
 document.addEventListener('visibilitychange',()=>{
-  if(document.hidden&&stream)message('Browser dapat menghentikan mikrofon di background. Pastikan izin tetap aktif.');
+  if(document.hidden){
+    // Never leave a held PTT key active after switching apps.
+    if(pttDown){pttDown=false;updateButtons();}
+    backgroundInfo(translation('backgroundHidden'));
+  }else void recoverVoice();
 });
-window.addEventListener('pagehide',()=>{stopMic();closeSocket();});
+window.addEventListener('pageshow',()=>void recoverVoice());
+window.addEventListener('focus',()=>{if(!document.hidden)void recoverVoice();});
+window.addEventListener('online',()=>{if(!document.hidden)void recoverVoice();});
+// Mobile may enter bfcache on pagehide; do not deliberately close voice resources.
+// Real navigation/tab closure is handled by the browser. Explicit Disconnect still closes all.
+window.addEventListener('pagehide',()=>{
+  if(pttDown){pttDown=false;updateButtons();}
+});
 if(API){
   request('/api/health').then(h=>status(h.ready?translation('ready'):translation('offline'),h.ready))
     .catch(()=>status(translation('offline'),false));
