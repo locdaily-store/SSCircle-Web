@@ -836,6 +836,54 @@ function validVotingVotes(input, questions, mode='global', globalTokens=3) {
     return [{questionId,account,optionId,voterKey,createdAt:s(v?.createdAt,40)||new Date().toISOString()}];
   });
 }
+// Read-only snapshot preview. No new leaderboard table: the existing season
+// snapshot is copied into the shared Season Archive only on confirmed closure.
+async function seasonClosingPreview(env,seasonId,activatedAt){
+  const empty={available:false,playerCount:0,playtimeSeconds:0,deaths:0,
+    mobKills:0,blocksMined:0,lastSyncedAt:'',entries:[]};
+  if(!activatedAt||!Number.isFinite(Date.parse(activatedAt)))return empty;
+  const table=await env.DB.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='player_stat_snapshots'"
+  ).first();
+  if(!table)return empty;
+  const key='season:'+seasonId+':'+activatedAt;
+  const totals=await env.DB.prepare(`SELECT COUNT(*) AS players,
+    COALESCE(SUM(playtime_seconds),0) AS playtime,
+    COALESCE(SUM(deaths),0) AS deaths,
+    COALESCE(SUM(mob_kills),0) AS mobs,
+    COALESCE(SUM(blocks_mined),0) AS blocks,
+    MAX(last_synced_at) AS last_sync
+    FROM player_stat_snapshots WHERE season_id=?`).bind(key).first();
+  const hasAccounts=await env.DB.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='minecraft_accounts'"
+  ).first();
+  const display=hasAccounts
+    ?"(SELECT a.username FROM minecraft_accounts a WHERE a.application_id=ps.application_id ORDER BY a.verified_at DESC LIMIT 1)"
+    :"NULL";
+  const rows=await env.DB.prepare(`SELECT ps.playtime_seconds,ps.mob_kills,
+    ${display} AS username FROM player_stat_snapshots ps WHERE ps.season_id=?
+    ORDER BY ps.playtime_seconds DESC,ps.mob_kills DESC LIMIT 20`).bind(key).all();
+  const positive=value=>Math.max(0,Number(value)||0);
+  const entries=(rows.results||[]).map((row,index)=>{
+    const seconds=positive(row.playtime_seconds);
+    const hours=Math.floor(seconds/3600),minutes=Math.floor(seconds%3600/60);
+    return {name:s(row.username,80)||'Pemain '+String(index+1).padStart(2,'0'),
+      score:hours+' jam '+minutes+' menit'};
+  });
+  return {available:true,playerCount:positive(totals?.players),
+    playtimeSeconds:positive(totals?.playtime),deaths:positive(totals?.deaths),
+    mobKills:positive(totals?.mobs),blocksMined:positive(totals?.blocks),
+    lastSyncedAt:totals?.last_sync||'',entries};
+}
+function seasonTimelineEvent(season,kind,title,now){
+  const timeline=Array.isArray(season.archiveTimeline)?season.archiveTimeline:[];
+  if(timeline.some(entry=>entry.kind===kind))return;
+  // Keep the 24-item limit while preserving all existing manual milestones.
+  if(timeline.length>=24)return;
+  timeline.push({id:'lifecycle-'+kind+'-'+season.id,date:now.slice(0,10),
+    title,description:'',kind});
+  season.archiveTimeline=timeline;
+}
 // Satu sumber data season untuk Leaderboard lama sekaligus Season Archive.
 function validLeaderboard(input) {
   if (!Array.isArray(input) || input.length > 12)
@@ -6106,6 +6154,105 @@ async function route(req, env, ctx) {
       const result = await env.DB.prepare("UPDATE form_config SET settings=json_set(settings,'$.homeVotingVotes',json('[]'),'$.homeVotingSessionId',?),updated_at=? WHERE id=1").bind(session, revision).run();
       return J({ ok: true, revision, sessionId: session, totalVotes: 0, changed: Number(result.meta?.changes || 0) });
     }
+    if (path === '/api/admin/seasons/lifecycle' && method === 'GET') {
+      const seasonId=s(url.searchParams.get('seasonId'),64);
+      const row=await readSettingsRow(env);
+      const settings=normalSettings(parse(row?.settings)||{});
+      const season=(settings.homeLeaderboardSeasons||[]).find(item=>item.id===seasonId);
+      if(!season)return bad('Season tidak ditemukan.',404);
+      const preview=seasonId===settings.statSeasonId
+        ?await seasonClosingPreview(env,seasonId,settings.statSeasonActivatedAt)
+        :{available:false,playerCount:0,entries:[]};
+      return J({season,preview,activeSeasonId:settings.statSeasonId||'',
+        revision:row?.updated_at||''});
+    }
+    if (path === '/api/admin/seasons/lifecycle' && method === 'POST') {
+      if(!(await rateLimit(env,req,'season-lifecycle',20,900)))
+        return bad('Terlalu banyak perubahan Season. Coba lagi nanti.',429);
+      const input=await body(req,2400);
+      const id=s(input.seasonId,64),action=s(input.action,24);
+      if(!['prepare','end','start','schedule'].includes(action))
+        return bad('Aksi Season tidak valid.',400);
+      if(typeof input.revision!=='string'||input.revision.length>100)
+        return bad('Muat ulang pengaturan Season.',428);
+      const row=await readSettingsRow(env);
+      if(!row||(row.updated_at||'')!==input.revision)
+        return bad('Pengaturan berubah. Muat ulang Admin Control sebelum melanjutkan.',409);
+      const settings=normalSettings(parse(row.settings)||{});
+      const season=(settings.homeLeaderboardSeasons||[]).find(item=>item.id===id);
+      if(!season)return bad('Season tidak ditemukan.',404);
+      const now=new Date().toISOString();
+      const active=settings.statSeasonId||'';
+      if(action==='schedule'){
+        if(season.archiveStatus!=='planned'&&season.archiveStatus!=='ended'||
+          season.archiveFinalizedAt)return bad('Hanya draft Season baru yang boleh dijadwalkan.',409);
+        const start=typeof input.scheduledAt==='string'?input.scheduledAt:'';
+        if(!start||!Number.isFinite(Date.parse(start))||
+          new Date(start).toISOString()!==start||Date.parse(start)<=Date.now())
+          return bad('Pilih waktu pembukaan Season di masa depan.',400);
+        season.archiveStatus='planned';
+        season.archiveScheduledAt=start;
+      }
+      if(action==='start'){
+        if(input.confirmation!=='START SEASON')
+          return bad('Konfirmasi pembukaan Season tidak sesuai.',400);
+        if(season.archiveFinalizedAt)
+          return bad('Season yang telah diarsipkan tidak dapat dibuka ulang.',409);
+        if(active&&active!==id)
+          return bad('Akhiri Season statistik aktif terlebih dahulu.',409);
+        if((settings.homeLeaderboardSeasons||[]).some(x=>x.id!==id&&x.archiveStatus==='active'))
+          return bad('Masih ada Season lain berstatus Sedang berlangsung.',409);
+        if(season.archiveScheduledAt&&Date.parse(season.archiveScheduledAt)>Date.now()&&
+          input.overrideSchedule!==true)
+          return bad('Waktu pembukaan yang dijadwalkan belum tiba.',409);
+        season.archiveStatus='active';
+        season.archiveStartDate=now.slice(0,10);
+        season.archiveEndDate='';
+        season.archiveScheduledAt='';
+        season.archivePublished=input.publish===true||season.archivePublished===true;
+        settings.statSeasonId=id;
+        settings.statSeasonActivatedAt=active===id&&
+          Number.isFinite(Date.parse(settings.statSeasonActivatedAt))
+          ?settings.statSeasonActivatedAt:now;
+        seasonTimelineEvent(season,'opening','Season dimulai',now);
+      }
+      if(action==='prepare'||action==='end'){
+        if(season.archiveStatus!=='active'||active!==id||
+          !Number.isFinite(Date.parse(settings.statSeasonActivatedAt)))
+          return bad('Season ini bukan periode statistik yang sedang aktif.',409);
+        if(action==='prepare'){
+          if(input.confirmation!=='PREPARE SEASON')
+            return bad('Konfirmasi persiapan Season tidak sesuai.',400);
+          season.archivePreparedAt=now;
+        }else{
+          if(input.confirmation!=='END SEASON'||!season.archivePreparedAt)
+            return bad('Persiapkan penutupan dan konfirmasi akhir Season terlebih dahulu.',400);
+          const snapshot=await seasonClosingPreview(env,id,settings.statSeasonActivatedAt);
+          if(snapshot.playerCount===0&&input.allowEmpty!==true)
+            return bad('Belum ada statistik Season. Konfirmasi penutupan tanpa snapshot pemain.',409);
+          season.archiveSnapshot={capturedAt:now,playerCount:snapshot.playerCount,
+            playtimeSeconds:snapshot.playtimeSeconds,deaths:snapshot.deaths,
+            mobKills:snapshot.mobKills,blocksMined:snapshot.blocksMined};
+          season.entries=snapshot.entries;
+          season.archiveFinalizedAt=now;
+          season.archiveEndDate=now.slice(0,10);
+          season.archiveStatus='ended';
+          season.archivePublished=input.publish===true||season.archivePublished===true;
+          settings.statSeasonId='';
+          settings.statSeasonActivatedAt='';
+          seasonTimelineEvent(season,'closing','Season berakhir',now);
+        }
+      }
+      // Single conditional DB update prevents two admins from starting or
+      // ending competing seasons using the same form revision.
+      const revision=now+'-'+uid();
+      const result=await env.DB.prepare(
+        "UPDATE form_config SET settings=?,updated_at=? WHERE id=1 AND COALESCE(updated_at,'')=?"
+      ).bind(JSON.stringify(settings),revision,row.updated_at||'').run();
+      if(!result.meta?.changes)return bad('Perubahan Season bentrok dengan admin lain. Muat ulang.',409);
+      return J({ok:true,revision,settings:normalSettings(settings),
+        season:settings.homeLeaderboardSeasons.find(item=>item.id===id)});
+    }
     if (path === '/api/admin/form' && method === 'PUT') {
       const input = await body(req, 280000);
       if (typeof input.revision !== 'string' || input.revision.length > 100)
@@ -6123,6 +6270,8 @@ async function route(req, env, ctx) {
       const historical=new Map((persistedVoting.homeLeaderboardSeasons||[]).map(item=>[item.id,item]));
       for(const season of settings.homeLeaderboardSeasons){
         const old=historical.get(season.id);
+        if(old?.archiveFinalizedAt&&season.archiveStatus!=='ended')
+          return bad('Season yang telah diarsipkan tidak boleh dibuka ulang.',409);
         for(const key of ['archivePreparedAt','archiveFinalizedAt','archiveSnapshot']){
           season[key]=old?.[key]??(key==='archiveSnapshot'?null:'');
         }
