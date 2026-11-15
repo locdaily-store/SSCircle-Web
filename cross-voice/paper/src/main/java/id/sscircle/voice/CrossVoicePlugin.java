@@ -54,7 +54,7 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
     private final SecureRandom random=new SecureRandom();
     private final Map<UUID,Settings> settings=new ConcurrentHashMap<>();
     private final Map<String,Group> groups=new HashMap<>();
-    private final ArrayBlockingQueue<Frame> audioQueue=new ArrayBlockingQueue<>(256);
+    private ArrayBlockingQueue<Frame> audioQueue=new ArrayBlockingQueue<>(256);
     private final AtomicBoolean running=new AtomicBoolean(false);
     private final Map<UUID,OpusDecoder> decoders=new HashMap<>(); // audio worker only
     private final Map<UUID,OpusEncoder> encoders=new HashMap<>(); // audio worker only
@@ -88,6 +88,7 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
             Bukkit.getPluginManager().disablePlugin(this);return;
         }
         service.registerPlugin(new VoiceHooks());
+        audioQueue=new ArrayBlockingQueue<>(Math.max(64,Math.min(2048,getConfig().getInt("audio.max-queued-frames",256))));
         http=HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(6)).build();
         running.set(true);
         audioWorker=Executors.newSingleThreadExecutor(r->{
@@ -173,6 +174,7 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
             item.addProperty("muted",s.muted||s.adminMuted);
             item.addProperty("deafened",s.deafened);
             item.addProperty("whisper",s.whisper);
+            item.addProperty("volume",s.volume);
             String group=s.group;
             if(api!=null&&!bedrock(p.getUniqueId())){
                 try{
