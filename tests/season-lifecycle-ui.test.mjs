@@ -67,3 +67,45 @@ test('Season award recipient search accepts member names, Minecraft username and
  assert.match(css,/\.season-member-results\[hidden\]/);
  assert.match(css,/\.season-admin-leaderboards/);
 });
+
+test('Season Archive card opens one accessible modal with close controls',()=>{
+ const page=read('seasons.js');
+ const html=read('seasons.html');
+ const css=read('season-lifecycle.css');
+ assert.match(page,/const dialog=el\('dialog','season-archive-modal'\)/);
+ assert.match(page,/dialog\.showModal\(\)/);
+ assert.match(page,/dialog\.addEventListener\('close'/);
+ assert.match(page,/dialog\.addEventListener\('click'/);
+ assert.match(page,/card\.setAttribute\('role','button'\)/);
+ assert.match(page,/event\.key==='Enter'\|\|event\.key===' '/);
+ assert.match(page,/modalContent\.replaceChildren\(intro,body\)/);
+ assert.match(page,/dialog\.setAttribute\('aria-labelledby'/);
+ assert.match(css,/\.season-archive-modal::backdrop/);
+ assert.match(css,/\.season-archive-modal-close/);
+ assert.doesNotMatch(page,/const detail=el\('details','season-archive-details'\)/);
+ assert.match(html,/seasons\.js\?v=10\.63\.2/);
+});
+
+test('Every Season image preserves original aspect ratios',()=>{
+ const css=read('season-lifecycle.css');
+ assert.match(css,/\.season-archive-card \.season-archive-cover img\s*\{/);
+ assert.match(css,/\.season-archive-modal-cover img\s*\{/);
+ assert.match(css,/\.season-archive-modal \.season-archive-photo img,/);
+ assert.match(css,/\.season-archive-modal \.season-archive-feature img\s*\{/);
+ const fits=(css.match(/object-fit:\s*contain/g)||[]).length;
+ assert.ok(fits>=3,'Card, cover, and gallery images must all use contain');
+});
+
+test('Homepage leaderboard references only the selected Season board and avoids duplicate editors',()=>{
+ const home=read('homepage.js'),admin=read('seasons-admin.js');
+ const editor=read('homepage-admin.js');
+ const worker=read('_worker.js');
+ assert.match(admin,/Pilih leaderboard utama untuk Homepage/);
+ assert.match(admin,/homeFeaturedLeaderboardId=featuredSelect\.value/);
+ assert.match(home,/season\.homeFeaturedLeaderboard/);
+ assert.match(home,/season\.homeFeaturedLeaderboardId/);
+ assert.match(worker,/homeFeaturedLeaderboardId/);
+ assert.match(worker,/homeFeaturedLeaderboard,archivePublished:false/);
+ assert.match(editor,/Buka Season & Sejarah/);
+ assert.doesNotMatch(editor,/\+ Tambah entri/);
+});
