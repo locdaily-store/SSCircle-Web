@@ -624,23 +624,38 @@ window.SSCircleSeasonsAdmin = (() => {
     root.append(main);
     const bar=el('div','rules-admin-toolbar season-admin-toolbar');
     const overview=el('div','season-admin-toolbar-copy');
-    overview.append(el('strong','',`Daftar season (${s.homeLeaderboardSeasons.length}/12)`));
+    overview.append(el('strong','',`Daftar season (${s.homeLeaderboardSeasons.length})`));
     overview.append(el('small','',`${s.homeLeaderboardSeasons.filter(item=>item.archivePublished===true).length} dipublikasikan · Buka kartu untuk mengedit cerita dan prestasi`));
     bar.append(overview);
     bar.append(action('+ Tambah season',()=>{
-      if(s.homeLeaderboardSeasons.length>=12)return SSCNotice.alert('Maksimal 12 season.');
       const id='season-'+crypto.randomUUID().replace(/-/g,'').slice(0,12);
       s.homeLeaderboardSeasons.push({id,title:'Season '+(s.homeLeaderboardSeasons.length+1),entries:[],archivePublished:false,archiveStatus:'planned',archiveTimeline:[],archiveScheduledAt:'',archiveStartDate:'',archiveEndDate:'',archiveSummary:'',archiveCover:'',archiveMemories:[],archiveBuilds:[],archiveAwards:[]});
+      seasonPage=Math.floor((s.homeLeaderboardSeasons.length-1)/SEASONS_PER_PAGE);
       expanded.add(id);mark();renderEditor();
       window.SSCNotice.toast('Season baru masih Draft. Tekan Simpan Season sebelum menjalankan Lifecycle.','info');
     },true));root.append(bar);
     const list=el('div','season-admin-list');root.append(list);
-    s.homeLeaderboardSeasons.forEach((season,index)=>{
+    const pageCount=Math.max(1,Math.ceil(s.homeLeaderboardSeasons.length/SEASONS_PER_PAGE));
+    seasonPage=Math.max(0,Math.min(seasonPage,pageCount-1));
+    const start=seasonPage*SEASONS_PER_PAGE;
+    const rows=s.homeLeaderboardSeasons.slice(start,start+SEASONS_PER_PAGE);
+    rows.forEach((season,index)=>{
       season.entries ||= [];season.archiveMemories ||= [];season.archiveBuilds ||= [];season.archiveAwards ||= [];
-      list.append(seasonCard(season,index));
+      list.append(seasonCard(season,start+index));
     });
+    if(pageCount>1){
+      const pager=el('div','rules-admin-toolbar season-admin-toolbar');
+      const prev=action('Sebelumnya',()=>{seasonPage--;renderEditor();});
+      prev.disabled=seasonPage===0;
+      const next=action('Berikutnya',()=>{seasonPage++;renderEditor();});
+      next.disabled=seasonPage===pageCount-1;
+      pager.append(prev,el('span','field-help',
+        'Halaman '+(seasonPage+1)+' dari '+pageCount+' · '+s.homeLeaderboardSeasons.length+' Season'),next);
+      root.append(pager);
+    }
     window.SSCircleSort?.attach(list,{item:'.season-admin-season',handleTarget:'summary',onMove:(from,to)=>{
-      s.homeLeaderboardSeasons.splice(to,0,s.homeLeaderboardSeasons.splice(from,1)[0]);mark();renderEditor();
+      const fromGlobal=start+from,toGlobal=start+to;
+      s.homeLeaderboardSeasons.splice(toGlobal,0,s.homeLeaderboardSeasons.splice(fromGlobal,1)[0]);mark();renderEditor();
     }});
     if(!s.homeLeaderboardSeasons.length)root.append(el('p','field-help','Belum ada season. Tambahkan season pertama untuk mulai mengisi sejarah SSCircle.'));
   }
