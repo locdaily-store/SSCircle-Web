@@ -73,7 +73,12 @@
 </div>
 <div class="voice-heard"><h3 id="nearby-title">Pemain yang terdengar</h3><ul id="nearby-list"><li>Belum ada pemain dalam jangkauan.</li></ul></div>
 <p id="room-message" class="voice-note" role="status"></p>
-<div class="voice-mobile-warning">Android/iOS dapat membatasi mikrofon dan audio browser saat Minecraft ada di layar depan. Fitur background tidak dijamin; gunakan dua perangkat jika perlu.</div>
+<div class="voice-background-panel" aria-label="Voice di latar belakang">
+  <div><strong id="background-title">Voice saat pindah aplikasi</strong>
+  <p id="background-state" role="status" aria-live="polite">Voice diusahakan tetap aktif saat pindah aplikasi. Jangan tutup tab.</p></div>
+  <button id="recover-voice" type="button">Pulihkan Voice</button>
+</div>
+<div class="voice-mobile-warning">Android/iOS bisa menghentikan mikrofon, audio, atau koneksi ketika browser di latar belakang. Pulihkan Voice jika terhenti; gunakan perangkat kedua bila perlu.</div>
 </section>
 </main>
 <footer class="home-footer"><div class="home-footer-inner"><div class="home-footer-brand"><img src="assets/sscircle-logo.png" width="28" height="28" alt=""> SSCircle Server</div><p>One circle. Endless stories.</p><a href="./">Homepage</a><a href="rules.html">Server Rules</a></div></footer>
