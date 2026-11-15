@@ -107,3 +107,84 @@ test('pairing requires correct origin, matching server and rate limit',async()=>
     assert.equal(result.status,429,'IP throttling prevents unlimited attempts');
   }finally{await app.close();}
 });
+
+test('voice chat unavailable blocks pairing; bridge restart revokes old browser session',async()=>{
+  const app=createGateway({port:0,bridgeSecret:secret,origin,maxClients:6});
+  await new Promise(resolve=>app.server.listen(0,'127.0.0.1',resolve));
+  const base='http://127.0.0.1:'+app.server.address().port;
+  const wsbase=base.replace('http:','ws:');
+  let bridge;
+  const call=async(path,payload,auth)=>{
+    const r=await fetch(base+path,{method:'POST',headers:{Origin:origin,'Content-Type':'application/json',
+      ...(auth?{Authorization:'Bearer '+auth}:{})},body:JSON.stringify(payload||{})});
+    return {status:r.status,data:await r.json()};
+  };
+  try{
+    bridge=await open(wsbase+'/bridge',{headers:{Authorization:'Bearer '+secret}});
+    bridge.send(JSON.stringify({t:'snapshot',voiceReady:false,players}));
+    await pause(30);
+    assert.equal((await (await fetch(base+'/api/health')).json()).ready,false);
+    assert.equal((await call('/api/pair',{code:'ZZZZZZZZ'})).status,503);
+    bridge.send(JSON.stringify({t:'snapshot',voiceReady:true,players}));
+    bridge.send(JSON.stringify({t:'code',code:'ABCDEFGH',uuid:A,expires:Date.now()+60000}));
+    await pause(30);
+    const paired=await call('/api/pair',{code:'ABCDEFGH'});
+    assert.equal(paired.status,200);
+    bridge.terminate();await pause(80);
+    const replacement=await open(wsbase+'/bridge',{headers:{Authorization:'Bearer '+secret}});
+    bridge=replacement;
+    bridge.send(JSON.stringify({t:'snapshot',voiceReady:true,players}));
+    await pause(40);
+    assert.equal((await call('/api/ticket',{},paired.data.token)).status,401,
+      'tokens from a previous server connection must not be reusable');
+  }finally{bridge?.terminate();await app.close();}
+});
+
+test('private groups, deafen and whisper never leak PCM to wrong listener',async()=>{
+  const app=createGateway({port:0,bridgeSecret:secret,origin,radius:32,whisperRadius:8});
+  await new Promise(resolve=>app.server.listen(0,'127.0.0.1',resolve));
+  const base='http://127.0.0.1:'+app.server.address().port,wsbase=base.replace('http:','ws:');
+  let bridge,clientA,clientB;
+  const pair=async(code,uuid)=>{
+    bridge.send(JSON.stringify({t:'code',code,uuid,expires:Date.now()+60000}));
+    await pause(20);
+    const r=await fetch(base+'/api/pair',{method:'POST',
+      headers:{Origin:origin,'Content-Type':'application/json'},
+      body:JSON.stringify({code})});
+    assert.equal(r.status,200);
+    const token=(await r.json()).token;
+    const k=await fetch(base+'/api/ticket',{method:'POST',
+      headers:{Origin:origin,'Content-Type':'application/json',Authorization:'Bearer '+token},body:'{}'});
+    assert.equal(k.status,200);
+    return open(wsbase+'/ws?ticket='+(await k.json()).ticket,{headers:{Origin:origin}});
+  };
+  try{
+    bridge=await open(wsbase+'/bridge',{headers:{Authorization:'Bearer '+secret}});
+    const near=players.filter(p=>p.uuid===A||p.uuid===B)
+      .map(x=>({...x,group:x.uuid===A?'group-one':'group-two'}));
+    bridge.send(JSON.stringify({t:'snapshot',voiceReady:true,players:near}));await pause(20);
+    clientA=await pair('ABCDEFGH',A);
+    clientB=await pair('JKLMNPQR',B);
+    const pcm=Buffer.alloc(1920).toString('base64');
+    let received=0;
+    const handler=data=>{try{const v=JSON.parse(data.toString());if(v.t==='audio')received++;}catch{}};
+    clientB.on('message',handler);
+    clientA.send(JSON.stringify({t:'audio',pcm}));
+    await pause(80);assert.equal(received,0,'different voice groups must be isolated');
+    bridge.send(JSON.stringify({t:'snapshot',voiceReady:true,players:near.map(x=>({...x,group:'',
+      deafened:x.uuid===B}))}));await pause(25);
+    clientA.send(JSON.stringify({t:'audio',pcm}));await pause(70);
+    assert.equal(received,0,'deafened listeners must not receive audio');
+    bridge.send(JSON.stringify({t:'snapshot',voiceReady:true,players:near.map(x=>({...x,group:'',
+      deafened:false,x:x.uuid===B?20:0,whisper:x.uuid===A}))}));await pause(25);
+    clientA.send(JSON.stringify({t:'audio',pcm}));await pause(70);
+    assert.equal(received,0,'whisper cannot reach listener beyond whisper radius');
+    bridge.send(JSON.stringify({t:'snapshot',voiceReady:true,players:near.map(x=>({...x,group:'',
+      deafened:false,x:x.uuid===B?5:0,whisper:x.uuid===A}))}));await pause(25);
+    clientA.send(JSON.stringify({t:'audio',pcm}));await pause(70);
+    assert.ok(received>=1,'listener now within whisper radius can hear');
+  }finally{
+    for(const ws of [clientA,clientB,bridge])try{ws?.terminate();}catch{}
+    await app.close();
+  }
+});
