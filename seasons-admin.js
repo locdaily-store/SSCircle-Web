@@ -166,12 +166,13 @@ window.SSCircleSeasonsAdmin = (() => {
     const status=el('label','field-group season-admin-status');
     status.append(el('span','field-label','Status season'));
     const choice=el('select');
-    for(const [value,label] of [['active','Sedang berlangsung'],['ended','Selesai / Arsip']]){
+    for(const [value,label] of [['planned','Draft / Direncanakan'],['active','Sedang berlangsung'],['ended','Selesai / Arsip']]){
       const option=el('option','',label);option.value=value;choice.append(option);
     }
     choice.value=season.archiveStatus||'ended';
-    choice.onchange=()=>{season.archiveStatus=choice.value;mark();};
-    status.append(choice);mainFields.append(status);
+    choice.disabled=true;
+    status.append(choice,el('small','field-help','Status berubah melalui tombol Lifecycle agar periode statistik selalu konsisten.'));
+    mainFields.append(status);
     const dates=el('div','season-admin-dates');
     dates.append(inputField('Tanggal mulai',season.archiveStartDate,v=>season.archiveStartDate=v,{type:'date'}));
     dates.append(inputField('Tanggal selesai (opsional)',season.archiveEndDate,v=>season.archiveEndDate=v,{type:'date'}));
@@ -182,7 +183,78 @@ window.SSCircleSeasonsAdmin = (() => {
     info.content.append(mainFields);
     body.append(info.section);
 
-    const media=editorGroup('02 · Dokumentasi','Sampul, foto kenangan, dan bangunan pilihan.');
+    const lifecycle=editorGroup('02 · Season Lifecycle Management',
+      'Persiapkan, akhiri, jadwalkan, atau mulai periode statistik melalui satu alur terkontrol.');
+    const box=el('div','season-lifecycle-panel');
+    const active=model.settings.statSeasonId===season.id;
+    const activeStatus=season.archiveStatus==='active';
+    const planned=season.archiveStatus==='planned';
+    const statusText=el('p','field-help',
+      active?'Periode statistik Minecraft untuk Season ini sedang aktif.'
+      :planned?'Season masih dalam tahap persiapan dan belum menghasilkan statistik Season.'
+      :season.archiveFinalizedAt?'Snapshot akhir tersimpan. Riwayat ini tidak dapat dibuka ulang.'
+      :'Belum ada periode statistik aktif untuk Season ini.');
+    box.append(statusText);
+    if(season.archiveScheduledAt){
+      const time=el('p','field-help','Rencana pembukaan: '+new Date(season.archiveScheduledAt).toLocaleString('id-ID')+
+        '. Jadwal tidak menjalankan pembukaan otomatis.');
+      box.append(time);
+    }
+    if(season.archiveFinalizedAt){
+      const snap=season.archiveSnapshot||{};
+      box.append(el('p','season-lifecycle-snapshot',
+        'Ditutup '+season.archiveFinalizedAt+' · '+(snap.playerCount||0)+' pemain · '+
+        Math.floor((snap.playtimeSeconds||0)/3600)+' jam total · '+(snap.deaths||0)+' deaths.'));
+    }
+    const actions=el('div','season-lifecycle-actions');
+    if((planned||activeStatus&&!active)&&!season.archiveFinalizedAt){
+      actions.append(action('Mulai Season',()=>lifecycleRequest(season,'start',{
+        publish:season.archivePublished,
+        overrideSchedule:!!season.archiveScheduledAt&&Date.parse(season.archiveScheduledAt)>Date.now()
+      }),true));
+    }
+    if(planned){
+      const field=el('label','field-group season-lifecycle-schedule');
+      field.append(el('span','field-label','Rencana pembukaan (opsional)'));
+      const dateInput=el('input');dateInput.type='datetime-local';
+      if(season.archiveScheduledAt){
+        const date=new Date(season.archiveScheduledAt);
+        if(Number.isFinite(date.getTime())){
+          const local=new Date(date.getTime()-date.getTimezoneOffset()*60000).toISOString();
+          dateInput.value=local.slice(0,16);
+        }
+      }
+      field.append(dateInput);
+      actions.append(field,action('Simpan jadwal',()=>{
+        const chosen=dateInput.value?new Date(dateInput.value):null;
+        if(!chosen||!Number.isFinite(chosen.getTime()))
+          return window.SSCNotice.alert('Pilih tanggal dan jam pembukaan yang valid.');
+        lifecycleRequest(season,'schedule',{scheduledAt:chosen.toISOString()});
+      }));
+    }
+    if(active&&activeStatus){
+      const preview=el('p','season-lifecycle-snapshot','Snapshot belum diperiksa.');
+      actions.append(action('Periksa snapshot akhir',()=>lifecyclePreview(season,preview)));
+      if(!season.archivePreparedAt){
+        actions.append(action('Persiapkan penutupan',()=>lifecycleRequest(season,'prepare')));
+      }else{
+        actions.append(el('p','field-help','Persiapan tercatat: '+season.archivePreparedAt));
+        const empty=el('label','season-lifecycle-check');
+        const allow=el('input');allow.type='checkbox';
+        empty.append(allow,el('span','',
+          'Izinkan penutupan tanpa data statistik jika snapshot pemain kosong.'));
+        actions.append(empty);
+        actions.append(action('Akhiri Season',()=>lifecycleRequest(season,'end',{
+          publish:season.archivePublished,allowEmpty:allow.checked
+        }),true));
+      }
+      actions.append(preview);
+    }
+    if(!actions.children.length)box.append(el('p','field-help',
+      'Season arsip tidak dapat dibuka ulang. Tambahkan Season baru untuk periode berikutnya.'));
+    box.append(actions);lifecycle.content.append(box);body.append(lifecycle.section);
+
+    const media=editorGroup('03 · Dokumentasi','Sampul, foto kenangan, dan bangunan pilihan.');
     mediaField(media.content,'Foto sampul season',season,'archiveCover',renderEditor);
     makeSublist(media.content,season,'archiveMemories','Foto kenangan',12,
       ()=>({src:'',caption:''}),[['caption','Keterangan foto','text',240]],'src');
@@ -192,7 +264,7 @@ window.SSCircleSeasonsAdmin = (() => {
        ['description','Cerita bangunan','textarea',350]],'src');
     body.append(media.section);
 
-    const achievement=editorGroup('03 · Prestasi & pemain','Catat penghargaan dan urutan pemain untuk season ini.');
+    const achievement=editorGroup('04 · Prestasi & pemain','Catat penghargaan dan urutan pemain untuk season ini.');
     makeSublist(achievement.content,season,'archiveAwards','Penghargaan',12,
       ()=>({title:'Penghargaan baru',player:'',description:'',memberId:''}),
       [['title','Kategori penghargaan','text',120],['player','Nama pemain','text',100],
@@ -227,12 +299,27 @@ window.SSCircleSeasonsAdmin = (() => {
     achievement.content.append(ranking);
     body.append(achievement.section);
 
+    const timeline=editorGroup('05 · Timeline Season',
+      'Tambahkan milestone, kegiatan penting, pembangunan besar, serta penghargaan untuk riwayat publik.');
+    season.archiveTimeline ||= [];
+    makeSublist(timeline.content,season,'archiveTimeline','Milestone timeline',24,
+      ()=>({id:'timeline-'+crypto.randomUUID().replace(/-/g,'').slice(0,12),
+        date:'',title:'Milestone baru',description:'',kind:'milestone'}),
+      [['date','Tanggal milestone','date',10],
+       ['title','Judul milestone','text',120],
+       ['description','Keterangan','textarea',450]]);
+    body.append(timeline.section);
+
     const footer=el('div','season-admin-delete-row');
     const deleteButton=action('Hapus season',async()=>{
       if(!await window.SSCNotice.confirm('Hapus season ini beserta seluruh riwayat dan Leaderboard?',{danger:true,confirmText:'Hapus season'}))return;
       model.settings.homeLeaderboardSeasons.splice(index,1);expanded.delete(season.id);mark();renderEditor();
     });
     deleteButton.classList.add('season-admin-delete');
+    if(season.archiveFinalizedAt){
+      deleteButton.disabled=true;
+      deleteButton.title='Season yang telah ditutup terlindungi dari penghapusan.';
+    }
     footer.append(deleteButton);body.append(footer);
     card.append(body);return card;
   }
@@ -257,12 +344,9 @@ window.SSCircleSeasonsAdmin = (() => {
       option.value=season.id;seasonChoice.append(option);
     }
     seasonChoice.value=s.statSeasonId||'';
-    seasonChoice.addEventListener('change',()=>{
-      s.statSeasonId=seasonChoice.value;
-      mark();
-    });
+    seasonChoice.disabled=true;
     seasonField.append(seasonChoice,el('small','field-help',
-      'Pengaturan berlaku setelah perubahan Admin Control disimpan. Memilih Season lain membuat periode statistik baru. Data lama tidak dihapus.'));
+      'Periode statistik dikelola otomatis oleh tombol Mulai Season / Akhiri Season pada tiap kartu. Data lama tidak dihapus.'));
     statsPane.content.append(seasonField);
     statsPane.content.append(el('p','field-help',
       'Waktu mulai dicatat otomatis oleh server saat disimpan. Season baru akan menampilkan 0 sampai statistik pemain yang pertama kali tersinkron dipakai sebagai baseline.'));
@@ -283,7 +367,7 @@ window.SSCircleSeasonsAdmin = (() => {
     bar.append(action('+ Tambah season',()=>{
       if(s.homeLeaderboardSeasons.length>=12)return SSCNotice.alert('Maksimal 12 season.');
       const id='season-'+crypto.randomUUID().replace(/-/g,'').slice(0,12);
-      s.homeLeaderboardSeasons.push({id,title:'Season '+(s.homeLeaderboardSeasons.length+1),entries:[],archivePublished:false,archiveStatus:'ended',archiveStartDate:'',archiveEndDate:'',archiveSummary:'',archiveCover:'',archiveMemories:[],archiveBuilds:[],archiveAwards:[]});
+      s.homeLeaderboardSeasons.push({id,title:'Season '+(s.homeLeaderboardSeasons.length+1),entries:[],archivePublished:false,archiveStatus:'planned',archiveTimeline:[],archiveScheduledAt:'',archiveStartDate:'',archiveEndDate:'',archiveSummary:'',archiveCover:'',archiveMemories:[],archiveBuilds:[],archiveAwards:[]});
       expanded.add(id);mark();renderEditor();
     },true));root.append(bar);
     const list=el('div','season-admin-list');root.append(list);
