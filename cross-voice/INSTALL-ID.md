@@ -52,6 +52,16 @@ Pengaturan domain gateway:
 - `voice-config.js`: `window.SSCIRCLE_VOICE_GATEWAY = "https://voice.domain-saya.com";`
 - `gateway.websocket-url` plugin: `wss://voice.domain-saya.com/bridge`
 
+**Jika Cloudflare Tunnel berjalan pada mesin yang sama dengan gateway,**
+set `VOICE_TRUST_CF=true` pada environment gateway agar rate limiting pairing
+memakai IP pengunjung asli dari header `CF-Connecting-IP`, bukan satu alamat
+lokal Tunnel untuk seluruh pemain. Hanya aktifkan opsi itu jika gateway **tidak
+dapat diakses langsung dari internet** dan semua permintaan publik memang
+melewati Cloudflare Tunnel yang kamu kelola.
+
+Jika menggunakan reverse proxy sendiri, biarkan `VOICE_TRUST_CF=false` sampai
+proxy dan IP source yang dipercaya dikonfigurasi dengan aman.
+
 **Catatan:** Cloudflare Pages tidak menjalankan proses Node permanen atau relai audio berlatensi rendah. Halaman HTML/JS boleh di Pages, gateway wajib terpisah. Paket ZIP website dari workflow Pages dapat diunggah setelah aset Voice masuk.
 
 ## 4. Pasang Paper plugin
