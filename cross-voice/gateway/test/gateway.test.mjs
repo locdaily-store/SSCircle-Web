@@ -57,7 +57,7 @@ test('one-time pairing, native Java / Bedrock PCM relay, same-world proximity an
   }
   try{
     bridge=await open(wsurl+'/bridge',{headers:{Authorization:'Bearer '+secret}});
-    bridge.send(JSON.stringify({t:'snapshot',players}));
+    bridge.send(JSON.stringify({t:'snapshot',voiceReady:true,players}));
     await pause(20);
     const a=await link('ABCDEFGH',A),b=await link('JKLMNPQR',B),d=await link('STUVWXYZ',D);
     clientA=a.ws;clientB=b.ws;clientD=d.ws;
