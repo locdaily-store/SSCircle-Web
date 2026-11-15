@@ -919,9 +919,31 @@ function validLeaderboard(input) {
     if (seen.has(id)) throw Error('ID season duplikat.');
     seen.add(id);
     const title=s(season?.title,120)||('Leaderboard S'+(index+1));
+    // One board per category; the first board stays mirrored as legacy
+    // season.entries for existing homepage widgets and older saved Seasons.
     const entriesRaw=Array.isArray(season?.entries)?season.entries:[];
     if(entriesRaw.length>20) throw Error('Maksimal 20 peringkat per season.');
-    const entries=entriesRaw.map(e=>({name:s(e?.name,80),score:s(e?.score,80)})).filter(e=>e.name||e.score);
+    const boardsRaw=season?.archiveLeaderboards===undefined
+      ?(entriesRaw.length?[{id:'main',title:'Leaderboard Season',entries:entriesRaw}]:[])
+      :season.archiveLeaderboards;
+    if(!Array.isArray(boardsRaw)||boardsRaw.length>8)
+      throw Error('Maksimal 8 leaderboard per Season.');
+    const boardIds=new Set();
+    const archiveLeaderboards=boardsRaw.map((board,i)=>{
+      const boardId=s(board?.id,64)||(i===0?'main':'leaderboard-'+(i+1));
+      if(!/^[a-z0-9_-]{1,64}$/i.test(boardId)||boardIds.has(boardId))
+        throw Error('ID leaderboard Season tidak valid atau duplikat.');
+      boardIds.add(boardId);
+      const boardEntries=board?.entries;
+      if(!Array.isArray(boardEntries)||boardEntries.length>20)
+        throw Error('Maksimal 20 pemain per leaderboard.');
+      const title=s(board?.title,120);
+      if(!title)throw Error('Judul leaderboard Season wajib diisi.');
+      return {id:boardId,title,entries:boardEntries.map(e=>({
+        name:s(e?.name,80),score:s(e?.score,80)
+      })).filter(e=>e.name||e.score)};
+    });
+    const entries=archiveLeaderboards[0]?.entries||[];
     const startDate=date(season?.archiveStartDate,'mulai season');
     const endDate=date(season?.archiveEndDate,'akhir season');
     if(startDate&&endDate&&endDate<startDate) throw Error('Tanggal akhir season harus setelah tanggal mulai.');
@@ -937,7 +959,7 @@ function validLeaderboard(input) {
     if(!Array.isArray(memories)||memories.length>12) throw Error('Maksimal 12 foto kenangan per season.');
     if(!Array.isArray(builds)||builds.length>8) throw Error('Maksimal 8 bangunan terbaik per season.');
     if(!Array.isArray(awards)||awards.length>12) throw Error('Maksimal 12 penghargaan per season.');
-    return {id,title,entries,
+    return {id,title,entries,archiveLeaderboards,
       archivePublished:season?.archivePublished===true,
       archiveStatus:['planned','active','ended'].includes(season?.archiveStatus)?season.archiveStatus:'ended',
       archiveStartDate:startDate,archiveEndDate:endDate,
@@ -6265,7 +6287,14 @@ async function route(req, env, ctx) {
           season.archiveSnapshot={capturedAt:now,playerCount:snapshot.playerCount,
             playtimeSeconds:snapshot.playtimeSeconds,deaths:snapshot.deaths,
             mobKills:snapshot.mobKills,blocksMined:snapshot.blocksMined};
-          if(snapshot.playerCount>0)season.entries=snapshot.entries;
+          if(snapshot.playerCount>0){
+            season.entries=snapshot.entries;
+            if(!Array.isArray(season.archiveLeaderboards))season.archiveLeaderboards=[];
+            if(!season.archiveLeaderboards.length)season.archiveLeaderboards.push({
+              id:'main',title:'Leaderboard Season',entries:snapshot.entries
+            });
+            else season.archiveLeaderboards[0].entries=snapshot.entries;
+          }
           if(input.autoAwards===true){
             const awards=Array.isArray(season.archiveAwards)?season.archiveAwards:[];
             for(const award of snapshot.awardCandidates||[]){
@@ -6315,7 +6344,19 @@ async function route(req, env, ctx) {
         const old=historical.get(season.id);
         if(old?.archiveFinalizedAt&&season.archiveStatus!=='ended')
           return bad('Season yang telah diarsipkan tidak boleh dibuka ulang.',409);
-        if(old?.archiveFinalizedAt)season.entries=old.entries||[];
+        if(old?.archiveFinalizedAt){
+          // Final snapshot board is immutable; other manually curated boards
+          // remain editable after closure without rewriting the final ranking.
+          season.entries=old.entries||[];
+          if(old.archiveLeaderboards?.length&&season.archiveLeaderboards.length===0)
+            return bad('Leaderboard snapshot akhir tidak boleh dihapus.',409);
+          if(old.entries?.length){
+            if(!season.archiveLeaderboards.length)season.archiveLeaderboards=[{
+              id:'main',title:'Leaderboard Season',entries:old.entries
+            }];
+            else season.archiveLeaderboards[0].entries=old.entries;
+          }
+        }
         for(const key of ['archivePreparedAt','archiveFinalizedAt','archiveSnapshot']){
           season[key]=old?.[key]??(key==='archiveSnapshot'?null:'');
         }
