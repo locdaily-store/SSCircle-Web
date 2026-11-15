@@ -54,7 +54,11 @@
     const entries=(Array.isArray(settings.homeLeaderboardSeasons)?settings.homeLeaderboardSeasons:[])
       .filter(s=>s?.archivePublished===true);
     $('season-page-empty').hidden=entries.length>0;
-    for(const [index,season] of entries.entries()) {
+    let shown=0;
+    const renderBatch=()=>{
+    const batch=entries.slice(shown,shown+20);
+    for(const [batchIndex,season] of batch.entries()) {
+      const index=shown+batchIndex;
       const card=el('article','season-archive-card');
       const heading=el('div','season-archive-card-head');
       const cover=image(season.archiveCover,'Sampul '+season.title);
@@ -189,6 +193,14 @@
       });
       root.append(card);
     }
+    shown+=batch.length;
+    if(shown<entries.length){
+      const more=el('button','button secondary','Tampilkan 20 Season berikutnya ('+shown+'/'+entries.length+')');
+      more.type='button';more.onclick=()=>{more.remove();renderBatch();};
+      root.append(more);
+    }
+    };
+    renderBatch();
     if(preview&&window.parent!==window)parent.postMessage({type:'ssc-season-preview-applied'},location.origin);
   }
   if(preview) {
