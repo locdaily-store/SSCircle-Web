@@ -257,7 +257,7 @@ test('lifecycle starts a dedicated stats period and freezes the final leaderboar
  assert.equal(finished.data.settings.statSeasonId,'');
  assert.equal(finished.data.season.archiveStatus,'ended');
  assert.equal(finished.data.season.archiveSnapshot.playerCount,1);
- assert.deepEqual(finished.data.season.entries,[{name:'BuilderA',score:'2 jam 3 menit'}]);
+ assert.deepEqual(finished.data.season.entries,[{memberId:member,name:'BuilderA',score:'2 jam 3 menit'}]);
  assert.deepEqual(finished.data.season.archiveTimeline.map(x=>x.kind),['opening','closing']);
  const publicForm=await t.req('/api/form');
  assert.equal(publicForm.data.settings.homeLeaderboardSeasons[0].archiveSnapshot.playerCount,1);
