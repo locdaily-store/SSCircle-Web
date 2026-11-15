@@ -5,7 +5,7 @@
   const page = normalizePath(location.pathname);
   const links = [
     ['Tentang','/#tentang'],['Galeri','/#galeri'],['Event','/events.html'],
-    ['Announcement','/announcements.html'],['Seasons','/seasons.html'],
+    ['Announcement','/announcements.html'],['Seasons','/seasons.html'],['Voice','/voice.html'],
     ['Cek Status','/status.html'],['How to Play','/how-to-play.html'],['Profile','/my-sscircle']
   ];
   const route = path => normalizePath(path).replace(/\.html$/,'');
@@ -112,7 +112,7 @@
     const previousFooter = document.querySelector('footer.home-footer,footer.site-footer');
     const f = document.createElement('footer');f.className='home-footer ssc-unified-footer';
     f.innerHTML='<div class="home-container home-footer-content ssc-footer-content"><div class="home-footer-mark"><img id="home-footer-logo" data-site-logo src="/assets/sscircle-logo.png" width="27" height="27" alt=""><span>SSCircle Server</span></div><span id="home-footer-text">One circle. Endless stories.</span>'+
-      '<div class="home-footer-links"><a href="/registration.html">Registration</a><a href="/status.html">Cek Status</a><a href="/my-sscircle">Profile</a><a href="/rules.html">Peraturan Server</a><a href="/how-to-play.html">How to Play</a><a href="/events.html">Event</a><a href="/announcements.html">Announcement</a><a href="/seasons.html" data-season-link hidden>Seasons</a><a href="https://discord.gg/vQQSgY2GRS" target="_blank" rel="noopener noreferrer">Discord ↗</a></div><small>© 2026 SSCircle Server</small></div>';
+      '<div class="home-footer-links"><a href="/voice.html">Voice</a><a href="/registration.html">Registration</a><a href="/status.html">Cek Status</a><a href="/my-sscircle">Profile</a><a href="/rules.html">Peraturan Server</a><a href="/how-to-play.html">How to Play</a><a href="/events.html">Event</a><a href="/announcements.html">Announcement</a><a href="/seasons.html" data-season-link hidden>Seasons</a><a href="https://discord.gg/vQQSgY2GRS" target="_blank" rel="noopener noreferrer">Discord ↗</a></div><small>© 2026 SSCircle Server</small></div>';
     if(previousFooter) previousFooter.replaceWith(f);else document.body.append(f);
     // Use the same verified primary-account skin source as the Profile dashboard.
     // The SSCircle logo remains the fallback when no linked skin is available.
