@@ -171,6 +171,7 @@ final class PaperStatsSync implements Listener {
     int pendingCount(){return pending.size();}
     int captureBacklogCount(){return playersToSample.size()+(activeJob==null?0:1);}
     String deliveryCode(){
+        if(!enabled())return "STATS_DISABLED";
         if(queueLocked||queueQuarantined||diskError.get())return "QUEUE_STORAGE_ERROR";
         return queueFull?"QUEUE_FULL":deliveryCode;
     }
