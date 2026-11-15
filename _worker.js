@@ -3995,7 +3995,7 @@ async function ensureMinecraftSyncMonitor(env){
 }
 const MC_DELIVERY_CODES=new Set([
   'IDLE','SYNC_OK','QUEUE_PENDING','NETWORK_ERROR','HTTP_ERROR','AUTH_ERROR',
-   'QUEUE_FULL','QUEUE_STORAGE_ERROR'
+   'QUEUE_FULL','QUEUE_STORAGE_ERROR','STATS_DISABLED'
 ]);
 async function minecraftSyncHeartbeat(req,env){
   const secret=await minecraftRequestSigningSecret(req,env);
@@ -4068,7 +4068,8 @@ async function minecraftSyncHeartbeat(req,env){
       HTTP_ERROR:'Permintaan statistik ditolak atau gagal.',
       AUTH_ERROR:'Periksa kunci atau autentikasi pengiriman.',
        QUEUE_FULL:'Antrean penuh; data sebelumnya dipertahankan.',
-       QUEUE_STORAGE_ERROR:'Arsip antrean perlu diperiksa oleh pengurus.'
+       QUEUE_STORAGE_ERROR:'Arsip antrean perlu diperiksa oleh pengurus.',
+       STATS_DISABLED:'Pengiriman statistik dimatikan di konfigurasi plugin Paper.'
     })[code];
     await env.DB.prepare('INSERT INTO minecraft_sync_events(id,at,code,details) VALUES(?,?,?,?)')
       .bind(uid(),at,code,detail).run();
