@@ -8,6 +8,8 @@ on:
       - 'voice.js'
       - 'voice-config.js'
       - 'voice-worklet.js'
+      - 'tests/voice-page.test.mjs'
+      - '_worker.js'
       - 'scripts/package_cross_voice.py'
       - '.github/workflows/cross-voice.yml'
   workflow_dispatch:
@@ -31,6 +33,8 @@ jobs:
           node --check cross-voice/gateway/server.mjs
       - name: Uji audio dua arah, pairing dan keamanan WebSocket
         run: npm test --prefix cross-voice/gateway
+      - name: Uji Permissions Policy, CSP dan konfigurasi Cloudflare Pages Voice
+        run: node --test tests/voice-page.test.mjs
   paper:
     name: Build Paper 26.3 dengan API resmi
     runs-on: ubuntu-latest
