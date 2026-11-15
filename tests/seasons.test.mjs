@@ -236,6 +236,19 @@ test('lifecycle starts a dedicated stats period and freezes the final leaderboar
  const persisted=(await t.req('/api/admin/form',{admin:true})).data.settings.homeLeaderboardSeasons[0];
  assert.equal(persisted.archiveSnapshot.playerCount,1);
  assert.equal(persisted.entries[0].name,'BuilderA');
+ assert.equal(persisted.archiveLeaderboards[0].entries[0].name,'BuilderA');
+ const extraBoard=await save(t,settings=>{
+   const season=settings.homeLeaderboardSeasons[0];
+   season.archiveLeaderboards[0].entries[0].name='Pemain palsu';
+   season.archiveLeaderboards.push({id:'builders',title:'Builder Terbaik',
+     entries:[{name:'Builder B',score:'Kastil Besar'}]});
+ });
+ assert.equal(extraBoard.status,200,JSON.stringify(extraBoard.data));
+ const after=(await t.req('/api/admin/form',{admin:true})).data.settings.homeLeaderboardSeasons[0];
+ assert.equal(after.archiveLeaderboards[0].entries[0].name,'BuilderA',
+   'final snapshot cannot be edited');
+ assert.equal(after.archiveLeaderboards[1].title,'Builder Terbaik',
+   'additional manual boards remain editable after finalization');
 });
 
 test('planned opening requires explicit override before its scheduled time',async()=>{
