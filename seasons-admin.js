@@ -5,6 +5,63 @@ window.SSCircleSeasonsAdmin = (() => {
   const el=(tag,cls='',text)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n;};
   let model=null,changed=()=>{},phone=false,installed=false,timer=0;
   const expanded=new Set();
+  let directoryPromise=null;
+  function cachedRecipients(){
+    const map=new Map();
+    const collect=(entry)=>{
+      if(typeof entry?.id!=='string'||!/^[0-9a-f-]{36}$/i.test(entry.id))return;
+      const previous=map.get(entry.id)||{id:entry.id,name:'',minecraft:[]};
+      const display=String(entry.displayName||entry.name||'').trim();
+      if(display)previous.name=display;
+      if(entry.username&&!previous.minecraft.includes(entry.username))
+        previous.minecraft.push(entry.username);
+      map.set(entry.id,previous);
+    };
+    for(const entry of model?.submissions||[])if(entry.status==='accepted')collect(entry);
+    for(const entry of window.SSCircleMemberCenterAdmin?.getMembers?.()||[])
+      if(entry.status==='accepted')collect(entry);
+    return map;
+  }
+  async function loadRecipientDirectory(){
+    if(directoryPromise)return directoryPromise;
+    directoryPromise=(async()=>{
+      const map=cachedRecipients();
+      // Load only on demand. Reuse the member-center paging API rather than
+      // adding a second member directory or storing extra member data in Season.
+      try{
+        for(let offset=0,page=0;page<50;page++){
+          const response=await fetch('/api/admin/member-center?offset='+offset,{
+            credentials:'same-origin',cache:'no-store'
+          });
+          if(!response.ok)break;
+          const data=await response.json();
+          for(const entry of data.items||[]){
+            if(entry.status!=='accepted')continue;
+            const previous=map.get(entry.id)||{id:entry.id,name:'',minecraft:[]};
+            previous.name=entry.displayName||previous.name;
+            map.set(entry.id,previous);
+          }
+          if(!data.hasMore||!(data.items||[]).length)break;
+          offset+=(data.items||[]).length;
+        }
+      }catch{}
+      try{
+        const response=await fetch('/api/admin/minecraft/links',{
+          credentials:'same-origin',cache:'no-store'
+        });
+        if(response.ok){
+          const data=await response.json();
+          for(const link of data.links||[]){
+            const entry=map.get(link.memberId);
+            const name=String(link.username||'').trim();
+            if(entry&&name&&!entry.minecraft.includes(name))entry.minecraft.push(name);
+          }
+        }
+      }catch{}
+      return [...map.values()];
+    })();
+    return directoryPromise;
+  }
   const mark=()=>{changed();schedule();};
   const inputField=(label,value,change,{type='text',multiline=false,max=400,help=''}={})=>{
     const wrap=el('label','field-group');wrap.append(el('span','field-label',label));
@@ -126,25 +183,83 @@ window.SSCircleSeasonsAdmin = (() => {
           group.append(select);inner.append(group);
         }
         if(key==='archiveAwards'){
-          const target=el('label','field-group season-admin-recipient');
+          const target=el('div','field-group season-admin-recipient');
           target.append(el('span','field-label','Penerima anggota SSCircle'));
-          const select=el('select');
-          const blank=el('option','', 'Belum ditautkan (penghargaan tetap ada di arsip)');
-          blank.value='';select.append(blank);
-          const profileNames=new Map((window.SSCircleMemberCenterAdmin?.getMembers?.()||[]).map(m=>[m.id,m.displayName||'']));
-          const accepted=(model?.submissions||[]).filter(s=>s.status==='accepted').slice(0,1000);
-          for(const member of accepted){
-            const nickname=profileNames.get(member.id)||'Anggota';
-            const option=el('option','',nickname+' · '+member.id.slice(0,8).toUpperCase());
-            option.value=member.id;select.append(option);
-          }
-          if(item.memberId && !accepted.some(s=>s.id===item.memberId)){
-            const existing=el('option','', 'Anggota terpilih sebelumnya · '+item.memberId.slice(0,8).toUpperCase());
-            existing.value=item.memberId;select.append(existing);
-          }
-          select.value=item.memberId||'';
-          select.onchange=()=>{item.memberId=select.value;mark();};
-          target.append(select,el('small','field-help','Pilih pendaftar Diterima. Penghargaan ini otomatis tampil di My SSCircle miliknya setelah disimpan.'));
+          const search=el('input','season-member-search');
+          search.type='search';
+          search.maxLength=120;
+          search.placeholder='Cari nama pemain, username Minecraft atau ID anggota';
+          search.setAttribute('aria-label','Cari anggota penerima penghargaan');
+          search.autocomplete='off';
+          const resultList=el('div','season-member-results');
+          resultList.setAttribute('role','listbox');
+          const selected=el('p','field-help season-member-selected');
+          const local=()=>[...cachedRecipients().values()];
+          let candidates=local();
+          const selectedText=()=>{
+            const member=candidates.find(m=>m.id===item.memberId);
+            selected.textContent=item.memberId
+              ?'Dipilih: '+(member?.name||member?.minecraft?.[0]||'Anggota')+
+                ' · ID '+item.memberId
+              :'Belum ada anggota ditautkan. Penghargaan tetap tersimpan di arsip.';
+          };
+          const paintMatches=()=>{
+            resultList.replaceChildren();
+            const q=search.value.trim().toLocaleLowerCase('id-ID');
+            if(!q){resultList.hidden=true;return;}
+            const found=candidates.filter(member=>{
+              const searchable=[member.id,member.id.slice(0,8),member.name,
+                ...(member.minecraft||[])].join(' ').toLocaleLowerCase('id-ID');
+              return searchable.includes(q);
+            }).slice(0,20);
+            resultList.hidden=false;
+            if(!found.length){
+              resultList.append(el('p','field-help',
+                'Tidak ditemukan pada daftar anggota Diterima. Coba nama atau ID lengkap.'));
+              return;
+            }
+            for(const member of found){
+              const name=member.name||member.minecraft[0]||'Anggota SSCircle';
+              const button=action(name+' · '+(member.minecraft[0]?'@'+member.minecraft[0]+' · ':'')+
+                member.id.slice(0,8).toUpperCase(),()=>{
+                item.memberId=member.id;
+                if(!item.player.trim()){
+                  item.player=member.minecraft[0]||member.name||'';
+                  const playerInput=inner.querySelector('input:not(.season-member-search)');
+                  if(playerInput&&item.player)playerInput.value=item.player;
+                }
+                search.value='';
+                selectedText();resultList.hidden=true;mark();
+              });
+              button.classList.add('season-member-result');
+              button.setAttribute('role','option');
+              button.title='ID anggota: '+member.id;
+              resultList.append(button);
+            }
+          };
+          search.addEventListener('input',paintMatches);
+          const loadDirectory=()=>{
+            loadRecipientDirectory().then(all=>{
+              candidates=all;
+              selectedText();paintMatches();
+            }).catch(()=>{selectedText();paintMatches();});
+          };
+          search.addEventListener('focus',loadDirectory,{once:true});
+          search.addEventListener('keydown',event=>{
+            if(event.key==='Escape'){search.value='';resultList.hidden=true;}
+            if(event.key==='Enter'&&!resultList.hidden){
+              const first=resultList.querySelector('button');
+              if(first){event.preventDefault();first.click();}
+            }
+          });
+          selectedText();
+          const clear=action('Lepas tautan anggota',()=>{
+            item.memberId='';selectedText();mark();
+          });
+          clear.classList.add('season-member-clear');
+          target.append(search,resultList,selected,clear,
+            el('small','field-help',
+              'Pencarian hanya menampilkan anggota berstatus Diterima. Nama, username Minecraft, dan ID dapat digunakan. Pilihan akan ditautkan ke Profile setelah disimpan.'));
           inner.append(target);
         }
         if(photoKey)mediaField(inner,'Foto',item,photoKey,repaint);
@@ -499,7 +614,7 @@ window.SSCircleSeasonsAdmin = (() => {
     frame?.contentWindow?.postMessage({type:'ssc-theme-preview-settings',settings},location.origin);
   }
   function schedule(){clearTimeout(timer);timer=setTimeout(post,130);}
-  function render(data,dirty){model=data;changed=dirty;renderEditor();
+  function render(data,dirty){model=data;changed=dirty;directoryPromise=null;renderEditor();
     if(!installed){installed=true;
       $('seasons-admin-preview-frame').addEventListener('load',schedule);
       $('seasons-preview-desktop').onclick=()=>{phone=false;resize();schedule();};
