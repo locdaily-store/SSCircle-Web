@@ -2,6 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 
+const paths=JSON.parse(readFileSync(new URL('../_routes.json',import.meta.url),'utf8'));
+test('Pages routes its Voice assets through Worker policy guards',()=>{
+  for(const path of ['/voice','/voice.html','/voice-config.js'])
+    assert.ok(paths.include.includes(path),'Missing Pages route '+path);
+});
 const source=readFileSync(new URL('../_worker.js',import.meta.url),'utf8');
 const worker=(await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'))).default;
 const originalPolicy="default-src 'self'; script-src 'self'; connect-src 'self'";
