@@ -5550,16 +5550,23 @@ async function sscAnnouncementAPI(req,env,path,method) {
 
 // SSCircle Voice is the ONLY Pages route allowed to request a microphone.
 // Pages advanced-mode _worker.js owns these headers; _headers is not enough.
-function sscVoiceGatewayOrigin(env){
-  const text=typeof env.VOICE_PUBLIC_URL==='string'?env.VOICE_PUBLIC_URL.trim():'';
-  if(!text)return '';
-  try{
-    const parsed=new URL(text);
-    if(parsed.protocol!=='https:'||parsed.username||parsed.password||
-       parsed.pathname!=='/'||parsed.search||parsed.hash||!parsed.hostname||
-       parsed.hostname==='voice.example.com')return '';
-    return parsed.origin;
-  }catch{return '';}
+// Preview SSCircle beralamat tetap. Public gateway origin ini BUKAN kredensial.
+// Variable Pages tetap diutamakan; produksi tidak memiliki fallback otomatis.
+const SSC_VOICE_PREVIEW_HOST='voice-test.sscircle.pages.dev';
+const SSC_VOICE_PREVIEW_GATEWAY='https://sscircle-cross-voice.locdailymar.workers.dev';
+function sscVoiceGatewayOrigin(env,hostname=''){
+  const configured=typeof env.VOICE_PUBLIC_URL==='string'?env.VOICE_PUBLIC_URL.trim():'';
+  const validate=value=>{
+    try{
+      const parsed=new URL(value);
+      if(parsed.protocol!=='https:'||parsed.username||parsed.password||
+         parsed.pathname!=='/'||parsed.search||parsed.hash||!parsed.hostname||
+         parsed.hostname==='voice.example.com')return '';
+      return parsed.origin;
+    }catch{return '';}
+  };
+  return validate(configured)||
+    (hostname===SSC_VOICE_PREVIEW_HOST?SSC_VOICE_PREVIEW_GATEWAY:'');
 }
 async function route(req, env, ctx) {
   const url = new URL(req.url), path = url.pathname, method = req.method;
@@ -5777,7 +5784,7 @@ async function route(req, env, ctx) {
     return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
   }
   if (path==='/voice-config.js' && ['GET','HEAD'].includes(method)){
-    const gateway=sscVoiceGatewayOrigin(env);
+    const gateway=sscVoiceGatewayOrigin(env,url.hostname);
     const js='window.SSCIRCLE_VOICE_GATEWAY = '+JSON.stringify(gateway)+';';
     return new Response(method==='HEAD'?null:js,{status:200,headers:{
       'Content-Type':'application/javascript; charset=utf-8',
@@ -5788,7 +5795,7 @@ async function route(req, env, ctx) {
   if (['/voice','/voice.html'].includes(path) && ['GET','HEAD'].includes(method)){
     const response=await env.ASSETS.fetch(req);
     if(response.status>=300&&response.status<400)return response;
-    const gateway=sscVoiceGatewayOrigin(env);
+    const gateway=sscVoiceGatewayOrigin(env,url.hostname);
     // No wildcard external endpoints. Gateway is explicitly set in Pages vars.
     const websocket=gateway?gateway.replace(/^https:/,'wss:'):'';
     const connect=["'self'"];
