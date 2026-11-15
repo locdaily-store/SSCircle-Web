@@ -53,6 +53,15 @@
   background: var(--primary, #9177d2);
   border: 2px solid var(--card-bg, #21172c);
 }
+.season-timeline-type {
+  display: inline-block;
+  margin: 0 0 6px;
+  padding: 3px 9px;
+  border: 1px solid var(--border, rgba(170,150,220,.4));
+  border-radius: 999px;
+  font-size: .72rem;
+  opacity: .92;
+}
 .season-timeline-entry strong { display: block; font-size: 1rem; }
 .season-timeline-entry p { margin: 6px 0 0; line-height: 1.6; overflow-wrap: anywhere; }
 .season-timeline-date { display: block; margin-bottom: 5px; font-size: .82rem; opacity: .8; }
