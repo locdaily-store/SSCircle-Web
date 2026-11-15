@@ -1,4 +1,7 @@
-// Konfigurasi ini digantikan secara dinamis oleh Cloudflare Pages _worker.js.
-// Set VOICE_PUBLIC_URL pada Pages ke URL Cloudflare Worker Durable Object.
-// Jangan menyimpan secret. Fallback ini tidak diaktifkan sampai domain diatur.
-window.SSCIRCLE_VOICE_GATEWAY = "https://voice.example.com";
+// SSCircle Voice menggunakan VOICE_PUBLIC_URL dari Cloudflare Pages saat _worker.js aktif.
+// Fallback hanya untuk alamat Preview SSCircle yang diketahui.
+// Alamat ini PUBLIK; jangan pernah memasukkan VOICE_BRIDGE_SECRET dalam file browser.
+window.SSCIRCLE_VOICE_GATEWAY =
+  window.location.hostname === 'voice-test.sscircle.pages.dev'
+    ? 'https://sscircle-cross-voice.locdailymar.workers.dev'
+    : '';
