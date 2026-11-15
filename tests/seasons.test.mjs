@@ -11,7 +11,8 @@ function fixture(){
   const db=new DatabaseSync(':memory:');
   db.exec(`CREATE TABLE form_config(id INTEGER PRIMARY KEY,settings TEXT,pages TEXT,questions TEXT,updated_at TEXT);
     CREATE TABLE revoked_sessions(token_hash TEXT PRIMARY KEY,expires_at INTEGER);
-    CREATE TABLE media(id TEXT PRIMARY KEY,visibility TEXT);`);
+    CREATE TABLE media(id TEXT PRIMARY KEY,visibility TEXT);
+    CREATE TABLE rate_limits(key TEXT PRIMARY KEY,count INTEGER,expires_at INTEGER);`);
   const pages=JSON.stringify([{id:'page-1',title:'Pendaftaran',description:'',blocks:[],routeQuestionId:'',routes:{}}]);
   db.prepare('INSERT INTO form_config VALUES(1,?,?,?,?)').run(JSON.stringify({homeLeaderboardSeasons:[{id:'season-1',title:'Leaderboard S1',entries:[{name:'Pemain Lama',score:'12'}]}]}),pages,'[]','rev-one');
   const env={SESSION_SECRET:secret,ADMIN_PASSWORD:password,DB:{prepare(sql){const stmt=db.prepare(sql);let args=[];
@@ -159,4 +160,113 @@ test('badge navigasi hanya memuat event aktif/mendatang dan pengumuman terbit',a
   assert.equal(result.data.events.length,1);
   assert.equal(result.data.events[0].id,'event-baru');
   assert.match(result.data.events[0].version,/Event baru/);
+});
+
+async function seasonAction(t,action,revision,other={}){
+ return t.req('/api/admin/seasons/lifecycle',{
+   admin:true,method:'POST',payload:{
+     action,seasonId:'season-1',revision,
+     confirmation:{start:'START SEASON',prepare:'PREPARE SEASON',end:'END SEASON'}[action],
+     ...other
+   }
+ });
+}
+
+test('lifecycle starts a dedicated stats period and freezes the final leaderboard',async()=>{
+ const t=fixture();
+ const draft=await save(t,s=>{
+   s.seasonArchiveEnabled=true;
+   s.homeLeaderboardSeasons[0].archiveStatus='planned';
+   s.homeLeaderboardSeasons[0].archivePublished=false;
+ });
+ assert.equal(draft.status,200,JSON.stringify(draft.data));
+ const before=await t.req('/api/admin/form',{admin:true});
+ const started=await seasonAction(t,'start',before.data.revision,{publish:true});
+ assert.equal(started.status,200,JSON.stringify(started.data));
+ assert.equal(started.data.settings.statSeasonId,'season-1');
+ assert.equal(started.data.season.archiveStatus,'active');
+ assert.equal(started.data.season.archiveTimeline[0].kind,'opening');
+ const activeKey='season:season-1:'+started.data.settings.statSeasonActivatedAt;
+ t.db.exec(`CREATE TABLE player_stat_snapshots (
+   application_id TEXT NOT NULL,season_id TEXT NOT NULL,
+   playtime_seconds INTEGER NOT NULL DEFAULT 0,deaths INTEGER NOT NULL DEFAULT 0,
+   mob_kills INTEGER NOT NULL DEFAULT 0,blocks_mined INTEGER NOT NULL DEFAULT 0,
+   last_synced_at TEXT NOT NULL DEFAULT '');
+   CREATE TABLE minecraft_accounts (
+     application_id TEXT, username TEXT, verified_at TEXT);
+ `);
+ const member='11111111-1111-4111-8111-111111111111';
+ t.db.prepare('INSERT INTO player_stat_snapshots VALUES(?,?,?,?,?,?,?)')
+   .run(member,activeKey,7380,2,44,90,new Date().toISOString());
+ t.db.prepare('INSERT INTO minecraft_accounts VALUES(?,?,?)').run(member,'BuilderA',new Date().toISOString());
+ const preview=await t.req('/api/admin/seasons/lifecycle?seasonId=season-1',{admin:true});
+ assert.equal(preview.status,200);
+ assert.equal(preview.data.preview.playerCount,1);
+ assert.equal(preview.data.preview.entries[0].name,'BuilderA');
+ const premature=await seasonAction(t,'end',started.data.revision);
+ assert.equal(premature.status,400);
+ const prepared=await seasonAction(t,'prepare',started.data.revision);
+ assert.equal(prepared.status,200,JSON.stringify(prepared.data));
+ const finished=await seasonAction(t,'end',prepared.data.revision);
+ assert.equal(finished.status,200,JSON.stringify(finished.data));
+ assert.equal(finished.data.settings.statSeasonId,'');
+ assert.equal(finished.data.season.archiveStatus,'ended');
+ assert.equal(finished.data.season.archiveSnapshot.playerCount,1);
+ assert.deepEqual(finished.data.season.entries,[{name:'BuilderA',score:'2 jam 3 menit'}]);
+ assert.deepEqual(finished.data.season.archiveTimeline.map(x=>x.kind),['opening','closing']);
+ const publicForm=await t.req('/api/form');
+ assert.equal(publicForm.data.settings.homeLeaderboardSeasons[0].archiveSnapshot.playerCount,1);
+ const reopen=await seasonAction(t,'start',finished.data.revision);
+ assert.equal(reopen.status,409);
+ const deleteArchived=await save(t,s=>{s.homeLeaderboardSeasons=[];});
+ assert.equal(deleteArchived.status,409);
+ const tamper=await save(t,s=>{
+   s.homeLeaderboardSeasons[0].archiveSnapshot={capturedAt:'2000-01-01T00:00:00.000Z',playerCount:9999};
+ });
+ assert.equal(tamper.status,200);
+ const persisted=(await t.req('/api/admin/form',{admin:true})).data.settings.homeLeaderboardSeasons[0];
+ assert.equal(persisted.archiveSnapshot.playerCount,1);
+});
+
+test('planned opening requires explicit override before its scheduled time',async()=>{
+ const t=fixture();
+ const draft=await save(t,s=>{s.homeLeaderboardSeasons[0].archiveStatus='planned';});
+ assert.equal(draft.status,200);
+ const admin=await t.req('/api/admin/form',{admin:true});
+ const scheduled=await seasonAction(t,'schedule',admin.data.revision,{
+   scheduledAt:new Date(Date.now()+86400000).toISOString()
+ });
+ assert.equal(scheduled.status,200,JSON.stringify(scheduled.data));
+ const blocked=await seasonAction(t,'start',scheduled.data.revision);
+ assert.equal(blocked.status,409);
+ const started=await seasonAction(t,'start',scheduled.data.revision,{overrideSchedule:true});
+ assert.equal(started.status,200);
+ assert.equal(started.data.season.archiveScheduledAt,'');
+ const replay=await seasonAction(t,'start',scheduled.data.revision,{overrideSchedule:true});
+ assert.equal(replay.status,409,'stale revision must not replay transitions');
+});
+
+test('lifecycle requires admin session and rejects competing seasons',async()=>{
+ const t=fixture();
+ assert.equal((await t.req('/api/admin/seasons/lifecycle?seasonId=season-1')).status,401);
+ const draft=await save(t,s=>{
+   s.homeLeaderboardSeasons[0].archiveStatus='planned';
+   s.homeLeaderboardSeasons.push({
+     id:'season-2',title:'Season 2',entries:[],archiveStatus:'planned',archivePublished:false
+   });
+ });
+ assert.equal(draft.status,200);
+ const form=await t.req('/api/admin/form',{admin:true});
+ const started=await seasonAction(t,'start',form.data.revision);
+ assert.equal(started.status,200);
+ const second=await t.req('/api/admin/seasons/lifecycle',{
+   admin:true,method:'POST',payload:{
+     action:'start',seasonId:'season-2',revision:started.data.revision,
+     confirmation:'START SEASON'
+   }
+ });
+ assert.equal(second.status,409);
+ assert.equal(second.data.error.includes('Akhiri Season'),true);
+ const active=(await t.req('/api/admin/form',{admin:true})).data.settings.homeLeaderboardSeasons;
+ assert.equal(active.filter(x=>x.archiveStatus==='active').length,1);
 });
