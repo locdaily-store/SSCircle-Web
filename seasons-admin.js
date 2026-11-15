@@ -111,6 +111,20 @@ window.SSCircleSeasonsAdmin = (() => {
           inner.append(inputField(label,item[field],v=>item[field]=v,{
             multiline:type==='textarea',type:type==='date'?'date':'text',max:maxLen||300
           }));
+        if(key==='archiveTimeline'){
+          const group=el('label','field-group');
+          group.append(el('span','field-label','Jenis milestone'));
+          const select=el('select');
+          for(const [value,label] of [
+            ['milestone','Milestone umum'],['event','Event komunitas'],
+            ['build','Pembangunan'],['award','Penghargaan']
+          ]){
+            const option=el('option','',label);option.value=value;select.append(option);
+          }
+          select.value=['event','build','award'].includes(item.kind)?item.kind:'milestone';
+          select.onchange=()=>{item.kind=select.value;mark();};
+          group.append(select);inner.append(group);
+        }
         if(key==='archiveAwards'){
           const target=el('label','field-group season-admin-recipient');
           target.append(el('span','field-label','Penerima anggota SSCircle'));
