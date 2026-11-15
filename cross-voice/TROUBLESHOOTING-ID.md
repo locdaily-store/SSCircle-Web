@@ -11,7 +11,7 @@
 | Pemain world lain terdengar | Bug isolasi | Matikan modul dan kirim laporan dengan UUID world, tanpa merekam suara |
 | Suara mengganda | Browser aktif pada beberapa perangkat, SVC addon lain, atau pengiriman loop | Putuskan sesi lain dan periksa addon suara |
 | iOS/Android berhenti mendengar | Browser ditangguhkan sistem operasi | Gunakan perangkat kedua atau desktop |
-| Gateway 503 | Paper belum terhubung | Restart gateway/Paper sesuai urutan lalu cek WSS |
+| Gateway 503 | Paper belum terhubung, secret atau origin Cloudflare tidak lengkap | Periksa Wrangler secret, /api/health dan restart Paper; Worker tidak perlu direstart |
 | HTTP 429 | Terlalu banyak pairing gagal | Tunggu setidaknya 60 detik |
 
 ### Pengumpulan log
