@@ -77,7 +77,7 @@ window.SSCircleSeasonsAdmin = (() => {
       prepare:'Persiapkan penutupan Season ini? Pastikan statistik Minecraft sudah tersinkron.',
       end:'Akhiri Season sekarang? Snapshot akhir akan disimpan dan statistik periode Season dinonaktifkan.',
       start:'Mulai Season ini? Periode statistik baru akan aktif dan Season lainnya harus sudah selesai.',
-      schedule:'Simpan rencana pembukaan Season? Jadwal adalah pengingat, bukan aktivasi otomatis.',
+      schedule:'Simpan jadwal pembukaan Season? Jika memilih otomatis, Cloudflare Cron akan membuka Season sesuai jadwal.',
       archiveLegacy:'Arsipkan Season lama tanpa statistik aktif? Data leaderboard manual akan dipertahankan.'
     };
     const yes=await window.SSCNotice.confirm(
@@ -114,7 +114,9 @@ window.SSCircleSeasonsAdmin = (() => {
       const data=await response.json();
       if(!response.ok)throw Error(data.error||'Tidak dapat mengambil statistik.');
       const preview=data.preview;
+      const sync=data.sync||{ready:false,message:'Belum ada sinkronisasi akhir.'};
       const when=preview.lastSyncedAt?'Terakhir disinkron: '+preview.lastSyncedAt:'Belum ada sinkronisasi';
+      const syncMessage=' Kesiapan penutupan: '+(sync.ready?'SIAP. ':'BELUM SIAP. ')+sync.message;
       const top=(preview.entries||[]).slice(0,5).map((entry,index)=>
         (index+1)+'. '+entry.name+' ('+entry.score+')').join(' · ');
       const awards=(preview.awardCandidates||[]).map(item=>item.title+': '+item.player).join(' · ');
@@ -122,8 +124,8 @@ window.SSCircleSeasonsAdmin = (() => {
         ?`Snapshot saat ini: ${preview.playerCount} pemain · ${Math.floor(preview.playtimeSeconds/3600)} jam total · ${preview.deaths} deaths · ${preview.mobKills} mob kills. ${when}. `+
           (top?'Peringkat teratas: '+top+'. ':'')+
           (awards?'Kandidat Hall of Fame: '+awards+'. ':'')+
-          'Snapshot final diambil kembali saat penutupan dikonfirmasi.'
-        :'Belum ada snapshot periode Season ini. Penutupan kosong memerlukan konfirmasi tambahan.';
+          'Snapshot final diambil kembali saat penutupan dikonfirmasi.'+syncMessage
+        :'Belum ada snapshot periode Season ini. Penutupan kosong memerlukan konfirmasi tambahan.'+syncMessage;
     }catch(error){output.textContent='Gagal memuat snapshot: '+error.message;}
   }
   // A dedicated switch keeps the control beside its label even in a wide editor.
@@ -337,7 +339,7 @@ window.SSCircleSeasonsAdmin = (() => {
     box.append(statusText);
     if(season.archiveScheduledAt){
       const time=el('p','field-help','Rencana pembukaan: '+new Date(season.archiveScheduledAt).toLocaleString('id-ID')+
-        '. Jadwal tidak menjalankan pembukaan otomatis.');
+        (season.archiveAutoOpen?'. Dibuka otomatis oleh Cloudflare Cron jika scheduler sudah terpasang.':'. Pembukaan manual, admin harus menekan Mulai Season.'));
       box.append(time);
     }
     if(season.archiveFinalizedAt){
@@ -372,11 +374,14 @@ window.SSCircleSeasonsAdmin = (() => {
         }
       }
       field.append(dateInput);
-      actions.append(field,action('Simpan jadwal',()=>{
+      const cronCheck=el('label','season-lifecycle-check');
+      const cronInput=el('input');cronInput.type='checkbox';cronInput.checked=season.archiveAutoOpen===true;
+      cronCheck.append(cronInput,el('span','','Buka Season otomatis pada jadwal ini (memerlukan Cloudflare Cron Worker).'));
+      actions.append(field,cronCheck,action('Simpan jadwal',()=>{
         const chosen=dateInput.value?new Date(dateInput.value):null;
         if(!chosen||!Number.isFinite(chosen.getTime()))
           return window.SSCNotice.alert('Pilih tanggal dan jam pembukaan yang valid.');
-        lifecycleRequest(season,'schedule',{scheduledAt:chosen.toISOString()});
+        lifecycleRequest(season,'schedule',{scheduledAt:chosen.toISOString(),autoStart:cronInput.checked});
       }));
     }
     if(active&&activeStatus){
@@ -385,7 +390,8 @@ window.SSCircleSeasonsAdmin = (() => {
       if(!season.archivePreparedAt){
         actions.append(action('Persiapkan penutupan',()=>lifecycleRequest(season,'prepare')));
       }else{
-        actions.append(el('p','field-help','Persiapan tercatat: '+season.archivePreparedAt));
+        actions.append(el('p','field-help','Persiapan tercatat: '+season.archivePreparedAt+'. Periksa kesiapan sinkronisasi sebelum mengakhiri Season.'));
+        actions.append(action('Minta ulang sinkronisasi akhir',()=>lifecycleRequest(season,'prepare')));
         const empty=el('label','season-lifecycle-check');
         const allow=el('input');allow.type='checkbox';
         empty.append(allow,el('span','',
