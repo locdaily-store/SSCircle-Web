@@ -73,3 +73,73 @@
   .season-lifecycle-actions > button { width: 100%; }
   .season-lifecycle-schedule { width: 100%; max-width: none; }
 }
+
+/* Multiple titled leaderboards share the existing Season Archive data. */
+.season-admin-leaderboards,
+.season-archive-leaderboard-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit,minmax(min(100%,320px),1fr));
+}
+.season-admin-leaderboard {
+  min-width: 0;
+  border: 1px solid var(--border,rgba(170,150,220,.3));
+  border-radius: 14px;
+  overflow: hidden;
+}
+.season-admin-leaderboard > summary {
+  padding: 13px 15px;
+  font-weight: 650;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.season-admin-leaderboard > .season-admin-mini-body { padding: 14px; }
+.season-admin-leaderboard .season-admin-rank { min-width: 0; }
+.season-archive-leaderboard {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--border,rgba(170,150,220,.3));
+  border-radius: 16px;
+  background: var(--card-bg,rgba(130,106,170,.07));
+}
+.season-archive-leaderboard h4 {
+  margin: 0 0 14px;
+  overflow-wrap: anywhere;
+  font-size: 1rem;
+}
+.season-archive-leaderboard .season-archive-ranking { margin: 0; }
+.season-admin-recipient { position: relative; min-width: 0; }
+.season-member-search {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.season-member-results {
+  display: grid;
+  gap: 4px;
+  max-height: 260px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 5px;
+  border: 1px solid var(--border,rgba(170,150,220,.35));
+  border-radius: 12px;
+  background: var(--card-bg,#241b30);
+}
+.season-member-results[hidden] { display: none; }
+.season-member-result.button {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  min-height: 40px;
+}
+.season-member-selected { overflow-wrap: anywhere; }
+.season-member-clear { max-width: 100%; }
+@media(max-width:600px) {
+  .season-admin-leaderboards,
+  .season-archive-leaderboard-grid { grid-template-columns: minmax(0,1fr); }
+  .season-archive-leaderboard { padding: 12px; }
+  .season-admin-leaderboard > .season-admin-mini-body { padding: 11px; }
+}
