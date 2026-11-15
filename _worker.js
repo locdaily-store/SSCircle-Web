@@ -5778,7 +5778,7 @@ async function route(req, env, ctx) {
   }
   if (path==='/voice-config.js' && ['GET','HEAD'].includes(method)){
     const gateway=sscVoiceGatewayOrigin(env);
-    const js='window.SSCIRCLE_VOICE_GATEWAY = '+JSON.stringify(gateway)+';\\n';
+    const js='window.SSCIRCLE_VOICE_GATEWAY = '+JSON.stringify(gateway)+';';
     return new Response(method==='HEAD'?null:js,{status:200,headers:{
       'Content-Type':'application/javascript; charset=utf-8',
       'Cache-Control':'no-store','X-Content-Type-Options':'nosniff',
