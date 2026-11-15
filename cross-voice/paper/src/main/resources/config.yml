@@ -2,7 +2,7 @@
 # Memerlukan Simple Voice Chat server plugin dan Floodgate.
 # Tidak ada audio yang direkam ke penyimpanan.
 gateway:
-  # Gunakan WSS di produksi, atau WS hanya untuk localhost saat pengujian.
+  # Pakai WSS URL Cloudflare Worker (workers.dev atau custom domain). Tidak perlu VPS/Tunnel.
   websocket-url: "wss://voice.example.com/bridge"
   # Simpan secret setidaknya 32 karakter, SAMA dengan VOICE_BRIDGE_SECRET pada gateway.
   # Jangan masukkan secret asli dalam GitHub atau file publik.
