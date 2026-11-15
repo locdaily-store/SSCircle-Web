@@ -28,7 +28,7 @@ const t={
 };
 let lang='id',token='',socket=null,me=null,latest=null,ctx=null,stream=null,worklet=null,
   micSource=null,micGain=1,speakerGain=null,pttDown=false,muted=false,deafened=false,
-  whisper=false,closing=false,reconnectTry=0,sendLevel=0,outputVolume=1,playing=new Map();
+  whisper=false,closing=false,reconnectTry=0,sendLevel=0,outputVolume=1,playing=new Map(),pendingMic=[];
 const translation=k=>t[lang][k]||k;
 function message(text,error=false){$('room-message').textContent=text;$('room-message').style.color=error?'#ffb1b7':'';}
 function pairMessage(text,error=false){$('pair-message').textContent=text;$('pair-message').style.color=error?'#ffb1b7':'';}
@@ -71,6 +71,7 @@ function control(action,value=''){
     socket.send(JSON.stringify({t:'control',action,value:String(value)}));
 }
 function updateButtons(){
+  if(!shouldTransmit())flushMic();
   $('mute').setAttribute('aria-pressed',String(muted));
   $('mute').textContent=muted?'Unmute':'Mute';
   $('deafen').setAttribute('aria-pressed',String(deafened));
@@ -106,7 +107,7 @@ async function join(){
     current.onmessage=e=>{
       let msg;try{msg=JSON.parse(e.data);}catch{return;}
       if(msg.t==='state'){latest=msg;renderState(msg);}
-      if(msg.t==='audio')receiveAudio(msg);
+      if(msg.t==='audio'||msg.t==='audioBatch')receiveAudio(msg);
       if(msg.t==='error')message(msg.code,true);
     };
     current.onclose=()=>{
@@ -160,6 +161,12 @@ async function ensureContext(){
   return ctx;
 }
 function receiveAudio(msg){
+  if(msg.t==='audioBatch'){
+    if(!Array.isArray(msg.frames)||msg.frames.length>4)return;
+    for(const frame of msg.frames)if(frame&&typeof frame.pcm==='string')
+      receiveAudio({...msg,t:'audio',pcm:frame.pcm});
+    return;
+  }
   if(deafened||!msg.pcm||!ctx||!speakerGain||!me||msg.uuid===me.uuid)return;
   let raw;try{raw=Uint8Array.from(atob(msg.pcm),ch=>ch.charCodeAt(0));}catch{return;}
   if(raw.length!==1920)return;
@@ -190,6 +197,13 @@ function receiveAudio(msg){
   source.start(when);source.onended=()=>source.disconnect();
   state.next=when+.02;
 }
+function flushMic(){
+  if(!pendingMic.length)return;
+  if(socket?.readyState===WebSocket.OPEN&&socket.bufferedAmount<32*1024){
+    socket.send(JSON.stringify({t:'audioBatch',frames:pendingMic}));
+  }
+  pendingMic=[];
+}
 function asPCM(samples){
   const bytes=new Uint8Array(1920),view=new DataView(bytes.buffer);
   for(let i=0;i<960;i++)view.setInt16(i*2,Math.max(-32768,Math.min(32767,Math.round(samples[i]*32767*micGain))),true);
@@ -212,7 +226,8 @@ async function startMic(){
       if(e.data?.t==='level'){$('mic-meter').value=Math.min(1,e.data.value*7);sendLevel=e.data.value;}
       if(e.data?.t==='pcm'&&shouldTransmit()&&socket?.readyState===WebSocket.OPEN&&
          socket.bufferedAmount<32*1024){
-        socket.send(JSON.stringify({t:'audio',pcm:asPCM(e.data.frame)}));
+        pendingMic.push({pcm:asPCM(e.data.frame)});
+        if(pendingMic.length>=3)flushMic();
       }
     };
     micSource.connect(worklet);worklet.connect(context.destination);
@@ -224,6 +239,7 @@ async function startMic(){
   }
 }
 function stopMic(){
+  flushMic();
   if(stream)stream.getTracks().forEach(track=>track.stop());
   stream=null;if(micSource)try{micSource.disconnect();}catch{}
   if(worklet)try{worklet.disconnect();}catch{}
