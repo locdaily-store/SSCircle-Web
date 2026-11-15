@@ -945,6 +945,24 @@ async function seasonSyncReadiness(env,season){
   return {ready:true,message:'Sinkronisasi akhir dikonfirmasi. Antrean Paper kosong.',
     completedAt:command.completed_at,lastSeenAt:status.seen_at};
 }
+// Ask the existing signed Paper heartbeat to capture the first Season sample.
+// Best effort: the Season must still open even if Minecraft is offline.
+async function seasonQueueInitialSync(env){
+  try{
+    await ensureMinecraftSyncMonitor(env);
+    const now=new Date().toISOString();
+    const pending=await env.DB.prepare(`SELECT id FROM minecraft_sync_commands
+      WHERE type='sync_now' AND completed_at IS NULL AND expires_at>? LIMIT 1`)
+      .bind(now).first();
+    if(pending)return;
+    await env.DB.prepare(`INSERT INTO minecraft_sync_commands
+      (id,type,created_at,expires_at) VALUES(?,'sync_now',?,?)`)
+      .bind(uid(),now,new Date(Date.now()+600000).toISOString()).run();
+  }catch(error){
+    // Avoid logging private account/secret fields.
+    console.error('[SSCircle season initial sync]',{errorType:String(error?.name||'Error')});
+  }
+}
 // This endpoint is only called by a separate Cloudflare Worker Cron Trigger.
 // A saved schedule does not silently run on an ordinary website visit.
 async function seasonScheduledTick(req,env){
@@ -982,6 +1000,7 @@ async function seasonScheduledTick(req,env){
     "UPDATE form_config SET settings=?,updated_at=? WHERE id=1 AND COALESCE(updated_at,'')=?"
   ).bind(JSON.stringify(settings),revision,row.updated_at||'').run();
   if(!result.meta?.changes)return J({ok:true,started:0,blocked:'Perubahan bersamaan. Coba pada jadwal Cron berikutnya.'});
+  await seasonQueueInitialSync(env);
   return J({ok:true,started:1,seasonId:season.id,activatedAt:now});
 }
 function seasonTimelineEvent(season,kind,title,now){
@@ -6600,6 +6619,7 @@ async function route(req, env, ctx) {
         "UPDATE form_config SET settings=?,updated_at=? WHERE id=1 AND COALESCE(updated_at,'')=?"
       ).bind(JSON.stringify(settings),revision,row.updated_at||'').run();
       if(!result.meta?.changes)return bad('Perubahan Season bentrok dengan admin lain. Muat ulang.',409);
+      if(action==='start')await seasonQueueInitialSync(env);
       if(action==='prepare' && season.archiveSyncCommandId){
         const present=await env.DB.prepare('SELECT id FROM minecraft_sync_commands WHERE id=?')
           .bind(season.archiveSyncCommandId).first();
