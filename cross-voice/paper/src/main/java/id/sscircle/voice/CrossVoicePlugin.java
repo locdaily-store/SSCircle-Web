@@ -35,6 +35,8 @@ import java.nio.ByteOrder;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.Iterator;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
@@ -59,6 +61,9 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
     private final Map<UUID,Long> lastPairing= new ConcurrentHashMap<>();
     private final Map<String,Group> groups=new HashMap<>();
     private ArrayBlockingQueue<Frame> audioQueue=new ArrayBlockingQueue<>(256);
+    private final ArrayBlockingQueue<String> outboundPackets=new ArrayBlockingQueue<>(256);
+    private final AtomicBoolean sendInFlight=new AtomicBoolean(false);
+    private final Map<UUID,JavaBatch> pendingJavaAudio=new LinkedHashMap<>();
     private final AtomicBoolean running=new AtomicBoolean(false);
     private final Map<UUID,OpusDecoder> decoders=new HashMap<>(); // audio worker only
     private final Map<UUID,OpusEncoder> encoders=new HashMap<>(); // audio worker only
@@ -79,6 +84,10 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
         volatile String group="";
     }
     private record Frame(UUID uuid,byte[] audio,boolean javaSource,boolean whisper) {}
+    private static final class JavaBatch {
+        final JsonArray frames=new JsonArray();
+        final long created=System.currentTimeMillis();
+    }
 
     @Override public void onEnable(){
         saveDefaultConfig();
@@ -153,10 +162,26 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
         }catch(Exception e){connecting=false;getLogger().warning("Alamat WSS gateway tidak dapat digunakan.");}
     }
     private void send(JsonObject packet){
+        if(socket==null||!running.get())return;
+        String serialized=packet.toString();
+        if(serialized.length()>16000||!outboundPackets.offer(serialized)){
+            dropped++;return;
+        }
+        drainPackets();
+    }
+    private void drainPackets(){
         WebSocket ws=socket;
-        if(ws==null||!running.get())return;
-        if(!ws.isOutputClosed())ws.sendText(packet.toString(),true)
-            .exceptionally(e->{dropped++;return null;});
+        if(ws==null||!running.get()||!sendInFlight.compareAndSet(false,true))return;
+        String next=outboundPackets.poll();
+        if(next==null){sendInFlight.set(false);
+            if(!outboundPackets.isEmpty())drainPackets();return;}
+        try{
+            ws.sendText(next,true).whenComplete((ignored,error)->{
+                sendInFlight.set(false);
+                if(error!=null){dropped++;outboundPackets.clear();}
+                else drainPackets();
+            });
+        }catch(RuntimeException e){sendInFlight.set(false);dropped++;outboundPackets.clear();}
     }
     private void snapshot(){
         if(socket==null)return; // Bukkit main thread: positions only, no audio codec.
@@ -272,7 +297,8 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
     private void audioLoop(){
         while(running.get()){
             try{
-                Frame frame=audioQueue.poll(200,TimeUnit.MILLISECONDS);
+                Frame frame=audioQueue.poll(20,TimeUnit.MILLISECONDS);
+                flushStaleJavaBatches();
                 if(frame==null)continue;
                 VoicechatServerApi api=voice;
                 if(api==null)continue;
@@ -284,11 +310,13 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
                     if(samples==null||samples.length<960)continue;
                     for(int start=0;start+960<=samples.length;start+=960){
                         short[] chunk=java.util.Arrays.copyOfRange(samples,start,start+960);
-                        JsonObject packet=new JsonObject();
-                        packet.addProperty("t","audio");packet.addProperty("uuid",frame.uuid().toString());
-                        packet.addProperty("pcm",Base64.getEncoder().encodeToString(toBytes(chunk)));
-                        packet.addProperty("whisper",frame.whisper());
-                        send(packet);sent++;
+                        JavaBatch batch=pendingJavaAudio.computeIfAbsent(frame.uuid(),k->new JavaBatch());
+                        JsonObject item=new JsonObject();
+                        item.addProperty("pcm",Base64.getEncoder().encodeToString(toBytes(chunk)));
+                        item.addProperty("whisper",frame.whisper());
+                        batch.frames.add(item);
+                        if(batch.frames.size()>=3){sendJavaBatch(frame.uuid(),batch);pendingJavaAudio.remove(frame.uuid());}
+                        sent++;
                     }
                 }else{
                     // Bedrock browser PCM -> Opus -> official AudioSender.
@@ -310,6 +338,22 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
             catch(Exception e){dropped++;}
         }
     }
+    private void sendJavaBatch(UUID uuid,JavaBatch batch){
+        if(batch.frames.isEmpty())return;
+        JsonObject out=new JsonObject();out.addProperty("t","audioBatch");
+        out.addProperty("uuid",uuid.toString());out.add("frames",batch.frames);
+        send(out);
+    }
+    private void flushStaleJavaBatches(){
+        long current=System.currentTimeMillis();
+        Iterator<Map.Entry<UUID,JavaBatch>> iterator=pendingJavaAudio.entrySet().iterator();
+        while(iterator.hasNext()){
+            Map.Entry<UUID,JavaBatch> entry=iterator.next();
+            if(current-entry.getValue().created>=60){
+                sendJavaBatch(entry.getKey(),entry.getValue());iterator.remove();
+            }
+        }
+    }
     private static byte[] toBytes(short[] data){
         ByteBuffer b=ByteBuffer.allocate(data.length*2).order(ByteOrder.LITTLE_ENDIAN);
         for(short s:data)b.putShort(s);return b.array();
@@ -321,15 +365,25 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
     private void inbound(JsonObject msg){
         if(!msg.has("t"))return;
         switch(msg.get("t").getAsString()){
-            case "audio" -> {
+            case "audio", "audioBatch" -> {
                 try{
                     UUID uuid=UUID.fromString(msg.get("uuid").getAsString());
-                    byte[] pcm=Base64.getDecoder().decode(msg.get("pcm").getAsString());
-                    if(pcm.length!=1920||!bedrock(uuid))return;
+                    if(!bedrock(uuid))return;
                     Settings pref=settings.get(uuid);
                     if(pref!=null&&(pref.muted||pref.adminMuted))return;
-                    boolean whisper=msg.has("whisper")&&msg.get("whisper").getAsBoolean();
-                    if(!audioQueue.offer(new Frame(uuid,pcm,false,whisper)))dropped++;
+                    JsonArray frames=msg.get("t").getAsString().equals("audio")
+                        ?new JsonArray():msg.getAsJsonArray("frames");
+                    if(msg.get("t").getAsString().equals("audio"))frames.add(msg);
+                    if(frames==null||frames.isEmpty()||frames.size()>4)return;
+                    for(var element:frames){
+                        JsonObject item=element.getAsJsonObject();
+                        String b64=item.get("pcm").getAsString();
+                        if(b64.length()!=2560)return;
+                        byte[] pcm=Base64.getDecoder().decode(b64);
+                        if(pcm.length!=1920)return;
+                        boolean whisper=item.has("whisper")&&item.get("whisper").getAsBoolean();
+                        if(!audioQueue.offer(new Frame(uuid,pcm,false,whisper)))dropped++;
+                    }
                 }catch(Exception ignored){dropped++;}
             }
             case "session" -> {
@@ -404,12 +458,13 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
     private final class SocketListener implements WebSocket.Listener {
         private final StringBuilder buffer=new StringBuilder();
         @Override public void onOpen(WebSocket ws){
+            outboundPackets.clear();sendInFlight.set(false);
             socket=ws;ws.request(1);
             if(isEnabled())Bukkit.getScheduler().runTask(CrossVoicePlugin.this,()->snapshot());
         }
         @Override public CompletionStage<?> onText(WebSocket ws,CharSequence data,boolean last){
             synchronized(buffer){
-                if(buffer.length()+data.length()>8192){buffer.setLength(0);ws.request(1);return null;}
+                if(buffer.length()+data.length()>16384){buffer.setLength(0);ws.request(1);return null;}
                 buffer.append(data);
                 if(last){
                     try{inbound(JsonParser.parseString(buffer.toString()).getAsJsonObject());}
@@ -543,6 +598,6 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
         for(UUID uuid:new ArrayList<>(senders.keySet()))closeCodec(uuid);
         for(OpusDecoder decoder:decoders.values())decoder.close();
         for(OpusEncoder encoder:encoders.values())encoder.close();
-        decoders.clear();encoders.clear();senders.clear();settings.clear();forcedOff.clear();webConnected.clear();lastPairing.clear();groups.clear();audioQueue.clear();
+        decoders.clear();encoders.clear();senders.clear();settings.clear();forcedOff.clear();webConnected.clear();lastPairing.clear();groups.clear();audioQueue.clear();outboundPackets.clear();pendingJavaAudio.clear();
     }
 }
