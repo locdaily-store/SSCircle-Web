@@ -168,6 +168,7 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
             item.addProperty("x",p.getLocation().getX());
             item.addProperty("y",p.getLocation().getY());
             item.addProperty("z",p.getLocation().getZ());
+            item.addProperty("yaw",p.getLocation().getYaw());
             item.addProperty("bedrock",bedrock(p.getUniqueId()));
             item.addProperty("muted",s.muted||s.adminMuted);
             item.addProperty("deafened",s.deafened);
