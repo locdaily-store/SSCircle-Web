@@ -51,12 +51,12 @@ export function createGateway(options = config) {
     if(sock?.readyState===WebSocket.OPEN&&sock.bufferedAmount<cfg.maxBuffer)
       sock.send(JSON.stringify(data));else counters.dropped++;
   };
-  const nearby=(a,b)=>{
+  const nearby=(a,b,whisperOverride=false)=>{
     if(!a||!b||a.world!==b.world)return false;
     // No leakage from a private group back to proximity.
     if(a.group||b.group)return !!a.group&&a.group===b.group;
     const dx=a.x-b.x,dy=a.y-b.y,dz=a.z-b.z;
-    const r=a.whisper?cfg.whisperRadius:cfg.radius;
+    const r=a.whisper||whisperOverride?cfg.whisperRadius:cfg.radius;
     return dx*dx+dy*dy+dz*dz<=r*r;
   };
   const publicState=uuid=>{
@@ -115,7 +115,7 @@ export function createGateway(options = config) {
       if(!sender||sender.muted||!checkPCM(msg.pcm,cfg.maxFrame))return;
       for(const [uuid,ws] of clients){
         const recipient=players.get(uuid);
-        if(recipient&&!recipient.deafened&&nearby(sender,recipient))
+        if(recipient&&!recipient.deafened&&nearby(sender,recipient,msg.whisper===true))
           tell(ws,{t:'audio',uuid:msg.uuid,pcm:msg.pcm,
             dx:sender.x-recipient.x,dz:sender.z-recipient.z,yaw:recipient.yaw});
       }
