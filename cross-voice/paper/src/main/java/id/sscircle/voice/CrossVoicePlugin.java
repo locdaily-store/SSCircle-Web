@@ -153,6 +153,7 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
     private void snapshot(){
         if(socket==null)return; // Bukkit main thread: positions only, no audio codec.
         JsonObject packet=new JsonObject();packet.addProperty("t","snapshot");
+        packet.addProperty("voiceReady",voiceReady);
         JsonArray array=new JsonArray();
         int limit=Math.max(2,Math.min(100,getConfig().getInt("audio.max-player-sessions",50)));
         int count=0;
