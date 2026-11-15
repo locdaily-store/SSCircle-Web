@@ -123,6 +123,9 @@ export function createGateway(options = config) {
     }else if(msg.t==='config'){
       const radius=Number(msg.radius);
       if(Number.isFinite(radius)&&radius>=2&&radius<=100)cfg.radius=radius;
+      const whisperRadius=Number(msg.whisperRadius);
+      if(Number.isFinite(whisperRadius)&&whisperRadius>=2&&whisperRadius<=cfg.radius)
+        cfg.whisperRadius=whisperRadius;
       if(typeof msg.groupsAllowed==='boolean')cfg.groupsAllowed=msg.groupsAllowed;
     }else if(msg.t==='kick'&&validUUID(msg.uuid)){
       detachBrowser(msg.uuid,'moderated');
