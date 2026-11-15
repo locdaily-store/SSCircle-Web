@@ -40,7 +40,7 @@ window.SSCircleMemberCenterAdmin = (() => {
     snapshot={items,awards:first?.awards||[],policy:first?.policy||{},total:first?.total||0};
   }
   function switchTab(id){current=id;draw();}
-  function renderTable(parent,rows,actions=false){
+  function renderTable(parent,rows,actions=false,purge=false){
     if(!rows.length){parent.append(empty('Belum ada anggota yang cocok dengan filter.'));return;}
     const list=el('div','member-admin-list');
     for(const m of rows){
@@ -55,6 +55,12 @@ window.SSCircleMemberCenterAdmin = (() => {
       if(m.lastSync)meta.append(el('small','','Sync: '+new Date(m.lastSync).toLocaleString('id-ID')));
       else meta.append(el('small','','Statistik: belum tersedia'));
       card.append(info,meta);
+      if(purge&&m.status==='rejected'){
+        const controls=el('div','member-admin-actions');
+        controls.append(button('Hapus seluruh data anggota',()=>purgeMember(m),
+          'button secondary member-admin-danger'));
+        card.append(controls);
+      }
       if(actions){
         const actions=el('div','member-admin-actions');
         actions.append(button('Verifikasi & kirim kode ke Mail Box',()=>issueInvite(m),'button secondary'),
@@ -77,7 +83,7 @@ window.SSCircleMemberCenterAdmin = (() => {
     const content=el('section','panel member-admin-panel');
     const note=el('p','member-admin-message');note.id='member-admin-message';note.setAttribute('role','status');
     if(current==='roster'){
-      content.append(heading('Daftar anggota','Cari pendaftar berdasarkan nama profil, ID anggota, atau status. Identitas Minecraft akan muncul setelah verifikasi resmi.'));
+      content.append(heading('Daftar anggota','Cari berdasarkan nama, ID, atau status. Untuk membersihkan data pemain yang diban di Paper, ubah status pendaftaran menjadi Ditolak dahulu. Daftar ban Minecraft tidak dihapus.'));
       const tools=el('div','member-admin-filters');
       const input=el('input');input.type='search';input.placeholder='Cari nama atau ID anggota...';input.value=search;input.setAttribute('aria-label','Cari anggota');
       const statuses=el('select');statuses.setAttribute('aria-label','Filter status');
@@ -88,7 +94,7 @@ window.SSCircleMemberCenterAdmin = (() => {
       const list=el('div');
       const drawList=()=>{list.replaceChildren();const q=search.toLowerCase().trim();const rows=snapshot.items.filter(m=>
         (statusFilter==='all'||m.status===statusFilter)&&(!q||memberName(m).toLowerCase().includes(q)||m.id.toLowerCase().includes(q)));
-        renderTable(list,rows);
+        renderTable(list,rows,false,true);
       };
       input.oninput=()=>{search=input.value;drawList();};
       statuses.onchange=()=>{statusFilter=statuses.value;drawList();};
@@ -183,6 +189,38 @@ window.SSCircleMemberCenterAdmin = (() => {
     if(current==='policy'||current==='awards')
       void window.SSCircleCommunityAdmin?.render(current,content,snapshot,message);
   }
+  async function purgeMember(member){
+    if(busy)return;
+    if(member.status!=='rejected'){
+      message('Ubah status anggota menjadi Ditolak melalui pengelolaan pendaftaran terlebih dahulu.',true);
+      return;
+    }
+    busy=true;
+    try{
+      const preview=await api('/api/admin/member-purge?memberId='+encodeURIComponent(member.id));
+      const ok=window.SSCNotice?.confirm
+        ?await window.SSCNotice.confirm(
+          'Hapus permanen data website '+memberName(member)+'? '+
+          preview.linkedAccounts+' akun Minecraft dan '+preview.statsRows+
+          ' baris statistik ikut dihapus. Tindakan ini tidak bisa dibatalkan. Ban Paper tetap berlaku.',
+          {danger:true,confirmText:'Lanjutkan penghapusan'})
+        :window.confirm('Hapus permanen data '+memberName(member)+'?');
+      if(!ok)return;
+      const typed=window.prompt('Ketik tepat "'+preview.confirmation+
+        '" untuk menghapus pendaftaran, skin, sesi, tautan akun dan statistik anggota ini:');
+      if(typed!==preview.confirmation){
+        message('Penghapusan dibatalkan karena konfirmasi tidak cocok.',true);return;
+      }
+      const result=await api('/api/admin/member-purge',{
+        method:'POST',body:JSON.stringify({id:member.id,confirmation:typed,revision:preview.revision})
+      });
+      await refreshData();draw();
+      message('Data '+memberName(member)+' sudah dihapus dari website.'+
+        (result.mediaErrors?' Ada '+result.mediaErrors+' file media R2 yang perlu ditinjau.':''));
+    }catch(error){message(error.message,true);}
+    finally{busy=false;}
+  }
+
   async function issueInvite(member){
     if(member.status!=='accepted')return;
     const confirmed=await window.SSCircleDialog.confirm('Sudah memverifikasi identitas '+memberName(member)+' melalui kontak resmi yang berbeda dari kode pendaftaran? Jika yakin, sistem akan mengirim kode secara otomatis ke Mail Box.');
