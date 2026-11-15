@@ -209,7 +209,7 @@ test('V10.48.3: FastLoginPlus name is detected and duplicate login adapters fail
 });
 test('V10.48.3: stats changes to authSource are not discarded as duplicate snapshots',()=>{
   const stats=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/PaperStatsSync.java',import.meta.url),'utf8');
-  assert.match(stats,/sameSnapshotAndEvidence\(old,id\.authSource\(\),playtime,deaths,mobs,blocks\)/);
+  assert.match(stats,/sameSnapshotAndEvidence\(old,id\.authSource\(\),playtime,deaths,mobs,blocks,worldEpoch\)/);
   assert.match(stats,/old\.authSource\(\)\.equals\(authSource\)/);
   const bridge=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/FastLoginSessionBridge.java',import.meta.url),'utf8');
    assert.match(bridge,/interpretProbe\(Object response\)/);
@@ -337,7 +337,7 @@ test('V10.49.1.1: separate Skin Bridge never bypasses the existing SSCircle logi
 test('V10.49.1.2: Paper Skin Bridge exposes useful HTTP and texture-source diagnostics',()=>{
  const bridge=readFileSync(new URL('../minecraft-skin-bridge-paper/src/main/java/id/sscircle/skin/SSCircleSkinBridge.java',import.meta.url),'utf8');
  const source=readFileSync(new URL('../minecraft-skin-bridge-paper/src/main/java/id/sscircle/skin/SkinPublisher.java',import.meta.url),'utf8');
- assert.match(bridge,/\/ssskin inspect/);
+ assert.match(bridge,/\/ssb check/);
  assert.match(source,/SKINSRESTORER_BELUM_MEMILIKI_SKIN/);
  assert.match(source,/getSkinOfPlayer/);
  assert.match(source,/X-SSC-Signature/);
@@ -357,7 +357,7 @@ test('V10.49.1.3: addon sends PNG only after CDN validation, retries automatic f
  assert.match(source,/LOGIN_BELUM_TERVERIFIKASI.*retry\(uuid,attempt\)/);
  assert.match(source,/imageStored/);
  assert.match(source,/WORKER_BELUM_SUPPORT_SIMPAN_PNG/);
- assert.match(addon,/10\.49\.1\.4/);
+ assert.match(addon,/implements Listener, CommandExecutor, TabCompleter/);
 });
 
 
