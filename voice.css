@@ -27,6 +27,10 @@
 .voice-groups label{display:inline-flex;gap:8px;margin-right:20px;align-items:center}.voice-groups input[type=text]{max-width:280px;display:inline-block;margin-right:10px}
 .voice-heard ul{padding:0;list-style:none;display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
 .voice-heard li{border:1px solid #8aabc133;border-radius:10px;padding:13px;background:#9cb8d008;font-size:14px}
+.voice-background-panel{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 18px;border:1px solid #8aabc144;border-radius:13px;background:#8aabc10b;margin-top:18px}
+.voice-background-panel>div{min-width:0;flex:1}.voice-background-panel strong{font-size:14px}
+.voice-background-panel p{font-size:13px;margin:5px 0 0;opacity:.85;line-height:1.55}
+.voice-background-panel button{flex-shrink:0}
 .voice-mobile-warning{padding:14px;border-radius:10px;background:#f9bf6c19;font-size:13px;margin-top:22px}
 .voice-home-mobile{display:none} .home-nav .is-active{color:var(--primary-color,#78caff)!important}
-@media(max-width:810px){.voice-top{flex-wrap:wrap}.voice-language{margin-left:0;width:100%}.voice-setting-grid{grid-template-columns:1fr}.voice-home-mobile{display:inline-block;margin-left:auto;padding:10px}.voice-page .home-nav,.ssc-voice-page .home-nav{display:none}.voice-pair-row{flex-direction:column}.voice-network{flex-wrap:wrap}.voice-network small{width:100%;margin-left:21px}.voice-room-head{align-items:center}.voice-shell{padding-bottom:50px}}
+@media(max-width:810px){.voice-top{flex-wrap:wrap}.voice-language{margin-left:0;width:100%}.voice-setting-grid{grid-template-columns:1fr}.voice-home-mobile{display:inline-block;margin-left:auto;padding:10px}.voice-page .home-nav,.ssc-voice-page .home-nav{display:none}.voice-pair-row{flex-direction:column}.voice-network{flex-wrap:wrap}.voice-network small{width:100%;margin-left:21px} .voice-room-head{align-items:center}.voice-background-panel{align-items:stretch;flex-direction:column}.voice-background-panel button{width:100%}.voice-shell{padding-bottom:50px}}
