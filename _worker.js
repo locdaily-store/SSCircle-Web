@@ -5972,12 +5972,19 @@ async function route(req, env, ctx) {
     const f = formFrom(await env.DB.prepare('SELECT * FROM form_config WHERE id=1').first());
     delete f.settings.homeVotingVotes;
     delete f.settings.gettingStartedDraft;
-    // Data draft Season Archive hanya untuk admin; ranking lama tetap dapat dipakai di Homepage.
-    // Juga cegah metadata arsip bocor melalui API publik saat halaman dinonaktifkan.
-    f.settings.homeLeaderboardSeasons = (f.settings.homeLeaderboardSeasons || []).map(season =>
-      f.settings.seasonArchiveEnabled === true && season.archivePublished === true
-        ? {...season,archiveAwards:(season.archiveAwards||[]).map(({memberId,...award})=>award)}
-        : {id:season.id,title:season.title,entries:season.entries,archivePublished:false});
+    // Draft archive stories stay private. Publish only the chosen Homepage
+    // leaderboard for unpublished Seasons; never expose their other boards.
+    f.settings.homeLeaderboardSeasons = (f.settings.homeLeaderboardSeasons || []).map(season => {
+      const boards=Array.isArray(season.archiveLeaderboards)?season.archiveLeaderboards:[];
+      const selected=boards.find(board=>board.id===season.homeFeaturedLeaderboardId)||boards[0];
+      const homeFeaturedLeaderboard=selected
+        ?{id:selected.id,title:selected.title,entries:selected.entries}:null;
+      if(f.settings.seasonArchiveEnabled===true&&season.archivePublished===true)
+        return {...season,homeFeaturedLeaderboard,
+          archiveAwards:(season.archiveAwards||[]).map(({memberId,...award})=>award)};
+      return {id:season.id,title:season.title,entries:season.entries,
+        homeFeaturedLeaderboard,archivePublished:false};
+    });
     return J(f);
   }
   if (path === '/api/registration-cooldown' && method === 'GET') {
