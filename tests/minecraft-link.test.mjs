@@ -360,6 +360,36 @@ test('V10.47.2: season starts at a fresh baseline and world resets never erase a
  assert.equal(profile.accountStatistics.find(s=>s.seasonId===oldKey).seasonTitle,'Season Pertama');
  assert.equal(profile.accountStatistics.find(s=>s.seasonId===profile.activeStatSeason).seasonTitle,'Season Kedua');
 });
+test('World restore resets baseline without counting backed-up stats twice',async()=>{
+ const x=fixture(),cookie=await x.active();
+ const token=(await x.call('/api/player/minecraft/link/create',{method:'POST',cookie,data:{}})).json.code;
+ assert.equal((await x.claim(payload(token))).status,200);
+ assert.equal((await x.call('/api/player/minecraft/link/confirm',{method:'POST',cookie,data:{}})).status,200);
+ const seasonStart=new Date(Date.now()-1000).toISOString();
+ x.db.prepare('UPDATE form_config SET settings=? WHERE id=1').run(JSON.stringify({
+   statSeasonId:'season-1',statSeasonActivatedAt:seasonStart,
+   homeLeaderboardSeasons:[{id:'season-1',title:'Season 1'}]}));
+ const epochOne='11111111-1111-4111-8111-111111111111:season1';
+ const epochTwo='11111111-1111-4111-8111-111111111111:restored2';
+ let offset=0;
+ const emit=(worldEpoch,playtimeSeconds)=>deliverStats(x,{
+   ...statsPayload(),worldEpoch,
+   capturedAt:new Date(Date.now()+offset++*1000).toISOString(),
+   stats:{playtimeSeconds,deaths:1,mobKills:2,blocksMined:4}});
+ assert.equal((await emit(epochOne,100)).status,200);
+ assert.equal((await emit(epochOne,140)).status,200);
+ let profile=(await x.call('/api/player/profile',{cookie})).json;
+ const key='season:season-1:'+seasonStart;
+ assert.equal(profile.accountStatistics.find(a=>a.seasonId===key).playtimeSeconds,40);
+ assert.equal((await emit(epochTwo,5000)).status,200);
+ profile=(await x.call('/api/player/profile',{cookie})).json;
+ assert.equal(profile.accountStatistics.find(a=>a.seasonId===key).playtimeSeconds,40,
+   'Restored world raw stats are used only as a fresh baseline');
+ assert.equal((await emit(epochTwo,5020)).status,200);
+ profile=(await x.call('/api/player/profile',{cookie})).json;
+ assert.equal(profile.accountStatistics.find(a=>a.seasonId===key).playtimeSeconds,60);
+});
+
 test('V10.47.2: out-of-order season snapshots are ignored rather than decreasing totals',async()=>{
  const x=fixture(),cookie=await x.active();
  const code=(await x.call('/api/player/minecraft/link/create',{method:'POST',cookie,data:{}})).json.code;

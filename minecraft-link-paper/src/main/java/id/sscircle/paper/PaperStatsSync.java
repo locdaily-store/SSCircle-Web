@@ -164,6 +164,8 @@ final class PaperStatsSync implements Listener {
     }
 
     void triggerNow(){
+        // Re-send unchanged counters: a new Season needs its first baseline.
+        latestSample.clear();
         captureOnline();
         sendNext();
     }
@@ -171,6 +173,7 @@ final class PaperStatsSync implements Listener {
     int pendingCount(){return pending.size();}
     int captureBacklogCount(){return playersToSample.size()+(activeJob==null?0:1);}
     String deliveryCode(){
+        if(!enabled())return "STATS_DISABLED";
         if(queueLocked||queueQuarantined||diskError.get())return "QUEUE_STORAGE_ERROR";
         return queueFull?"QUEUE_FULL":deliveryCode;
     }
@@ -331,10 +334,11 @@ final class PaperStatsSync implements Listener {
         Snapshot old=latestSample.get(key);
         // AuthMe may finish before FastLoginPlus publishes its verified
         // session status. Send new evidence even if every stat is unchanged.
-        if(sameSnapshotAndEvidence(old,id.authSource(),playtime,deaths,mobs,blocks))return;
+        String worldEpoch=currentWorldEpoch();
+        if(sameSnapshotAndEvidence(old,id.authSource(),playtime,deaths,mobs,blocks,worldEpoch))return;
         Snapshot snapshot=new Snapshot(UUID.randomUUID().toString(),id.provider(),
             id.verifiedId(),id.authSource(),Instant.now().toString(),
-            playtime,deaths,mobs,blocks);
+            playtime,deaths,mobs,blocks,worldEpoch);
         if(!canQueue(pending,key)){
             queueFull=true;
             deliveryCode="QUEUE_FULL";
@@ -356,9 +360,25 @@ final class PaperStatsSync implements Listener {
 
     static boolean sameSnapshotAndEvidence(Snapshot old,String authSource,
                                            int playtime,int deaths,int mobs,int blocks){
+        return sameSnapshotAndEvidence(old,authSource,playtime,deaths,mobs,blocks,
+            old==null?"":old.worldEpoch());
+    }
+    static boolean sameSnapshotAndEvidence(Snapshot old,String authSource,
+                                           int playtime,int deaths,int mobs,int blocks,String worldEpoch){
         return old!=null&&old.authSource().equals(authSource)
             &&old.playtimeSeconds()==playtime&&old.deaths()==deaths
-            &&old.mobKills()==mobs&&old.blocksMined()==blocks;
+            &&old.mobKills()==mobs&&old.blocksMined()==blocks
+            &&old.worldEpoch().equals(worldEpoch);
+    }
+    // World UUID survives restarts, changes when a new world is generated.
+    // On restoring an old uid.dat, increment stats-sync.world-generation manually.
+    private String currentWorldEpoch(){
+        String generation=plugin.getConfig().getString("stats-sync.world-generation","default");
+        if(generation==null||!generation.matches("[A-Za-z0-9_-]{1,32}"))
+            generation="default";
+        UUID world=Bukkit.getWorlds().isEmpty()
+            ?new UUID(0,0):Bukkit.getWorlds().get(0).getUID();
+        return world+":"+generation;
     }
 
     private void sendNext(){
@@ -576,30 +596,39 @@ final class PaperStatsSync implements Listener {
     }
 
     record Snapshot(String eventId,String provider,String providerId,String authSource,
-                    String capturedAt,int playtimeSeconds,int deaths,int mobKills,int blocksMined){
+                    String capturedAt,int playtimeSeconds,int deaths,int mobKills,int blocksMined,
+                    String worldEpoch){
+        Snapshot(String eventId,String provider,String providerId,String authSource,
+                 String capturedAt,int playtimeSeconds,int deaths,int mobKills,int blocksMined){
+            this(eventId,provider,providerId,authSource,capturedAt,
+                playtimeSeconds,deaths,mobKills,blocksMined,"");
+        }
         String toJson(){
             return "{\"eventId\":\""+eventId+"\",\"provider\":\""+provider
                 +"\",\"providerId\":\""+providerId+"\",\"authSource\":\""+authSource
-                +"\",\"capturedAt\":\""+capturedAt+"\",\"stats\":{"
+                +"\",\"capturedAt\":\""+capturedAt+"\",\"worldEpoch\":\""+worldEpoch+"\",\"stats\":{"
                 +"\"playtimeSeconds\":"+playtimeSeconds+",\"deaths\":"+deaths
                 +",\"mobKills\":"+mobKills+",\"blocksMined\":"+blocksMined+"}}";
         }
         String toStorage(){
             return String.join("|",eventId,provider,providerId,authSource,capturedAt,
                 Integer.toString(playtimeSeconds),Integer.toString(deaths),
-                Integer.toString(mobKills),Integer.toString(blocksMined));
+                Integer.toString(mobKills),Integer.toString(blocksMined),worldEpoch);
         }
         static Snapshot fromStorage(String text){
             try{
                 String[] p=text.split("\\|",-1);
-                if(p.length!=9||p[2].length()>64||p[3].length()>32)return null;
+                if((p.length!=9&&p.length!=10)||p[2].length()>64||p[3].length()>32)return null;
+                if(p.length==10&&!p[9].isEmpty()&&
+                    !p[9].matches("[0-9a-f-]{36}:[A-Za-z0-9_-]{1,32}"))return null;
                 UUID.fromString(p[0]);
                 if(!List.of("java_premium","java_offline","bedrock").contains(p[1]))return null;
                 Instant.parse(p[4]);
                 int play=Integer.parseInt(p[5]),death=Integer.parseInt(p[6]),
                     mobs=Integer.parseInt(p[7]),blocks=Integer.parseInt(p[8]);
                 if(play<0||death<0||mobs<0||blocks<0)return null;
-                return new Snapshot(p[0],p[1],p[2],p[3],p[4],play,death,mobs,blocks);
+                return new Snapshot(p[0],p[1],p[2],p[3],p[4],play,death,mobs,blocks,
+                    p.length==10?p[9]:"");
             }catch(Exception ignored){return null;}
         }
     }

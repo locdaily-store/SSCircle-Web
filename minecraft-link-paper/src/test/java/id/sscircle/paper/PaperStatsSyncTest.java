@@ -16,6 +16,23 @@ class PaperStatsSyncTest {
         assertTrue(snap.toJson().contains("\"authSource\":\"authme-session\""));
     }
 
+    @Test void worldEpochRoundTripAndLegacyQueueCompatibility() {
+        String epoch="11111111-1111-4111-8111-111111111111:season7";
+        var current=new PaperStatsSync.Snapshot(UUID.randomUUID().toString(),
+            "bedrock","12345678901234567","floodgate-xuid",
+            "2026-11-15T10:00:00Z",45,1,3,7,epoch);
+        assertEquals(epoch,PaperStatsSync.Snapshot.fromStorage(current.toStorage()).worldEpoch());
+        assertTrue(current.toJson().contains("worldEpoch"));
+        assertFalse(PaperStatsSync.sameSnapshotAndEvidence(current,"floodgate-xuid",45,1,3,7,
+            "22222222-2222-4222-8222-222222222222:season7"));
+        assertNotNull(PaperStatsSync.Snapshot.fromStorage(
+            new PaperStatsSync.Snapshot(UUID.randomUUID().toString(),
+                "bedrock","12345678901234567","floodgate-xuid",
+                "2026-11-15T10:00:00Z",45,1,3,7).toStorage().replaceFirst("\\|$","")));
+        String oldQueue=current.toStorage().substring(0,current.toStorage().lastIndexOf('|'));
+        assertEquals("",PaperStatsSync.Snapshot.fromStorage(oldQueue).worldEpoch());
+    }
+
     @Test void rejectsInvalidOrNegativeQueuedStatistics() {
         assertNull(PaperStatsSync.Snapshot.fromStorage(""));
         assertNull(PaperStatsSync.Snapshot.fromStorage("invalid"));
