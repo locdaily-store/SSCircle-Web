@@ -525,9 +525,19 @@
       const heading = document.createElement('h3');
       heading.textContent = season.title;
       slide.append(heading);
+      const boards = Array.isArray(season.archiveLeaderboards) ? season.archiveLeaderboards : [];
+      const selectedBoard = boards.find(board => board.id === season.homeFeaturedLeaderboardId)
+        || boards[0] || null;
+      if (selectedBoard) {
+        const subtitle = document.createElement('p');
+        subtitle.className = 'home-leaderboard-category';
+        subtitle.textContent = selectedBoard.title || 'Leaderboard Season';
+        slide.append(subtitle);
+      }
       const list = document.createElement('ol');
       list.className = 'home-leaderboard-list';
-      const entries = (Array.isArray(season.entries) ? season.entries : []).filter(entry => entry && (entry.name || entry.score));
+      const rows = selectedBoard ? selectedBoard.entries : season.entries;
+      const entries = (Array.isArray(rows) ? rows : []).filter(entry => entry && (entry.name || entry.score));
       if (!entries.length) {
         const li = document.createElement('li');
         li.className = 'home-leaderboard-item';
