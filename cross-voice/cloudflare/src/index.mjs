@@ -207,7 +207,7 @@ export class VoiceRoom extends DurableObject {
     const count=current&&current.expires>clock?current.attempts+1:1;
     this.sql.exec('INSERT INTO voice_limits (ip_hash,attempts,expires) VALUES (?,?,?) ON CONFLICT(ip_hash) DO UPDATE SET attempts=excluded.attempts,expires=excluded.expires',
       id,count,current&&current.expires>clock?current.expires:clock+60000);
-    return count<=8;
+    return count<=12; // per-IP/minute; shared NAT users still have breathing room
   }
   async consumeBody(req){
     if(Number(req.headers.get('Content-Length')||0)>512)return null;
