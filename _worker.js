@@ -6200,8 +6200,8 @@ async function route(req, env, ctx) {
       const now=new Date().toISOString();
       const active=settings.statSeasonId||'';
       if(action==='schedule'){
-        if(season.archiveStatus!=='planned'&&season.archiveStatus!=='ended'||
-          season.archiveFinalizedAt)return bad('Hanya draft Season baru yang boleh dijadwalkan.',409);
+        if(season.archiveStatus!=='planned'||season.archiveFinalizedAt)
+          return bad('Hanya draft Season baru yang boleh dijadwalkan.',409);
         const start=typeof input.scheduledAt==='string'?input.scheduledAt:'';
         if(!start||!Number.isFinite(Date.parse(start))||
           new Date(start).toISOString()!==start||Date.parse(start)<=Date.now())
