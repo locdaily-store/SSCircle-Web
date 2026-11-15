@@ -218,9 +218,10 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
         String code=pairingCode();
         JsonObject msg=new JsonObject();msg.addProperty("t","code");
         msg.addProperty("code",code);msg.addProperty("uuid",player.getUniqueId().toString());
-        msg.addProperty("expires",System.currentTimeMillis()+120000);
+        int ttl=Math.max(30,Math.min(180,getConfig().getInt("security.pairing-expiry-seconds",120)));
+        msg.addProperty("expires",clock+ttl*1000L);
         send(msg);
-        tell(sender,"Kode SSCircle Voice: §e"+code+"§f (berlaku 2 menit, sekali pakai).");
+        tell(sender,"Kode SSCircle Voice: §e"+code+"§f (berlaku "+ttl+" detik, sekali pakai).");
         tell(sender,"Buka halaman SSCircle Voice pada browser, masukkan kode, lalu aktifkan mikrofon.");
     }
     @EventHandler public void quit(PlayerQuitEvent e){
