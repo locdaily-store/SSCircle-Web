@@ -14,7 +14,7 @@ const t={
    micDenied:'Izin mikrofon ditolak. Periksa izin browser dan aktifkan melalui tombol mikrofon.',
    audioUnavailable:'Browser tidak mendukung AudioWorklet. Gunakan browser lebih baru.',
    invalid:'Kode salah, kedaluwarsa, atau sudah pernah dipakai.',
-   noConfig:'Alamat gateway belum diatur. Admin harus mengedit voice-config.js.',
+   noConfig:'Gateway Voice belum dikonfigurasi. Periksa VOICE_PUBLIC_URL di Cloudflare Pages dan deploy ulang website.',
    noNearby:'Tidak ada pemain dalam jangkauan.',group:'Gabung grup'},
  en:{start:'Enable microphone',stop:'Disable microphone',status:'Checking server...',
    offline:'Voice gateway offline. Check the voice server.',ready:'Gateway online',
@@ -23,7 +23,7 @@ const t={
    micDenied:'Microphone permission denied. Review browser permissions and enable it manually.',
    audioUnavailable:'AudioWorklet is unsupported. Please use a current browser.',
    invalid:'Pairing code invalid, expired, or already used.',
-   noConfig:'Voice gateway is not configured. Admin must edit voice-config.js.',
+   noConfig:'Voice gateway is not configured. Check the VOICE_PUBLIC_URL Cloudflare Pages variable and redeploy.',
    noNearby:'No players within hearing range.',group:'Join group'}
 };
 let lang='id',token='',socket=null,me=null,latest=null,ctx=null,stream=null,worklet=null,
