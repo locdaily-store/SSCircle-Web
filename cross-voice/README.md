@@ -1,42 +1,35 @@
-# SSCircle Cross Voice
+# SSCircle Cross Voice — Cloudflare Edition
 
-**Status: PR Draft / belum teruji di server nyata.** Sistem ini dibuat dari awal dan tidak mengubah PR Season #73.
+**PR #74 (Draft). Belum diuji di server Minecraft sungguhan.** Sistem lintas platform untuk Java ↔ Bedrock dan Bedrock ↔ Bedrock menggunakan Simple Voice Chat API, Floodgate, website mikrofon, dan **Cloudflare Worker + Durable Object** sebagai gateway tanpa VPS.
 
-## Komponen
-- `paper/`: SSCircleCrossVoice.jar, integrasi resmi Simple Voice Chat API 2.6.25, Floodgate API, Java 25/Paper 26.3.
-- `gateway/`: server Node.js WebSocket yang hidup terus (bukan Cloudflare Pages), autentikasi pairing sekali pakai, relay audio PCM 48 kHz 16-bit mono per 20 ms dan sesi 15 menit.
-- Aset root `voice.html`, `voice.js`, `voice.css`, `voice-worklet.js`, `voice-config.js`: SSCircle Voice responsif dengan header/footer yang sama seperti halaman lain.
+## Struktur
 
-## Alur audio
-1. **Java→Java**: Simple Voice Chat mengirim paket sendiri; SSCircle tidak menggandakan audio ini.
-2. **Java→Bedrock**: server menerima MicrophonePacketEvent berisi Opus, codec official API mengubahnya menjadi PCM dan mengirim frame melalui WSS gateway ke browser Bedrock dalam world/jarak yang sama.
-3. **Bedrock→Java**: AudioWorklet di browser mengirim PCM ke gateway. Plugin menerima PCM, mengkodekannya ke Opus menggunakan Simple Voice Chat API lalu menyalurkannya lewat AudioSender atas identitas Floodgate player.
-4. **Bedrock→Bedrock**: Gateway meneruskan PCM dalam world/jarak yang sama secara langsung. Ini mencegah duplikasi akibat pengiriman ulang dari audio sender.
-5. **Whisper**: jarak lebih pendek dan flag whisper AudioSender.
-6. **Group**: kelompok Simple Voice Chat dibagikan berdasarkan ID group, bukan nama. Group berpassword tidak boleh dimasuki lewat jalur browser.
+- paper/: source SSCircleCrossVoice.jar Paper 26.3 / Java 25 / Simple Voice Chat API resmi.
+- cloudflare/: gateway utama Cloudflare Durable Object berbasis SQLite, protokol audio WebSocket dan pengujian Wrangler lokal.
+- gateway/: gateway Node.js lama, **opsional** jika ingin self-hosting; bukan prasyarat Cloudflare Edition.
+- File voice.html, voice.js, voice-worklet.js, voice.css di root: UI Voice SSCircle.
+- INSTALL-ID.md: panduan instalasi Cloudflare tanpa VPS.
+- PLAYER-GUIDE-ID.md dan TROUBLESHOOTING-ID.md: bantuan pengguna.
 
-Seluruh data posisi dan identitas pemain berasal dari plugin Paper. Browser tidak dapat mengaku sebagai UUID orang lain lewat username. Tidak ada rekaman suara yang disimpan.
+## Audio
 
-## Command Minecraft
-Pemain Bedrock: `/voice link`, `/voice status`, `/voice mute`, `/voice unmute`, `/voice deafen`, `/voice undeafen`, `/voice whisper`, `/voice normal`, `/voice volume <0..200>`, `/voice group <nama|leave>`, `/voice disconnect`.
+- Java→Java menggunakan Simple Voice Chat native.
+- Java→Bedrock: event mikrofon Opus SVC didekode oleh API resmi pada worker audio Paper → PCM → Durable Object → browser.
+- Bedrock→Java: browser AudioWorklet → PCM → Durable Object → plugin Paper → Opus via AudioSender API resmi.
+- Bedrock→Bedrock: relay langsung di DO berdasarkan world/jarak/grup/deafen, tanpa duplikasi dari Paper.
+- Audio PCM 48kHz mono 16-bit dibatch dalam tiga frame per 60ms. Ini mengurangi message count, belum menggunakan kompresi Opus pada browser; konsumsi bandwidth dapat besar saat ramai.
+- No recording. Durable Object menyimpan hanya hash kode pairing/token yang terbatas waktu dalam SQLite, tidak menyimpan suara.
 
-Admin: `/scvoice status`, `/scvoice inspect <pemain>`, `/scvoice mute <pemain>`, `/scvoice unmute <pemain>`, `/scvoice kick <pemain>`, `/scvoice distance <2..100>`, `/scvoice groups on|off`, `/scvoice reload`.
+## Penggunaan dan keamanan
 
-Permission: `sscircle.voice.use`, `sscircle.voice.group`, `sscircle.voice.admin`, `sscircle.voice.admin.mute`, `sscircle.voice.admin.disconnect`, `sscircle.voice.admin.reload`, `sscircle.voice.admin.configure`.
+Bedrock mengetik /voice link → kode satu kali kedaluwarsa → browser pairing → token sesi → ticket WSS sekali pakai. Token dan kode tidak disimpan browser localStorage; gateway mengikat sesi pada UUID yang divalidasi oleh plugin Paper.
 
-## Konfigurasi frontend
+Perintah pemain: /voice link, status, mute, unmute, deafen, undeafen, whisper, normal, volume, group, disconnect. Admin: /scvoice status, inspect, mute, unmute, kick, distance, groups, reload.
 
-Atur `VOICE_PUBLIC_URL=https://voice.domain-saya.com` pada Cloudflare Pages
-(Production dan Preview terpisah). `_worker.js` menghasilkan konfigurasi publik
-secara otomatis dan hanya halaman Voice yang memperoleh izin mikrofon serta
-CSP WebSocket gateway. Tidak perlu menyimpan secret dalam frontend.
+## Pengujian dan keterbatasan
 
-## Pengujian
-- Node.js: `cd cross-voice/gateway && npm install && npm test`.
-- Gradle: `gradle -p cross-voice/paper clean build` (Java 25, Paper 26.3 API asli, Simple Voice Chat API asli). JAR hanya dianggap valid jika berhasil pada GitHub Actions dan uji server.
-- Website: perlu HTTPS dan izin mikrofon browser. Perlu uji desktop, Android dan iOS.
-- Uji langsung Java/Bedrock dan stabilitas 20–50 pemain **BELUM** selesai.
+GitHub Actions mengompilasi Paper JAR menggunakan dependency asli, mengetes gateway Node lama, CSP halaman Cloudflare Pages, dan **menjalankan Wrangler Durable Object lokal + tes pairing/audio WebSocket**. JAR dan ZIP baru dipaketkan setelah semua job berhasil.
 
-**Pengingat kompatibilitas:** daftar resmi Simple Voice Chat plugin server yang diperiksa saat pengembangan belum memuat Paper 26.3. Mod client 26.3 didukung, tetapi itu bukan bukti plugin server sudah mendukung Paper 26.3. Pastikan sebelum produksi: https://modrepo.de/minecraft/voicechat/wiki/supported_versions
+Masih perlu uji pada client Minecraft sesungguhnya, Paper 26.3 + plugin SVC server asli, browser Android/iOS background, dan beban 20–50 pengguna. Cloudflare Worker Free mungkin tidak cukup untuk traffic voice ramai. Jangan merge/deploy produksi sebelum uji staging selesai.
 
-Baca `INSTALL-ID.md`, `PLAYER-GUIDE-ID.md`, dan `TROUBLESHOOTING-ID.md`.
+Mulai dari INSTALL-ID.md.
