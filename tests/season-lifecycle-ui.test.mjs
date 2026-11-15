@@ -41,3 +41,29 @@ test('Season Lifecycle CSS is shared and provides narrow-screen controls',()=>{
  assert.match(css,/\.season-timeline-entry/);
  assert.match(css,/\.season-lifecycle-actions/);
 });
+
+test('Season editor manages multiple titled boards without duplicating the legacy leaderboard editor',()=>{
+ const editor=read('seasons-admin.js'),publicPage=read('seasons.js');
+ assert.match(editor,/\+ Tambah leaderboard/);
+ assert.match(editor,/Judul leaderboard/);
+ assert.match(editor,/Maksimal 8 leaderboard per Season/);
+ assert.match(editor,/archiveLeaderboards/);
+ assert.match(editor,/syncPrimary\(\)/);
+ assert.doesNotMatch(editor,/Leaderboard season \(\$\{season\.entries\.length\}\/20\)/);
+ assert.match(publicPage,/season-archive-leaderboard-grid/);
+ assert.match(publicPage,/board\.title/);
+ assert.match(publicPage,/Array\.isArray\(season\.archiveLeaderboards\)/);
+});
+
+test('Season award recipient search accepts member names, Minecraft username and full IDs',()=>{
+ const editor=read('seasons-admin.js'),css=read('season-lifecycle.css');
+ assert.match(editor,/season-member-search/);
+ assert.match(editor,/Cari nama pemain, username Minecraft atau ID anggota/);
+ assert.match(editor,/\/api\/admin\/member-center\?offset=/);
+ assert.match(editor,/\/api\/admin\/minecraft\/links/);
+ assert.match(editor,/searchable\.includes\(q\)/);
+ assert.match(editor,/item\.memberId=member\.id/);
+ assert.match(editor,/Lepas tautan anggota/);
+ assert.match(css,/\.season-member-results\[hidden\]/);
+ assert.match(css,/\.season-admin-leaderboards/);
+});
