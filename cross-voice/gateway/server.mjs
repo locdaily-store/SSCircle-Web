@@ -73,7 +73,11 @@ export function createGateway(options = config) {
   };
   function detachBrowser(uuid,reason='disconnected'){
     const current=clients.get(uuid);
-    if(current){clients.delete(uuid);try{current.close(4001,reason);}catch{}}
+    if(current){
+      clients.delete(uuid);
+      tell(bridge,{t:'session',uuid,connected:false});
+      try{current.close(4001,reason);}catch{}
+    }
   }
   function detachBridge(){
     const old=bridge;bridge=null;svcReady=false;lastSnapshotAt=0;
@@ -222,6 +226,7 @@ export function createGateway(options = config) {
         tell(ws,{t:'hello',generation});
       }else{
         detachBrowser(uuid,'reconnected');clients.set(uuid,ws);
+        tell(bridge,{t:'session',uuid,connected:true});
         tell(ws,publicState(uuid));
         const expiry=setTimeout(()=>ws.close(4001,'session expired'),Math.max(1,sessionExpiry-now()));
         expiry.unref();ws.on('close',()=>clearTimeout(expiry));
@@ -250,7 +255,11 @@ export function createGateway(options = config) {
               value:typeof msg.value==='string'?msg.value.slice(0,48):String(msg.value||'')});
           }
         });
-        ws.on('close',()=>{if(clients.get(uuid)===ws)clients.delete(uuid);});
+        ws.on('close',()=>{
+          if(clients.get(uuid)===ws){
+            clients.delete(uuid);tell(bridge,{t:'session',uuid,connected:false});
+          }
+        });
       }
     });
   });
