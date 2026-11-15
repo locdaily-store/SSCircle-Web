@@ -98,6 +98,20 @@ test('metadata season draft tidak dikirim ke API publik, tetapi ranking lama tet
   assert.equal(adminData.data.settings.homeLeaderboardSeasons[0].archiveSummary,'Rencana internal belum diumumkan.');
 });
 
+test('Season Archive accepts more than the old fixed 12-season cap',async()=>{
+  const t=fixture();
+  const result=await save(t,s=>{
+    s.homeLeaderboardSeasons=Array.from({length:30},(_,i)=>({
+      id:'season-'+(i+1),title:'Season '+(i+1),entries:[],
+      archiveStatus:'planned',archivePublished:false
+    }));
+  });
+  assert.equal(result.status,200,JSON.stringify(result.data));
+  const returned=(await t.req('/api/admin/form',{admin:true})).data.settings.homeLeaderboardSeasons;
+  assert.equal(returned.length,30);
+  assert.equal(returned[29].title,'Season 30');
+});
+
 test('backend menolak data season tidak valid, foto berbahaya, tanggal terbalik',async()=>{
   for(const mutate of [
     s=>{s.homeLeaderboardSeasons[0].archiveCover='javascript:alert(1)';},
