@@ -198,8 +198,10 @@ window.fetch=async url => {
   })''')
   assert layout['scroll']<=layout['width']+2,('Member Control overflow',w,layout)
   assert layout['memberCount']>=1,('Member list missing',w,layout)
-  page.locator('.member-admin-tab').nth(4).click()
-  assert page.locator('.member-admin-switch').count()==5,('Member policy options missing',w)
+  policy_tab=page.locator('.member-admin-tab').filter(has_text='Profile Settings')
+  policy_tab.click()
+  page.locator('.member-admin-policy .member-admin-switch').first.wait_for(state='attached',timeout=5000)
+  assert page.locator('.member-admin-policy .member-admin-switch').count()==5,('Member policy options missing',w)
 
   if w<=390:
     page.locator('#admin-nav-toggle').click()
