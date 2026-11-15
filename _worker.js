@@ -894,8 +894,8 @@ async function seasonClosingPreview(env,seasonId,activatedAt){
 function seasonTimelineEvent(season,kind,title,now){
   const timeline=Array.isArray(season.archiveTimeline)?season.archiveTimeline:[];
   if(timeline.some(entry=>entry.kind===kind))return;
-  // Keep the 24-item limit while preserving all existing manual milestones.
-  if(timeline.length>=24)return;
+  // Never silently omit the closing/opening record if the timeline is full.
+  if(timeline.length>=24)throw Error('Maksimal 24 milestone. Hapus satu milestone sebelum memulai atau menutup Season.');
   timeline.push({id:'lifecycle-'+kind+'-'+season.id,date:now.slice(0,10),
     title,description:'',kind});
   season.archiveTimeline=timeline;
@@ -6187,7 +6187,7 @@ async function route(req, env, ctx) {
         return bad('Terlalu banyak perubahan Season. Coba lagi nanti.',429);
       const input=await body(req,2400);
       const id=s(input.seasonId,64),action=s(input.action,24);
-      if(!['prepare','end','start','schedule'].includes(action))
+      if(!['prepare','end','start','schedule','archiveLegacy'].includes(action))
         return bad('Aksi Season tidak valid.',400);
       if(typeof input.revision!=='string'||input.revision.length>100)
         return bad('Muat ulang pengaturan Season.',428);
@@ -6208,6 +6208,18 @@ async function route(req, env, ctx) {
           return bad('Pilih waktu pembukaan Season di masa depan.',400);
         season.archiveStatus='planned';
         season.archiveScheduledAt=start;
+      }
+      if(action==='archiveLegacy'){
+        if(input.confirmation!=='ARCHIVE SEASON')
+          return bad('Konfirmasi pengarsipan Season tidak sesuai.',400);
+        if(season.archiveStatus!=='active'||active===id||season.archiveFinalizedAt)
+          return bad('Pengarsipan tanpa snapshot hanya berlaku untuk Season lama tanpa statistik aktif.',409);
+        season.archiveStatus='ended';
+        season.archiveEndDate=now.slice(0,10);
+        season.archiveFinalizedAt=now;
+        season.archiveSnapshot=null;
+        season.archivePublished=input.publish===true||season.archivePublished===true;
+        seasonTimelineEvent(season,'closing','Season diarsipkan tanpa snapshot statistik',now);
       }
       if(action==='start'){
         if(input.confirmation!=='START SEASON')
