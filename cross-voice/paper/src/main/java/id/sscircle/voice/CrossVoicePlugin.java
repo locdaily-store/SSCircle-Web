@@ -55,6 +55,7 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
     private final SecureRandom random=new SecureRandom();
     private final Map<UUID,Settings> settings=new ConcurrentHashMap<>();
     private final Set<UUID> forcedOff=ConcurrentHashMap.newKeySet();
+    private final Map<UUID,Long> lastPairing= new ConcurrentHashMap<>();
     private final Map<String,Group> groups=new HashMap<>();
     private ArrayBlockingQueue<Frame> audioQueue=new ArrayBlockingQueue<>(256);
     private final AtomicBoolean running=new AtomicBoolean(false);
@@ -204,6 +205,12 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
         if(!(sender instanceof Player player)){tell(sender,"Gunakan perintah ini di Minecraft.");return;}
         if(!bedrock(player.getUniqueId())){tell(sender,"Java cukup memakai mod Simple Voice Chat.");return;}
         if(socket==null||!voiceReady){tell(sender,"Gateway atau Simple Voice Chat belum siap. Coba lagi.");return;}
+        long clock=System.currentTimeMillis();
+        Long previous=lastPairing.get(player.getUniqueId());
+        if(previous!=null&&clock-previous<10000L){
+            tell(sender,"Tunggu 10 detik sebelum meminta kode pairing baru.");return;
+        }
+        lastPairing.put(player.getUniqueId(),clock);
         String code=pairingCode();
         JsonObject msg=new JsonObject();msg.addProperty("t","code");
         msg.addProperty("code",code);msg.addProperty("uuid",player.getUniqueId().toString());
@@ -214,7 +221,7 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
     }
     @EventHandler public void quit(PlayerQuitEvent e){
         UUID id=e.getPlayer().getUniqueId();
-        settings.remove(id);forcedOff.remove(id);
+        settings.remove(id);forcedOff.remove(id);lastPairing.remove(id);
         JsonObject m=new JsonObject();m.addProperty("t","kick");m.addProperty("uuid",id.toString());send(m);
         // The audio worker owns all codec instances.
         audioWorker.submit(()->closeCodec(id));
@@ -234,6 +241,13 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
             });
             events.registerEvent(VoicechatServerStoppedEvent.class,event->{
                 voiceReady=false;voice=null;
+                // A restarted SVC server invalidates codec history and senders.
+                if(audioWorker!=null)audioWorker.submit(()->{
+                    for(UUID uuid:new ArrayList<>(senders.keySet()))closeCodec(uuid);
+                    for(OpusDecoder d:decoders.values())d.close();
+                    for(OpusEncoder e:encoders.values())e.close();
+                    decoders.clear();encoders.clear();senders.clear();
+                });
             });
             events.registerEvent(MicrophonePacketEvent.class,event->{
                 if(event.getSenderConnection()==null||!running.get())return;
@@ -433,7 +447,15 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
             }
             if((action.equals("distance")||action.equals("groups")||action.equals("reload"))&&
                 sender.hasPermission(action.equals("reload")?"sscircle.voice.admin.reload":"sscircle.voice.admin.configure")){
-                if(action.equals("reload")){reloadConfig();if(loadSettings())tell(sender,"Pengaturan dimuat ulang.");else tell(sender,"Konfigurasi gateway salah. Periksa file.");}
+                if(action.equals("reload")){
+                    reloadConfig();
+                    if(loadSettings()){
+                        WebSocket old=socket;socket=null;connecting=false;
+                        if(old!=null)old.abort();
+                        connect();
+                        tell(sender,"Konfigurasi dimuat ulang; gateway sedang dihubungkan kembali.");
+                    }else tell(sender,"Konfigurasi gateway salah. Periksa file.");
+                }
                 if(action.equals("distance")&&args.length>=2)try{
                     distance=(float)Math.max(2,Math.min(100,Double.parseDouble(args[1])));
                     tell(sender,"Jarak Cross Voice diatur: "+distance);
@@ -504,6 +526,6 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
         for(UUID uuid:new ArrayList<>(senders.keySet()))closeCodec(uuid);
         for(OpusDecoder decoder:decoders.values())decoder.close();
         for(OpusEncoder encoder:encoders.values())encoder.close();
-        decoders.clear();encoders.clear();senders.clear();settings.clear();forcedOff.clear();groups.clear();audioQueue.clear();
+        decoders.clear();encoders.clear();senders.clear();settings.clear();forcedOff.clear();lastPairing.clear();groups.clear();audioQueue.clear();
     }
 }
