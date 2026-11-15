@@ -16,7 +16,7 @@ ASSET_EXT = ROOT_EXT | {'.ogg', '.ttf', '.otf', '.avif', '.wasm'}
 EXTRA_ROOT = {'_headers', '_redirects', '_version.txt', 'robots.txt', 'favicon.ico'}
 EXCLUDED_DIRS = {'.github', 'docs', 'scripts', 'tests', 'migrations', '.vscode',
                  'minecraft-link-velocity', 'minecraft-link-paper',
-                 'minecraft-skin-bridge-paper', 'dev'}
+                 'minecraft-skin-bridge-paper', 'dev', 'cloudflare'}
 EXCLUDED_ROOT = {'.gitignore', '.gitattributes', 'README.md', 'CONTRIBUTING.md',
                  'SECURITY.md', 'PANDUAN-GITHUB.md', 'rules-defaults.json',
                  'wrangler.local.toml', '.dev.vars.example', 'MULAI-LOCALHOST.bat',
