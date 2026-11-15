@@ -280,3 +280,28 @@ test('lifecycle requires admin session and rejects competing seasons',async()=>{
  const active=(await t.req('/api/admin/form',{admin:true})).data.settings.homeLeaderboardSeasons;
  assert.equal(active.filter(x=>x.archiveStatus==='active').length,1);
 });
+
+test('legacy active Season can be archived without a live stats period',async()=>{
+ const t=fixture();
+ const initial=await save(t,s=>{
+   s.seasonArchiveEnabled=true;
+   s.homeLeaderboardSeasons[0].archiveStatus='active';
+   s.homeLeaderboardSeasons[0].archivePublished=true;
+ });
+ assert.equal(initial.status,200);
+ const form=await t.req('/api/admin/form',{admin:true});
+ assert.equal(form.data.settings.statSeasonId,'');
+ const archived=await seasonAction(t,'archiveLegacy',form.data.revision,{
+   confirmation:'ARCHIVE SEASON',publish:true
+ });
+ assert.equal(archived.status,200,JSON.stringify(archived.data));
+ assert.equal(archived.data.season.archiveStatus,'ended');
+ assert.equal(archived.data.season.entries[0].name,'Pemain Lama');
+ assert.equal(archived.data.season.archiveSnapshot,null);
+ assert.ok(archived.data.season.archiveFinalizedAt);
+ assert.equal(archived.data.season.archiveTimeline[0].kind,'closing');
+ const repeated=await seasonAction(t,'archiveLegacy',archived.data.revision,{
+   confirmation:'ARCHIVE SEASON'
+ });
+ assert.equal(repeated.status,409);
+});
