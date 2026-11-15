@@ -87,6 +87,7 @@ function shouldTransmit(){
 function setMode(){
   const ptt=$('talk-mode').value==='ptt';
   $('ptt').hidden=!ptt;
+  worklet?.port.postMessage({t:'sensitivity',value:ptt?0:Number($('sensitivity').value)/1000});
   updateButtons();
 }
 async function join(){
@@ -207,7 +208,7 @@ async function startMic(){
     };
     micSource.connect(worklet);worklet.connect(context.destination);
     $('start-mic').textContent=translation('stop');$('start-mic').classList.add('is-active');
-    worklet.port.postMessage({t:'sensitivity',value:Number($('sensitivity').value)/1000});
+    worklet.port.postMessage({t:'sensitivity',value:$('talk-mode').value==='ptt'?0:Number($('sensitivity').value)/1000});
     updateButtons();await updateDevices();
   }catch(e){
     stopMic();message(e.name==='NotAllowedError'?translation('micDenied'):e.message,true);
@@ -268,7 +269,7 @@ $('whisper').onclick=()=>{whisper=!whisper;control(whisper?'whisper':'normal');u
 $('talk-mode').onchange=setMode;
 $('mic-select').onchange=async()=>{if(stream){stopMic();await startMic();}};
 $('speaker-select').onchange=async()=>{if(ctx?.setSinkId)try{await ctx.setSinkId($('speaker-select').value);}catch(e){message(e.message,true);}};
-$('sensitivity').oninput=()=>worklet?.port.postMessage({t:'sensitivity',value:Number($('sensitivity').value)/1000});
+$('sensitivity').oninput=()=>worklet?.port.postMessage({t:'sensitivity',value:$('talk-mode').value==='ptt'?0:Number($('sensitivity').value)/1000});
 $('mic-volume').oninput=()=>micGain=Number($('mic-volume').value)/100;
 $('noise-suppression').onchange=async()=>{
   if(stream)for(const track of stream.getAudioTracks())try{
