@@ -190,7 +190,9 @@ Pages dan Cron Worker secara bersamaan.
 - Backup D1 sebelum migrasi/deploy; jangan menghapus data Seasons lama.
 - Verifikasi koneksi Paper melalui `/sscircle status` dan Admin Control
   **Minecraft Sync**. Heartbeat harus aktif serta antrean dan capture backlog
-  turun ke nol setelah perintah sinkronisasi final.
+  turun ke nol setelah perintah sinkronisasi final. Pasang JAR Player Sync
+  terbaru dari build PR ini supaya plugin dapat melaporkan status
+  `STATS_DISABLED` bila `stats-sync.enabled` dimatikan.
 - Uji minimal dua akun Minecraft, termasuk pemain yang memiliki lebih dari
   satu akun tertaut, lalu bandingkan total playtime/deaths/mob kills/blocks mined
   di Profile dengan **Periksa snapshot akhir**.
