@@ -41,6 +41,35 @@ Entri lama yang memiliki status *Sedang berlangsung* tetapi tidak terhubung
 ke periode statistik bisa memakai **Arsipkan Season lama**. Tindakan ini
 mempertahankan leaderboard manual dan tidak membuat statistik palsu.
 
+## Beberapa Leaderboard dalam satu Season
+
+- Buka **Admin Control → Season & Sejarah**, pilih Season, kemudian bagian
+  **Prestasi & pemain → Leaderboard Season**.
+- Klik **+ Tambah leaderboard**, isi **Judul leaderboard**, lalu di dalam
+  leaderboard tersebut klik **+ Tambah pemain** untuk memasukkan nama dan skor.
+- Satu Season mendukung maksimal **8 leaderboard**, masing-masing maksimal
+  **20 pemain**. Setiap leaderboard memiliki judul serta isi yang terpisah.
+- Papan pertama tetap tersinkron dengan `season.entries` untuk kompatibilitas
+  kartu leaderboard Homepage yang sudah ada. Data lama otomatis dibaca sebagai
+  papan pertama, tanpa menggandakannya di arsip.
+- Ketika Season ditutup dengan snapshot, peringkat dari statistik Minecraft
+  masuk ke papan pertama. Papan final tersebut terkunci dari pengeditan pemain,
+  sedangkan papan tambahan masih dapat dibuat untuk kategori prestasi manual.
+- **Publikasikan season ini** menentukan apakah seluruh leaderboard dapat
+  dilihat pengunjung melalui halaman arsip.
+
+## Mencari anggota penerima penghargaan
+
+- Di bagian **Penghargaan** gunakan kolom pencarian anggota.
+- Pencarian menerima nama tampilan, username Minecraft yang sudah tertaut,
+  ID anggota penuh, atau sebagian ID.
+- Hasil menampilkan nama/username dan ID singkat untuk membedakan anggota
+  bernama mirip. Pencarian hanya mengambil data yang boleh diakses Admin.
+- Klik nama anggota agar `memberId` penghargaan ditautkan ke Profile.
+  Gunakan **Lepas tautan anggota** jika penghargaan hanya untuk arsip publik.
+- Data anggota diambil saat pencarian digunakan, bukan otomatis saat halaman
+  dibuka. Penghargaan yang sebelumnya sudah memiliki penerima tetap terpilih.
+
 ## Timeline dan publikasi
 
 - Tambah maksimal 24 milestone per Season, dengan tanggal, judul,
