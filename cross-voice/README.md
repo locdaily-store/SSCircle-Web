@@ -24,6 +24,13 @@ Admin: `/scvoice status`, `/scvoice inspect <pemain>`, `/scvoice mute <pemain>`,
 
 Permission: `sscircle.voice.use`, `sscircle.voice.group`, `sscircle.voice.admin`, `sscircle.voice.admin.mute`, `sscircle.voice.admin.disconnect`, `sscircle.voice.admin.reload`, `sscircle.voice.admin.configure`.
 
+## Konfigurasi frontend
+
+Atur `VOICE_PUBLIC_URL=https://voice.domain-saya.com` pada Cloudflare Pages
+(Production dan Preview terpisah). `_worker.js` menghasilkan konfigurasi publik
+secara otomatis dan hanya halaman Voice yang memperoleh izin mikrofon serta
+CSP WebSocket gateway. Tidak perlu menyimpan secret dalam frontend.
+
 ## Pengujian
 - Node.js: `cd cross-voice/gateway && npm install && npm test`.
 - Gradle: `gradle -p cross-voice/paper clean build` (Java 25, Paper 26.3 API asli, Simple Voice Chat API asli). JAR hanya dianggap valid jika berhasil pada GitHub Actions dan uji server.
