@@ -190,7 +190,9 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
         }
         packet.add("players",array);send(packet);
         JsonObject cfg=new JsonObject();cfg.addProperty("t","config");
-        cfg.addProperty("radius",distance);cfg.addProperty("groupsAllowed",groupsAllowed);
+        cfg.addProperty("radius",distance);
+        cfg.addProperty("whisperRadius",Math.max(2,Math.min(distance,getConfig().getDouble("audio.whisper-distance",8))));
+        cfg.addProperty("groupsAllowed",groupsAllowed);
         send(cfg);
     }
     private String pairingCode(){
@@ -310,7 +312,9 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
                     if(!audioQueue.offer(new Frame(uuid,pcm,false,whisper)))dropped++;
                 }catch(Exception ignored){dropped++;}
             }
-            case "control" -> Bukkit.getScheduler().runTask(this,()->{
+            case "control" -> {
+                if(!isEnabled())return;
+                Bukkit.getScheduler().runTask(this,()->{
                 try{
                     UUID uuid=UUID.fromString(msg.get("uuid").getAsString());
                     Player player=Bukkit.getPlayer(uuid);
@@ -319,7 +323,8 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
                     String value=msg.has("value")?msg.get("value").getAsString():"";
                     apply(player,action,value);
                 }catch(Exception ignored){}
-            });
+                });
+            }
             default -> {}
         }
     }
@@ -368,7 +373,10 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
     }
     private final class SocketListener implements WebSocket.Listener {
         private final StringBuilder buffer=new StringBuilder();
-        @Override public void onOpen(WebSocket ws){socket=ws;ws.request(1);snapshot();}
+        @Override public void onOpen(WebSocket ws){
+            socket=ws;ws.request(1);
+            if(isEnabled())Bukkit.getScheduler().runTask(CrossVoicePlugin.this,()->snapshot());
+        }
         @Override public CompletionStage<?> onText(WebSocket ws,CharSequence data,boolean last){
             synchronized(buffer){
                 if(buffer.length()+data.length()>8192){buffer.setLength(0);ws.request(1);return null;}
