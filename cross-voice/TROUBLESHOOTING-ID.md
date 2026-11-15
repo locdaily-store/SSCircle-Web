@@ -2,7 +2,7 @@
 
 | Gejala | Kemungkinan penyebab | Pemeriksaan |
 |---|---|---|
-| /scvoice status OFFLINE | WSS gateway, secret atau DNS salah | Uji /api/health, cek log gateway dan domain WSS |
+| /scvoice status OFFLINE | WSS Cloudflare Worker, secret atau firewall keluar TCP 443 salah | Uji /api/health, Worker observability, DNS dan domain WSS |
 | /voice link gagal | Bukan Bedrock/Floodgate atau gateway offline | Cek /voice status dan plugin floodgate |
 | Kode pairing invalid | Sudah digunakan, kedaluwarsa 2 menit, atau server restart | Ketik /voice link untuk kode baru |
 | Mikrofon ditolak | Browser tidak mendapat izin | Pastikan HTTPS, izin mikrofon diberikan |
