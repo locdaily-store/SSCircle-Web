@@ -225,7 +225,7 @@ window.SSCircleSeasonsAdmin = (() => {
                 item.memberId=member.id;
                 if(!item.player.trim()){
                   item.player=member.minecraft[0]||member.name||'';
-                  const playerInput=inner.querySelector('input:not(.season-member-search)');
+                  const playerInput=inner.querySelectorAll('.season-admin-mini-body > .field-group input')[1];
                   if(playerInput&&item.player)playerInput.value=item.player;
                 }
                 search.value='';
