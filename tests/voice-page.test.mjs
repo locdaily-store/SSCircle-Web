@@ -55,3 +55,34 @@ test('CSP refuses unconfigured or malformed external gateway URLs',async()=>{
     assert.equal(await config.text(),'window.SSCIRCLE_VOICE_GATEWAY = "";');
   }
 });
+
+test('Preview alias uses SSCircle Worker automatically if Pages variable is absent',async()=>{
+  const previewUrl='https://voice-test.sscircle.pages.dev';
+  const previewRequest=path=>worker.fetch(new Request(previewUrl+path),
+    env({VOICE_PUBLIC_URL:''}),{waitUntil(){}});
+  const config=await previewRequest('/voice-config.js');
+  assert.equal(config.status,200);
+  assert.equal(await config.text(),
+    'window.SSCIRCLE_VOICE_GATEWAY = "https://sscircle-cross-voice.locdailymar.workers.dev";');
+  const document=await previewRequest('/voice');
+  const csp=document.headers.get('content-security-policy');
+  assert.match(csp,/https:\/\/sscircle-cross-voice\.locdailymar\.workers\.dev/);
+  assert.match(csp,/wss:\/\/sscircle-cross-voice\.locdailymar\.workers\.dev/);
+  assert.match(document.headers.get('permissions-policy'),/microphone=\(self\)/);
+  const production=await get('/voice-config.js',{VOICE_PUBLIC_URL:''});
+  assert.equal(await production.text(),'window.SSCIRCLE_VOICE_GATEWAY = "";');
+});
+
+test('Valid Pages gateway variable overrides Preview fallback',async()=>{
+  const config=await worker.fetch(new Request('https://voice-test.sscircle.pages.dev/voice-config.js'),
+    env({VOICE_PUBLIC_URL:'https://custom-gateway.example'}),{waitUntil(){}});
+  assert.equal(await config.text(),
+    'window.SSCIRCLE_VOICE_GATEWAY = "https://custom-gateway.example";');
+});
+
+test('Static voice-config fallback is isolated to Preview hostname',()=>{
+  const source=readFileSync(new URL('../voice-config.js',import.meta.url),'utf8');
+  assert.match(source,/voice-test\.sscircle\.pages\.dev/);
+  assert.match(source,/sscircle-cross-voice\.locdailymar\.workers\.dev/);
+  assert.doesNotMatch(source,/VOICE_BRIDGE_SECRET\s*=/);
+});
