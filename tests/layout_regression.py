@@ -111,7 +111,7 @@ window.fetch=async url => {
     memoryFit:getComputedStyle(document.querySelector('#season-archive-dialog .season-archive-photo img')).objectFit,
     buildFit:getComputedStyle(document.querySelector('#season-archive-dialog .season-archive-feature img')).objectFit
   })''')
-  assert vals['ranks']==3,('Season popup leaderboard missing',w,vals)
+  assert vals['ranks']==2,('Season popup must show only rankings from the selected Season',w,vals)
   assert vals['scrollWidth']<=w+2,('Season Archive overflow',w,vals)
   assert vals['modalWidth']<=w,('Season popup too wide',w,vals)
   assert all(vals[name]=='contain' for name in ('photoFit','memoryFit','buildFit')),('Season image cropped',w,vals)
