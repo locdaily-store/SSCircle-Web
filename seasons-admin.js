@@ -4,6 +4,8 @@ window.SSCircleSeasonsAdmin = (() => {
   const $=id=>document.getElementById(id);
   const el=(tag,cls='',text)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n;};
   let model=null,changed=()=>{},phone=false,installed=false,timer=0;
+  const SEASONS_PER_PAGE=24;
+  let seasonPage=0;
   const expanded=new Set();
   let directoryPromise=null;
   function cachedRecipients(){
