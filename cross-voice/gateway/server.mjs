@@ -1,4 +1,5 @@
 import http from 'node:http';
+import {isIP} from 'node:net';
 import {randomBytes, timingSafeEqual} from 'node:crypto';
 import {WebSocketServer, WebSocket} from 'ws';
 
@@ -13,7 +14,8 @@ const config = {
   whisperRadius: 8,
   maxFrame: 5000,
   maxBuffer: 64*1024,
-  voiceEnabled: true
+  voiceEnabled: true,
+  trustCloudflare: process.env.VOICE_TRUST_CF==='true'
 };
 if(import.meta.url === 'file://' + process.argv[1] && config.bridgeSecret.length < 32) {
   console.error('VOICE_BRIDGE_SECRET minimal 32 karakter. Tidak menjalankan gateway.');
@@ -25,6 +27,10 @@ export function createGateway(options = config) {
   const pairing = new Map(),sessions=new Map(),clients=new Map(),players=new Map(),attempts=new Map();
   let bridge=null, svcReady=false, counters={up:0,down:0,dropped:0}, generation=0;
   const now=()=>Date.now();
+  const clientAddress=req=>{
+    const forwarded=String(req.headers['cf-connecting-ip']||'');
+    return cfg.trustCloudflare&&isIP(forwarded)?forwarded:req.socket.remoteAddress;
+  };
   const allowAttempt=address=>{
     const current=now(),key=String(address||'unknown');
     const record=attempts.get(key);
@@ -60,7 +66,8 @@ export function createGateway(options = config) {
         distance:Math.round(Math.hypot(x.x-p.x,x.y-p.y,x.z-p.z))}));
     return {t:'state',status:bridge&&svcReady?'connected':'disconnected',
       self:p?{uuid:p.uuid,name:p.name,world:p.world,group:p.group||'',
-        muted:!!p.muted,deafened:!!p.deafened,whisper:!!p.whisper}:null,
+        muted:!!p.muted,deafened:!!p.deafened,whisper:!!p.whisper,
+        volume:p.volume}:null,
       nearby:online,players:players.size,gatewayUp:!!bridge};
   };
   function detachBrowser(uuid,reason='disconnected'){
@@ -88,6 +95,7 @@ export function createGateway(options = config) {
         updated.set(p.uuid,{uuid:p.uuid,name:p.name,world:p.world,
           x:p.x,y:p.y,z:p.z,yaw:Number.isFinite(p.yaw)?p.yaw:0,bedrock:!!p.bedrock,muted:!!p.muted,
           deafened:!!p.deafened,whisper:!!p.whisper,
+          volume:Number.isFinite(p.volume)?Math.max(0,Math.min(200,p.volume)):100,
           group:typeof p.group==='string'?p.group.slice(0,48):''});
       }
       players.clear();for(const [key,p] of updated)players.set(key,p);
@@ -141,7 +149,7 @@ export function createGateway(options = config) {
     }
     if(req.url==='/api/pair'&&req.method==='POST'){
       if(!origin){json(res,403,{error:'ORIGIN_DENIED'});return;}
-      if(!allowAttempt(req.socket.remoteAddress)){json(res,429,{error:'RATE_LIMIT'});return;}
+      if(!allowAttempt(clientAddress(req))){json(res,429,{error:'RATE_LIMIT'});return;}
       if(!bridge||!svcReady){json(res,503,{error:'SERVER_OFFLINE'});return;}
       const chunks=[];let size=0;
       for await(const chunk of req){size+=chunk.length;if(size>512){json(res,413,{error:'TOO_LARGE'});return;}chunks.push(chunk);}
