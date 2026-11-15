@@ -129,6 +129,8 @@ final class SkinPublisher {
     String lastDelivery(){return lastDelivery;}
     String lastSuccess(){return lastSuccess==null?"BELUM ADA":lastSuccess.toString();}
     int activeLookups(){return active.get();}
+    int pendingScanCount(){return pendingScans.size();}
+    boolean pausedForLowTps(){return pauseForLowTps();}
 
     /** Queue once per UUID. The queue is bounded by distinct online players. */
     private void scheduleOnline(boolean force){
