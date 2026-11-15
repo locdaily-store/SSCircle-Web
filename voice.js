@@ -127,6 +127,10 @@ function renderState(msg){
   const myself=msg.self;
   if(!myself){message('Minecraft offline. Login ke server terlebih dahulu.',true);return;}
   $('room-status').textContent=translation('connected');
+  if(Number.isFinite(myself.volume)&&Number($('output-volume').value)!==myself.volume){
+    $('output-volume').value=String(myself.volume);outputVolume=myself.volume/100;
+    if(speakerGain)speakerGain.gain.value=outputVolume;
+  }
   const list=$('nearby-list');list.replaceChildren();
   for(const player of msg.nearby||[]){
     const li=document.createElement('li');
@@ -271,7 +275,11 @@ $('noise-suppression').onchange=async()=>{
     await track.applyConstraints({noiseSuppression:$('noise-suppression').checked});
   }catch(e){message('Noise suppression tidak didukung oleh mikrofon/browser ini.',true);}
 };
-$('output-volume').oninput=()=>{outputVolume=Number($('output-volume').value)/100;if(speakerGain)speakerGain.gain.value=outputVolume;};
+$('output-volume').oninput=()=>{
+  outputVolume=Number($('output-volume').value)/100;
+  if(speakerGain)speakerGain.gain.value=outputVolume;
+  control('volume',$('output-volume').value);
+};
 $('ptt').addEventListener('pointerdown',e=>{e.preventDefault();pttDown=true;updateButtons();});
 for(const ev of ['pointerup','pointercancel','pointerleave'])
   $('ptt').addEventListener(ev,()=>{pttDown=false;updateButtons();});
