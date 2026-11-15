@@ -23,7 +23,7 @@ export function createGateway(options = config) {
   const cfg = {...config,...options};
   if(cfg.bridgeSecret.length<32)throw Error('VOICE_BRIDGE_SECRET minimal 32 karakter');
   const pairing = new Map(),sessions=new Map(),clients=new Map(),players=new Map(),attempts=new Map();
-  let bridge=null, counters={up:0,down:0,dropped:0}, generation=0;
+  let bridge=null, svcReady=false, counters={up:0,down:0,dropped:0}, generation=0;
   const now=()=>Date.now();
   const allowAttempt=address=>{
     const current=now(),key=String(address||'unknown');
@@ -58,7 +58,7 @@ export function createGateway(options = config) {
     const online=[...players.values()].filter(x=>x.uuid!==uuid&&nearby(p,x))
       .map(x=>({uuid:x.uuid,name:x.name,bedrock:x.bedrock,
         distance:Math.round(Math.hypot(x.x-p.x,x.y-p.y,x.z-p.z))}));
-    return {t:'state',status:bridge?'connected':'disconnected',
+    return {t:'state',status:bridge&&svcReady?'connected':'disconnected',
       self:p?{uuid:p.uuid,name:p.name,world:p.world,group:p.group||'',
         muted:!!p.muted,deafened:!!p.deafened,whisper:!!p.whisper}:null,
       nearby:online,players:players.size,gatewayUp:!!bridge};
@@ -68,7 +68,7 @@ export function createGateway(options = config) {
     if(current){clients.delete(uuid);try{current.close(4001,reason);}catch{}}
   }
   function detachBridge(){
-    const old=bridge;bridge=null;players.clear();pairing.clear();generation++;
+    const old=bridge;bridge=null;svcReady=false;players.clear();pairing.clear();generation++;
     for(const [uuid,ws] of clients){tell(ws,{t:'error',code:'BRIDGE_OFFLINE'});ws.close(1012,'Minecraft offline');}
     clients.clear();
     if(old&&old.readyState===WebSocket.OPEN)old.close(1012,'replaced');
@@ -78,6 +78,7 @@ export function createGateway(options = config) {
   }
   function handleBridge(msg){
     if(msg.t==='snapshot'){
+      svcReady=msg.voiceReady===true;
       if(!Array.isArray(msg.players)||msg.players.length>cfg.maxClients+30)return;
       const updated=new Map();
       for(const p of msg.players){
@@ -136,12 +137,12 @@ export function createGateway(options = config) {
         'Access-Control-Max-Age':'600','Vary':'Origin'});res.end();return;
     }
     if(req.url==='/api/health'&&req.method==='GET'){
-      json(res,200,{ready:!!bridge,players:players.size,sessions:clients.size});return;
+      json(res,200,{ready:!!bridge&&svcReady,players:players.size,sessions:clients.size});return;
     }
     if(req.url==='/api/pair'&&req.method==='POST'){
       if(!origin){json(res,403,{error:'ORIGIN_DENIED'});return;}
       if(!allowAttempt(req.socket.remoteAddress)){json(res,429,{error:'RATE_LIMIT'});return;}
-      if(!bridge){json(res,503,{error:'SERVER_OFFLINE'});return;}
+      if(!bridge||!svcReady){json(res,503,{error:'SERVER_OFFLINE'});return;}
       const chunks=[];let size=0;
       for await(const chunk of req){size+=chunk.length;if(size>512){json(res,413,{error:'TOO_LARGE'});return;}chunks.push(chunk);}
       let code='';
@@ -171,7 +172,7 @@ export function createGateway(options = config) {
       if(!origin){json(res,403,{error:'ORIGIN_DENIED'});return;}
       const token=String(req.headers.authorization||'').replace(/^Bearer /,'');
       const state=sessions.get(token);
-      if(!state||state.expires<now()||!bridge||!players.get(state.uuid)?.bedrock){
+      if(!state||state.expires<now()||!bridge||!svcReady||!players.get(state.uuid)?.bedrock){
         json(res,401,{error:'SESSION_EXPIRED'});return;
       }
       const ticket=rand(18);sessions.set('ticket:'+ticket,{uuid:state.uuid,expires:Math.min(now()+15000,state.expires),sessionExpiry:state.expires});
