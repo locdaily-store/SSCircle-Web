@@ -22,9 +22,15 @@ if(import.meta.url === 'file://' + process.argv[1] && config.bridgeSecret.length
 export function createGateway(options = config) {
   const cfg = {...config,...options};
   if(cfg.bridgeSecret.length<32)throw Error('VOICE_BRIDGE_SECRET minimal 32 karakter');
-  const pairing = new Map(),sessions=new Map(),clients=new Map(),players=new Map();
+  const pairing = new Map(),sessions=new Map(),clients=new Map(),players=new Map(),attempts=new Map();
   let bridge=null, counters={up:0,down:0,dropped:0}, generation=0;
   const now=()=>Date.now();
+  const allowAttempt=address=>{
+    const current=now(),key=String(address||'unknown');
+    const record=attempts.get(key);
+    if(!record||record.until<current){attempts.set(key,{n:1,until:current+60000});return true;}
+    record.n++;return record.n<=8;
+  };
   const rand=(n=24)=>randomBytes(n).toString('base64url');
   const safe=(a,b)=> {
     const x=Buffer.from(a||''),y=Buffer.from(b||'');
@@ -105,6 +111,10 @@ export function createGateway(options = config) {
             dx:sender.x-recipient.x,dz:sender.z-recipient.z});
       }
       counters.down++;
+    }else if(msg.t==='config'){
+      const radius=Number(msg.radius);
+      if(Number.isFinite(radius)&&radius>=2&&radius<=100)cfg.radius=radius;
+      if(typeof msg.groupsAllowed==='boolean')cfg.groupsAllowed=msg.groupsAllowed;
     }else if(msg.t==='kick'&&validUUID(msg.uuid)){
       detachBrowser(msg.uuid,'moderated');
       for(const [key,v] of sessions)if(v.uuid===msg.uuid)sessions.delete(key);
@@ -129,6 +139,8 @@ export function createGateway(options = config) {
       json(res,200,{ready:!!bridge,players:players.size,sessions:clients.size});return;
     }
     if(req.url==='/api/pair'&&req.method==='POST'){
+      if(!origin){json(res,403,{error:'ORIGIN_DENIED'});return;}
+      if(!allowAttempt(req.socket.remoteAddress)){json(res,429,{error:'RATE_LIMIT'});return;}
       if(!bridge){json(res,503,{error:'SERVER_OFFLINE'});return;}
       const chunks=[];let size=0;
       for await(const chunk of req){size+=chunk.length;if(size>512){json(res,413,{error:'TOO_LARGE'});return;}chunks.push(chunk);}
@@ -146,13 +158,23 @@ export function createGateway(options = config) {
       json(res,200,{ok:true,token,expiresIn:900,
         player:{uuid:entry.uuid,name:players.get(entry.uuid).name}});return;
     }
+    if(req.url==='/api/disconnect'&&req.method==='POST'){
+      if(!origin){json(res,403,{error:'ORIGIN_DENIED'});return;}
+      const token=String(req.headers.authorization||'').replace(/^Bearer /,'');
+      const state=sessions.get(token);
+      if(!state||state.expires<now()){json(res,401,{error:'SESSION_EXPIRED'});return;}
+      for(const [key,v] of sessions)if(v.uuid===state.uuid)sessions.delete(key);
+      detachBrowser(state.uuid,'user');
+      json(res,200,{ok:true});return;
+    }
     if(req.url==='/api/ticket'&&req.method==='POST'){
+      if(!origin){json(res,403,{error:'ORIGIN_DENIED'});return;}
       const token=String(req.headers.authorization||'').replace(/^Bearer /,'');
       const state=sessions.get(token);
       if(!state||state.expires<now()||!bridge||!players.get(state.uuid)?.bedrock){
         json(res,401,{error:'SESSION_EXPIRED'});return;
       }
-      const ticket=rand(18);sessions.set('ticket:'+ticket,{uuid:state.uuid,expires:now()+15000});
+      const ticket=rand(18);sessions.set('ticket:'+ticket,{uuid:state.uuid,expires:Math.min(now()+15000,state.expires),sessionExpiry:state.expires});
       json(res,200,{ticket});return;
     }
     json(res,404,{error:'NOT_FOUND'});
@@ -164,7 +186,7 @@ export function createGateway(options = config) {
     const isBridge=url.pathname==='/bridge';
     const isBrowser=url.pathname==='/ws';
     if(!isBridge&&!isBrowser){socket.destroy();return;}
-    let uuid='';
+    let uuid='',sessionExpiry=0;
     if(isBridge){
       const key=String(req.headers.authorization||'').replace(/^Bearer /,'');
       if(!safe(key,cfg.bridgeSecret)){socket.destroy();return;}
@@ -173,7 +195,7 @@ export function createGateway(options = config) {
       if(!ticket||ticket.expires<now()||!bridge||!players.get(ticket.uuid)?.bedrock){
         socket.destroy();return;
       }
-      uuid=ticket.uuid;sessions.delete('ticket:'+url.searchParams.get('ticket'));
+      uuid=ticket.uuid;sessionExpiry=ticket.sessionExpiry;sessions.delete('ticket:'+url.searchParams.get('ticket'));
       if(clients.size>=cfg.maxClients&&!clients.has(uuid)){socket.destroy();return;}
     }
     wss.handleUpgrade(req,socket,head,ws=>{
@@ -187,6 +209,8 @@ export function createGateway(options = config) {
       }else{
         detachBrowser(uuid,'reconnected');clients.set(uuid,ws);
         tell(ws,publicState(uuid));
+        const expiry=setTimeout(()=>ws.close(4001,'session expired'),Math.max(1,sessionExpiry-now()));
+        expiry.unref();ws.on('close',()=>clearTimeout(expiry));
         let sec=Math.floor(now()/1000),frames=0;
         ws.on('message',(bytes,binary)=>{
           if(binary||bytes.length>8192)return;
@@ -219,6 +243,7 @@ export function createGateway(options = config) {
   const prune=setInterval(()=>{
     for(const [key,v] of sessions)if(v.expires<now())sessions.delete(key);
     for(const [key,v] of pairing)if(v.expires<now())pairing.delete(key);
+    for(const [key,v] of attempts)if(v.until<now())attempts.delete(key);
     broadcast();
   },2000);prune.unref();
   return {server,close:async()=>{clearInterval(prune);wss.close();
