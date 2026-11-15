@@ -1004,154 +1004,36 @@ window.SSCircleHomeAdmin = (() => {
     container.append(wrap);
   }
   function leaderboardEditor(box) {
-    if (!Array.isArray(state.settings.homeLeaderboardSeasons))
-      state.settings.homeLeaderboardSeasons = [];
-    const toolbar = node('div', 'home-admin-gallery-add'), list = node('div', 'home-admin-social-list');
-    box.append(toolbar, list);
-    helpButton(toolbar, '+ Tambah season', () => {
-      if (state.settings.homeLeaderboardSeasons.length >= 12)
-        return SSCNotice.alert('Maksimal 12 season leaderboard.');
-      state.settings.homeLeaderboardSeasons.push({
-        id: 'season-' + (state.settings.homeLeaderboardSeasons.length + 1),
-        title: 'Leaderboard S' + (state.settings.homeLeaderboardSeasons.length + 1),
-        entries: [{ name: '', score: '' }, { name: '', score: '' }, { name: '', score: '' }]
-      });
-      changed();
-      redraw();
-    });
-    function redraw(forceId) {
-      const openIds = new Set([...list.querySelectorAll('details[open]')].map(d => d.dataset.seasonId));
-      if (forceId)
-        openIds.add(forceId);
-      list.replaceChildren();
-      state.settings.homeLeaderboardSeasons.forEach((season, index) => {
-        const card = node('details', 'home-admin-social-card');
-        card.dataset.seasonId = season.id || String(index);
-        card.open = openIds.has(card.dataset.seasonId);
-        const summary = node('summary', 'home-admin-social-card-header');
-        const identity = node('span', 'home-admin-social-identity');
-        identity.append(node('strong', '', season.title || ('Leaderboard S' + (index + 1))), node('small', '', '' + ((season.entries || []).filter(entry => entry && (entry.name || entry.score)).length) + ' entri'));
-        summary.append(identity, node('span', 'home-admin-social-expand', 'Ubah'));
-        card.append(summary);
-        const body = node('div', 'home-admin-social-card-body');
-        const titleWrap = node('label', 'field-group full');
-        titleWrap.append(node('span', 'field-label', 'Judul season'));
-        const titleInput = node('input');
-        titleInput.type = 'text';
-        titleInput.maxLength = 120;
-        titleInput.value = season.title || '';
-        titleInput.oninput = () => {
-          season.title = titleInput.value;
-          changed();
-        };
-        titleWrap.append(titleInput);
-        body.append(titleWrap);
-        const entryWrap = node('div', 'home-admin-gallery');
-        body.append(entryWrap);
-        const entries = Array.isArray(season.entries) ? season.entries : [];
-        entries.forEach((entry, rowIndex) => {
-          const row = node('div', 'home-admin-gallery-row home-admin-leaderboard-entry-row');
-          const fields = node('div', 'home-admin-gallery-row-inputs');
-          const name = node('input');
-          name.type = 'text';
-          name.placeholder = 'Nama pemain';
-          name.maxLength = 80;
-          name.value = entry.name || '';
-          name.oninput = () => {
-            entry.name = name.value;
-            changed();
-          };
-          const score = node('input');
-          score.type = 'text';
-          score.placeholder = 'Skor / catatan';
-          score.maxLength = 80;
-          score.value = entry.score || '';
-          score.oninput = () => {
-            entry.score = score.value;
-            changed();
-          };
-          fields.append(name, score);
-          const actions = node('div', 'home-admin-gallery-actions');
-          helpButton(actions, '↑', () => {
-            if (rowIndex > 0) {
-              [entries[rowIndex - 1], entries[rowIndex]] = [entries[rowIndex], entries[rowIndex - 1]];
-              changed();
-              redraw(card.dataset.seasonId);
-            }
-          });
-          helpButton(actions, '↓', () => {
-            if (rowIndex < entries.length - 1) {
-              [entries[rowIndex + 1], entries[rowIndex]] = [entries[rowIndex], entries[rowIndex + 1]];
-              changed();
-              redraw(card.dataset.seasonId);
-            }
-          });
-          helpButton(actions, 'Hapus', async () => {
-            if (!await SSCNotice.confirm('Hapus entri leaderboard ini?', { danger: true, confirmText: 'Hapus entri' }))
-              return;
-            entries.splice(rowIndex, 1);
-            changed();
-            redraw(card.dataset.seasonId);
-          });
-          row.append(fields, actions);
-          entryWrap.append(row);
-        });
-        window.SSCircleSort?.attach(entryWrap, {
-          item: '.home-admin-gallery-row',
-          onMove: (from, to) => {
-            entries.splice(to, 0, entries.splice(from, 1)[0]);
-            changed();
-            redraw(card.dataset.seasonId);
-          }
-        });
-        const addEntry = helpButton(body, '+ Tambah entri', () => {
-          if (entries.length >= 20)
-            return SSCNotice.alert('Maksimal 20 entri per season.');
-          entries.push({ name: '', score: '' });
-          changed();
-          redraw(card.dataset.seasonId);
-        });
-        addEntry.classList.add('secondary');
-        const actions = node('div', 'home-admin-gallery-add');
-        helpButton(actions, 'Geser season ke atas', () => {
-          if (index > 0) {
-            [state.settings.homeLeaderboardSeasons[index - 1], state.settings.homeLeaderboardSeasons[index]] = [state.settings.homeLeaderboardSeasons[index], state.settings.homeLeaderboardSeasons[index - 1]];
-            changed();
-            redraw(card.dataset.seasonId);
-          }
-        });
-        helpButton(actions, 'Geser season ke bawah', () => {
-          if (index < state.settings.homeLeaderboardSeasons.length - 1) {
-            [state.settings.homeLeaderboardSeasons[index + 1], state.settings.homeLeaderboardSeasons[index]] = [state.settings.homeLeaderboardSeasons[index], state.settings.homeLeaderboardSeasons[index + 1]];
-            changed();
-            redraw(card.dataset.seasonId);
-          }
-        });
-        helpButton(actions, 'Hapus season', async () => {
-          if (!await SSCNotice.confirm('Hapus season leaderboard ini?', { danger: true, confirmText: 'Hapus season' }))
-            return;
-          state.settings.homeLeaderboardSeasons.splice(index, 1);
-          changed();
-          redraw();
-        });
-        body.append(actions);
-        card.append(body);
-        list.append(card);
-      });
-      window.SSCircleSort?.attach(list, {
-        item: '.home-admin-social-card',
-        handleTarget: '.home-admin-social-card-header',
-        onMove: (from, to) => {
-          const seasons = state.settings.homeLeaderboardSeasons;
-          const item = seasons.splice(from, 1)[0];
-          seasons.splice(to, 0, item);
-          changed();
-          redraw(item.id);
-        }
-      });
+    // Leaderboards are managed in Season & Sejarah. Avoid a second editor
+    // modifying the obsolete season.entries mirror and bypassing final snapshots.
+    const seasons=Array.isArray(state.settings.homeLeaderboardSeasons)
+      ?state.settings.homeLeaderboardSeasons:[];
+    const info=node('p','field-help',
+      'Judul, pemain, dan kategori leaderboard sekarang dikelola di Season & Sejarah. Di sana kamu juga dapat memilih satu leaderboard utama per Season untuk tampil di Homepage.');
+    box.append(info);
+    const list=node('div','home-admin-social-list');
+    for(const season of seasons){
+      const boards=Array.isArray(season.archiveLeaderboards)?season.archiveLeaderboards:
+        (Array.isArray(season.entries)&&season.entries.length
+          ?[{id:'main',title:'Leaderboard Season',entries:season.entries}]:[]);
+      const selected=boards.find(board=>board.id===season.homeFeaturedLeaderboardId)||boards[0];
+      const card=node('div','home-admin-social-card home-admin-featured-board');
+      const title=node('strong','',season.title||'Season SSCircle');
+      const description=node('small','',selected
+        ?'Ditampilkan di Homepage: '+(selected.title||'Leaderboard Season')
+        :'Belum ada kategori leaderboard');
+      card.append(title,description);
+      list.append(card);
     }
-    redraw();
+    if(!seasons.length)list.append(node('p','field-help','Belum ada Season yang dibuat.'));
+    box.append(list);
+    const actions=node('div','home-admin-gallery-add');
+    helpButton(actions,'Buka Season & Sejarah',()=>{
+      document.querySelector('.dashboard-sidebar [data-tab="seasons-admin"]')?.click();
+    });
+    box.append(actions);
   }
+
   function range(box, key, label, min, max, unit) {
     const labelWrap = node('label', 'field-group'), heading = node('span', 'field-label', label), slider = node('input'), line = node('div', 'home-admin-range'), out = node('output');
     slider.type = 'range';
