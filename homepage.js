@@ -526,7 +526,8 @@
       heading.textContent = season.title;
       slide.append(heading);
       const boards = Array.isArray(season.archiveLeaderboards) ? season.archiveLeaderboards : [];
-      const selectedBoard = boards.find(board => board.id === season.homeFeaturedLeaderboardId)
+      const selectedBoard = season.homeFeaturedLeaderboard
+        || boards.find(board => board.id === season.homeFeaturedLeaderboardId)
         || boards[0] || null;
       if (selectedBoard) {
         const subtitle = document.createElement('p');
