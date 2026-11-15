@@ -68,7 +68,7 @@ export function createGateway(options = config) {
     if(current){clients.delete(uuid);try{current.close(4001,reason);}catch{}}
   }
   function detachBridge(){
-    const old=bridge;bridge=null;svcReady=false;players.clear();pairing.clear();generation++;
+    const old=bridge;bridge=null;svcReady=false;players.clear();pairing.clear();sessions.clear();generation++;
     for(const [uuid,ws] of clients){tell(ws,{t:'error',code:'BRIDGE_OFFLINE'});ws.close(1012,'Minecraft offline');}
     clients.clear();
     if(old&&old.readyState===WebSocket.OPEN)old.close(1012,'replaced');
@@ -86,7 +86,7 @@ export function createGateway(options = config) {
            !Number.isFinite(p.x)||!Number.isFinite(p.y)||!Number.isFinite(p.z)||
            !/^[a-z0-9_.:-]{1,100}$/i.test(p.world||''))continue;
         updated.set(p.uuid,{uuid:p.uuid,name:p.name,world:p.world,
-          x:p.x,y:p.y,z:p.z,bedrock:!!p.bedrock,muted:!!p.muted,
+          x:p.x,y:p.y,z:p.z,yaw:Number.isFinite(p.yaw)?p.yaw:0,bedrock:!!p.bedrock,muted:!!p.muted,
           deafened:!!p.deafened,whisper:!!p.whisper,
           group:typeof p.group==='string'?p.group.slice(0,48):''});
       }
@@ -109,7 +109,7 @@ export function createGateway(options = config) {
         const recipient=players.get(uuid);
         if(recipient&&!recipient.deafened&&nearby(sender,recipient))
           tell(ws,{t:'audio',uuid:msg.uuid,pcm:msg.pcm,
-            dx:sender.x-recipient.x,dz:sender.z-recipient.z});
+            dx:sender.x-recipient.x,dz:sender.z-recipient.z,yaw:recipient.yaw});
       }
       counters.down++;
     }else if(msg.t==='config'){
@@ -228,7 +228,7 @@ export function createGateway(options = config) {
               const recipient=players.get(id);
               if(id!==uuid&&recipient&&!recipient.deafened&&nearby(sender,recipient))
                 tell(recipientWs,{t:'audio',uuid,pcm:msg.pcm,
-                  dx:sender.x-recipient.x,dz:sender.z-recipient.z});
+                  dx:sender.x-recipient.x,dz:sender.z-recipient.z,yaw:recipient.yaw});
             }
             counters.up++;
           }else if(msg.t==='control'&&typeof msg.action==='string'&&
