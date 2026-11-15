@@ -26,6 +26,22 @@ Ganti origin sesuai domain website SSCircle. Simpan nilai `VOICE_BRIDGE_SECRET` 
 
 Untuk produksi sebaiknya pakai systemd atau system manager terpercaya agar gateway otomatis restart. Batasi proses ke localhost dan gunakan firewall.
 
+## Konfigurasi Cloudflare Pages untuk halaman Voice
+
+Pada **Workers & Pages → SSCircle Pages → Settings → Variables and Secrets**
+tambahkan variabel **Production** bernama `VOICE_PUBLIC_URL`, isi
+`https://voice.domain-saya.com` tanpa path. **Bukan secret**: URL ini memang
+harus bisa dilihat browser. Worker SSCircle menggunakan variabel ini untuk
+menyajikan `voice-config.js` dan mengizinkan sambungan WSS HTTPS ke domain
+tersebut dalam Content Security Policy.
+
+Halaman Voice mendapat `Permissions-Policy: microphone=(self)` secara khusus,
+sementara halaman lain tetap melarang mikrofon. Kebijakan `_headers` global
+tetap ketat; jangan memperbolehkan mikrofon ke seluruh website.
+
+Untuk **Preview** konfigurasi terpisah sesuai domain staging. Deploy situs
+terbaru agar `_worker.js` mengenali variabel dan route Voice.
+
 ## 3. Cloudflare Tunnel untuk HTTPS/WSS
 Anda bisa membuat **Public Hostname** pada Cloudflare Zero Trust → Networks → Tunnels (nama menu dapat berubah), misalnya `voice.domain-saya.com`, dengan Service HTTP `http://127.0.0.1:8788` pada host gateway. Cloudflare Tunnel meneruskan WebSocket Upgrade yang dipakai gateway.
 
