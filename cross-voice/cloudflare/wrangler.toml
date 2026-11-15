@@ -5,7 +5,7 @@ workers_dev = true
 
 [vars]
 # Origin persis dari website SSCircle (tanpa slash terakhir). Preview: gunakan origin preview sendiri.
-VOICE_ORIGIN = "https://sscircle.example.com"
+VOICE_ORIGIN = "https://voice-test.sscircle.pages.dev"
 VOICE_SERVER_KEY = "sscircle-main"
 VOICE_MAX_CLIENTS = "50"
 
