@@ -28,7 +28,9 @@ settings={
  'open':True,'homeUpcomingEnabled':True,'homeUpcomingCount':2,'homeUpcomingLayout':'grid','homeUpcomingHideEmpty':True,'eventsEnabled':True,
  'seasonArchiveEnabled':True,'homeSeasonHighlightsEnabled':True,'homeSeasonHighlightsCount':2,'homeSeasonHighlightsStyle':'cards','homeSeasonHighlightsHideEmpty':True,
  'homeShowLeaderboard':True,'homeLeaderboardSeasons':[
-  {'id':'season-a','title':'Season 6 • Test', 'archivePublished':True,'archiveSummary':'Kegiatan komunitas dan berbagai cerita menarik yang berlangsung sepanjang season ini.', 'archiveStartDate':'2026-10-01','archiveStatus':'active','archiveCover':'assets/gallery/sscircle-01.webp', 'entries':[{'name':'PemainMinecraftYangSangatPanjangTanpaSpasi_123456789123456789','score':'12345678999999999999999999999 XP'}, {'name':'Steve','score':'45'}], 'archiveAwards':[{'title':'Best Builder','player':'Test123','description':'Contoh pengujian.'}], 'archiveBuilds':[], 'archiveMemories':[]},
+  {'id':'season-a','title':'Season 6 • Test', 'archivePublished':True,'archiveSummary':'Kegiatan komunitas dan berbagai cerita menarik yang berlangsung sepanjang season ini.', 'archiveStartDate':'2026-10-01','archiveStatus':'active','archiveCover':'assets/gallery/sscircle-01.webp', 'entries':[{'name':'PemainMinecraftYangSangatPanjangTanpaSpasi_123456789123456789','score':'12345678999999999999999999999 XP'}, {'name':'Steve','score':'45'}], 'archiveAwards':[{'title':'Best Builder','player':'Test123','description':'Contoh pengujian.'}],
+    'archiveBuilds':[{'title':'Rumah Kenangan','src':'assets/gallery/sscircle-03.webp'}],
+    'archiveMemories':[{'src':'assets/gallery/sscircle-02.webp','caption':'Kenangan'}]},
   {'id':'season-b','title':'Season 5','archivePublished':True,'archiveSummary':'Perjalanan lainnya', 'archiveStartDate':'2026-01-01','archiveStatus':'ended','entries':[{'name':'Alex','score':'100'}]}
  ]
 }
@@ -105,12 +107,14 @@ window.fetch=async url => {
     ranks:document.querySelectorAll('#season-archive-dialog .season-archive-ranking li').length,
     rankWidth:document.querySelector('#season-archive-dialog .season-archive-ranking li').getBoundingClientRect().width,
     modalWidth:document.getElementById('season-archive-dialog').getBoundingClientRect().width,
-    photoFit:getComputedStyle(document.querySelector('.season-archive-cover img')).objectFit
+    photoFit:getComputedStyle(document.querySelector('.season-archive-cover img')).objectFit,
+    memoryFit:getComputedStyle(document.querySelector('#season-archive-dialog .season-archive-photo img')).objectFit,
+    buildFit:getComputedStyle(document.querySelector('#season-archive-dialog .season-archive-feature img')).objectFit
   })''')
   assert vals['ranks']==3,('Season popup leaderboard missing',w,vals)
   assert vals['scrollWidth']<=w+2,('Season Archive overflow',w,vals)
   assert vals['modalWidth']<=w,('Season popup too wide',w,vals)
-  assert vals['photoFit']=='contain',('Season photo cropped',w,vals)
+  assert all(vals[name]=='contain' for name in ('photoFit','memoryFit','buildFit')),('Season image cropped',w,vals)
   page.keyboard.press('Escape')
   assert not page.locator('#season-archive-dialog').evaluate('(dialog)=>dialog.open'),('Season popup did not close with Escape',w)
   # Compact card: state badge remains near its title, not at bottom of empty space.
