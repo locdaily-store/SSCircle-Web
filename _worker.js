@@ -2899,10 +2899,140 @@ async function memberSecurityAPI(req,env,path,method) {
   return bad('Endpoint keamanan anggota tidak ditemukan.',404);
 }
 
+// Erase a rejected member's linked data in a single D1 batch. Never allow
+// deletion of accepted accounts; suspension must be deliberate and visible.
+// Manual text-only historical rankings cannot be attributed safely by name.
+async function memberPurgeAPI(req,env,method){
+  const value=method==='GET'
+    ?{id:new URL(req.url).searchParams.get('memberId')}
+    :await body(req,600);
+  const memberId=value?.id;
+  if(!/^[0-9a-f-]{36}$/.test(memberId||''))
+    return bad('ID anggota tidak valid.',400);
+  const person=await env.DB.prepare('SELECT id,status FROM submissions WHERE id=?')
+    .bind(memberId).first();
+  if(!person)return bad('Anggota tidak ditemukan.',404);
+  if(person.status!=='rejected')
+    return bad('Ubah status ke Ditolak atau Keluarkan anggota terlebih dahulu. Akun aktif tidak boleh dihapus.',409);
+  const account=await env.DB.prepare(
+    'SELECT COUNT(*) AS n FROM minecraft_accounts WHERE application_id=?'
+  ).bind(memberId).first();
+  const stat=await env.DB.prepare(`SELECT COUNT(*) AS n FROM minecraft_account_stat_progress p
+    WHERE p.account_id IN (SELECT id FROM minecraft_accounts WHERE application_id=?)`)
+    .bind(memberId).first();
+  const row=await readSettingsRow(env);
+  if(!row)return bad('Pengaturan website tidak tersedia.',503);
+  const confirmation='HAPUS DATA '+memberId.slice(0,8).toUpperCase();
+  if(method==='GET')return J({id:memberId,status:person.status,
+    linkedAccounts:account?.n||0,statsRows:stat?.n||0,
+    confirmation,revision:row.updated_at||'',
+    warning:'Menghapus pendaftaran, profil, tautan Minecraft, gambar skin, statistik D1, sesi, hubungan sosial dan penghargaan terkait. Ban Paper tetap dikelola terpisah.'});
+  if(method!=='POST')return bad('Metode tidak didukung.',405);
+  if(!await rateLimit(env,req,'member-purge',3,3600))
+    return bad('Batas penghapusan tercapai. Coba setelah satu jam.',429);
+  if(value.confirmation!==confirmation || value.revision!==(row.updated_at||''))
+    return bad('Konfirmasi salah atau pengaturan berubah. Tinjau ulang dahulu.',409);
+  const settings=parse(row.settings)||{};
+  const legacyVoteKey='app:'+memberId;
+  if(Array.isArray(settings.homeVotingVotes))
+    settings.homeVotingVotes=settings.homeVotingVotes.filter(v=>v?.voterKey!==legacyVoteKey);
+  for(const season of settings.homeLeaderboardSeasons||[]){
+    if(Array.isArray(season.archiveAwards))
+      season.archiveAwards=season.archiveAwards.filter(award=>award?.memberId!==memberId);
+    if(Array.isArray(season.archiveLeaderboards)){
+      for(const board of season.archiveLeaderboards)
+        if(Array.isArray(board.entries))
+          board.entries=board.entries.filter(entry=>entry?.memberId!==memberId);
+      season.entries=season.archiveLeaderboards[0]?.entries||[];
+    }else if(Array.isArray(season.entries))
+      season.entries=season.entries.filter(entry=>entry?.memberId!==memberId);
+  }
+  // Protect against a second admin modifying the form or re-accepting the member.
+  const revision=new Date().toISOString()+'-'+uid();
+  const condition=`EXISTS(SELECT 1 FROM submissions s WHERE s.id=? AND s.status='rejected')
+    AND EXISTS(SELECT 1 FROM form_config f WHERE f.id=1 AND f.updated_at=?)`;
+  const queries=[
+    env.DB.prepare(`UPDATE form_config SET settings=?,updated_at=? WHERE id=1
+      AND COALESCE(updated_at,'')=?
+      AND EXISTS(SELECT 1 FROM submissions WHERE id=? AND status='rejected')`)
+      .bind(JSON.stringify(settings),revision,row.updated_at||'',memberId)
+  ];
+  const tableRows=await env.DB.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+  ).all();
+  const tables=new Set((tableRows.results||[]).map(x=>x.name));
+  const mediaColumns=tables.has('media')
+    ?new Set((await env.DB.prepare('PRAGMA table_info(media)').all()).results.map(x=>x.name))
+    :new Set();
+  const privateMedia=mediaColumns.has('submission_id')&&mediaColumns.has('object_key')
+    ?(await env.DB.prepare("SELECT id,object_key FROM media WHERE submission_id=? AND visibility='private'")
+      .bind(memberId).all()).results||[]
+    :[];
+  if(tables.has('media_blobs')&&privateMedia.length){
+    queries.push(env.DB.prepare(`DELETE FROM media_blobs WHERE
+      id IN (SELECT id FROM media WHERE submission_id=? AND visibility='private')
+      AND ${condition}`).bind(memberId,memberId,revision));
+  }
+  if(privateMedia.length){
+    queries.push(env.DB.prepare(`DELETE FROM media WHERE submission_id=?
+      AND visibility='private' AND ${condition}`).bind(memberId,memberId,revision));
+  }
+  // All identifiers come from sqlite_master and are checked before interpolation.
+  // Account-linked children are removed before minecraft_accounts.
+  const special=['submissions','form_config','media','media_blobs','minecraft_accounts'];
+  const deletions=[];
+  for(const table of tables){
+    if(special.includes(table)||!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(table))continue;
+    const columns=new Set((await env.DB.prepare('PRAGMA table_info("'+table+'")').all())
+      .results.map(item=>item.name));
+    const clauses=[],args=[];
+    for(const field of ['application_id','member_id','member_a','member_b',
+                        'requested_by','submission_id']){
+      if(columns.has(field)){clauses.push('"'+field+'"=?');args.push(memberId);}
+    }
+    if(columns.has('account_id')){
+      clauses.push('"account_id" IN (SELECT id FROM minecraft_accounts WHERE application_id=?)');
+      args.push(memberId);
+    }
+    if(columns.has('voter_key')){
+      clauses.push('"voter_key"=?');args.push(legacyVoteKey);
+    }
+    if(!clauses.length)continue;
+    const sql=`DELETE FROM "${table}" WHERE (${clauses.join(' OR ')}) AND ${condition}`;
+    deletions.push({table,statement:env.DB.prepare(sql).bind(...args,memberId,revision)});
+  }
+  // Referenced account tables must precede their parent.
+  for(const item of deletions)queries.push(item.statement);
+  if(tables.has('minecraft_accounts'))
+    queries.push(env.DB.prepare(`DELETE FROM minecraft_accounts WHERE application_id=?
+      AND ${condition}`).bind(memberId,memberId,revision));
+  // Delete submission last. ON DELETE CASCADE acts as a second guard for
+  // any legacy tables linked by foreign key that were not enumerated above.
+  queries.push(env.DB.prepare(`DELETE FROM submissions WHERE id=?
+    AND status='rejected'
+    AND EXISTS(SELECT 1 FROM form_config WHERE id=1 AND updated_at=?)`)
+    .bind(memberId,revision));
+  const results=await env.DB.batch(queries);
+  const removed=Number(results.at(-1)?.meta?.changes||0);
+  if(!removed)return bad('Penghapusan batal karena status atau revisi telah berubah.',409);
+  const objectKeys=privateMedia.map(x=>x.object_key).filter(x=>x&&!x.startsWith('d1/'));
+  let mediaErrors=0;
+  if(objectKeys.length){
+    if(!env.MEDIA)mediaErrors=objectKeys.length;
+    else try{
+      await env.MEDIA.delete(objectKeys.length===1?objectKeys[0]:objectKeys);
+    }catch{mediaErrors=objectKeys.length;}
+  }
+  return J({ok:true,removed:1,mediaErrors,
+    message:'Data anggota terkait telah dihapus. Ban server Minecraft tidak berubah.'});
+}
+
 async function memberCenterAPI(req,env,path,method) {
   if (path.startsWith('/api/admin/')) {
     if (!await admin(req,env)) return bad('Silakan masuk ke Admin Control.',401);
     await ensureMemberCenter(env);
+    if(path==='/api/admin/member-purge' && ['GET','POST'].includes(method))
+      return await memberPurgeAPI(req,env,method);
     if (path==='/api/admin/member-center' && method==='GET') {
       await ensureMailbox(env);
       const url=new URL(req.url), offset=Math.max(0,Math.min(100000,Number.parseInt(url.searchParams.get('offset')||'0',10)||0));
