@@ -10,7 +10,7 @@ test('Page lifecycle retains microphone and socket, then restores an interrupted
   const element=id=>{
     if(!elements.has(id))elements.set(id,{
       id,value:id==='language'?'id':id==='talk-mode'?'ptt':id==='output-volume'?'100':'',
-      hidden:false,textContent:'',classList:{add(){},remove(){}},
+      hidden:false,textContent:'',style:{},classList:{add(){},remove(){}},
       setAttribute(){},replaceChildren(){},append(){},addEventListener(){},
       get options(){return [];}
     });
