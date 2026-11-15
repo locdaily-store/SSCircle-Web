@@ -172,7 +172,10 @@ window.SSCircleSeasonsAdmin = (() => {
     card.addEventListener('toggle',()=>{if(card.open)expanded.add(season.id);else expanded.delete(season.id);});
     const summary=el('summary','season-admin-summary');
     summary.append(el('strong','',season.title||'Season '+(index+1)));
-    summary.append(el('span','season-admin-count',`${season.archivePublished?'Publik':'Draft'} · ${(season.entries||[]).length} pemain`));
+    const boardCount=Array.isArray(season.archiveLeaderboards)
+      ?season.archiveLeaderboards.length:(season.entries||[]).length?1:0;
+    summary.append(el('span','season-admin-count',
+      `${season.archivePublished?'Publik':'Draft'} · ${boardCount} leaderboard`));
     card.append(summary);
     const body=el('div','season-admin-body');
 
@@ -303,37 +306,101 @@ window.SSCircleSeasonsAdmin = (() => {
       ()=>({title:'Penghargaan baru',player:'',description:'',memberId:''}),
       [['title','Kategori penghargaan','text',120],['player','Nama pemain','text',100],
        ['description','Keterangan','textarea',350]]);
+    // A Season may have multiple titled leaderboards. The first board is
+    // mirrored as season.entries for legacy homepage cards and snapshot data.
+    if(!Array.isArray(season.archiveLeaderboards)){
+      season.archiveLeaderboards=(Array.isArray(season.entries)&&season.entries.length)
+        ?[{id:'main',title:'Leaderboard Season',entries:season.entries}]:[];
+    }
+    const boards=season.archiveLeaderboards;
+    const syncPrimary=()=>{season.entries=boards[0]?.entries||[];};
+    syncPrimary();
     const ranking=el('details','season-admin-subsection');
-    ranking.append(el('summary','',`Leaderboard season (${season.entries.length}/20)`));
-    const inner=el('div','season-admin-subsection-content');ranking.append(inner);
-    const list=el('div','season-admin-sublist');inner.append(list);
-    const repaint=()=>{
+    ranking.open=boards.length>0;
+    ranking.append(el('summary','',`Leaderboard Season (${boards.length}/8)`));
+    const inner=el('div','season-admin-subsection-content');
+    ranking.append(inner);
+    inner.append(el('p','field-help',
+      'Buat leaderboard berjudul terlebih dahulu, kemudian tambahkan pemain pada leaderboard yang dipilih. Leaderboard pertama juga dipakai untuk kompatibilitas Homepage dan snapshot statistik.'));
+    const list=el('div','season-admin-leaderboards');
+    inner.append(list);
+    const openBoards=new Set();
+    const repaintBoards=()=>{
       list.replaceChildren();
-      season.entries.forEach((entry,i)=>{
-        const row=el('div','season-admin-rank');
-        const top=el('div','season-admin-rank-top');
-        top.append(el('strong','season-admin-rank-number','Pemain '+String(i+1).padStart(2,'0')));
-        if(!season.archiveFinalizedAt)
-          top.append(action('Hapus',()=>{season.entries.splice(i,1);mark();repaint();}));
-        const fields=el('div','season-admin-rank-fields');
-        fields.append(inputField('Nama pemain',entry.name,v=>entry.name=v,{max:80}));
-        fields.append(inputField('Peringkat / skor',entry.score,v=>entry.score=v,{max:80}));
-        if(season.archiveFinalizedAt)fields.querySelectorAll('input').forEach(input=>input.disabled=true);
-        row.append(top,fields);list.append(row);
+      boards.forEach((board,boardIndex)=>{
+        board.entries ||= [];
+        const frozen=!!season.archiveFinalizedAt&&boardIndex===0;
+        const panel=el('details','season-admin-mini season-admin-leaderboard');
+        panel.open=openBoards.has(board.id);
+        panel.addEventListener('toggle',()=>{
+          if(panel.open)openBoards.add(board.id);else openBoards.delete(board.id);
+        });
+        panel.append(el('summary','',`${board.title||'Leaderboard '+(boardIndex+1)} · ${board.entries.length} pemain`));
+        const controls=el('div','season-admin-mini-body');
+        controls.append(inputField('Judul leaderboard',board.title,v=>{
+          board.title=v;mark();
+          panel.querySelector('summary').textContent=`${v||'Leaderboard '+(boardIndex+1)} · ${board.entries.length} pemain`;
+        },{max:120}));
+        if(frozen)controls.append(el('p','field-help',
+          'Leaderboard snapshot final terkunci. Judul boleh diubah, tetapi hasil peringkat tidak.'));
+        const entries=el('div','season-admin-sublist');
+        controls.append(entries);
+        const paintEntries=()=>{
+          entries.replaceChildren();
+          board.entries.forEach((entry,index)=>{
+            const item=el('div','season-admin-rank');
+            const top=el('div','season-admin-rank-top');
+            top.append(el('strong','season-admin-rank-number','Peringkat '+String(index+1).padStart(2,'0')));
+            if(!frozen)top.append(action('Hapus',()=>{
+              board.entries.splice(index,1);syncPrimary();mark();paintEntries();
+            }));
+            const fields=el('div','season-admin-rank-fields');
+            fields.append(inputField('Nama pemain',entry.name,v=>{entry.name=v;syncPrimary();},{max:80}));
+            fields.append(inputField('Skor / pencapaian',entry.score,v=>{entry.score=v;syncPrimary();},{max:80}));
+            if(frozen)fields.querySelectorAll('input').forEach(input=>input.disabled=true);
+            item.append(top,fields);entries.append(item);
+          });
+          if(!frozen)window.SSCircleSort?.attach(entries,{
+            item:'.season-admin-rank',handleTarget:'.season-admin-rank-top',
+            onMove:(from,to)=>{
+              board.entries.splice(to,0,board.entries.splice(from,1)[0]);
+              syncPrimary();mark();paintEntries();
+            }
+          });
+          panel.querySelector('summary').textContent=
+            `${board.title||'Leaderboard '+(boardIndex+1)} · ${board.entries.length} pemain`;
+        };
+        paintEntries();
+        const actions=el('div','season-lifecycle-actions');
+        if(!frozen){
+          actions.append(action('+ Tambah pemain',()=>{
+            if(board.entries.length>=20)return window.SSCNotice.alert('Maksimal 20 pemain per leaderboard.');
+            board.entries.push({name:'',score:''});syncPrimary();mark();paintEntries();
+            panel.open=true;openBoards.add(board.id);
+          }));
+        }
+        if(!frozen)actions.append(action('Hapus leaderboard',async()=>{
+          const ok=await window.SSCNotice.confirm(
+            'Hapus leaderboard '+(board.title||'ini')+' beserta seluruh peringkat di dalamnya?',
+            {danger:true,confirmText:'Hapus leaderboard'});
+          if(!ok)return;
+          boards.splice(boardIndex,1);
+          if(boardIndex===0&&boards.length)boards[0].id='main';
+          syncPrimary();mark();repaintBoards();
+        }));
+        controls.append(actions);
+        panel.append(controls);list.append(panel);
       });
-      if(!season.archiveFinalizedAt)window.SSCircleSort?.attach(list,{
-        item:'.season-admin-rank',handleTarget:'.season-admin-rank-top',onMove:(from,to)=>{
-          season.entries.splice(to,0,season.entries.splice(from,1)[0]);mark();repaint();
-        }});
+      if(!boards.length)list.append(el('p','field-help',
+        'Belum ada leaderboard. Klik Tambah leaderboard untuk membuat kategori pertama.'));
     };
-    repaint();
-    const addPlayer=action('+ Tambah pemain',()=>{
-      if(season.entries.length>=20)return SSCNotice.alert('Maksimal 20 pemain per season.');
-      season.entries.push({name:'',score:''});mark();repaint();ranking.open=true;
-    });
-    addPlayer.classList.add('season-admin-add-player');
-    if(!season.archiveFinalizedAt)inner.append(addPlayer);
-    else inner.append(el('p','field-help','Leaderboard final sudah dikunci saat penutupan. Data snapshot tetap tersimpan.'));
+    repaintBoards();
+    inner.append(action('+ Tambah leaderboard',()=>{
+      if(boards.length>=8)return window.SSCNotice.alert('Maksimal 8 leaderboard per Season.');
+      const id=boards.length?'board-'+crypto.randomUUID().replace(/-/g,'').slice(0,12):'main';
+      boards.push({id,title:boards.length?'Leaderboard '+(boards.length+1):'Leaderboard Season',entries:[]});
+      syncPrimary();openBoards.add(id);mark();repaintBoards();ranking.open=true;
+    },true));
     achievement.content.append(ranking);
     body.append(achievement.section);
 
