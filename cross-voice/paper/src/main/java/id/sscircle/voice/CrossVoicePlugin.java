@@ -47,12 +47,14 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabExecutor {
     private static final String ALPHABET="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     private final SecureRandom random=new SecureRandom();
     private final Map<UUID,Settings> settings=new ConcurrentHashMap<>();
+    private final Set<UUID> forcedOff=ConcurrentHashMap.newKeySet();
     private final Map<String,Group> groups=new HashMap<>();
     private ArrayBlockingQueue<Frame> audioQueue=new ArrayBlockingQueue<>(256);
     private final AtomicBoolean running=new AtomicBoolean(false);
@@ -210,7 +212,7 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
     }
     @EventHandler public void quit(PlayerQuitEvent e){
         UUID id=e.getPlayer().getUniqueId();
-        settings.remove(id);
+        settings.remove(id);forcedOff.remove(id);
         JsonObject m=new JsonObject();m.addProperty("t","kick");m.addProperty("uuid",id.toString());send(m);
         // The audio worker owns all codec instances.
         audioWorker.submit(()->closeCodec(id));
@@ -235,6 +237,10 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
                 if(event.getSenderConnection()==null||!running.get())return;
                 UUID id=event.getSenderConnection().getPlayer().getUuid();
                 if(bedrock(id))return; // Don't echo injected Bedrock audio back into itself.
+                if(forcedOff.contains(id)||prefs(id).adminMuted){
+                    if(event.isCancellable())event.cancel();
+                    return;
+                }
                 byte[] encoded=event.getPacket().getOpusEncodedData();
                 if(encoded==null||encoded.length==0||encoded.length>2048)return;
                 if(!audioQueue.offer(new Frame(id,encoded.clone(),true,event.getPacket().isWhispering())))
@@ -407,9 +413,13 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
                 Player target=Bukkit.getPlayerExact(args[1]);
                 if(target==null){tell(sender,"Pemain tidak online.");return true;}
                 if(action.equals("kick")){
+                    forcedOff.add(target.getUniqueId());
                     JsonObject msg=new JsonObject();msg.addProperty("t","kick");
                     msg.addProperty("uuid",target.getUniqueId().toString());send(msg);
-                }else prefs(target.getUniqueId()).adminMuted=action.equals("mute");
+                }else {
+                    if(action.equals("unmute"))forcedOff.remove(target.getUniqueId());
+                    prefs(target.getUniqueId()).adminMuted=action.equals("mute");
+                }
                 snapshot();tell(sender,"Perintah "+action+" untuk "+target.getName()+" diterapkan.");return true;
             }
             if((action.equals("distance")||action.equals("groups")||action.equals("reload"))&&
@@ -485,6 +495,6 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
         for(UUID uuid:new ArrayList<>(senders.keySet()))closeCodec(uuid);
         for(OpusDecoder decoder:decoders.values())decoder.close();
         for(OpusEncoder encoder:encoders.values())encoder.close();
-        decoders.clear();encoders.clear();senders.clear();settings.clear();groups.clear();audioQueue.clear();
+        decoders.clear();encoders.clear();senders.clear();settings.clear();forcedOff.clear();groups.clear();audioQueue.clear();
     }
 }
