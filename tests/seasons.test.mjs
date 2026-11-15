@@ -226,8 +226,10 @@ test('lifecycle starts a dedicated stats period and freezes the final leaderboar
    .run(member,activeKey,15,1,1,1,new Date().toISOString());
  t.db.prepare('INSERT INTO minecraft_account_stat_progress VALUES(?,?,?,?,?,?,?)')
    .run(account,activeKey,7380,2,44,90,new Date().toISOString());
- t.db.prepare('INSERT OR REPLACE INTO minecraft_sync_status (id,seen_at,pending_count,capture_backlog,delivery_code) VALUES(?,?,?,?,?)')
-   .run(1,new Date().toISOString(),0,0,'SYNC_OK');
+ t.db.prepare(`INSERT OR REPLACE INTO minecraft_sync_status
+   (id,seen_at,plugin_version,online_count,pending_count,capture_backlog,delivery_code,last_success_at,tps_1m)
+   VALUES(?,?,?,?,?,?,?,?,?)`).run(1,new Date().toISOString(),'10.54.0',1,0,0,
+     'SYNC_OK',new Date().toISOString(),20);
  const preview=await t.req('/api/admin/seasons/lifecycle?seasonId=season-1',{admin:true});
  assert.equal(preview.status,200);
  assert.equal(preview.data.preview.playerCount,1);
