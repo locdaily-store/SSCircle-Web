@@ -1,0 +1,76 @@
+# Season Management & Timeline
+
+Season dikelola di **Admin Control → Season & Sejarah**. Editor ini memakai
+`homeLeaderboardSeasons`, `statSeasonId`, dan `statSeasonActivatedAt` yang sudah ada.
+Tidak ada database Season kedua, penghapusan statistik lama, atau reset dunia Minecraft.
+
+## Membuat dan membuka Season
+
+1. Klik **+ Tambah season**, isi nama/tanggal/sampul, lalu klik **Simpan Season**.
+   Entri baru dimulai sebagai **Draft / Direncanakan** dan belum dipublikasikan.
+2. Jika diperlukan, pilih **Rencana pembukaan** untuk mencatat tanggal dan jam.
+   **Catatan:** jadwal ini belum menjalankan aktivasi otomatis. SSCircle berjalan
+   di Cloudflare Pages dan belum memiliki scheduler terpisah. Admin harus
+   menekan **Mulai Season** ketika waktu pembukaan tiba.
+3. Jika jadwal belum tiba tetapi pembukaan tetap diminta, tindakan tersebut
+   membutuhkan konfirmasi admin tambahan.
+4. Saat **Mulai Season** dikonfirmasi, Worker memastikan tidak ada Season lain
+   dengan periode statistik aktif atau status berlangsung. Waktu aktivasi
+   berasal dari server, bukan dari browser. Data lama tidak dihapus.
+
+## Menutup Season dengan snapshot akhir
+
+1. Biarkan plugin Player Sync mengirim data terbaru. Periksa terakhir sinkron
+   pada **Periksa snapshot akhir**. Snapshot hanya mencakup data yang telah
+   berhasil diterima D1, tidak membaca statistik langsung dari RAM Paper.
+2. Klik **Persiapkan penutupan**. Persiapan disimpan dengan waktu server.
+3. Periksa pratinjau leaderboard, jumlah pemain, total playtime, deaths,
+   mob kills, blocks mined, dan kandidat Hall of Fame.
+4. Pilih apakah tiga penghargaan dari statistik yang memenuhi syarat akan
+   ditambahkan otomatis. Penghargaan dengan kategori yang sudah ada tidak
+   diduplikasi, dan penghargaan manual dipertahankan.
+5. Klik **Akhiri Season**, lalu konfirmasi. Server menyalin snapshot dan
+   leaderboard ke arsip, mengunci hasil akhir, mencatat timestamp penutupan,
+   menonaktifkan periode statistik Season dan menambahkan milestone penutupan.
+6. Jika belum ada statistik, admin harus mengizinkan penutupan tanpa snapshot
+   secara eksplisit. Data leaderboard manual tidak dihapus saat snapshot kosong.
+
+## Season lama
+
+Entri lama yang memiliki status *Sedang berlangsung* tetapi tidak terhubung
+ke periode statistik bisa memakai **Arsipkan Season lama**. Tindakan ini
+mempertahankan leaderboard manual dan tidak membuat statistik palsu.
+
+## Timeline dan publikasi
+
+- Tambah maksimal 24 milestone per Season, dengan tanggal, judul,
+  penjelasan, dan jenis (umum, event, pembangunan, penghargaan).
+- Milestone pembukaan/penutupan otomatis dicatat satu kali.
+- **Publikasikan season ini** mengatur tampil/tidaknya entri; **Tampilkan
+  Season Archive** mengatur akses halaman publik secara keseluruhan.
+- Season berstatus Draft tidak otomatis dipublikasikan.
+- Setelah Season ditutup, snapshot akhir dan leaderboard dilindungi dari
+  pengeditan melalui form biasa. Konten sejarah/kenangan tetap dapat ditambah.
+
+## Keamanan dan keterbatasan
+
+- API `/api/admin/seasons/lifecycle` memerlukan autentikasi Admin Control.
+- Semua mutasi menggunakan revision compare-and-swap untuk mencegah
+  overwrite perubahan admin lain; ada batas request.
+- Tidak ada sinkronisasi paksa otomatis ke plugin sebelum menutup Season.
+  Pastikan antrean Player Sync normal dan catat waktu lastSyncedAt.
+- Mengakhiri Season website **tidak** mereset world, inventory, achievement
+  Minecraft in-game, atau membuka Season secara otomatis pada jam tertentu.
+- Percobaan membuka ulang Season yang sudah diarsipkan ditolak.
+- Sebelum dipakai produksi, verifikasi pada staging dengan data D1 yang
+  representatif, kemudian uji koneksi Paper serta pengiriman statistik.
+
+## Urutan pengujian
+
+1. Jalankan `npm test`, tes browser/layout, dan build Paper lewat CI.
+2. Buat Season percobaan sebagai Draft, lalu simpan.
+3. Mulai Season, kirim satu statistik uji yang sah, dan verifikasi snapshot.
+4. Persiapkan dan akhiri Season. Pastikan hadiah tidak ganda, arsip tetap
+   tersedia, dan periode statistik lama tidak aktif.
+5. Buat Season baru, mulai, lalu pastikan catatan sepanjang masa serta
+   riwayat Season sebelumnya tetap dapat diakses.
