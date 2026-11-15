@@ -165,7 +165,8 @@ function receiveAudio(msg){
   }
   const dx=Number(msg.dx)||0,dz=Number(msg.dz)||0;
   const distance=Math.hypot(dx,dz),attenuation=Math.max(.08,1-distance/48);
-  state.pan.pan.value=Math.max(-1,Math.min(1,dx/Math.max(1,distance)));
+  const yaw=(Number(msg.yaw)||0)*Math.PI/180;
+  state.pan.pan.value=Math.max(-1,Math.min(1,-(dx*Math.cos(yaw)+dz*Math.sin(yaw))/Math.max(1,distance)));
   state.gain.gain.value=attenuation;
   const buffer=ctx.createBuffer(1,960,48000);
   buffer.copyToChannel(samples,0);
@@ -189,7 +190,7 @@ async function startMic(){
     const device=$('mic-select').value;
     stream=await navigator.mediaDevices.getUserMedia({audio:{
       deviceId:device?{exact:device}:undefined,echoCancellation:true,
-      noiseSuppression:true,autoGainControl:true},video:false});
+      noiseSuppression:$('noise-suppression').checked,autoGainControl:true},video:false});
     await context.audioWorklet.addModule('voice-worklet.js');
     micSource=context.createMediaStreamSource(stream);
     worklet=new AudioWorkletNode(context,'sscircle-microphone',{numberOfInputs:1,numberOfOutputs:1});
@@ -265,6 +266,11 @@ $('mic-select').onchange=async()=>{if(stream){stopMic();await startMic();}};
 $('speaker-select').onchange=async()=>{if(ctx?.setSinkId)try{await ctx.setSinkId($('speaker-select').value);}catch(e){message(e.message,true);}};
 $('sensitivity').oninput=()=>worklet?.port.postMessage({t:'sensitivity',value:Number($('sensitivity').value)/1000});
 $('mic-volume').oninput=()=>micGain=Number($('mic-volume').value)/100;
+$('noise-suppression').onchange=async()=>{
+  if(stream)for(const track of stream.getAudioTracks())try{
+    await track.applyConstraints({noiseSuppression:$('noise-suppression').checked});
+  }catch(e){message('Noise suppression tidak didukung oleh mikrofon/browser ini.',true);}
+};
 $('output-volume').oninput=()=>{outputVolume=Number($('output-volume').value)/100;if(speakerGain)speakerGain.gain.value=outputVolume;};
 $('ptt').addEventListener('pointerdown',e=>{e.preventDefault();pttDown=true;updateButtons();});
 for(const ev of ['pointerup','pointercancel','pointerleave'])
