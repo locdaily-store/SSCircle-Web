@@ -178,6 +178,9 @@ test('lifecycle starts a dedicated stats period and freezes the final leaderboar
    s.seasonArchiveEnabled=true;
    s.homeLeaderboardSeasons[0].archiveStatus='planned';
    s.homeLeaderboardSeasons[0].archivePublished=false;
+   s.homeLeaderboardSeasons[0].archiveAwards=[
+     {title:'Pemain Teraktif',player:'Pilihan Admin',description:'Penghargaan pilihan admin.'}
+   ];
  });
  assert.equal(draft.status,200,JSON.stringify(draft.data));
  const before=await t.req('/api/admin/form',{admin:true});
@@ -207,8 +210,13 @@ test('lifecycle starts a dedicated stats period and freezes the final leaderboar
  assert.equal(premature.status,400);
  const prepared=await seasonAction(t,'prepare',started.data.revision);
  assert.equal(prepared.status,200,JSON.stringify(prepared.data));
- const finished=await seasonAction(t,'end',prepared.data.revision);
+ const finished=await seasonAction(t,'end',prepared.data.revision,{autoAwards:true});
  assert.equal(finished.status,200,JSON.stringify(finished.data));
+ assert.equal(finished.data.season.archiveAwards.length,3);
+ assert.equal(finished.data.season.archiveAwards[0].player,'Pilihan Admin');
+ assert.equal(finished.data.season.archiveAwards.filter(a=>a.title==='Pemain Teraktif').length,1);
+ assert.equal(finished.data.season.archiveAwards.find(a=>a.title==='Pembasmi Monster').memberId,
+   member);
  assert.equal(finished.data.settings.statSeasonId,'');
  assert.equal(finished.data.season.archiveStatus,'ended');
  assert.equal(finished.data.season.archiveSnapshot.playerCount,1);
@@ -222,10 +230,12 @@ test('lifecycle starts a dedicated stats period and freezes the final leaderboar
  assert.equal(deleteArchived.status,409);
  const tamper=await save(t,s=>{
    s.homeLeaderboardSeasons[0].archiveSnapshot={capturedAt:'2000-01-01T00:00:00.000Z',playerCount:9999};
+   s.homeLeaderboardSeasons[0].entries=[{name:'Peringkat palsu',score:'100000'}];
  });
  assert.equal(tamper.status,200);
  const persisted=(await t.req('/api/admin/form',{admin:true})).data.settings.homeLeaderboardSeasons[0];
  assert.equal(persisted.archiveSnapshot.playerCount,1);
+ assert.equal(persisted.entries[0].name,'BuilderA');
 });
 
 test('planned opening requires explicit override before its scheduled time',async()=>{
