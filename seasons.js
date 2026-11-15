@@ -39,11 +39,35 @@
       if(dates.length)headText.append(el('p','season-archive-dates',dates.join(' – ')));
       const summary=typeof season.archiveSummary==='string'?season.archiveSummary.trim():'';
       if(summary)headText.append(el('p','season-archive-summary',summary));
-      const badge=el('span','season-archive-state',season.archiveStatus==='active'?'Sedang Berlangsung':'Arsip Season');
+      const badge=el('span','season-archive-state',season.archiveStatus==='active'
+        ?'Sedang Berlangsung':season.archiveStatus==='planned'?'Akan Datang':'Arsip Season');
       heading.append(headText,badge);card.append(heading);
       const detail=el('details','season-archive-details');
       detail.append(el('summary','','Lihat kenangan dan prestasi season ↗'));
       const body=el('div','season-archive-details-body');
+      const timeline=Array.isArray(season.archiveTimeline)?season.archiveTimeline.filter(item=>item?.title):[];
+      if(timeline.length){
+        const section=el('section','season-archive-group season-archive-timeline');
+        section.append(el('h3','','Timeline Season'));
+        const list=el('ol','season-timeline-list');
+        for(const item of [...timeline].sort((a,b)=>(a.date||'').localeCompare(b.date||''))){
+          const entry=el('li','season-timeline-entry');
+          if(item.date)entry.append(el('time','season-timeline-date',dateLabel(item.date)));
+          entry.append(el('strong','',item.title));
+          if(item.description)entry.append(el('p','',item.description));
+          list.append(entry);
+        }
+        section.append(list);body.append(section);
+      }
+      if(season.archiveStatus==='ended'&&season.archiveSnapshot?.capturedAt){
+        const snapshot=season.archiveSnapshot;
+        const section=el('section','season-archive-group season-archive-final');
+        section.append(el('h3','','Rekap Akhir Season'));
+        section.append(el('p','',String(snapshot.playerCount||0)+' pemain · '+
+          Math.floor((snapshot.playtimeSeconds||0)/3600)+' jam bermain · '+
+          (snapshot.deaths||0)+' deaths · '+(snapshot.mobKills||0)+' mob kills'));
+        body.append(section);
+      }
       const memories=Array.isArray(season.archiveMemories)?season.archiveMemories:[];
       if(memories.length){
         const section=el('section','season-archive-group');section.append(el('h3','','Foto & Kenangan'));
