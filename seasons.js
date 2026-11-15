@@ -24,6 +24,33 @@
     window.SSCircleTheme?.apply(settings);
     window.SSCircleShell?.apply(settings);
     const root=$('season-archive-list');root.replaceChildren();
+    // One accessible modal for all cards, including the live Admin preview.
+    const previous=$('season-archive-dialog');
+    if(previous){if(previous.open)previous.close();previous.remove();}
+    document.body.classList.remove('season-modal-open');
+    const dialog=el('dialog','season-archive-modal');
+    dialog.id='season-archive-dialog';
+    dialog.setAttribute('aria-modal','true');
+    dialog.setAttribute('aria-labelledby','season-archive-dialog-title');
+    const shell=el('div','season-archive-modal-shell');
+    const toolbar=el('div','season-archive-modal-toolbar');
+    const modalTitle=el('h2','season-archive-modal-title');
+    modalTitle.id='season-archive-dialog-title';
+    const closeButton=el('button','season-archive-modal-close','Tutup ✕');
+    closeButton.type='button';
+    closeButton.setAttribute('aria-label','Tutup detail Season');
+    closeButton.onclick=()=>dialog.close();
+    toolbar.append(modalTitle,closeButton);
+    const modalContent=el('div','season-archive-modal-content');
+    shell.append(toolbar,modalContent);
+    dialog.append(shell);
+    document.body.append(dialog);
+    let previousTrigger=null;
+    dialog.addEventListener('click',event=>{if(event.target===dialog)dialog.close();});
+    dialog.addEventListener('close',()=>{
+      document.body.classList.remove('season-modal-open');
+      if(previousTrigger?.isConnected)previousTrigger.focus({preventScroll:true});
+    });
     const entries=(Array.isArray(settings.homeLeaderboardSeasons)?settings.homeLeaderboardSeasons:[])
       .filter(s=>s?.archivePublished===true);
     $('season-page-empty').hidden=entries.length>0;
@@ -48,8 +75,10 @@
       const badge=el('span','season-archive-state',season.archiveStatus==='active'
         ?'Sedang Berlangsung':season.archiveStatus==='planned'?'Akan Datang':'Arsip Season');
       heading.append(headText,badge);card.append(heading);
-      const detail=el('details','season-archive-details');
-      detail.append(el('summary','','Lihat kenangan dan prestasi season ↗'));
+      card.setAttribute('role','button');
+      card.setAttribute('tabindex','0');
+      card.setAttribute('aria-label','Lihat detail lengkap '+(season.title||'Season SSCircle'));
+      card.append(el('span','season-archive-card-action','Lihat cerita, foto dan prestasi season ↗'));
       const body=el('div','season-archive-details-body');
       const timeline=Array.isArray(season.archiveTimeline)?season.archiveTimeline.filter(item=>item?.title):[];
       if(timeline.length){
@@ -131,7 +160,34 @@
         section.append(collection);body.append(section);
       }
       if(!body.children.length)body.append(el('p','season-archive-note','Cerita season ini sedang dilengkapi oleh pengelola.'));
-      detail.append(body);card.append(detail);root.append(card);
+      const openDetails=()=>{
+        if(dialog.open)return;
+        previousTrigger=card;
+        modalTitle.textContent=season.title||'Season SSCircle';
+        const intro=el('div','season-archive-modal-intro');
+        const fullCover=image(season.archiveCover,'Sampul lengkap '+(season.title||'Season SSCircle'));
+        if(fullCover){
+          const figure=el('figure','season-archive-modal-cover');
+          figure.append(fullCover);intro.append(figure);
+        }
+        const overview=el('div','season-archive-modal-overview');
+        overview.append(el('span','season-archive-state',badge.textContent));
+        if(dates.length)overview.append(el('p','season-archive-dates',dates.join(' – ')));
+        if(summary)overview.append(el('p','season-archive-summary',summary));
+        intro.append(overview);
+        modalContent.replaceChildren(intro,body);
+        modalContent.scrollTop=0;
+        dialog.showModal();
+        document.body.classList.add('season-modal-open');
+        closeButton.focus();
+      };
+      card.addEventListener('click',openDetails);
+      card.addEventListener('keydown',event=>{
+        if(event.key==='Enter'||event.key===' '){
+          event.preventDefault();openDetails();
+        }
+      });
+      root.append(card);
     }
     if(preview&&window.parent!==window)parent.postMessage({type:'ssc-season-preview-applied'},location.origin);
   }
