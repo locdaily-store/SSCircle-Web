@@ -404,3 +404,66 @@ test('unpublished boards stay hidden from public form metadata',async()=>{
  assert.equal(publicSeason.archiveLeaderboards,undefined);
  assert.equal(publicSeason.entries[0].name,'Pemain Lama');
 });
+
+test('Homepage may feature a secondary leaderboard without changing the official snapshot',async()=>{
+ const t=fixture();
+ const stored=await save(t,settings=>{
+   const season=settings.homeLeaderboardSeasons[0];
+   season.archivePublished=true;
+   season.archiveLeaderboards=[
+     {id:'main',title:'Pemain Teraktif',entries:[{name:'Pemain A',score:'300 jam'}]},
+     {id:'builders',title:'Builder Terbaik',entries:[{name:'Builder B',score:'Juara'}]}
+   ];
+   season.homeFeaturedLeaderboardId='builders';
+ });
+ assert.equal(stored.status,200,JSON.stringify(stored.data));
+ const admin=(await t.req('/api/admin/form',{admin:true})).data.settings.homeLeaderboardSeasons[0];
+ assert.equal(admin.homeFeaturedLeaderboardId,'builders');
+ assert.equal(admin.entries[0].name,'Pemain A');
+ const pub=(await t.req('/api/form')).data.settings.homeLeaderboardSeasons[0];
+ assert.equal(pub.homeFeaturedLeaderboard.title,'Builder Terbaik');
+ assert.equal(pub.homeFeaturedLeaderboard.entries[0].name,'Builder B');
+ assert.equal(pub.entries[0].name,'Pemain A');
+});
+
+test('Homepage featured selection safely falls back when the selected board is removed',async()=>{
+ const t=fixture();
+ const first=await save(t,settings=>{
+   const season=settings.homeLeaderboardSeasons[0];
+   season.archiveLeaderboards=[
+     {id:'main',title:'Utama',entries:[{name:'Pemain A',score:'1'}]},
+     {id:'event',title:'Event',entries:[{name:'Pemain B',score:'2'}]}
+   ];
+   season.homeFeaturedLeaderboardId='event';
+ });
+ assert.equal(first.status,200);
+ const changed=await save(t,settings=>{
+   settings.homeLeaderboardSeasons[0].archiveLeaderboards.pop();
+ });
+ assert.equal(changed.status,200,JSON.stringify(changed.data));
+ const season=(await t.req('/api/admin/form',{admin:true})).data.settings.homeLeaderboardSeasons[0];
+ assert.equal(season.homeFeaturedLeaderboardId,'main');
+ assert.equal(season.archiveLeaderboards.length,1);
+});
+
+test('Homepage featured board does not publish other Draft archive boards',async()=>{
+ const t=fixture();
+ const result=await save(t,settings=>{
+   settings.homeLeaderboardEnabled=true;
+   settings.seasonArchiveEnabled=true;
+   const season=settings.homeLeaderboardSeasons[0];
+   season.archivePublished=false;
+   season.archiveLeaderboards=[
+     {id:'main',title:'Pemain Teraktif',entries:[{name:'Pemain A',score:'10'}]},
+     {id:'featured',title:'Event Utama',entries:[{name:'Juara B',score:'1st'}]},
+     {id:'private',title:'Catatan privat',entries:[{name:'Rahasia',score:'99'}]}
+   ];
+   season.homeFeaturedLeaderboardId='featured';
+ });
+ assert.equal(result.status,200,JSON.stringify(result.data));
+ const season=(await t.req('/api/form')).data.settings.homeLeaderboardSeasons[0];
+ assert.equal(season.homeFeaturedLeaderboard.title,'Event Utama');
+ assert.equal(season.homeFeaturedLeaderboard.entries[0].name,'Juara B');
+ assert.equal(season.archiveLeaderboards,undefined);
+ assert.equal(JSON.stringify(season).includes('Catatan privat'),false);
+});
