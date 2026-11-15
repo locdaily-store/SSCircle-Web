@@ -320,9 +320,11 @@ async function recoverVoice(manual=false){
     if(ctx&&ctx.state!=='running'){
       void ctx.resume().catch(()=>backgroundInfo(translation('audioInterrupted')));
     }
-    if(micWanted&&(!stream||stream.getAudioTracks().every(t=>t.readyState==='ended'))){
-      if(manual)await activateMic();
-      else backgroundInfo(translation('micInterrupted'));
+    if(micWanted&&(!stream||stream.getAudioTracks().every(t=>t.readyState==='ended'||t.muted))){
+      if(manual){
+        if(stream)stopMic(true); // Recreate a track that stayed muted after app switching.
+        await activateMic();
+      }else backgroundInfo(translation('micInterrupted'));
     }else if(ctx?.state==='running'){
       backgroundInfo(translation('backgroundReady'));
     }
