@@ -894,7 +894,8 @@ async function seasonClosingPreview(env,seasonId,activatedAt){
   const positive=x=>Math.max(0,Number(x)||0);
   const entries=(ranked.results||[]).map((row,index)=>{
     const seconds=positive(row.playtime_seconds);
-    return {name:s(row.username,80)||'Pemain '+String(index+1).padStart(2,'0'),
+    return {memberId:row.application_id,
+      name:s(row.username,80)||'Pemain '+String(index+1).padStart(2,'0'),
       score:Math.floor(seconds/3600)+' jam '+Math.floor(seconds%3600/60)+' menit'};
   });
   const awardCandidates=[];
@@ -1032,6 +1033,7 @@ function validLeaderboard(input) {
       const title=s(board?.title,120);
       if(!title)throw Error('Judul leaderboard Season wajib diisi.');
       return {id:boardId,title,entries:boardEntries.map(e=>({
+        memberId:/^[0-9a-f-]{36}$/.test(e?.memberId||'')?e.memberId:'',
         name:s(e?.name,80),score:s(e?.score,80)
       })).filter(e=>e.name||e.score)};
     });
@@ -6224,12 +6226,16 @@ async function route(req, env, ctx) {
     f.settings.homeLeaderboardSeasons = (f.settings.homeLeaderboardSeasons || []).map(season => {
       const boards=Array.isArray(season.archiveLeaderboards)?season.archiveLeaderboards:[];
       const selected=boards.find(board=>board.id===season.homeFeaturedLeaderboardId)||boards[0];
+      // Internal member IDs support erasure, but must not reach the public API.
+      const withoutMemberIds=entries=>(entries||[]).map(({memberId,...entry})=>entry);
       const homeFeaturedLeaderboard=selected
-        ?{id:selected.id,title:selected.title,entries:selected.entries}:null;
+        ?{id:selected.id,title:selected.title,entries:withoutMemberIds(selected.entries)}:null;
       if(f.settings.seasonArchiveEnabled===true&&season.archivePublished===true)
-        return {...season,homeFeaturedLeaderboard,
+        return {...season,entries:withoutMemberIds(season.entries),
+          archiveLeaderboards:boards.map(board=>({...board,entries:withoutMemberIds(board.entries)})),
+          homeFeaturedLeaderboard,
           archiveAwards:(season.archiveAwards||[]).map(({memberId,...award})=>award)};
-      return {id:season.id,title:season.title,entries:season.entries,
+      return {id:season.id,title:season.title,entries:withoutMemberIds(season.entries),
         homeFeaturedLeaderboard,archivePublished:false};
     });
     return J(f);
