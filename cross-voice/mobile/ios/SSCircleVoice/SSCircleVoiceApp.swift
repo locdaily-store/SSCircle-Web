@@ -12,92 +12,189 @@ struct SSCircleVoiceApp: App {
     }
 }
 
+private enum VoiceTheme {
+    static let background = Color(red:12/255, green:24/255, blue:39/255)
+    static let panel = Color(red:20/255, green:38/255, blue:58/255)
+    static let card = Color(red:24/255, green:45/255, blue:67/255)
+    static let border = Color(red:53/255, green:83/255, blue:110/255)
+    static let foreground = Color(red:244/255, green:247/255, blue:255/255)
+    static let muted = Color(red:163/255, green:185/255, blue:204/255)
+    static let accent = Color(red:189/255, green:229/255, blue:252/255)
+    static let cyan = Color(red:124/255, green:196/255, blue:242/255)
+}
+
+private struct VoicePanel<Content: View>: View {
+    @ViewBuilder var content: Content
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) { content }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(18)
+            .background(RoundedRectangle(cornerRadius: 18).fill(VoiceTheme.panel))
+            .overlay(RoundedRectangle(cornerRadius: 18)
+                .stroke(VoiceTheme.border, lineWidth: 1))
+    }
+}
+
+private struct VoiceActionStyle: ButtonStyle {
+    var prominent = false
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 13, weight: .bold))
+            .foregroundColor(prominent ? VoiceTheme.background : VoiceTheme.foreground)
+            .frame(maxWidth: .infinity, minHeight: 49)
+            .background(RoundedRectangle(cornerRadius: 11)
+                .fill(prominent ? VoiceTheme.accent : VoiceTheme.card))
+            .overlay(RoundedRectangle(cornerRadius: 11)
+                .stroke(prominent ? Color.clear : VoiceTheme.border, lineWidth: 1))
+            .opacity(configuration.isPressed ? 0.75 : 1)
+    }
+}
+
 struct VoiceScreen: View {
     @EnvironmentObject private var voice: SSCircleVoiceSession
-    @AppStorage("voice.gateway") private var gateway = ""
-    @AppStorage("voice.origin") private var websiteOrigin = ""
     @State private var code = ""
     @State private var group = ""
 
+    private func eyebrow(_ value: String) -> some View {
+        Text(value).font(.system(size: 11, weight: .bold))
+            .tracking(2).foregroundColor(VoiceTheme.cyan)
+    }
+
+    private func darkField(_ title: String, text: Binding<String>) -> some View {
+        TextField(title, text: text)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .font(.system(size: 16))
+            .foregroundColor(VoiceTheme.foreground)
+            .padding(.horizontal, 14)
+            .frame(height: 52)
+            .background(RoundedRectangle(cornerRadius: 11).fill(VoiceTheme.card))
+            .overlay(RoundedRectangle(cornerRadius: 11)
+                .stroke(VoiceTheme.border, lineWidth: 1))
+    }
+
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 15) {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(spacing: 13) {
                     Image("sscircle-logo")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 72, height: 72)
+                        .resizable().scaledToFit()
+                        .frame(width: 64, height: 64)
                         .accessibilityLabel("Logo SSCircle")
-                    Text("SSCircle Voice")
-                        .font(.largeTitle).bold()
-                    Text("Voice Minecraft Java ↔ Bedrock, dengan audio iOS native.")
-                        .foregroundColor(.secondary)
-                    Group {
-                        Text("1. Konfigurasi Cloudflare (sekali saja)").font(.headline)
-                        TextField("https://...workers.dev", text: $gateway)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .keyboardType(.URL)
-                            .textFieldStyle(.roundedBorder)
-                        TextField("Website origin (VOICE_ORIGIN)", text: $websiteOrigin)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .keyboardType(.URL)
-                            .textFieldStyle(.roundedBorder)
-                        Text("Alamat Origin harus sama persis dengan VOICE_ORIGIN pada Cloudflare Worker.")
-                            .font(.caption).foregroundColor(.secondary)
+                    VStack(alignment: .leading, spacing: 5) {
+                        eyebrow("VOICE / CROSS-PLATFORM")
+                        Text("SSCircle Voice")
+                            .font(.system(size: 27, weight: .bold))
+                            .foregroundColor(VoiceTheme.foreground)
+                        Text("Java + Bedrock • Voice Chat")
+                            .font(.system(size: 12))
+                            .foregroundColor(VoiceTheme.muted)
                     }
-                    Text("2. Ketik /voice link di Minecraft Bedrock").font(.headline)
-                    TextField("Kode pairing 8 karakter", text: $code)
+                }
+                .padding(.bottom, 4)
+
+                VoicePanel {
+                    eyebrow("●  SSCIRCLE NETWORK")
+                    Text(voice.active ? "Gateway terhubung otomatis" :
+                        "Konfigurasi otomatis dari SSCircle")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(VoiceTheme.foreground)
+                }
+
+                VoicePanel {
+                    eyebrow("01 / PAIRING")
+                    Text("Hubungkan akun Minecraft")
+                        .font(.system(size: 21, weight: .bold))
+                        .foregroundColor(VoiceTheme.foreground)
+                    Text("Masuk server Bedrock, jalankan /voice link, lalu masukkan kode 8 karakter.")
+                        .font(.system(size: 14))
+                        .foregroundColor(VoiceTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                    darkField("Kode pairing 8 karakter", text: $code)
                         .textInputAutocapitalization(.characters)
-                        .autocorrectionDisabled()
-                        .textFieldStyle(.roundedBorder)
-                    Button("Hubungkan & aktifkan mikrofon") {
-                        voice.connect(gateway: gateway, origin: websiteOrigin,
-                                      code: code.uppercased())
+                    Button("Hubungkan ke Voice") {
+                        voice.connect(code: code.uppercased().trimmingCharacters(in: .whitespacesAndNewlines))
                         code = ""
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(VoiceActionStyle(prominent: true))
                     .disabled(voice.active)
-                    Button("Putuskan Voice") { voice.disconnect() }
-                        .buttonStyle(.bordered)
-                        .tint(.red)
-                        .disabled(!voice.active)
-                    Text(voice.status).font(.headline)
-                    if !voice.player.isEmpty {
-                        Text("Akun: \(voice.player)").foregroundColor(.secondary)
-                    }
-                    HStack {
+                    Text("Gateway dan Origin akan terdeteksi otomatis. Kode berlaku 2 menit.")
+                        .font(.system(size: 12))
+                        .foregroundColor(VoiceTheme.muted)
+                }
+
+                VoicePanel {
+                    eyebrow("02 / VOICE ROOM")
+                    Text("Live Voice Control")
+                        .font(.system(size: 21, weight: .bold))
+                        .foregroundColor(VoiceTheme.foreground)
+                    Text(voice.player.isEmpty ? "Minecraft belum ditautkan" : "@" + voice.player)
+                        .font(.system(size: 13))
+                        .foregroundColor(VoiceTheme.muted)
+                    Text(voice.status)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(VoiceTheme.foreground)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    HStack(spacing: 8) {
                         Button(voice.muted ? "Unmute" : "Mute") {
                             voice.control(voice.muted ? "unmute" : "mute")
                         }
+                        .buttonStyle(VoiceActionStyle())
                         Button(voice.deafened ? "Undeafen" : "Deafen") {
                             voice.control(voice.deafened ? "undeafen" : "deafen")
                         }
+                        .buttonStyle(VoiceActionStyle())
+                    }
+                    HStack(spacing: 8) {
                         Button(voice.whisper ? "Whisper ON" : "Whisper OFF") {
                             voice.control(voice.whisper ? "normal" : "whisper")
                         }
+                        .buttonStyle(VoiceActionStyle())
+                        Button("Disconnect") { voice.disconnect() }
+                            .buttonStyle(VoiceActionStyle())
                     }
-                    .buttonStyle(.bordered)
                     .disabled(!voice.active)
-                    TextField("Nama grup (opsional)", text: $group)
-                        .textInputAutocapitalization(.never)
-                        .textFieldStyle(.roundedBorder)
-                    HStack {
-                        Button("Gabung grup") { voice.control("group", value: group) }
-                        Button("Keluar grup") { voice.control("leave-group") }
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(!voice.active)
-                    Text(voice.nearby).font(.subheadline)
-                    Text("3. Buka Minecraft. iOS akan mencoba mempertahankan mikrofon dan suara saat aplikasi berpindah ke background. Panggilan telepon dan kebijakan audio game masih bisa menginterupsi sesi.")
-                        .font(.caption).foregroundColor(.secondary)
                 }
-                .padding()
+
+                VoicePanel {
+                    eyebrow("03 / MODE SUARA")
+                    Text("Proximity & Group")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundColor(VoiceTheme.foreground)
+                    Text("Proximity aktif otomatis. Gunakan grup untuk kanal bersama.")
+                        .font(.system(size: 13))
+                        .foregroundColor(VoiceTheme.muted)
+                    darkField("Nama grup (opsional)", text: $group)
+                    HStack(spacing: 8) {
+                        Button("Gabung grup") {
+                            voice.control("group", value: group)
+                        }
+                        .buttonStyle(VoiceActionStyle(prominent: true))
+                        Button("Keluar grup") {
+                            voice.control("leave-group")
+                        }
+                        .buttonStyle(VoiceActionStyle())
+                    }
+                    .disabled(!voice.active)
+                }
+
+                VoicePanel {
+                    eyebrow("PEMAIN YANG TERDENGAR")
+                    Text(voice.nearby)
+                        .font(.system(size: 14))
+                        .foregroundColor(VoiceTheme.foreground)
+                }
+                Text("BACKGROUND VOICE  •  Aplikasi mencoba mempertahankan mikrofon saat membuka Minecraft. Panggilan, Bluetooth, dan kebijakan iOS dapat menginterupsi audio.")
+                    .font(.system(size: 12))
+                    .foregroundColor(VoiceTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 5)
             }
-            .navigationTitle("Voice")
-            .navigationBarTitleDisplayMode(.inline)
+            .padding(18)
         }
+        .background(VoiceTheme.background.ignoresSafeArea())
+        .preferredColorScheme(.dark)
     }
 }
 
