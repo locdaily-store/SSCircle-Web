@@ -28,16 +28,21 @@ VOICE_IOS_APP_URL=https://testflight.apple.com/join/KODE_RESMI_APPLE
 ```
 Ganti `KODE_RESMI_APPLE` dengan kode undangan TestFlight yang benar. **Jangan gunakan contoh ini secara langsung**. Redeploy Pages agar `/voice-config.js` menyajikan dua tautan yang telah divalidasi. Tanpa variabel yang valid, halaman tetap menampilkan dua pilihan, tetapi diarahkan ke daftar build Android dan panduan instalasi iOS, bukan APK/IPA palsu.
 
-## Cara pakai
-1. Deploy gateway pada `cross-voice/cloudflare` dan plugin Paper seperti `cross-voice/INSTALL-ID.md`. Gunakan gateway terbaru **yang sudah mendukung POST /api/renew**.
-2. Buka aplikasi SSCircle Voice di HP.
-3. Masukkan **Gateway Cloudflare**: URL HTTPS Worker, misalnya `https://sscircle-cross-voice.<akun>.workers.dev` (tanpa `/ws`, `/bridge`, atau `/api`).
-4. Masukkan **Origin website**: harus SAMA PERSIS dengan `VOICE_ORIGIN` di `cross-voice/cloudflare/wrangler.toml`, misalnya `https://sscircle.example.com`. Ini adalah konfigurasi CORS gateway, **bukan** secret.
-5. Login ke server Minecraft Bedrock melalui Geyser/Floodgate, ketik `/voice link`.
-6. Masukkan kode 8 karakter dan tekan **Hubungkan & mulai Voice**. Izinkan akses mikrofon saat diminta.
-7. Setelah status **Terhubung**, masuk Minecraft. Mikrofon tetap aktif melalui layanan Android dengan notifikasi permanen, saat Android mengizinkan.
-8. Kontrol **Mute, Deafen, Whisper, Group** dapat dibuka kembali dari aplikasi. Tombol notifikasi **Putuskan** menghentikan sesi.
-9. Bila koneksi gagal dan token habis, lakukan `/voice link` ulang. Alamat gateway/origin disimpan, kode dan token **tidak** disimpan.
+## Cara pakai (konfigurasi otomatis)
+1. Deploy gateway Cloudflare terbaru dan plugin Paper; gateway harus mendukung `/api/renew` dan halaman SSCircle Pages harus memiliki `/api/voice/mobile-config`.
+2. **Admin server** mengatur satu kali `VOICE_PUBLIC_URL` pada Cloudflare Pages dan `VOICE_ORIGIN` pada Worker. Origin harus sama dengan domain website yang benar.
+3. Pasang aplikasi SSCircle Voice. **Tidak perlu mengisi alamat gateway atau Origin**; aplikasi membaca keduanya melalui endpoint HTTPS website resmi.
+4. Login ke Minecraft Bedrock melalui Geyser/Floodgate, jalankan `/voice link`, dan ketik kode 8 karakter di aplikasi.
+5. Tekan **Hubungkan ke Voice**, izinkan mikrofon dan tunggu status terhubung. Lalu buka Minecraft.
+6. Tombol Mute, Deafen, Whisper, Group, dan Disconnect berada dalam kartu berwarna gelap yang mengikuti tema halaman SSCircle Voice.
+7. Kode pairing dan session token tidak disimpan ke penyimpanan permanen. Sesi kadaluarsa membutuhkan kode baru.
+
+### Domain website bawaan aplikasi
+APK Preview saat ini mengenali website staging resmi `https://voice-test.sscircle.pages.dev`. Untuk **domain SSCircle produksi yang berbeda**, admin harus menyetel satu variabel saat build, bukan meminta setiap pemain mengisinya:
+```bash
+gradle -p cross-voice/mobile/android :app:assembleDebug -PvoiceSiteOrigin=https://DOMAIN-WEBSITE-SSCircle --no-daemon
+```
+Ganti contoh `DOMAIN-WEBSITE-SSCircle` dengan domain HTTPS website aktual, tanpa trailing path. Setelah domain dibangun ke APK, pembaruan Worker/gateway berikutnya diambil **otomatis** dari `/api/voice/mobile-config`, tanpa membangun ulang aplikasi hanya karena URL Worker berubah. Hindari menebak domain produksi.
 
 ## Peringatan penggunaan
 - **Jangan** memakai URL HTTP. Semua request menggunakan HTTPS/WSS, TLS normal (tanpa bypass sertifikat).
@@ -63,4 +68,5 @@ Buka folder `cross-voice/mobile/android` sebagai proyek di Android Studio jika p
 - Format audio kompatibel dengan `voice.js`: PCM16 LE, mono, 48 kHz, 960 sample/20 ms, base64, batch 3 frame.
 - Ada notifikasi ongoing yang bisa menghentikan mikrofon, izin mikrofon, mode voice activation, reconnect bertahap, dan wakelock terbatas.
 - Aplikasi tidak menyimpan rekaman, pairing code, maupun bearer token di penyimpanan permanen.
+- Hanya domain HTTPS SSCircle yang sudah ditentukan saat build yang boleh menjadi sumber konfigurasi otomatis. Tidak ada URL manual yang dapat dipakai untuk mengalihkan pengguna ke situs asing.
 - Proyek harus diuji secara langsung dengan plugin Paper/SVC pada versi Minecraft target sebelum digunakan di server produksi.
