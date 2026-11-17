@@ -227,66 +227,97 @@ public final class VoiceService extends Service {
         }
     }
 
-    // This Preview fallback is a known public SSCircle endpoint, NOT a hidden secret.
-    // Never use this fallback for a custom production domain.
+    // The SSCircle website is the source of truth for both web and native voice.
+    // Do NOT silently switch a Production pairing code to the Preview Worker.
+    private static final String PRODUCTION_SITE = "https://sscircle.pages.dev";
     private static final String PREVIEW_SITE = "https://voice-test.sscircle.pages.dev";
+    private static final String PRODUCTION_GATEWAY =
+        "https://sscircle-cross-voice-prod.locdailymar.workers.dev";
     private static final String PREVIEW_GATEWAY =
         "https://sscircle-cross-voice.locdailymar.workers.dev";
 
+    private OkHttpClient discoveryClient() {
+        return client.newBuilder()
+            .followRedirects(false).followSslRedirects(false)
+            .callTimeout(9, TimeUnit.SECONDS).build();
+    }
+    private String configGateway(String site, OkHttpClient discovery) {
+        Request req = new Request.Builder()
+            .url(site + "/api/voice/mobile-config")
+            .header("Accept", "application/json")
+            .header("Cache-Control", "no-store").build();
+        try (Response res = discovery.newCall(req).execute()) {
+            if (res.code() != 200 || res.body() == null) return null;
+            JSONObject data = new JSONObject(res.body().string());
+            String originFromSite = normalizeHttpsOrigin(data.optString("origin", ""));
+            String discovered = normalizeHttpsOrigin(data.optString("gateway", ""));
+            return data.optBoolean("ready", false) && site.equals(originFromSite)
+                ? discovered : null;
+        } catch (Exception ignored) { return null; }
+    }
+    private String webGateway(String site, OkHttpClient discovery) {
+        // Exactly the same gateway source that voice.html loads in the browser.
+        // We only parse one fixed data assignment, never execute untrusted JS.
+        Request req = new Request.Builder()
+            .url(site + "/voice-config.js")
+            .header("Cache-Control", "no-store").build();
+        try (Response res = discovery.newCall(req).execute()) {
+            if (res.code() != 200 || res.body() == null) return null;
+            String body = res.body().string();
+            if (body.length() > 8192) return null;
+            java.util.regex.Matcher matcher = java.util.regex.Pattern.compile(
+                "window\\.SSCIRCLE_VOICE_GATEWAY\\s*=\\s*(['\\\"])(https://[A-Za-z0-9.-]+(?::[0-9]+)?)\\1\\s*;"
+            ).matcher(body);
+            return matcher.find() ? normalizeHttpsOrigin(matcher.group(2)) : null;
+        } catch (Exception ignored) { return null; }
+    }
+    private boolean gatewayHealthy(String worker, String site, OkHttpClient discovery) {
+        if (worker == null || worker.equals(site)) return false;
+        Request req = new Request.Builder()
+            .url(worker + "/api/health")
+            .header("Origin", site)
+            .header("Accept", "application/json")
+            .header("Cache-Control", "no-store").build();
+        try (Response res = discovery.newCall(req).execute()) {
+            if (res.code() != 200 || res.body() == null) return false;
+            JSONObject data = new JSONObject(res.body().string());
+            // The same ready indicator shown on the web. It is tied to a
+            // live Paper bridge + recent Minecraft player snapshot.
+            return data.optBoolean("ready", false);
+        } catch (Exception ignored) { return false; }
+    }
     private void discoverAndPair(long gen, String code) {
-        String trusted = normalizeHttpsOrigin(getString(R.string.voice_site_origin));
-        if (trusted == null) {
+        String site = normalizeHttpsOrigin(getString(R.string.voice_site_origin));
+        if (site == null) {
             if (valid(gen)) failAndStop("Domain SSCircle pada aplikasi tidak valid.");
             return;
         }
-        // Prevent redirect to an unrelated website from returning attacker-controlled
-        // gateway URLs. Same-origin redirects can be diagnosed, but not followed blindly.
-        OkHttpClient configClient = client.newBuilder()
-            .followRedirects(false).followSslRedirects(false).build();
-        Request request = new Request.Builder()
-            .url(trusted + "/api/voice/mobile-config")
-            .header("Cache-Control", "no-store")
-            .header("Accept", "application/json")
-            .build();
-        String issue = "Konfigurasi tidak tersedia.";
-        try (Response response = configClient.newCall(request).execute()) {
+        OkHttpClient discovery = discoveryClient();
+        java.util.LinkedHashSet<String> candidates = new java.util.LinkedHashSet<>();
+        String pagesGateway = configGateway(site, discovery);
+        if (pagesGateway != null) candidates.add(pagesGateway);
+        // The runtime browser script is the fallback, not a hard-coded
+        // unrelated Preview gateway as in v0.2.1.
+        String browserGateway = webGateway(site, discovery);
+        if (browserGateway != null) candidates.add(browserGateway);
+        // Stable, public fallback only for its matching website environment.
+        // Always require /api/health ready=true BEFORE using it.
+        if (PRODUCTION_SITE.equals(site)) candidates.add(PRODUCTION_GATEWAY);
+        if (PREVIEW_SITE.equals(site)) candidates.add(PREVIEW_GATEWAY);
+        for (String candidate : candidates) {
             if (!valid(gen)) return;
-            int status = response.code();
-            if (status >= 300 && status < 400) {
-                issue = "Website mengalihkan URL konfigurasi (HTTP " + status + ").";
-            } else if (response.body() == null) {
-                issue = "Respons konfigurasi SSCircle kosong.";
-            } else if (!response.isSuccessful()) {
-                issue = "Endpoint konfigurasi HTTP " + status + ".";
-            } else {
-                JSONObject data = new JSONObject(response.body().string());
-                String website = normalizeHttpsOrigin(data.optString("origin", ""));
-                String worker = normalizeHttpsOrigin(data.optString("gateway", ""));
-                // Always use the Origin actually reported by the trusted website.
-                if (data.optBoolean("ready", false) && trusted.equals(website) &&
-                    worker != null) {
-                    gateway = worker;
-                    origin = website;
-                    message("Gateway SSCircle ditemukan. Memeriksa pairing...");
-                    pair(gen, code);
-                    return;
-                }
-                issue = "Gateway belum diatur atau Origin website tidak cocok.";
-            }
-        } catch (Exception error) {
-            issue = "Konfigurasi SSCircle tidak dapat dibaca: " + error.getMessage();
-        }
-        if (!valid(gen)) return;
-        if (PREVIEW_SITE.equals(trusted)) {
-            // The existing SSCircle Preview webpage is already configured to use
-            // this exact worker. No dependency on a Pages redirect for pairing.
-            gateway = PREVIEW_GATEWAY;
-            origin = PREVIEW_SITE;
-            message("Menghubungkan gateway SSCircle Preview...");
+            message("Memeriksa gateway Voice SSCircle...");
+            if (!gatewayHealthy(candidate, site, discovery)) continue;
+            gateway = candidate;
+            origin = site;
+            message("Gateway Minecraft online. Memeriksa kode pairing...");
             pair(gen, code);
             return;
         }
-        failAndStop(issue + " Periksa /api/voice/mobile-config di domain SSCircle.");
+        if (valid(gen)) failAndStop(
+            "Gateway Voice SSCircle tidak terhubung ke server Minecraft. " +
+            "Pastikan VOICE_PUBLIC_URL website dan /scvoice status memakai Worker " +
+            "yang sama. Tidak memakai gateway Preview untuk kode Production.");
     }
 
     private void pair(long gen, String code) {
