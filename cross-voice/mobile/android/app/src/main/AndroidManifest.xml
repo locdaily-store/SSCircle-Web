@@ -9,6 +9,7 @@
     <uses-feature android:name="android.hardware.microphone" android:required="true"/>
 
     <application
+        android:icon="@drawable/sscircle_voice_logo"
         android:label="SSCircle Voice"
         android:theme="@android:style/Theme.Material.Light.NoActionBar"
         android:usesCleartextTraffic="false"
