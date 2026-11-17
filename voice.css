@@ -32,5 +32,16 @@
 .voice-background-panel p{font-size:13px;margin:5px 0 0;opacity:.85;line-height:1.55}
 .voice-background-panel button{flex-shrink:0}
 .voice-mobile-warning{padding:14px;border-radius:10px;background:#f9bf6c19;font-size:13px;margin-top:22px}
+.voice-app-downloads{border:1px solid #8aabc144;border-radius:18px;padding:clamp(18px,3vw,28px);background:linear-gradient(125deg,#96d9ff15,#eef9ff05);margin:0 0 24px}
+.voice-app-heading h2{font-size:clamp(20px,3vw,27px);margin:7px 0}
+.voice-app-heading p{font-size:14px;margin:0 0 18px;opacity:.76}
+.voice-app-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}
+.voice-app-option{min-width:0;padding:16px;border:1px solid #8aabc144;border-radius:13px;background:#8aabc10b}
+.voice-app-platform{font-weight:700;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.voice-app-platform small{font-size:12px;font-weight:500;opacity:.7}
+.voice-app-button{display:block;margin-top:12px;padding:12px 14px;border-radius:10px;text-align:center;text-decoration:none!important;font-weight:700;background:#bde5fc;color:#08233b!important;transition:background .15s}
+.voice-app-button:hover{background:#91cffa}
+.voice-app-option p{font-size:12px;line-height:1.5;margin:10px 0 0;opacity:.78}
+@media(max-width:620px){.voice-app-grid{grid-template-columns:1fr}.voice-app-platform{flex-wrap:wrap}}
 .voice-home-mobile{display:none} .home-nav .is-active{color:var(--primary-color,#78caff)!important}
 @media(max-width:810px){.voice-top{flex-wrap:wrap}.voice-language{margin-left:0;width:100%}.voice-setting-grid{grid-template-columns:1fr}.voice-home-mobile{display:inline-block;margin-left:auto;padding:10px}.voice-page .home-nav,.ssc-voice-page .home-nav{display:none}.voice-pair-row{flex-direction:column}.voice-network{flex-wrap:wrap}.voice-network small{width:100%;margin-left:21px} .voice-room-head{align-items:center}.voice-background-panel{align-items:stretch;flex-direction:column}.voice-background-panel button{width:100%}.voice-shell{padding-bottom:50px}}
