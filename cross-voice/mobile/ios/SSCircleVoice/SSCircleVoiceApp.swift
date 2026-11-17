@@ -266,8 +266,12 @@ final class SSCircleVoiceSession: ObservableObject {
         request.setValue("application/json, text/javascript", forHTTPHeaderField: "Accept")
         guard let (data, response) = try? await URLSession.shared.data(for: request),
               let http = response as? HTTPURLResponse, http.statusCode == 200,
-              let finalURL = http.url, normalized(finalURL.absoluteString.replacingOccurrences(
-                of: finalURL.path, with: "", range: finalURL.pathRange)) == site else {
+              let url = http.url,
+              let parts = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              parts.scheme?.lowercased() == "https",
+              let host = parts.host,
+              "https://" + host.lowercased() +
+                (parts.port.map { ":\($0)" } ?? "") == site else {
             return nil
         }
         return data
@@ -325,7 +329,9 @@ final class SSCircleVoiceSession: ObservableObject {
         // Production pairing must never be sent to the Preview Worker.
         if site == productionSite { endpoints.append(productionGateway) }
         if site == previewSite { endpoints.append(previewGateway) }
-        for endpoint in Array(Set(endpoints)) where endpoint != site {
+        var checked = Set<String>()
+        for endpoint in endpoints where endpoint != site {
+            guard checked.insert(endpoint).inserted else { continue }
             if await voiceHealth(endpoint, site: site) {
                 gateway = endpoint
                 origin = site
