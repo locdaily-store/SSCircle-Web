@@ -25,6 +25,7 @@ Worker menghasilkan URL workers.dev, atau bisa pakai Custom Domain pada Settings
 - GET /api/health: health, jumlah pemain/sesi, counters.
 - POST /api/pair: kode sekali pakai dari Paper yang dipasangkan ke UUID Floodgate; hasilnya token sesi 15 menit.
 - POST /api/ticket: token Bearer menjadi ticket sekali pakai (15 detik).
+- POST /api/renew: rotasi token Bearer yang masih valid (15 menit baru), memperbarui attachment WebSocket aktif untuk aplikasi native; token lama tidak bisa dipakai kembali. Saat Paper offline sementara, token valid tidak dibatalkan.
 - GET /ws?ticket=... dengan Upgrade WebSocket: browser.
 - GET /bridge dengan Upgrade WebSocket dan Authorization Bearer secret: plugin Paper.
 - POST /api/disconnect: cabut token/session dan tutup koneksi browser.
