@@ -120,7 +120,7 @@ test('Voice app download links are injected only when official URL is configured
 test('Mobile bootstrap returns gateway and exact current website origin without secrets',async()=>{
   const result=await get('/api/voice/mobile-config',{VOICE_PUBLIC_URL:'https://voice.sscircle.example'});
   assert.equal(result.status,200);
-  assert.match(result.headers.get('content-type'),/application\\/json/);
+  assert.ok((result.headers.get('content-type')||'').includes('application/json'));
   assert.match(result.headers.get('cache-control'),/no-store/);
   const body=await result.json();
   assert.deepEqual(body,{version:1,ready:true,gateway:'https://voice.sscircle.example',origin:'https://sscircle.test'});
