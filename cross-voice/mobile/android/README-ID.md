@@ -51,6 +51,14 @@ Ganti contoh `DOMAIN-WEBSITE-SSCircle` dengan domain HTTPS website aktual, tanpa
 - Di Android 13+, izin notifikasi diperlukan agar tombol kontrol muncul di panel notifikasi. Sebagian vendor menyembunyikan tombol pada tampilan notifikasi ringkas; perlu diperluas/expand.
 - Notifikasi bukan kontrol game internal dan tidak muncul sebagai tombol Minecraft. Pada iPhone mekanisme notifikasi Android ini tidak tersedia.
 
+## Mode Speaker / Telepon v0.2.3
+- Buka **Voice Room → OUTPUT AUDIO**, lalu pilih **Speaker HP** untuk loudspeaker (suara seperti pemutar media) atau **Telepon** untuk earpiece/receiver.
+- Mode Speaker dipilih secara default ketika pertama kali dipasang; preferensi selanjutnya disimpan di perangkat, **bukan** di Cloudflare. Tidak ada kode pairing, token, atau secret yang disimpan bersama preferensi.
+- Bisa berpindah mode ketika Voice sedang terhubung tanpa disconnect. Audio Android 12+ menggunakan `AudioManager.setCommunicationDevice`, sedangkan Android 8–11 menggunakan routing speakerphone bawaan Android.
+- Jika perangkat **tidak memiliki earpiece** (misalnya tablet), mode Telepon tidak bisa dipilih dan aplikasi menampilkan pemberitahuan. Bluetooth/headset, kebijakan audio Minecraft, dan mode fokus suara perangkat dapat memengaruhi output aktual.
+- Mode Speaker dapat menimbulkan feedback atau gema, terutama bila microphone dekat loudspeaker. Headset atau volume lebih rendah disarankan.
+- Tombol Mute, Deafen, dan Disconnect tetap tersedia dari panel notifikasi Android. Pemilihan output berada di aplikasi SSCircle Voice.
+
 ## Peringatan penggunaan
 - **Jangan** memakai URL HTTP. Semua request menggunakan HTTPS/WSS, TLS normal (tanpa bypass sertifikat).
 - Aplikasi tidak meminta secret Bridge Paper. Credential tersebut tidak boleh dimasukkan ke aplikasi.
