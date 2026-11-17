@@ -104,13 +104,9 @@ public final class VoiceService extends Service {
             stopSelf();
             return START_NOT_STICKY;
         }
-        String host = intent.getStringExtra("gateway");
-        String website = intent.getStringExtra("origin");
         String code = intent.getStringExtra("code");
-        if (host == null || website == null || code == null ||
-            !host.startsWith("https://") || !website.startsWith("https://") ||
-            !code.matches("[A-HJ-NP-Z2-9]{8}")) {
-            message("Alamat gateway / origin / pairing tidak valid.");
+        if (code == null || !code.matches("[A-HJ-NP-Z2-9]{8}")) {
+            message("Kode pairing 8 karakter tidak valid.");
             stopSelf();
             return START_NOT_STICKY;
         }
@@ -128,16 +124,16 @@ public final class VoiceService extends Service {
         }
         // A new consented pairing replaces the former session on this device.
         endSession(false);
-        gateway = host;
-        origin = website;
+        gateway = "";
+        origin = "";
         token = ""; uuid = ""; player = ""; expiresAt = 0;
         muted = false; deafened = false; whisper = false;
         connected = false; reconnectAttempt = 0;
         active = true;
         long now = ++generation;
         acquireWakeLock();
-        message("Memeriksa kode pairing...");
-        io.execute(() -> pair(now, code));
+        message("Mengambil konfigurasi Voice dari SSCircle...");
+        io.execute(() -> discoverAndPair(now, code));
         return START_NOT_STICKY; // Never restart microphone without a visible, user-approved action.
     }
     private Notification notification(String content) {
@@ -190,6 +186,56 @@ public final class VoiceService extends Service {
             return json;
         }
     }
+    /** Native bootstrap is a fixed HTTPS website origin, not an arbitrary untrusted URL. */
+    private static String normalizeHttpsOrigin(String input) {
+        try {
+            java.net.URI uri = new java.net.URI(input);
+            if (!"https".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null ||
+                uri.getUserInfo() != null || uri.getRawQuery() != null ||
+                uri.getRawFragment() != null ||
+                (uri.getRawPath() != null && !uri.getRawPath().isEmpty() &&
+                 !"/".equals(uri.getRawPath()))) return null;
+            String host = uri.getHost().toLowerCase(java.util.Locale.ROOT);
+            return "https://" + host + (uri.getPort() == -1 ? "" : ":" + uri.getPort());
+        } catch (java.net.URISyntaxException | IllegalArgumentException failure) {
+            return null;
+        }
+    }
+
+    private void discoverAndPair(long gen, String code) {
+        String trusted = normalizeHttpsOrigin(getString(R.string.voice_site_origin));
+        if (trusted == null) {
+            if (valid(gen)) failAndStop("Alamat SSCircle pada build tidak valid.");
+            return;
+        }
+        Request request = new Request.Builder()
+            .url(trusted + "/api/voice/mobile-config")
+            .header("Cache-Control", "no-store")
+            .build();
+        try (Response response = client.newCall(request).execute()) {
+            if (!valid(gen)) return;
+            // Don't follow redirect to another website when fetching gateway config.
+            String received = normalizeHttpsOrigin(
+                response.request().url().scheme() + "://" + response.request().url().host() +
+                (response.request().url().port() == 443 ? "" : ":" + response.request().url().port()));
+            if (!trusted.equals(received)) throw new IOException("Domain konfigurasi berubah.");
+            if (response.body() == null) throw new IOException("Konfigurasi SSCircle kosong.");
+            JSONObject data = new JSONObject(response.body().string());
+            if (!response.isSuccessful() || !data.optBoolean("ready", false))
+                throw new IOException("Gateway belum dikonfigurasi pada website SSCircle.");
+            String site = normalizeHttpsOrigin(data.optString("origin", ""));
+            String worker = normalizeHttpsOrigin(data.optString("gateway", ""));
+            if (!trusted.equals(site) || worker == null)
+                throw new IOException("Konfigurasi gateway / Origin ditolak.");
+            gateway = worker;
+            origin = site;
+            message("Gateway ditemukan. Memeriksa kode pairing...");
+            pair(gen, code);
+        } catch (Exception failure) {
+            if (valid(gen)) failAndStop("Gagal menemukan Voice SSCircle: " + failure.getMessage());
+        }
+    }
+
     private void pair(long gen, String code) {
         try {
             JSONObject result = post("/api/pair", null, new JSONObject().put("code", code));
