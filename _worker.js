@@ -5568,6 +5568,23 @@ function sscVoiceGatewayOrigin(env,hostname=''){
   return validate(configured)||
     (hostname===SSC_VOICE_PREVIEW_HOST?SSC_VOICE_PREVIEW_GATEWAY:'');
 }
+// Only link installers hosted by the SSCircle GitHub release or Apple.
+function sscVoiceAppDownload(env,platform){
+  const key=platform==='android'?'VOICE_ANDROID_APK_URL':'VOICE_IOS_APP_URL';
+  const raw=typeof env[key]==='string'?env[key].trim():'';
+  try{
+    const url=new URL(raw);
+    if(url.protocol!=='https:'||url.username||url.password||url.search||url.hash)return '';
+    if(platform==='android' && url.hostname==='github.com' &&
+       /^\/locdaily-store\/SSCircle-Web\/releases\/download\/[^/]+\/[^/]+\.apk$/i.test(url.pathname))
+      return url.href;
+    if(platform==='ios' &&
+       ((url.hostname==='testflight.apple.com' && /^\/join\/[A-Za-z0-9]+\/?$/.test(url.pathname))||
+        (url.hostname==='apps.apple.com' && /^\/[a-z]{2}\/app\/[^/?#]+\/id\d+\/?$/i.test(url.pathname))))
+      return url.href;
+  }catch{}
+  return '';
+}
 async function route(req, env, ctx) {
   const url = new URL(req.url), path = url.pathname, method = req.method;
   if (path === '/api/github/database/inspect')
@@ -5785,7 +5802,9 @@ async function route(req, env, ctx) {
   }
   if (path==='/voice-config.js' && ['GET','HEAD'].includes(method)){
     const gateway=sscVoiceGatewayOrigin(env,url.hostname);
-    const js='window.SSCIRCLE_VOICE_GATEWAY = '+JSON.stringify(gateway)+';';
+    const downloads={android:sscVoiceAppDownload(env,'android'),ios:sscVoiceAppDownload(env,'ios')};
+    const js='window.SSCIRCLE_VOICE_GATEWAY = '+JSON.stringify(gateway)+';'+
+      '\\nwindow.SSCIRCLE_VOICE_DOWNLOADS = '+JSON.stringify(downloads)+';';
     return new Response(method==='HEAD'?null:js,{status:200,headers:{
       'Content-Type':'application/javascript; charset=utf-8',
       'Cache-Control':'no-store','X-Content-Type-Options':'nosniff',
