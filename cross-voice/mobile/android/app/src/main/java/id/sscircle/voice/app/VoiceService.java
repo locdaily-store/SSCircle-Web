@@ -158,7 +158,7 @@ public final class VoiceService extends Service {
             .setContentIntent(launch)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-            .setVisibility(Notification.VISIBILITY_PUBLIC)
+            .setVisibility(Notification.VISIBILITY_PRIVATE)
             .setCategory(Notification.CATEGORY_SERVICE);
         if (active) {
             builder.addAction(android.R.drawable.ic_lock_silent_mode,
