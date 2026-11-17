@@ -205,8 +205,9 @@ public final class VoiceActivity extends Activity {
                 .putExtra("code",pendingCode);
             if(Build.VERSION.SDK_INT>=26) startForegroundService(intent);
             else startService(intent);
-            pairing.setText("");
-            status.setText("Mencari gateway SSCircle...");
+            // Keep the one-time code visible if network discovery fails.
+            // Clear only after pairing has returned a Minecraft player account.
+            status.setText("Mencari gateway SSCircle Production...");
             if(Build.VERSION.SDK_INT>=33 &&
                checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)
                 requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},2002);
@@ -238,6 +239,7 @@ public final class VoiceActivity extends Activity {
             if(status==null)return;
             status.setText(s.message);
             account.setText(s.player.isEmpty()?"Minecraft belum ditautkan":"@"+s.player);
+            if (s.active && !s.player.isEmpty() && pairing.length() > 0) pairing.setText("");
             connected.setText(s.active?"Gateway terdeteksi • koneksi sedang aktif":
                 "Gateway terhubung otomatis melalui situs SSCircle");
             nearby.setText(s.nearby);
