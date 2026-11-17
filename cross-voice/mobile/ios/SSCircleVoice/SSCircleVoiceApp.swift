@@ -257,58 +257,82 @@ final class SSCircleVoiceSession: ObservableObject {
         return "https://" + host.lowercased() + port
     }
 
+    private func retrieveConfig(_ site: String, path: String) async -> Data? {
+        guard let url = URL(string: site + path) else { return nil }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 9
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
+        request.setValue("application/json, text/javascript", forHTTPHeaderField: "Accept")
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              let http = response as? HTTPURLResponse, http.statusCode == 200,
+              let finalURL = http.url, normalized(finalURL.absoluteString.replacingOccurrences(
+                of: finalURL.path, with: "", range: finalURL.pathRange)) == site else {
+            return nil
+        }
+        return data
+    }
+
+    private func voiceHealth(_ endpoint: String, site: String) async -> Bool {
+        guard let url = URL(string: endpoint + "/api/health") else { return false }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 8
+        request.setValue(site, forHTTPHeaderField: "Origin")
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              let http = response as? HTTPURLResponse, http.statusCode == 200,
+              let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              json["ready"] as? Bool == true else { return false }
+        return true
+    }
+
     private func discoverConfiguration() async throws {
-        // The web client and mobile clients share one SSCircle gateway.
-        // Preview has a pinned, PUBLIC gateway so an HTTPS redirect on Pages
-        // cannot prevent /voice link pairing. Production still requires a valid
-        // bootstrap response from its own trusted HTTPS website.
+        let productionSite = "https://sscircle.pages.dev"
         let previewSite = "https://voice-test.sscircle.pages.dev"
+        let productionGateway = "https://sscircle-cross-voice-prod.locdailymar.workers.dev"
         let previewGateway = "https://sscircle-cross-voice.locdailymar.workers.dev"
         let configuredSite = Bundle.main.object(forInfoDictionaryKey: "SSCVoiceBootstrapURL") as? String
-            ?? previewSite
-        guard let site = normalized(configuredSite),
-              let url = URL(string: site + "/api/voice/mobile-config") else {
+            ?? productionSite
+        guard let site = normalized(configuredSite) else {
             throw voiceError("Domain SSCircle pada aplikasi tidak valid.")
         }
-
-        do {
-            var request = URLRequest(url: url)
-            request.cachePolicy = .reloadIgnoringLocalCacheData
-            request.timeoutInterval = 12
-            let (data, response) = try await URLSession.shared.data(for: request)
-            // URLs may redirect to a canonical website. Never trust JSON from
-            // an unrelated redirected host.
-            guard let http = response as? HTTPURLResponse,
-                  let responseURL = http.url,
-                  responseURL.scheme?.lowercased() == "https",
-                  let host = responseURL.host else {
-                throw voiceError("Respons konfigurasi bukan dari HTTPS SSCircle.")
-            }
-            let port = responseURL.port.map { ":\($0)" } ?? ""
-            let actualOrigin = "https://" + host.lowercased() + port
-            guard actualOrigin == site else {
-                throw voiceError("Website mengalihkan endpoint konfigurasi.")
-            }
-            guard http.statusCode == 200,
-                  let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  object["ready"] as? Bool == true,
-                  let originString = object["origin"] as? String,
-                  let gatewayString = object["gateway"] as? String,
-                  let newOrigin = normalized(originString),
-                  let newGateway = normalized(gatewayString),
-                  newOrigin == site else {
-                throw voiceError("Gateway belum dikonfigurasi di website SSCircle.")
-            }
-            gateway = newGateway
-            origin = newOrigin
-            return
-        } catch {
-            guard site == previewSite else { throw error }
-            // The Preview website also uses this pinned gateway in voice-config.js.
-            // The fallback never accepts redirects or arbitrary gateway URLs.
-            gateway = previewGateway
-            origin = previewSite
+        var endpoints: [String] = []
+        if let bytes = await retrieveConfig(site, path: "/api/voice/mobile-config"),
+           let result = (try? JSONSerialization.jsonObject(with: bytes)) as? [String: Any],
+           result["ready"] as? Bool == true,
+           let website = result["origin"] as? String, normalized(website) == site,
+           let value = result["gateway"] as? String,
+           let endpoint = normalized(value) {
+            endpoints.append(endpoint)
         }
+        // This is the same runtime script used by voice.html in the browser.
+        if let bytes = await retrieveConfig(site, path: "/voice-config.js"),
+           bytes.count < 8192,
+           let script = String(data: bytes, encoding: .utf8) {
+            let pattern = #"window\.SSCIRCLE_VOICE_GATEWAY\s*=\s*(['"])(https://[A-Za-z0-9.-]+(?::[0-9]+)?)\1\s*;"#
+            if let match = script.range(of: pattern, options: .regularExpression) {
+                let assignment = String(script[match])
+                if let firstQuote = assignment.firstIndex(where: { $0 == "'" || $0 == "\"" }) {
+                    let quoted = assignment[assignment.index(after: firstQuote)...]
+                    if let closing = quoted.firstIndex(of: assignment[firstQuote]),
+                       let endpoint = normalized(String(quoted[..<closing])) {
+                        endpoints.append(endpoint)
+                    }
+                }
+            }
+        }
+        // Only a matching environment may use its published fallback. A
+        // Production pairing must never be sent to the Preview Worker.
+        if site == productionSite { endpoints.append(productionGateway) }
+        if site == previewSite { endpoints.append(previewGateway) }
+        for endpoint in Array(Set(endpoints)) where endpoint != site {
+            if await voiceHealth(endpoint, site: site) {
+                gateway = endpoint
+                origin = site
+                return
+            }
+        }
+        throw voiceError("SERVER_OFFLINE: Gateway website SSCircle tidak terhubung ke Minecraft. Periksa VOICE_PUBLIC_URL dan /scvoice status.")
     }
 
     func connect(code: String) {
