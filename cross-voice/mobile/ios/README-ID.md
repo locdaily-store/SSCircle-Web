@@ -29,6 +29,11 @@ Proyek native SwiftUI + AVAudioEngine. Berbeda dari website/PWA, audio menggunak
 ### Domain bootstrap iOS
 `SSCVoiceBootstrapURL` pada `SSCircleVoice/Info.plist` adalah domain website resmi yang boleh memberikan konfigurasi. Default saat preview: `https://voice-test.sscircle.pages.dev`. Sebelum membangun aplikasi untuk domain produksi yang berbeda, admin harus mengganti nilai tersebut satu kali, lalu build/sign melalui Xcode. Gateway Worker dapat berubah kemudian tanpa build ulang karena diambil dari website saat pairing.
 
+## Mode output Speaker / Telepon
+- Voice Room mempunyai dua tombol **Speaker HP** dan **Telepon**. Mode default Speaker untuk penggunaan Minecraft tanpa menempelkan HP ke telinga.
+- Pilihan langsung mengubah audio route `AVAudioSession.playAndRecord`, opsi `defaultToSpeaker`, dan `overrideOutputAudioPort` saat sesi aktif, **tanpa membuat sesi pairing baru**. Pilihan disimpan di `UserDefaults` (hanya preferensi speaker, bukan token atau kode).
+- Mode Telepon membutuhkan perangkat dengan receiver/earpiece; pada iPad dan perangkat audio Bluetooth, rute akhir bisa berbeda. iOS dapat menginterupsi atau mengubah rute ketika Minecraft/game dan panggilan lain mengambil alih audio.
+
 ## Implementasi
 - Audio input menggunakan AVAudioEngine mic tap + AVAudioConverter menuju PCM16 LE mono 48kHz.
 - Audio output menggunakan AVAudioPlayerNode per sumber untuk mixing, volume attenuation dan pan.
