@@ -146,6 +146,22 @@ struct VoiceScreen: View {
                         }
                         .buttonStyle(VoiceActionStyle())
                     }
+                    eyebrow("OUTPUT AUDIO")
+                        .padding(.top, 8)
+                    HStack(spacing: 8) {
+                        Button(voice.speakerMode ? "● Speaker HP" : "Speaker HP") {
+                            voice.selectOutput(speaker: true)
+                        }
+                        .buttonStyle(VoiceActionStyle(prominent: voice.speakerMode))
+                        Button(voice.speakerMode ? "Telepon" : "● Telepon") {
+                            voice.selectOutput(speaker: false)
+                        }
+                        .buttonStyle(VoiceActionStyle(prominent: !voice.speakerMode))
+                    }
+                    Text("Mode Speaker untuk suara terbuka; Telepon untuk receiver. Gunakan headset untuk mengurangi gema.")
+                        .font(.system(size: 12))
+                        .foregroundColor(VoiceTheme.muted)
+
                     HStack(spacing: 8) {
                         Button(voice.whisper ? "Whisper ON" : "Whisper OFF") {
                             voice.control(voice.whisper ? "normal" : "whisper")
@@ -207,6 +223,8 @@ final class SSCircleVoiceSession: ObservableObject {
     @Published private(set) var whisper = false
     @Published private(set) var player = ""
     @Published private(set) var nearby = "Pemain terdekat: -"
+    @Published private(set) var speakerMode =
+        (UserDefaults.standard.object(forKey: "sscircle.voice.speaker") as? Bool) ?? true
 
     private var gateway = ""
     private var origin = ""
@@ -219,6 +237,7 @@ final class SSCircleVoiceSession: ObservableObject {
     private var interruptionObserver: NSObjectProtocol?
 
     init() {
+        try? audio.setSpeakerMode(speakerMode)
         audio.onAudioBatch = { [weak self] batch in
             Task { @MainActor [weak self] in
                 guard let self, self.active, !self.muted, let socket = self.socket else { return }
@@ -532,6 +551,20 @@ final class SSCircleVoiceSession: ObservableObject {
                 status = "Sesi habis. Gunakan /voice link lagi."
                 disconnect(preserveStatus: true)
             }
+        }
+    }
+
+    func selectOutput(speaker: Bool) {
+        do {
+            // Device-local routing; it is not a Cloudflare control event.
+            try audio.setSpeakerMode(speaker)
+            speakerMode = speaker
+            UserDefaults.standard.set(speaker, forKey: "sscircle.voice.speaker")
+            if active {
+                status = speaker ? "Output: Speaker HP" : "Output: Telepon / Earpiece"
+            }
+        } catch {
+            status = "Tidak bisa mengubah output audio: \(error.localizedDescription)"
         }
     }
 
