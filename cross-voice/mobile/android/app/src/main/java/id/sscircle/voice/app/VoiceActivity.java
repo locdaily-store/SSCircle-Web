@@ -245,7 +245,7 @@ public final class VoiceActivity extends Activity {
             deafen.setText(s.deafened?"Undeafen":"Deafen");
             whisper.setText(s.whisper?"Whisper ON":"Whisper OFF");
             connect.setEnabled(!s.active);
-            connect.setAlpha(s.active?.6f:1f);
+            connect.setAlpha(s.active ? 0.6f : 1f);
         });
     }
 }
