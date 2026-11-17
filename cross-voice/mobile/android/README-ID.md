@@ -44,6 +44,13 @@ gradle -p cross-voice/mobile/android :app:assembleDebug -PvoiceSiteOrigin=https:
 ```
 Ganti contoh `DOMAIN-WEBSITE-SSCircle` dengan domain HTTPS website aktual, tanpa trailing path. Setelah domain dibangun ke APK, pembaruan Worker/gateway berikutnya diambil **otomatis** dari `/api/voice/mobile-config`, tanpa membangun ulang aplikasi hanya karena URL Worker berubah. Hindari menebak domain produksi.
 
+## Perbaikan AutoConnect v0.2.1 dan kontrol notifikasi
+- Error **"Domain konfigurasi berubah"** pada versi sebelumnya ditangani dengan menolak redirect ke domain asing, lalu memakai gateway SSCircle Preview yang sudah dikenal sebagai fallback publik **hanya jika domain awal adalah `https://voice-test.sscircle.pages.dev`**. Untuk domain produksi lain, konfigurasi tetap harus valid dari domain HTTPS situs tersebut.
+- Website SSCircle masih menentukan konfigurasi utama dari `VOICE_PUBLIC_URL`. Kode pairing `/voice link` tetap harus dimasukkan oleh pemain.
+- Saat sesi aktif, tarik **panel notifikasi Android dari bagian atas HP**, lalu tekan **Mute/Unmute**, **Deafen/Undeafen**, atau **Disconnect** tanpa perlu membuka kembali aplikasi.
+- Di Android 13+, izin notifikasi diperlukan agar tombol kontrol muncul di panel notifikasi. Sebagian vendor menyembunyikan tombol pada tampilan notifikasi ringkas; perlu diperluas/expand.
+- Notifikasi bukan kontrol game internal dan tidak muncul sebagai tombol Minecraft. Pada iPhone mekanisme notifikasi Android ini tidak tersedia.
+
 ## Peringatan penggunaan
 - **Jangan** memakai URL HTTP. Semua request menggunakan HTTPS/WSS, TLS normal (tanpa bypass sertifikat).
 - Aplikasi tidak meminta secret Bridge Paper. Credential tersebut tidak boleh dimasukkan ke aplikasi.
