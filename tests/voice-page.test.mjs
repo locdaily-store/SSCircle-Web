@@ -40,7 +40,7 @@ test('Voice config is dynamic, no-store and does not expose gateway secret',asyn
   const response=await get('/voice-config.js');
   assert.equal(response.status,200);
   const js=await response.text();
-  assert.equal(js,'window.SSCIRCLE_VOICE_GATEWAY = "https://voice.sscircle.example";');
+  assert.equal(js,'window.SSCIRCLE_VOICE_GATEWAY = "https://voice.sscircle.example";window.SSCIRCLE_VOICE_DOWNLOADS = {"android":"","ios":""};');
   assert.match(response.headers.get('content-type'),/javascript/);
   assert.equal(response.headers.get('cache-control'),'no-store');
   assert.doesNotMatch(js,/SECRET|TOKEN|PASSWORD/);
@@ -52,7 +52,7 @@ test('CSP refuses unconfigured or malformed external gateway URLs',async()=>{
     assert.doesNotMatch(response.headers.get('content-security-policy'),/trusted\.example|unsafe\.example|evil\.example/);
     assert.match(response.headers.get('content-security-policy'),/connect-src 'self';/);
     const config=await get('/voice-config.js',{VOICE_PUBLIC_URL:input});
-    assert.equal(await config.text(),'window.SSCIRCLE_VOICE_GATEWAY = "";');
+    assert.equal(await config.text(),'window.SSCIRCLE_VOICE_GATEWAY = "";window.SSCIRCLE_VOICE_DOWNLOADS = {"android":"","ios":""};');
   }
 });
 
@@ -63,21 +63,21 @@ test('Preview alias uses SSCircle Worker automatically if Pages variable is abse
   const config=await previewRequest('/voice-config.js');
   assert.equal(config.status,200);
   assert.equal(await config.text(),
-    'window.SSCIRCLE_VOICE_GATEWAY = "https://sscircle-cross-voice.locdailymar.workers.dev";');
+    'window.SSCIRCLE_VOICE_GATEWAY = "https://sscircle-cross-voice.locdailymar.workers.dev";window.SSCIRCLE_VOICE_DOWNLOADS = {"android":"","ios":""};');
   const document=await previewRequest('/voice');
   const csp=document.headers.get('content-security-policy');
   assert.match(csp,/https:\/\/sscircle-cross-voice\.locdailymar\.workers\.dev/);
   assert.match(csp,/wss:\/\/sscircle-cross-voice\.locdailymar\.workers\.dev/);
   assert.match(document.headers.get('permissions-policy'),/microphone=\(self\)/);
   const production=await get('/voice-config.js',{VOICE_PUBLIC_URL:''});
-  assert.equal(await production.text(),'window.SSCIRCLE_VOICE_GATEWAY = "";');
+  assert.equal(await production.text(),'window.SSCIRCLE_VOICE_GATEWAY = "";window.SSCIRCLE_VOICE_DOWNLOADS = {"android":"","ios":""};');
 });
 
 test('Valid Pages gateway variable overrides Preview fallback',async()=>{
   const config=await worker.fetch(new Request('https://voice-test.sscircle.pages.dev/voice-config.js'),
     env({VOICE_PUBLIC_URL:'https://custom-gateway.example'}),{waitUntil(){}});
   assert.equal(await config.text(),
-    'window.SSCIRCLE_VOICE_GATEWAY = "https://custom-gateway.example";');
+    'window.SSCIRCLE_VOICE_GATEWAY = "https://custom-gateway.example";window.SSCIRCLE_VOICE_DOWNLOADS = {"android":"","ios":""};');
 });
 
 test('Static voice-config fallback is isolated to Preview hostname',()=>{
@@ -85,4 +85,20 @@ test('Static voice-config fallback is isolated to Preview hostname',()=>{
   assert.match(source,/voice-test\.sscircle\.pages\.dev/);
   assert.match(source,/sscircle-cross-voice\.locdailymar\.workers\.dev/);
   assert.doesNotMatch(source,/VOICE_BRIDGE_SECRET\s*=/);
+});
+
+test('Voice app download links are injected only when official URL is configured',async()=>{
+  const apk='https://github.com/locdaily-store/SSCircle-Web/releases/download/sscircle-voice-android-preview/SSCircle-Voice-Android.apk';
+  const ios='https://testflight.apple.com/join/ABCDEFGH';
+  const response=await get('/voice-config.js',{VOICE_ANDROID_APK_URL:apk,VOICE_IOS_APP_URL:ios});
+  const source=await response.text();
+  assert.match(source,/SSCIRCLE_VOICE_DOWNLOADS/);
+  assert.match(source,/SSCircle-Voice-Android\\.apk/);
+  assert.match(source,/testflight\\.apple\\.com/);
+  for(const bad of ['javascript:alert(1)','https://attacker.invalid/app.apk',
+    'https://github.com/locdaily-store/SSCircle-Web/releases/download/demo/evil.apk?token=abc']){
+    const blocked=await get('/voice-config.js',{
+      VOICE_ANDROID_APK_URL:bad,VOICE_IOS_APP_URL:'https://evil.invalid/join/ABCDEFGH'});
+    assert.match(await blocked.text(),/SSCIRCLE_VOICE_DOWNLOADS = \\{"android":"","ios":""\\}/);
+  }
 });
