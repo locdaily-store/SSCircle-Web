@@ -116,3 +116,24 @@ test('Voice app download links are injected only when official URL is configured
     assert.ok((await blocked.text()).includes('window.SSCIRCLE_VOICE_DOWNLOADS = {"android":"","ios":""};'));
   }
 });
+
+test('Mobile bootstrap returns gateway and exact current website origin without secrets',async()=>{
+  const result=await get('/api/voice/mobile-config',{VOICE_PUBLIC_URL:'https://voice.sscircle.example'});
+  assert.equal(result.status,200);
+  assert.match(result.headers.get('content-type'),/application\\/json/);
+  assert.match(result.headers.get('cache-control'),/no-store/);
+  const body=await result.json();
+  assert.deepEqual(body,{version:1,ready:true,gateway:'https://voice.sscircle.example',origin:'https://sscircle.test'});
+  assert.doesNotMatch(JSON.stringify(body),/SECRET|TOKEN|PASSWORD|bridge-secret/i);
+  const unconfigured=await get('/api/voice/mobile-config',{VOICE_PUBLIC_URL:''});
+  assert.equal(unconfigured.status,503);
+  const payload=await unconfigured.json();
+  assert.equal(payload.ready,false);
+  assert.equal(payload.origin,'https://sscircle.test');
+  const preview=await worker.fetch(new Request('https://voice-test.sscircle.pages.dev/api/voice/mobile-config'),
+    env({VOICE_PUBLIC_URL:''}),{waitUntil(){}});
+  assert.equal(preview.status,200);
+  const previewJson=await preview.json();
+  assert.equal(previewJson.origin,'https://voice-test.sscircle.pages.dev');
+  assert.equal(previewJson.gateway,'https://sscircle-cross-voice.locdailymar.workers.dev');
+});
