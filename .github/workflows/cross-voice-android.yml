@@ -64,9 +64,20 @@ jobs:
           test -s cross-voice/mobile/android/app/src/main/AndroidManifest.xml
       - name: Compile SSCircle Voice APK
         shell: bash
+        env:
+          # Optional repository variable for an alternate official SSCircle production website.
+          VOICE_SITE_ORIGIN: ${{ vars.VOICE_SITE_ORIGIN }}
         run: |
           set -euo pipefail
-          gradle --project-dir cross-voice/mobile/android :app:assembleDebug --no-daemon --stacktrace --warning-mode all
+          args=()
+          if [ -n "$VOICE_SITE_ORIGIN" ]; then
+            if [[ ! "$VOICE_SITE_ORIGIN" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?$ ]]; then
+              echo "::error::VOICE_SITE_ORIGIN harus domain HTTPS tanpa path"
+              exit 1
+            fi
+            args+=("-PvoiceSiteOrigin=$VOICE_SITE_ORIGIN")
+          fi
+          gradle --project-dir cross-voice/mobile/android :app:assembleDebug "${args[@]}" --no-daemon --stacktrace --warning-mode all
       - name: Verify real APK output
         shell: bash
         run: |
