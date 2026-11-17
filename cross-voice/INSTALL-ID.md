@@ -122,7 +122,18 @@ Browser Android/iOS dapat ditangguhkan ketika Minecraft sedang di depan. **Tidak
 | Browser → Cloudflare gateway | 443 | HTTPS/WSS |
 | Node VPS / Cloudflare Tunnel | tidak ada | tidak diperlukan |
 
-## 8. Sebelum produksi
+## 8. Aplikasi khusus Android dan iPhone
+
+PR #74 sekarang menyediakan sumber aplikasi native yang **terpisah dari halaman Voice**:
+
+- Android (API 26+): `cross-voice/mobile/android/`, panduan `cross-voice/mobile/android/README-ID.md`. Workflow `SSCircle Voice Android APK` menghasilkan `SSCircle-Voice-Android-APK` setelah build sukses. APK debug ditandatangani otomatis untuk pengujian.
+- iPhone/iPad (iOS 16+): `cross-voice/mobile/ios/`, panduan `cross-voice/mobile/ios/README-ID.md`. Memerlukan Xcode dan Apple signing atau TestFlight; APK Android **tidak** dapat dipasang di iOS.
+- Keduanya menggunakan Cloudflare Worker yang sama (tanpa VPS) dan bukan WebView. Native audio memakai PCM16 48kHz sesuai protokol PR #74.
+- Masukkan URL HTTPS Worker dan Origin yang persis sama dengan `VOICE_ORIGIN`. Pairing memakai `/voice link` dalam game.
+- Worker versi terbaru menyediakan `POST /api/renew` agar sesi native dirotasi otomatis tanpa menutup audio. Deploy ulang Worker dari branch PR #74 untuk aplikasi mobile.
+- Tetap **wajib pengujian pada HP fisik** saat Minecraft aktif, termasuk headset, screen lock, interupsi panggilan, kualitas dua arah, baterai dan latensi.
+
+## 9. Sebelum produksi
 
 - Pastikan status SVC server plugin sendiri kompatibel dengan Paper 26.3. Daftar mod client yang mendukung 26.3 bukan sertifikasi plugin server.
 - Tes otomatis CI meliputi real Wrangler local runtime, pairing sekali pakai, WebSocket PCM Bedrock→Java, Java→Bedrock, Bedrock→Bedrock, world isolation, whisper, grup, deafen, autentikasi dan build JAR nyata.
