@@ -202,38 +202,66 @@ public final class VoiceService extends Service {
         }
     }
 
+    // This Preview fallback is a known public SSCircle endpoint, NOT a hidden secret.
+    // Never use this fallback for a custom production domain.
+    private static final String PREVIEW_SITE = "https://voice-test.sscircle.pages.dev";
+    private static final String PREVIEW_GATEWAY =
+        "https://sscircle-cross-voice.locdailymar.workers.dev";
+
     private void discoverAndPair(long gen, String code) {
         String trusted = normalizeHttpsOrigin(getString(R.string.voice_site_origin));
         if (trusted == null) {
-            if (valid(gen)) failAndStop("Alamat SSCircle pada build tidak valid.");
+            if (valid(gen)) failAndStop("Domain SSCircle pada aplikasi tidak valid.");
             return;
         }
+        // Prevent redirect to an unrelated website from returning attacker-controlled
+        // gateway URLs. Same-origin redirects can be diagnosed, but not followed blindly.
+        OkHttpClient configClient = client.newBuilder()
+            .followRedirects(false).followSslRedirects(false).build();
         Request request = new Request.Builder()
             .url(trusted + "/api/voice/mobile-config")
             .header("Cache-Control", "no-store")
+            .header("Accept", "application/json")
             .build();
-        try (Response response = client.newCall(request).execute()) {
+        String issue = "Konfigurasi tidak tersedia.";
+        try (Response response = configClient.newCall(request).execute()) {
             if (!valid(gen)) return;
-            // Don't follow redirect to another website when fetching gateway config.
-            String received = normalizeHttpsOrigin(
-                response.request().url().scheme() + "://" + response.request().url().host() +
-                (response.request().url().port() == 443 ? "" : ":" + response.request().url().port()));
-            if (!trusted.equals(received)) throw new IOException("Domain konfigurasi berubah.");
-            if (response.body() == null) throw new IOException("Konfigurasi SSCircle kosong.");
-            JSONObject data = new JSONObject(response.body().string());
-            if (!response.isSuccessful() || !data.optBoolean("ready", false))
-                throw new IOException("Gateway belum dikonfigurasi pada website SSCircle.");
-            String site = normalizeHttpsOrigin(data.optString("origin", ""));
-            String worker = normalizeHttpsOrigin(data.optString("gateway", ""));
-            if (!trusted.equals(site) || worker == null)
-                throw new IOException("Konfigurasi gateway / Origin ditolak.");
-            gateway = worker;
-            origin = site;
-            message("Gateway ditemukan. Memeriksa kode pairing...");
-            pair(gen, code);
-        } catch (Exception failure) {
-            if (valid(gen)) failAndStop("Gagal menemukan Voice SSCircle: " + failure.getMessage());
+            int status = response.code();
+            if (status >= 300 && status < 400) {
+                issue = "Website mengalihkan URL konfigurasi (HTTP " + status + ").";
+            } else if (response.body() == null) {
+                issue = "Respons konfigurasi SSCircle kosong.";
+            } else if (!response.isSuccessful()) {
+                issue = "Endpoint konfigurasi HTTP " + status + ".";
+            } else {
+                JSONObject data = new JSONObject(response.body().string());
+                String website = normalizeHttpsOrigin(data.optString("origin", ""));
+                String worker = normalizeHttpsOrigin(data.optString("gateway", ""));
+                // Always use the Origin actually reported by the trusted website.
+                if (data.optBoolean("ready", false) && trusted.equals(website) &&
+                    worker != null) {
+                    gateway = worker;
+                    origin = website;
+                    message("Gateway SSCircle ditemukan. Memeriksa pairing...");
+                    pair(gen, code);
+                    return;
+                }
+                issue = "Gateway belum diatur atau Origin website tidak cocok.";
+            }
+        } catch (Exception error) {
+            issue = "Konfigurasi SSCircle tidak dapat dibaca: " + error.getMessage();
         }
+        if (!valid(gen)) return;
+        if (PREVIEW_SITE.equals(trusted)) {
+            // The existing SSCircle Preview webpage is already configured to use
+            // this exact worker. No dependency on a Pages redirect for pairing.
+            gateway = PREVIEW_GATEWAY;
+            origin = PREVIEW_SITE;
+            message("Menghubungkan gateway SSCircle Preview...");
+            pair(gen, code);
+            return;
+        }
+        failAndStop(issue + " Periksa /api/voice/mobile-config di domain SSCircle.");
     }
 
     private void pair(long gen, String code) {
