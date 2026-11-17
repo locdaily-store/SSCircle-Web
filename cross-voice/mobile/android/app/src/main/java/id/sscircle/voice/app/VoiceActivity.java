@@ -13,6 +13,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -43,6 +44,10 @@ public final class VoiceActivity extends Activity {
         scroll.addView(root);
         setContentView(scroll);
 
+        ImageView logo = new ImageView(this);
+        logo.setImageResource(R.drawable.sscircle_voice_logo);
+        logo.setContentDescription("Logo SSCircle");
+        root.addView(logo, new LinearLayout.LayoutParams(dp(70), dp(70)));
         TextView title = label("SSCircle Voice", 27);
         title.setTextColor(Color.rgb(26, 57, 84));
         root.addView(title);
