@@ -10,8 +10,8 @@ android {
         applicationId = "id.sscircle.voice.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4
-        versionName = "0.2.2"
+        versionCode = 5
+        versionName = "0.2.3"
         // Configure once for each server deployment, never ask every mobile user.
         // CI can override with -PvoiceSiteOrigin=https://your-pages-domain
         val voiceSite = providers.gradleProperty("voiceSiteOrigin")
