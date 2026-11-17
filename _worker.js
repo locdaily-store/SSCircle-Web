@@ -5804,7 +5804,7 @@ async function route(req, env, ctx) {
     const gateway=sscVoiceGatewayOrigin(env,url.hostname);
     const downloads={android:sscVoiceAppDownload(env,'android'),ios:sscVoiceAppDownload(env,'ios')};
     const js='window.SSCIRCLE_VOICE_GATEWAY = '+JSON.stringify(gateway)+';'+
-      '\\nwindow.SSCIRCLE_VOICE_DOWNLOADS = '+JSON.stringify(downloads)+';';
+      'window.SSCIRCLE_VOICE_DOWNLOADS = '+JSON.stringify(downloads)+';';
     return new Response(method==='HEAD'?null:js,{status:200,headers:{
       'Content-Type':'application/javascript; charset=utf-8',
       'Cache-Control':'no-store','X-Content-Type-Options':'nosniff',
