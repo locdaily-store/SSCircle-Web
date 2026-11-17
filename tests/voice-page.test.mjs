@@ -87,6 +87,20 @@ test('Static voice-config fallback is isolated to Preview hostname',()=>{
   assert.doesNotMatch(source,/VOICE_BRIDGE_SECRET\s*=/);
 });
 
+test('Voice page contains accessible Android and iOS download choices',()=>{
+  const html=readFileSync(new URL('../voice.html',import.meta.url),'utf8');
+  const stylesheet=readFileSync(new URL('../voice.css',import.meta.url),'utf8');
+  const script=readFileSync(new URL('../voice.js',import.meta.url),'utf8');
+  for (const id of ['voice-app-title','voice-download-android','voice-download-ios',
+    'voice-android-note','voice-ios-note']) {
+    assert.ok(html.includes('id="'+id+'"'),'Missing app-download markup: '+id);
+  }
+  assert.match(stylesheet,/\.voice-app-grid/);
+  assert.match(stylesheet,/@media\(max-width:620px\)/);
+  assert.match(script,/updateAppDownloads/);
+  assert.match(script,/SSCIRCLE_VOICE_DOWNLOADS/);
+});
+
 test('Voice app download links are injected only when official URL is configured',async()=>{
   const apk='https://github.com/locdaily-store/SSCircle-Web/releases/download/sscircle-voice-android-preview/SSCircle-Voice-Android.apk';
   const ios='https://testflight.apple.com/join/ABCDEFGH';
