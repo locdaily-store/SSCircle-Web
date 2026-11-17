@@ -1,6 +1,13 @@
 name: SSCircle Voice iOS Compile
 
 on:
+  push:
+    branches:
+      - feature/sscircle-cross-voice
+    paths:
+      - 'cross-voice/mobile/**'
+      - '.github/workflows/cross-voice-android.yml'
+      - '.github/workflows/cross-voice-ios.yml'
   pull_request:
     paths:
       - 'cross-voice/mobile/ios/**'
