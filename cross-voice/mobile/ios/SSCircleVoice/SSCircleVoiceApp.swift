@@ -290,55 +290,82 @@ final class SSCircleVoiceSession: ObservableObject {
         return true
     }
 
-    private func discoverConfiguration() async throws {
+    private func discoverAndPair(code: String) async throws -> [String: Any] {
         let productionSite = "https://sscircle.pages.dev"
         let previewSite = "https://voice-test.sscircle.pages.dev"
-        let productionGateway = "https://sscircle-cross-voice-prod.locdailymar.workers.dev"
-        let previewGateway = "https://sscircle-cross-voice.locdailymar.workers.dev"
         let configuredSite = Bundle.main.object(forInfoDictionaryKey: "SSCVoiceBootstrapURL") as? String
             ?? productionSite
-        guard let site = normalized(configuredSite) else {
+        guard let configured = normalized(configuredSite) else {
             throw voiceError("Domain SSCircle pada aplikasi tidak valid.")
         }
-        var endpoints: [String] = []
-        if let bytes = await retrieveConfig(site, path: "/api/voice/mobile-config"),
-           let result = (try? JSONSerialization.jsonObject(with: bytes)) as? [String: Any],
-           result["ready"] as? Bool == true,
-           let website = result["origin"] as? String, normalized(website) == site,
-           let value = result["gateway"] as? String,
-           let endpoint = normalized(value) {
-            endpoints.append(endpoint)
-        }
-        // This is the same runtime script used by voice.html in the browser.
-        if let bytes = await retrieveConfig(site, path: "/voice-config.js"),
-           bytes.count < 8192,
-           let script = String(data: bytes, encoding: .utf8) {
-            let pattern = #"window\.SSCIRCLE_VOICE_GATEWAY\s*=\s*(['"])(https://[A-Za-z0-9.-]+(?::[0-9]+)?)\1\s*;"#
-            if let match = script.range(of: pattern, options: .regularExpression) {
-                let assignment = String(script[match])
-                if let firstQuote = assignment.firstIndex(where: { $0 == "'" || $0 == "\"" }) {
-                    let quoted = assignment[assignment.index(after: firstQuote)...]
-                    if let closing = quoted.firstIndex(of: assignment[firstQuote]),
-                       let endpoint = normalized(String(quoted[..<closing])) {
-                        endpoints.append(endpoint)
+        // Both sites belong to SSCircle; a code from the Preview server
+        // cannot be consumed at the Production gateway and vice versa.
+        let sites: [String] = configured == productionSite
+            ? [productionSite, previewSite]
+            : configured == previewSite
+                ? [previewSite, productionSite] : [configured]
+        var checked = Set<String>()
+        var hadInvalidCode = false
+        var hadOnline = false
+        for site in sites {
+            var endpoints: [String] = []
+            if let bytes = await retrieveConfig(site, path: "/api/voice/mobile-config"),
+               let result = (try? JSONSerialization.jsonObject(with: bytes)) as? [String: Any],
+               result["ready"] as? Bool == true,
+               let website = result["origin"] as? String, normalized(website) == site,
+               let value = result["gateway"] as? String,
+               let endpoint = normalized(value) {
+                endpoints.append(endpoint)
+            }
+            if let bytes = await retrieveConfig(site, path: "/voice-config.js"),
+               bytes.count < 8192,
+               let script = String(data: bytes, encoding: .utf8) {
+                let pattern = #"window\.SSCIRCLE_VOICE_GATEWAY\s*=\s*(['"])(https://[A-Za-z0-9.-]+(?::[0-9]+)?)\1\s*;"#
+                if let match = script.range(of: pattern, options: .regularExpression) {
+                    let assignment = String(script[match])
+                    if let firstQuote = assignment.firstIndex(where: { $0 == "'" || $0 == "\"" }) {
+                        let quoted = assignment[assignment.index(after: firstQuote)...]
+                        if let closing = quoted.firstIndex(of: assignment[firstQuote]),
+                           let endpoint = normalized(String(quoted[..<closing])) {
+                            endpoints.append(endpoint)
+                        }
                     }
                 }
             }
-        }
-        // Only a matching environment may use its published fallback. A
-        // Production pairing must never be sent to the Preview Worker.
-        if site == productionSite { endpoints.append(productionGateway) }
-        if site == previewSite { endpoints.append(previewGateway) }
-        var checked = Set<String>()
-        for endpoint in endpoints where endpoint != site {
-            guard checked.insert(endpoint).inserted else { continue }
-            if await voiceHealth(endpoint, site: site) {
+            // The fallback worker is tied to this site's environment and
+            // must report ready=true; no arbitrary untrusted worker URLs.
+            if site == productionSite {
+                endpoints.append("https://sscircle-cross-voice-prod.locdailymar.workers.dev")
+            }
+            if site == previewSite {
+                endpoints.append("https://sscircle-cross-voice.locdailymar.workers.dev")
+            }
+            for endpoint in endpoints where endpoint != site {
+                guard checked.insert(site + "|" + endpoint).inserted else { continue }
+                guard await voiceHealth(endpoint, site: site) else { continue }
+                hadOnline = true
                 gateway = endpoint
                 origin = site
-                return
+                do {
+                    status = "Gateway SSCircle ditemukan. Memeriksa kode pairing..."
+                    return try await post("/api/pair", body: ["code": code])
+                } catch {
+                    if error.localizedDescription.contains("INVALID_CODE") {
+                        hadInvalidCode = true
+                        continue
+                    }
+                    if error.localizedDescription.contains("RATE_LIMIT") { throw error }
+                    // An unrelated bridge's Origin or connection may have
+                    // changed after the preflight; keep searching SSCircle.
+                }
             }
         }
-        throw voiceError("SERVER_OFFLINE: Gateway website SSCircle tidak terhubung ke Minecraft. Periksa VOICE_PUBLIC_URL dan /scvoice status.")
+        if hadInvalidCode {
+            throw voiceError("Kode pairing tidak ditemukan di SSCircle Production/Preview. Jalankan /voice link lagi.")
+        }
+        throw voiceError(hadOnline
+            ? "Gateway yang membuat kode pairing tidak tersedia. Periksa /scvoice status."
+            : "SERVER_OFFLINE: Gateway SSCircle tidak terhubung ke Paper. Periksa VOICE_PUBLIC_URL dan /scvoice status.")
     }
 
     func connect(code: String) {
@@ -363,10 +390,7 @@ final class SSCircleVoiceSession: ObservableObject {
             }
             do {
                 status = "Mencari gateway SSCircle..."
-                try await discoverConfiguration()
-                guard active else { return }
-                status = "Gateway ditemukan. Memeriksa pairing..."
-                let result = try await post("/api/pair", body: ["code": code])
+                let result = try await discoverAndPair(code: code)
                 guard active else { return }
                 guard let bearer = result["token"] as? String,
                       let info = result["player"] as? [String: Any],
