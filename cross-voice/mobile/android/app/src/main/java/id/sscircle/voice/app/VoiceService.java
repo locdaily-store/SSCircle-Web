@@ -360,11 +360,15 @@ public final class VoiceService extends Service {
                 if (why.contains("INVALID_CODE")) {
                     hadInvalidCode = true; continue;
                 }
-                if (why.contains("SERVER_OFFLINE")) {
-                    hadOffline = true; continue;
+                if (why.contains("RATE_LIMIT")) {
+                    if (valid(gen)) failAndStop("Terlalu banyak percobaan pairing. Coba lagi nanti.");
+                    return;
                 }
-                if (valid(gen)) failAndStop("Pairing gagal: " + why);
-                return;
+                // A candidate may be configured for a different site, or its
+                // Paper bridge can drop immediately after the healthy check.
+                // Continue only across the two pinned SSCircle environments.
+                hadOffline = true;
+                continue;
             }
         }
         if (!valid(gen)) return;
