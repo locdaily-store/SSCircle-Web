@@ -258,38 +258,57 @@ final class SSCircleVoiceSession: ObservableObject {
     }
 
     private func discoverConfiguration() async throws {
-        // A single known HTTPS SSCircle website acts as a trusted native bootstrap.
+        // The web client and mobile clients share one SSCircle gateway.
+        // Preview has a pinned, PUBLIC gateway so an HTTPS redirect on Pages
+        // cannot prevent /voice link pairing. Production still requires a valid
+        // bootstrap response from its own trusted HTTPS website.
+        let previewSite = "https://voice-test.sscircle.pages.dev"
+        let previewGateway = "https://sscircle-cross-voice.locdailymar.workers.dev"
         let configuredSite = Bundle.main.object(forInfoDictionaryKey: "SSCVoiceBootstrapURL") as? String
-            ?? "https://voice-test.sscircle.pages.dev"
+            ?? previewSite
         guard let site = normalized(configuredSite),
               let url = URL(string: site + "/api/voice/mobile-config") else {
-            throw voiceError("Domain bootstrap SSCircle pada aplikasi tidak valid.")
+            throw voiceError("Domain SSCircle pada aplikasi tidak valid.")
         }
-        var request = URLRequest(url: url)
-        request.cachePolicy = .reloadIgnoringLocalCacheData
-        request.timeoutInterval = 12
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse,
-              let actual = http.url?.scheme.flatMap({ scheme -> String? in
-                  guard scheme.lowercased() == "https", let host = http.url?.host else { return nil }
-                  let port = http.url?.port.map { ":\($0)" } ?? ""
-                  return "https://" + host.lowercased() + port
-              }),
-              actual == site else {
-            throw voiceError("Konfigurasi SSCircle dialihkan ke domain tidak terpercaya.")
+
+        do {
+            var request = URLRequest(url: url)
+            request.cachePolicy = .reloadIgnoringLocalCacheData
+            request.timeoutInterval = 12
+            let (data, response) = try await URLSession.shared.data(for: request)
+            // URLs may redirect to a canonical website. Never trust JSON from
+            // an unrelated redirected host.
+            guard let http = response as? HTTPURLResponse,
+                  let responseURL = http.url,
+                  responseURL.scheme?.lowercased() == "https",
+                  let host = responseURL.host else {
+                throw voiceError("Respons konfigurasi bukan dari HTTPS SSCircle.")
+            }
+            let port = responseURL.port.map { ":\($0)" } ?? ""
+            let actualOrigin = "https://" + host.lowercased() + port
+            guard actualOrigin == site else {
+                throw voiceError("Website mengalihkan endpoint konfigurasi.")
+            }
+            guard http.statusCode == 200,
+                  let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  object["ready"] as? Bool == true,
+                  let originString = object["origin"] as? String,
+                  let gatewayString = object["gateway"] as? String,
+                  let newOrigin = normalized(originString),
+                  let newGateway = normalized(gatewayString),
+                  newOrigin == site else {
+                throw voiceError("Gateway belum dikonfigurasi di website SSCircle.")
+            }
+            gateway = newGateway
+            origin = newOrigin
+            return
+        } catch {
+            guard site == previewSite else { throw error }
+            // The Preview website also uses this pinned gateway in voice-config.js.
+            // The fallback never accepts redirects or arbitrary gateway URLs.
+            gateway = previewGateway
+            origin = previewSite
         }
-        guard http.statusCode == 200,
-              let dataObject = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-              dataObject["ready"] as? Bool == true,
-              let originString = dataObject["origin"] as? String,
-              let gatewayString = dataObject["gateway"] as? String,
-              let newOrigin = normalized(originString),
-              let newGateway = normalized(gatewayString),
-              newOrigin == site else {
-            throw voiceError("Gateway belum aktif atau pengaturan VOICE_PUBLIC_URL salah.")
-        }
-        gateway = newGateway
-        origin = newOrigin
     }
 
     func connect(code: String) {
