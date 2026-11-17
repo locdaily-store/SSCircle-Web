@@ -5,234 +5,247 @@ import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.text.InputFilter;
 import android.text.InputType;
 import android.view.Gravity;
-import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
-import java.net.URI;
 import java.util.Locale;
 
 /**
- * Native control screen. Audio belongs exclusively to VoiceService,
- * so navigating to Minecraft does not destroy the microphone.
+ * Matches SSCircle Voice web: dark navy canvas, glassy panels, soft cyan accent.
+ * Gateway + website origin are discovered by VoiceService; no manual URL fields.
  */
 public final class VoiceActivity extends Activity {
-    private static final int MIC_REQUEST = 2001;
-    private EditText gateway, origin, pairing, group;
-    private TextView status, nearby;
-    private Button mute, deafen, whisper;
-    private String pendingGateway, pendingOrigin, pendingCode;
-    private final VoiceService.Listener statusListener = this::renderState;
+    private static final int PERMISSION_MIC = 2001;
+    private static final int BG = Color.rgb(12,24,39), PANEL = Color.rgb(20,38,58);
+    private static final int PANEL_ALT = Color.rgb(24,45,67), STROKE = Color.rgb(53,83,110);
+    private static final int TEXT = Color.rgb(244,247,255), MUTED = Color.rgb(163,185,204);
+    private static final int ACCENT = Color.rgb(189,229,252), BLUE = Color.rgb(124,196,242);
+    private EditText pairing, group;
+    private TextView status, nearby, account, connected;
+    private Button mute, deafen, whisper, connect;
+    private String pendingCode = "";
+    private final VoiceService.Listener listener = this::render;
+
+    private int dp(int v) { return (int)(getResources().getDisplayMetrics().density*v+.5f); }
+
+    private GradientDrawable background(int fill, int radius, int border) {
+        GradientDrawable b = new GradientDrawable();
+        b.setColor(fill);
+        b.setCornerRadius(dp(radius));
+        if (border != 0) b.setStroke(dp(1), border);
+        return b;
+    }
+    private TextView text(String value, int size, int color, boolean bold) {
+        TextView t=new TextView(this);
+        t.setText(value); t.setTextSize(size); t.setTextColor(color);
+        if(bold)t.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
+        t.setIncludeFontPadding(true);
+        return t;
+    }
+    private LinearLayout vertical() {
+        LinearLayout l=new LinearLayout(this);
+        l.setOrientation(LinearLayout.VERTICAL);
+        return l;
+    }
+    private void line(LinearLayout parent, TextView child, int top, int bottom) {
+        LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(-1,-2);
+        params.setMargins(0,dp(top),0,dp(bottom));parent.addView(child,params);
+    }
+    private LinearLayout card(LinearLayout parent) {
+        LinearLayout c=vertical(); c.setPadding(dp(18),dp(18),dp(18),dp(18));
+        c.setBackground(background(PANEL,18,STROKE));
+        LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);
+        p.bottomMargin=dp(16);parent.addView(c,p);return c;
+    }
+    private EditText input(String hint) {
+        EditText e=new EditText(this);
+        e.setHint(hint);e.setSingleLine(true);e.setTextSize(16);
+        e.setTextColor(TEXT);e.setHintTextColor(MUTED);
+        e.setPadding(dp(14),dp(12),dp(14),dp(12));
+        e.setBackground(background(PANEL_ALT,11,STROKE));
+        return e;
+    }
+    private Button button(String label, boolean primary) {
+        Button b=new Button(this);
+        b.setText(label);b.setAllCaps(false);b.setTextSize(13);
+        b.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
+        b.setTextColor(primary?BG:TEXT);
+        b.setBackground(background(primary?ACCENT:PANEL_ALT,11,primary?0:STROKE));
+        b.setPadding(dp(8),dp(11),dp(8),dp(11));
+        b.setMinHeight(dp(48));return b;
+    }
+    private void addButton(LinearLayout parent, Button b, int top) {
+        LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,dp(52));
+        p.topMargin=dp(top);parent.addView(b,p);
+    }
+    private void addColumnButton(LinearLayout row, Button b) {
+        LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(52),1f);
+        p.setMargins(dp(3),0,dp(3),0);row.addView(b,p);
+    }
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
-        int margin = dp(18);
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(margin, margin, margin, margin);
-        root.setBackgroundColor(Color.rgb(243, 247, 250));
-        ScrollView scroll = new ScrollView(this);
-        scroll.setFillViewport(true);
-        scroll.addView(root);
-        setContentView(scroll);
+        getWindow().setStatusBarColor(BG);
+        getWindow().setNavigationBarColor(BG);
+        ScrollView scroller=new ScrollView(this);
+        scroller.setFillViewport(true);scroller.setBackgroundColor(BG);
+        LinearLayout root=vertical();
+        root.setPadding(dp(18),dp(22),dp(18),dp(30));
+        scroller.addView(root);setContentView(scroller);
 
-        ImageView logo = new ImageView(this);
+        LinearLayout hero=new LinearLayout(this);
+        hero.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams heroParam=new LinearLayout.LayoutParams(-1,-2);
+        heroParam.bottomMargin=dp(20);root.addView(hero,heroParam);
+        ImageView logo=new ImageView(this);
         logo.setImageResource(R.drawable.sscircle_voice_logo);
-        logo.setContentDescription("Logo SSCircle");
-        root.addView(logo, new LinearLayout.LayoutParams(dp(70), dp(70)));
-        TextView title = label("SSCircle Voice", 27);
-        title.setTextColor(Color.rgb(26, 57, 84));
-        root.addView(title);
-        root.addView(label("Aplikasi pendamping Minecraft Bedrock • Java ↔ Bedrock", 14));
-        root.addView(label("1. Konfigurasi gateway (hanya sekali)", 17));
+        logo.setContentDescription("Logo SSCircle Server");
+        hero.addView(logo,new LinearLayout.LayoutParams(dp(64),dp(64)));
+        LinearLayout heroTitles=vertical();
+        heroTitles.setPadding(dp(13),0,0,0);
+        hero.addView(heroTitles,new LinearLayout.LayoutParams(0,-2,1));
+        line(heroTitles,text("VOICE / CROSS-PLATFORM",10,BLUE,true),0,3);
+        line(heroTitles,text("SSCircle Voice",25,TEXT,true),0,3);
+        line(heroTitles,text("Java + Bedrock • Voice Chat",12,MUTED,false),0,0);
 
-        gateway = input("Gateway Cloudflare: https://...workers.dev");
-        gateway.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
-        gateway.setText(getPreferences(MODE_PRIVATE).getString("gateway", ""));
-        root.addView(gateway);
+        LinearLayout network=card(root);
+        network.setBackground(background(PANEL_ALT,14,STROKE));
+        line(network,text("●  SSCIRCLE NETWORK",11,BLUE,true),0,5);
+        connected=text("Konfigurasi otomatis dari SSCircle",13,TEXT,true);
+        network.addView(connected);
 
-        origin = input("Origin website: https://domain-website");
-        origin.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
-        origin.setText(getPreferences(MODE_PRIVATE).getString("origin", ""));
-        root.addView(origin);
-        root.addView(label("Alamat Origin harus sama persis dengan VOICE_ORIGIN di Worker Cloudflare.", 12));
+        LinearLayout linking=card(root);
+        line(linking,text("01 / PAIRING",11,BLUE,true),0,9);
+        line(linking,text("Hubungkan akun Minecraft",21,TEXT,true),0,8);
+        line(linking,text("Masuk server Bedrock, jalankan /voice link, lalu masukkan kode 8 karakter.",14,MUTED,false),0,15);
+        pairing=input("KODE PAIRING");
+        pairing.setFilters(new InputFilter[]{new InputFilter.LengthFilter(8),
+            (source,start,end,dest,dstart,dend) ->
+                source.subSequence(start,end).toString().toUpperCase(Locale.ROOT)
+                    .replaceAll("[^A-HJ-NP-Z2-9]","")});
+        pairing.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS);
+        linking.addView(pairing,new LinearLayout.LayoutParams(-1,dp(54)));
+        connect=button("Hubungkan ke Voice",true);
+        addButton(linking,connect,11);
+        connect.setOnClickListener(v->startPair());
+        line(linking,text("Gateway dan Origin terdeteksi otomatis. Kode berlaku 2 menit.",12,MUTED,false),11,0);
 
-        root.addView(label("2. Masuk ke Minecraft Bedrock dan jalankan /voice link", 17));
-        pairing = input("Kode pairing 8 karakter");
-        pairing.setFilters(new InputFilter[]{new InputFilter.LengthFilter(8)});
-        pairing.setAllCaps(true);
-        pairing.setSingleLine(true);
-        root.addView(pairing);
+        LinearLayout room=card(root);
+        line(room,text("02 / VOICE ROOM",11,BLUE,true),0,9);
+        line(room,text("Live Voice Control",20,TEXT,true),0,7);
+        account=text("Minecraft belum ditautkan",13,MUTED,false);line(room,account,0,5);
+        status=text("Voice tidak aktif",14,TEXT,false);line(room,status,0,14);
+        LinearLayout row1=new LinearLayout(this);row1.setOrientation(LinearLayout.HORIZONTAL);
+        room.addView(row1,new LinearLayout.LayoutParams(-1,dp(52)));
+        mute=button("Mute",false);deafen=button("Deafen",false);
+        addColumnButton(row1,mute);addColumnButton(row1,deafen);
+        LinearLayout row2=new LinearLayout(this);row2.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams second=new LinearLayout.LayoutParams(-1,dp(52));
+        second.topMargin=dp(8);room.addView(row2,second);
+        whisper=button("Whisper OFF",false);
+        addColumnButton(row2,whisper);
+        Button disconnect=button("Disconnect",false);addColumnButton(row2,disconnect);
+        mute.setOnClickListener(v->control(VoiceService.state.muted?"unmute":"mute",""));
+        deafen.setOnClickListener(v->control(VoiceService.state.deafened?"undeafen":"deafen",""));
+        whisper.setOnClickListener(v->control(VoiceService.state.whisper?"normal":"whisper",""));
+        disconnect.setOnClickListener(v->startService(
+            new Intent(this,VoiceService.class).setAction(VoiceService.STOP)));
 
-        Button connect = button("Hubungkan & mulai Voice", root);
-        connect.setOnClickListener(v -> connect());
-
-        Button disconnect = button("Putuskan Voice", root);
-        disconnect.setOnClickListener(v -> startService(new Intent(this, VoiceService.class)
-            .setAction(VoiceService.STOP)));
-
-        status = label("Belum terhubung", 17);
-        status.setPadding(0, dp(14), 0, dp(12));
-        status.setTextColor(Color.rgb(16, 91, 74));
-        root.addView(status);
-        root.addView(label("3. Mainkan Minecraft. Voice Activation terus berjalan selama layanan Android aktif.", 14));
-
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        root.addView(row);
-        mute = button("Mute", row);
-        deafen = button("Deafen", row);
-        whisper = button("Whisper", row);
-        mute.setOnClickListener(v -> control(VoiceService.state.muted ? "unmute" : "mute", ""));
-        deafen.setOnClickListener(v -> control(VoiceService.state.deafened ? "undeafen" : "deafen", ""));
-        whisper.setOnClickListener(v -> control(VoiceService.state.whisper ? "normal" : "whisper", ""));
-
-        group = input("Nama grup (opsional, a-z 0-9 _ -)");
-        group.setSingleLine(true);
-        root.addView(group);
-        Button join = button("Gabung grup", root);
-        join.setOnClickListener(v -> {
-            String value = group.getText().toString().trim();
-            if (!value.matches("[A-Za-z0-9_-]{1,24}")) {
-                showError("Nama grup hanya 1–24 huruf/angka, _ atau -.");
-                return;
+        LinearLayout groupCard=card(root);
+        line(groupCard,text("03 / MODE SUARA",11,BLUE,true),0,10);
+        line(groupCard,text("Proximity & Group",19,TEXT,true),0,5);
+        line(groupCard,text("Proximity aktif otomatis. Gunakan grup untuk kanal bersama.",13,MUTED,false),0,11);
+        group=input("Nama grup (opsional)");
+        groupCard.addView(group,new LinearLayout.LayoutParams(-1,dp(50)));
+        LinearLayout groupRow=new LinearLayout(this);groupRow.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams gp=new LinearLayout.LayoutParams(-1,dp(52));
+        gp.topMargin=dp(10);groupCard.addView(groupRow,gp);
+        Button join=button("Gabung grup",true),leave=button("Keluar grup",false);
+        addColumnButton(groupRow,join);addColumnButton(groupRow,leave);
+        join.setOnClickListener(v->{
+            String value=group.getText().toString().trim();
+            if(!value.matches("[A-Za-z0-9_-]{1,24}")){
+                status.setText("Nama grup: 1–24 huruf, angka, _ atau -");return;
             }
-            control("group", value);
+            control("group",value);
         });
-        Button leave = button("Keluar grup", root);
-        leave.setOnClickListener(v -> control("leave-group", ""));
+        leave.setOnClickListener(v->control("leave-group",""));
 
-        nearby = label("Pemain terdekat: -", 14);
-        root.addView(nearby);
-        root.addView(label("Layanan microphone Android aktif di background dan menampilkan notifikasi. "
-            + "Tombol Putuskan Voice menghentikan mikrofon sepenuhnya. "
-            + "Audio bisa terganggu oleh panggilan, Bluetooth, atau kebijakan baterai HP.", 12));
+        LinearLayout heard=card(root);
+        line(heard,text("PEMAIN YANG TERDENGAR",11,BLUE,true),0,8);
+        nearby=text("Belum ada pemain dalam jangkauan.",14,TEXT,false);
+        line(heard,nearby,0,0);
+        line(root,text("BACKGROUND VOICE  •  Tetap aktif saat membuka Minecraft jika diizinkan Android. Panggilan dan penghemat baterai dapat menginterupsi audio.",12,MUTED,false),0,14);
     }
-
-    private int dp(int value) {
-        return (int)(getResources().getDisplayMetrics().density * value + 0.5f);
+    private void startPair() {
+        String code=pairing.getText().toString().trim().toUpperCase(Locale.ROOT);
+        if(!code.matches("[A-HJ-NP-Z2-9]{8}")) {
+            status.setText("Masukkan kode 8 karakter dari /voice link");return;
+        }
+        pendingCode=code;
+        if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){
+            requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},PERMISSION_MIC);
+            return;
+        }
+        launch();
     }
-    private TextView label(String value, int size) {
-        TextView text = new TextView(this);
-        text.setText(value);
-        text.setTextSize(size);
-        text.setTextColor(Color.rgb(59, 68, 78));
-        text.setPadding(0, dp(8), 0, dp(8));
-        return text;
-    }
-    private EditText input(String hint) {
-        EditText field = new EditText(this);
-        field.setHint(hint);
-        field.setTextSize(15);
-        field.setSingleLine(true);
-        field.setPadding(dp(8), dp(8), dp(8), dp(8));
-        return field;
-    }
-    private Button button(String title, LinearLayout parent) {
-        Button button = new Button(this);
-        button.setText(title);
-        button.setTextSize(12);
-        parent.addView(button, parent.getOrientation() == LinearLayout.HORIZONTAL
-            ? new LinearLayout.LayoutParams(0, dp(55), 1) :
-            new LinearLayout.LayoutParams(-1, -2));
-        return button;
-    }
-
-    private static String httpsOrigin(String raw) {
+    private void launch() {
         try {
-            URI uri = URI.create(raw.trim());
-            if (!"https".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null ||
-                uri.getRawUserInfo() != null || uri.getRawQuery() != null ||
-                uri.getRawFragment() != null ||
-                (uri.getPath() != null && !uri.getPath().isEmpty() && !"/".equals(uri.getPath())))
-                return null;
-            String hostname = uri.getHost().toLowerCase(Locale.ROOT);
-            // URI.toString is not used: it may preserve a deceptive path or user-info.
-            return "https://" + (hostname.contains(":") ? "[" + hostname + "]" : hostname) +
-                (uri.getPort() == -1 ? "" : ":" + uri.getPort());
-        } catch (IllegalArgumentException error) {
-            return null;
-        }
-    }
-    private void connect() {
-        String url = httpsOrigin(gateway.getText().toString());
-        String site = httpsOrigin(origin.getText().toString());
-        String code = pairing.getText().toString().toUpperCase(Locale.ROOT).trim();
-        if (url == null || site == null) {
-            showError("Gateway dan website harus memakai URL HTTPS yang valid tanpa path.");
-            return;
-        }
-        if (!code.matches("[A-HJ-NP-Z2-9]{8}")) {
-            showError("Masukkan kode /voice link yang valid (8 karakter).");
-            return;
-        }
-        pendingGateway = url;
-        pendingOrigin = site;
-        pendingCode = code;
-        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, MIC_REQUEST);
-            return;
-        }
-        startVoice();
-    }
-    private void startVoice() {
-        getPreferences(MODE_PRIVATE).edit()
-            .putString("gateway", pendingGateway).putString("origin", pendingOrigin).apply();
-        Intent intent = new Intent(this, VoiceService.class)
-            .setAction(VoiceService.START)
-            .putExtra("gateway", pendingGateway)
-            .putExtra("origin", pendingOrigin)
-            .putExtra("code", pendingCode);
-        try {
-            if (Build.VERSION.SDK_INT >= 26) startForegroundService(intent);
+            Intent intent=new Intent(this,VoiceService.class).setAction(VoiceService.START)
+                .putExtra("code",pendingCode);
+            if(Build.VERSION.SDK_INT>=26) startForegroundService(intent);
             else startService(intent);
             pairing.setText("");
-            showError("Menghubungkan ke SSCircle Voice...");
-            if (Build.VERSION.SDK_INT >= 33 &&
-                checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 2002);
-            }
-        } catch (RuntimeException error) {
-            showError("Tidak bisa mengaktifkan Voice: " + error.getClass().getSimpleName());
+            status.setText("Mencari gateway SSCircle...");
+            if(Build.VERSION.SDK_INT>=33 &&
+               checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)
+                requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},2002);
+        } catch(RuntimeException error) {
+            status.setText("Tidak bisa memulai layanan: "+error.getClass().getSimpleName());
         }
     }
-    private void showError(String message) { status.setText(message); }
-    private void control(String action, String value) {
-        if (!VoiceService.state.active) { showError("Hubungkan Voice terlebih dahulu."); return; }
-        startService(new Intent(this, VoiceService.class)
-            .setAction(VoiceService.CONTROL).putExtra("command", action).putExtra("value", value));
+    private void control(String action,String value) {
+        if(!VoiceService.state.active) {status.setText("Hubungkan Voice terlebih dahulu.");return;}
+        startService(new Intent(this,VoiceService.class).setAction(VoiceService.CONTROL)
+            .putExtra("command",action).putExtra("value",value));
     }
-    @Override public void onRequestPermissionsResult(int req, String[] permissions, int[] grants) {
-        super.onRequestPermissionsResult(req, permissions, grants);
-        if (req == MIC_REQUEST) {
-            if (grants.length > 0 && grants[0] == PackageManager.PERMISSION_GRANTED) startVoice();
-            else showError("Izin mikrofon wajib untuk panggilan Voice. Tidak ada layanan yang dimulai.");
+    @Override public void onRequestPermissionsResult(int request,String[] perms,int[] grants) {
+        super.onRequestPermissionsResult(request,perms,grants);
+        if(request==PERMISSION_MIC){
+            if(grants.length>0&&grants[0]==PackageManager.PERMISSION_GRANTED)launch();
+            else status.setText("Izin mikrofon diperlukan untuk Voice.");
         }
     }
     @Override protected void onStart() {
         super.onStart();
-        VoiceService.addListener(statusListener);
-        renderState(VoiceService.state);
+        VoiceService.addListener(listener);render(VoiceService.state);
     }
     @Override protected void onStop() {
-        VoiceService.removeListener(statusListener);
-        super.onStop();
+        VoiceService.removeListener(listener);super.onStop();
     }
-    private void renderState(VoiceService.State s) {
-        runOnUiThread(() -> {
-            status.setText(s.message + (s.player.isEmpty() ? "" : " • " + s.player));
-            mute.setText(s.muted ? "Unmute" : "Mute");
-            deafen.setText(s.deafened ? "Undeafen" : "Deafen");
-            whisper.setText(s.whisper ? "Whisper ON" : "Whisper OFF");
+    private void render(VoiceService.State s) {
+        runOnUiThread(()->{
+            if(status==null)return;
+            status.setText(s.message);
+            account.setText(s.player.isEmpty()?"Minecraft belum ditautkan":"@"+s.player);
+            connected.setText(s.active?"Gateway terdeteksi • koneksi sedang aktif":
+                "Gateway terhubung otomatis melalui situs SSCircle");
             nearby.setText(s.nearby);
+            mute.setText(s.muted?"Unmute":"Mute");
+            deafen.setText(s.deafened?"Undeafen":"Deafen");
+            whisper.setText(s.whisper?"Whisper ON":"Whisper OFF");
+            connect.setEnabled(!s.active);
+            connect.setAlpha(s.active?.6f:1f);
         });
     }
 }
