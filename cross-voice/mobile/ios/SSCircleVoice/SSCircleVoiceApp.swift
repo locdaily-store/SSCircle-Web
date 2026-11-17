@@ -23,6 +23,11 @@ struct VoiceScreen: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 15) {
+                    Image("sscircle-logo")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 72, height: 72)
+                        .accessibilityLabel("Logo SSCircle")
                     Text("SSCircle Voice")
                         .font(.largeTitle).bold()
                     Text("Voice Minecraft Java ↔ Bedrock, dengan audio iOS native.")
