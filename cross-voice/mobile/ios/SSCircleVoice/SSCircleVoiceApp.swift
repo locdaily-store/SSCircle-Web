@@ -257,18 +257,47 @@ final class SSCircleVoiceSession: ObservableObject {
         return "https://" + host.lowercased() + port
     }
 
-    func connect(gateway: String, origin: String, code: String) {
-        guard !active else { return }
-        guard let endpoint = normalized(gateway), let website = normalized(origin) else {
-            status = "Alamat Gateway / Origin harus HTTPS tanpa path."
-            return
+    private func discoverConfiguration() async throws {
+        // A single known HTTPS SSCircle website acts as a trusted native bootstrap.
+        let configuredSite = Bundle.main.object(forInfoDictionaryKey: "SSCVoiceBootstrapURL") as? String
+            ?? "https://voice-test.sscircle.pages.dev"
+        guard let site = normalized(configuredSite),
+              let url = URL(string: site + "/api/voice/mobile-config") else {
+            throw voiceError("Domain bootstrap SSCircle pada aplikasi tidak valid.")
         }
+        var request = URLRequest(url: url)
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.timeoutInterval = 12
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse,
+              let actual = http.url?.scheme.flatMap({ scheme -> String? in
+                  guard scheme.lowercased() == "https", let host = http.url?.host else { return nil }
+                  let port = http.url?.port.map { ":\\($0)" } ?? ""
+                  return "https://" + host.lowercased() + port
+              }),
+              actual == site else {
+            throw voiceError("Konfigurasi SSCircle dialihkan ke domain tidak terpercaya.")
+        }
+        guard http.statusCode == 200,
+              let dataObject = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              dataObject["ready"] as? Bool == true,
+              let originString = dataObject["origin"] as? String,
+              let gatewayString = dataObject["gateway"] as? String,
+              let newOrigin = normalized(originString),
+              let newGateway = normalized(gatewayString),
+              newOrigin == site else {
+            throw voiceError("Gateway belum aktif atau pengaturan VOICE_PUBLIC_URL salah.")
+        }
+        gateway = newGateway
+        origin = newOrigin
+    }
+
+    func connect(code: String) {
+        guard !active else { return }
         guard code.range(of: "^[A-HJ-NP-Z2-9]{8}$", options: .regularExpression) != nil else {
             status = "Kode pairing harus 8 karakter dari /voice link."
             return
         }
-        self.gateway = endpoint
-        self.origin = website
         active = true
         status = "Meminta izin mikrofon..."
         connectionTask = Task {
@@ -284,7 +313,10 @@ final class SSCircleVoiceSession: ObservableObject {
                 return
             }
             do {
-                status = "Memeriksa pairing..."
+                status = "Mencari gateway SSCircle..."
+                try await discoverConfiguration()
+                guard active else { return }
+                status = "Gateway ditemukan. Memeriksa pairing..."
                 let result = try await post("/api/pair", body: ["code": code])
                 guard active else { return }
                 guard let bearer = result["token"] as? String,
