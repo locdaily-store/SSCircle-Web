@@ -286,58 +286,100 @@ public final class VoiceService extends Service {
             return data.optBoolean("ready", false);
         } catch (Exception ignored) { return false; }
     }
+    private static final class VoiceTarget {
+        final String site, worker;
+        VoiceTarget(String site, String worker) {
+            this.site = site; this.worker = worker;
+        }
+    }
     private void discoverAndPair(long gen, String code) {
-        String site = normalizeHttpsOrigin(getString(R.string.voice_site_origin));
-        if (site == null) {
+        String installedSite = normalizeHttpsOrigin(getString(R.string.voice_site_origin));
+        if (installedSite == null) {
             if (valid(gen)) failAndStop("Domain SSCircle pada aplikasi tidak valid.");
             return;
         }
+        java.util.ArrayList<String> sites = new java.util.ArrayList<>();
+        sites.add(installedSite);
+        // Only these two official SSCircle environments are eligible for
+        // automatic code discovery. Custom builds remain single-site.
+        if (PRODUCTION_SITE.equals(installedSite)) sites.add(PREVIEW_SITE);
+        else if (PREVIEW_SITE.equals(installedSite)) sites.add(PRODUCTION_SITE);
         OkHttpClient discovery = discoveryClient();
-        java.util.LinkedHashSet<String> candidates = new java.util.LinkedHashSet<>();
-        String pagesGateway = configGateway(site, discovery);
-        if (pagesGateway != null) candidates.add(pagesGateway);
-        // The runtime browser script is the fallback, not a hard-coded
-        // unrelated Preview gateway as in v0.2.1.
-        String browserGateway = webGateway(site, discovery);
-        if (browserGateway != null) candidates.add(browserGateway);
-        // Stable, public fallback only for its matching website environment.
-        // Always require /api/health ready=true BEFORE using it.
-        if (PRODUCTION_SITE.equals(site)) candidates.add(PRODUCTION_GATEWAY);
-        if (PREVIEW_SITE.equals(site)) candidates.add(PREVIEW_GATEWAY);
-        for (String candidate : candidates) {
-            if (!valid(gen)) return;
-            message("Memeriksa gateway Voice SSCircle...");
-            if (!gatewayHealthy(candidate, site, discovery)) continue;
-            gateway = candidate;
-            origin = site;
-            message("Gateway Minecraft online. Memeriksa kode pairing...");
-            pair(gen, code);
-            return;
+        java.util.ArrayList<VoiceTarget> targets = new java.util.ArrayList<>();
+        java.util.HashSet<String> seen = new java.util.HashSet<>();
+        for (String site : sites) {
+            java.util.LinkedHashSet<String> workers = new java.util.LinkedHashSet<>();
+            String fromWebsite = configGateway(site, discovery);
+            if (fromWebsite != null) workers.add(fromWebsite);
+            String fromWebScript = webGateway(site, discovery);
+            if (fromWebScript != null) workers.add(fromWebScript);
+            // These names are public; use only if /api/health confirms
+            // a live Paper connection AND correct Origin.
+            if (PRODUCTION_SITE.equals(site)) workers.add(PRODUCTION_GATEWAY);
+            if (PREVIEW_SITE.equals(site)) workers.add(PREVIEW_GATEWAY);
+            for (String candidate : workers) {
+                if (candidate.equals(site)) continue;
+                String key = site + "\n" + candidate;
+                if (seen.add(key)) targets.add(new VoiceTarget(site, candidate));
+            }
         }
-        if (valid(gen)) failAndStop(
-            "Gateway Voice SSCircle tidak terhubung ke server Minecraft. " +
-            "Pastikan VOICE_PUBLIC_URL website dan /scvoice status memakai Worker " +
-            "yang sama. Tidak memakai gateway Preview untuk kode Production.");
+        boolean hadOnline = false;
+        boolean hadInvalidCode = false;
+        boolean hadOffline = false;
+        for (VoiceTarget target : targets) {
+            if (!valid(gen)) return;
+            message("Mencari gateway Minecraft yang menerima kode pairing...");
+            if (!gatewayHealthy(target.worker, target.site, discovery)) {
+                hadOffline = true; continue;
+            }
+            hadOnline = true;
+            gateway = target.worker;
+            origin = target.site;
+            try {
+                JSONObject result = post("/api/pair", null, new JSONObject().put("code", code));
+                if (!valid(gen)) return;
+                token = result.getString("token");
+                expiresAt = System.currentTimeMillis() +
+                    result.optLong("expiresIn", 900) * 1000L;
+                JSONObject account = result.getJSONObject("player");
+                uuid = account.getString("uuid");
+                player = account.optString("name", "Minecraft");
+                reconnectAttempt = 0;
+                renewal = io.scheduleWithFixedDelay(() -> renew(gen),
+                    1, 1, TimeUnit.MINUTES);
+                message("Kode pairing cocok di " +
+                    (PRODUCTION_SITE.equals(target.site) ? "SSCircle Production" :
+                     PREVIEW_SITE.equals(target.site) ? "SSCircle Preview" : "website SSCircle") +
+                    ". Menghubungkan suara...");
+                openSocket(gen);
+                return;
+            } catch (Exception problem) {
+                String why = String.valueOf(problem.getMessage());
+                // An invalid code is NOT necessarily invalid on another
+                // SSCircle environment. Only the issuing Worker can consume it.
+                if (why.contains("INVALID_CODE")) {
+                    hadInvalidCode = true; continue;
+                }
+                if (why.contains("SERVER_OFFLINE")) {
+                    hadOffline = true; continue;
+                }
+                if (valid(gen)) failAndStop("Pairing gagal: " + why);
+                return;
+            }
+        }
+        if (!valid(gen)) return;
+        if (hadInvalidCode) {
+            failAndStop("Kode pairing tidak ditemukan pada SSCircle Production/Preview. " +
+                "Jalankan /voice link lagi; pastikan kode 8 karakter belum kedaluwarsa.");
+        } else if (hadOnline || hadOffline) {
+            failAndStop("Gateway SSCircle tidak terhubung ke plugin Paper yang membuat kode. " +
+                "Periksa VOICE_PUBLIC_URL website, alamat /bridge pada config.yml, " +
+                "dan /scvoice status. Aplikasi tidak dapat mengaktifkan server offline.");
+        } else {
+            failAndStop("Gateway belum dikonfigurasi. Periksa halaman Voice SSCircle.");
+        }
     }
 
-    private void pair(long gen, String code) {
-        try {
-            JSONObject result = post("/api/pair", null, new JSONObject().put("code", code));
-            if (!valid(gen)) return;
-            token = result.getString("token");
-            expiresAt = System.currentTimeMillis() +
-                result.optLong("expiresIn", 900) * 1000L;
-            JSONObject account = result.getJSONObject("player");
-            uuid = account.getString("uuid");
-            player = account.optString("name", "Minecraft");
-            reconnectAttempt = 0;
-            renewal = io.scheduleWithFixedDelay(() -> renew(gen),
-                1, 1, TimeUnit.MINUTES);
-            openSocket(gen);
-        } catch (Exception error) {
-            if (valid(gen)) failAndStop("Pairing gagal: " + error.getMessage());
-        }
-    }
     private boolean valid(long gen) { return active && generation == gen; }
 
     private void openSocket(long gen) {
