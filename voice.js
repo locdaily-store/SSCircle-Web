@@ -410,7 +410,7 @@ function updateAppDownloads(){
   const config=window.SSCIRCLE_VOICE_DOWNLOADS||{};
   const android=typeof config.android==='string'&&
     /^https:\/\/github\.com\/locdaily-store\/SSCircle-Web\/releases\/download\/[a-z0-9._-]+\/[a-z0-9._-]+\.apk$/i.test(config.android)
-    ?config.android:'';
+    ?config.android:'https://github.com/locdaily-store/SSCircle-Web/releases/download/sscircle-voice-android-preview/SSCircle-Voice-Android.apk';
   const ios=typeof config.ios==='string'&&
     /^https:\/\/(?:testflight\.apple\.com\/join\/[a-z0-9]+|apps\.apple\.com\/[a-z]{2}\/app\/[^?#]+\/id[0-9]+)\/?$/i.test(config.ios)
     ?config.ios:'';
