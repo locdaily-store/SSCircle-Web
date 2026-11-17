@@ -93,12 +93,12 @@ test('Voice app download links are injected only when official URL is configured
   const response=await get('/voice-config.js',{VOICE_ANDROID_APK_URL:apk,VOICE_IOS_APP_URL:ios});
   const source=await response.text();
   assert.match(source,/SSCIRCLE_VOICE_DOWNLOADS/);
-  assert.match(source,/SSCircle-Voice-Android\\.apk/);
-  assert.match(source,/testflight\\.apple\\.com/);
+  assert.ok(source.includes('SSCircle-Voice-Android.apk'));
+  assert.ok(source.includes('testflight.apple.com'));
   for(const bad of ['javascript:alert(1)','https://attacker.invalid/app.apk',
     'https://github.com/locdaily-store/SSCircle-Web/releases/download/demo/evil.apk?token=abc']){
     const blocked=await get('/voice-config.js',{
       VOICE_ANDROID_APK_URL:bad,VOICE_IOS_APP_URL:'https://evil.invalid/join/ABCDEFGH'});
-    assert.match(await blocked.text(),/SSCIRCLE_VOICE_DOWNLOADS = \\{"android":"","ios":""\\}/);
+    assert.ok((await blocked.text()).includes('window.SSCIRCLE_VOICE_DOWNLOADS = {"android":"","ios":""};'));
   }
 });
