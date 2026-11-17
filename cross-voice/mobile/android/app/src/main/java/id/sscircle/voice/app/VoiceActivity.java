@@ -33,6 +33,7 @@ public final class VoiceActivity extends Activity {
     private EditText pairing, group;
     private TextView status, nearby, account, connected;
     private Button mute, deafen, whisper, connect;
+    private Button speaker, telephone;
     private String pendingCode = "";
     private final VoiceService.Listener listener = this::render;
 
@@ -161,6 +162,19 @@ public final class VoiceActivity extends Activity {
         disconnect.setOnClickListener(v->startService(
             new Intent(this,VoiceService.class).setAction(VoiceService.STOP)));
 
+        line(room,text("OUTPUT AUDIO",11,BLUE,true),17,8);
+        line(room,text("Pilih Speaker HP untuk suara keras atau Telepon untuk earpiece.",13,MUTED,false),0,10);
+        LinearLayout outputRow=new LinearLayout(this);
+        outputRow.setOrientation(LinearLayout.HORIZONTAL);
+        room.addView(outputRow,new LinearLayout.LayoutParams(-1,dp(52)));
+        speaker=button("Speaker HP",false);
+        telephone=button("Telepon",false);
+        addColumnButton(outputRow,speaker);
+        addColumnButton(outputRow,telephone);
+        speaker.setOnClickListener(v->selectOutput(true));
+        telephone.setOnClickListener(v->selectOutput(false));
+        renderOutput();
+
         LinearLayout groupCard=card(root);
         line(groupCard,text("03 / MODE SUARA",11,BLUE,true),0,10);
         line(groupCard,text("Proximity & Group",19,TEXT,true),0,5);
@@ -215,6 +229,29 @@ public final class VoiceActivity extends Activity {
             status.setText("Tidak bisa memulai layanan: "+error.getClass().getSimpleName());
         }
     }
+    private void selectOutput(boolean useSpeaker) {
+        // Save preference even before the session is started. Only an active
+        // VoiceService owns the audio route and may change live output.
+        if (!VoiceService.state.active) {
+            VoiceOutputRoute.save(this,useSpeaker);
+            renderOutput();
+            return;
+        }
+        startService(new Intent(this,VoiceService.class).setAction(VoiceService.CONTROL)
+            .putExtra("command",useSpeaker ? "speaker" : "earpiece"));
+        renderOutput();
+    }
+    private void renderOutput() {
+        if (speaker == null || telephone == null) return;
+        boolean onSpeaker=VoiceOutputRoute.isSpeaker(this);
+        speaker.setText(onSpeaker ? "● Speaker HP" : "Speaker HP");
+        telephone.setText(onSpeaker ? "Telepon" : "● Telepon");
+        speaker.setBackground(background(onSpeaker?ACCENT:PANEL_ALT,11,onSpeaker?0:STROKE));
+        speaker.setTextColor(onSpeaker?BG:TEXT);
+        telephone.setBackground(background(onSpeaker?PANEL_ALT:ACCENT,11,onSpeaker?STROKE:0));
+        telephone.setTextColor(onSpeaker?TEXT:BG);
+    }
+
     private void control(String action,String value) {
         if(!VoiceService.state.active) {status.setText("Hubungkan Voice terlebih dahulu.");return;}
         startService(new Intent(this,VoiceService.class).setAction(VoiceService.CONTROL)
@@ -248,6 +285,7 @@ public final class VoiceActivity extends Activity {
             whisper.setText(s.whisper?"Whisper ON":"Whisper OFF");
             connect.setEnabled(!s.active);
             connect.setAlpha(s.active ? 0.6f : 1f);
+            renderOutput();
         });
     }
 }
