@@ -10,12 +10,23 @@ Koneksi langsung ke Cloudflare Worker + Durable Object yang sudah dipakai oleh S
 - iPhone tidak bisa menginstal APK; perlu proyek iOS tersendiri.
 - Layanan voice background mengikuti batasan Android, tidak menjamin bertahan saat *force stop*, izin mikrofon dicabut, atau proses dibunuh OS.
 
-## Download APK (sesudah Actions sukses)
-1. Buka **GitHub → SSCircle-Web → Actions → SSCircle Voice Android APK**.
-2. Pilih workflow run PR #74 yang hijau/sukses.
-3. Pada **Artifacts**, unduh **SSCircle-Voice-Android-APK**.
-4. Ekstrak ZIP dan pasang **app-debug.apk** di Android. Izinkan pemasangan sumber tepercaya bila diminta.
-5. APK debug khusus uji; distribusi publik perlu signing release yang konsisten.
+## Download APK (sesudah build berhasil)
+1. Workflow **SSCircle Voice Android APK** mengompilasi kode Android 8.0+ menjadi **APK debug asli**, memverifikasinya sebagai arsip APK, dan mengunggah artifact.
+2. Setelah build sukses pada branch PR #74, workflow mencoba menerbitkan prerelease GitHub dengan **nama berkas tetap**: `SSCircle-Voice-Android.apk`.
+3. **URL unduh langsung (baru berfungsi setelah rilis berhasil diterbitkan):** https://github.com/locdaily-store/SSCircle-Web/releases/download/sscircle-voice-android-preview/SSCircle-Voice-Android.apk
+4. Jika prerelease tidak tersedia, buka https://github.com/locdaily-store/SSCircle-Web/actions/workflows/cross-voice-android.yml → run berhasil → Artifacts → `SSCircle-Voice-Android-APK`; ekstrak ZIP dan pasang `SSCircle-Voice-Android.apk`.
+5. APK debug khusus uji; distribusi publik perlu **release signing key** dan uji perangkat. Jangan berbagi APK yang belum dibangun untuk menghindari berkas palsu.
+
+## Tombol unduh pada halaman Voice
+Di Cloudflare Pages → SSCircle Web → Settings → Variables and Secrets, setelah APK sudah tersedia, tambahkan:
+```
+VOICE_ANDROID_APK_URL=https://github.com/locdaily-store/SSCircle-Web/releases/download/sscircle-voice-android-preview/SSCircle-Voice-Android.apk
+```
+Untuk iOS, **hanya setelah App Store/TestFlight siap**, tambahkan misalnya:
+```
+VOICE_IOS_APP_URL=https://testflight.apple.com/join/KODE_RESMI_APPLE
+```
+Ganti `KODE_RESMI_APPLE` dengan kode undangan TestFlight yang benar. **Jangan gunakan contoh ini secara langsung**. Redeploy Pages agar `/voice-config.js` menyajikan dua tautan yang telah divalidasi. Tanpa variabel yang valid, halaman tetap menampilkan dua pilihan, tetapi diarahkan ke daftar build Android dan panduan instalasi iOS, bukan APK/IPA palsu.
 
 ## Cara pakai
 1. Deploy gateway pada `cross-voice/cloudflare` dan plugin Paper seperti `cross-voice/INSTALL-ID.md`. Gunakan gateway terbaru **yang sudah mendukung POST /api/renew**.
