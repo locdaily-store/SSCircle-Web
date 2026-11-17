@@ -5800,6 +5800,22 @@ async function route(req, env, ctx) {
     headers.set('Vary', 'Cookie');
     return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
   }
+  // Native app bootstrap: public non-secret configuration from the SAME trusted SSCircle website.
+  // No manual gateway/origin field on Android or iOS. Both still require /voice link pairing.
+  if (path==='/api/voice/mobile-config' && ['GET','HEAD'].includes(method)) {
+    const gateway=sscVoiceGatewayOrigin(env,url.hostname);
+    const payload=JSON.stringify({
+      version:1,
+      ready:Boolean(gateway),
+      gateway,
+      origin:url.origin
+    });
+    return new Response(method==='HEAD'?null:payload,{status:gateway?200:503,headers:{
+      'Content-Type':'application/json; charset=utf-8',
+      'Cache-Control':'no-store, max-age=0',
+      'X-Content-Type-Options':'nosniff'
+    }});
+  }
   if (path==='/voice-config.js' && ['GET','HEAD'].includes(method)){
     const gateway=sscVoiceGatewayOrigin(env,url.hostname);
     const downloads={android:sscVoiceAppDownload(env,'android'),ios:sscVoiceAppDownload(env,'ios')};
