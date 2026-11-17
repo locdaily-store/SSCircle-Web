@@ -115,9 +115,12 @@ public final class VoiceService extends Service {
             return START_NOT_STICKY;
         }
         try {
-            startForeground(NOTIFICATION, notification("Memulai Voice"),
-                Build.VERSION.SDK_INT >= 29
-                    ? ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE : 0);
+            if (Build.VERSION.SDK_INT >= 29) {
+                startForeground(NOTIFICATION, notification("Memulai Voice"),
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE);
+            } else {
+                startForeground(NOTIFICATION, notification("Memulai Voice"));
+            }
         } catch (RuntimeException exception) {
             message("Gagal memulai layanan mikrofon: " + exception.getClass().getSimpleName());
             stopSelf();
@@ -392,7 +395,11 @@ public final class VoiceService extends Service {
         }
     }
     @Override public void onDestroy() {
-        endSession(false);
+        if (active) {
+            endSession(false);
+            publish(new State(false, false, false, false,
+                "Layanan dihentikan oleh sistem.", "", "Pemain terdekat: -"));
+        }
         io.shutdownNow();
         client.dispatcher().executorService().shutdown();
         super.onDestroy();
