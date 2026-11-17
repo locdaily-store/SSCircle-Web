@@ -73,6 +73,7 @@ jobs:
           if-no-files-found: error
       - name: Publish Android prerelease for direct website download
         if: github.event_name == 'push' && github.ref == 'refs/heads/feature/sscircle-cross-voice'
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
