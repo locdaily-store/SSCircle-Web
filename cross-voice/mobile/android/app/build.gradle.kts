@@ -10,12 +10,12 @@ android {
         applicationId = "id.sscircle.voice.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "0.2.1"
+        versionCode = 4
+        versionName = "0.2.2"
         // Configure once for each server deployment, never ask every mobile user.
         // CI can override with -PvoiceSiteOrigin=https://your-pages-domain
         val voiceSite = providers.gradleProperty("voiceSiteOrigin")
-            .getOrElse("https://voice-test.sscircle.pages.dev")
+            .getOrElse("https://sscircle.pages.dev")
         require(voiceSite.matches(Regex("https://[a-zA-Z0-9.-]+(?::[0-9]+)?"))) {
             "voiceSiteOrigin must be an HTTPS origin without path"
         }
