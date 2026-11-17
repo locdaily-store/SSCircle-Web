@@ -90,6 +90,17 @@ test('real Cloudflare Durable Object pairing, voice batches and world separation
     await sleep(90);
     assert.equal(leaked,false,'different worlds must not receive audio');
     d.socket.off('message',onD);
+    // A mobile foreground service rotates its bearer while the live socket stays open.
+    const formerToken=a.token;
+    const rotation=await post('/api/renew',{},formerToken);
+    assert.equal(rotation.status,200,'session renew succeeds before expiry');
+    assert.equal(rotation.data.expiresIn,900);
+    assert.notEqual(rotation.data.token,formerToken,'renew rotates the bearer');
+    assert.equal((await post('/api/ticket',{},formerToken)).status,401,'old bearer is invalid');
+    a.token=rotation.data.token;
+    const streamAfterRenew=next(a.socket,m=>m.t==='audioBatch'&&m.uuid===C);
+    send(bridge,{t:'audioBatch',uuid:C,frames:[{pcm}]});
+    assert.equal((await streamAfterRenew).frames[0].pcm,pcm,'socket stays alive after rotation');
     assert.equal((await post('/api/disconnect',{},a.token)).status,200);
     assert.equal((await post('/api/ticket',{},a.token)).status,401,'explicit disconnect revokes token');
     const oldTicket=await new Promise(resolve=>{
