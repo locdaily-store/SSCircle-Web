@@ -272,7 +272,7 @@ final class SSCircleVoiceSession: ObservableObject {
         guard let http = response as? HTTPURLResponse,
               let actual = http.url?.scheme.flatMap({ scheme -> String? in
                   guard scheme.lowercased() == "https", let host = http.url?.host else { return nil }
-                  let port = http.url?.port.map { ":\\($0)" } ?? ""
+                  let port = http.url?.port.map { ":\($0)" } ?? ""
                   return "https://" + host.lowercased() + port
               }),
               actual == site else {
