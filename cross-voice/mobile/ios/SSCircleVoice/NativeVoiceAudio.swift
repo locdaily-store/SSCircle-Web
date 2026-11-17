@@ -13,20 +13,48 @@ final class NativeVoiceAudio {
                                           sampleRate: 48_000, channels: 1,
                                           interleaved: false)!
     private var running = false
+    private var speakerMode = true
     private var muted = false
     private var deafened = false
     private var inputSamples: [Float] = []
     private var pendingFrames: [String] = []
     private var speakers: [String: AVAudioPlayerNode] = [:]
 
+    /// Switch native output without disconnecting WebSocket or microphone.
+    /// Earphone mode uses the receiver; Speaker explicitly requests loudspeaker.
+    /// iOS can still change the route when Bluetooth, calls, or Minecraft take audio.
+    func setSpeakerMode(_ speaker: Bool) throws {
+        let previous = speakerMode
+        speakerMode = speaker
+        guard running else { return }
+        do {
+            try configureRoute()
+        } catch {
+            speakerMode = previous
+            try? configureRoute()
+            throw error
+        }
+    }
+
+    private func configureRoute() throws {
+        let session = AVAudioSession.sharedInstance()
+        let options: AVAudioSession.CategoryOptions = speakerMode
+            ? [.defaultToSpeaker, .allowBluetooth, .mixWithOthers]
+            : [.allowBluetooth, .mixWithOthers]
+        try session.setCategory(.playAndRecord, mode: .voiceChat, options: options)
+        if running {
+            try session.overrideOutputAudioPort(speakerMode ? .speaker : .none)
+        }
+    }
+
     func start() throws {
         if running { return }
         let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.playAndRecord, mode: .voiceChat,
-                                options: [.defaultToSpeaker, .allowBluetooth, .mixWithOthers])
+        try configureRoute()
         try session.setPreferredSampleRate(48_000)
         try session.setPreferredIOBufferDuration(0.02)
         try session.setActive(true)
+        try session.overrideOutputAudioPort(speakerMode ? .speaker : .none)
 
         let input = engine.inputNode
         let hardwareFormat = input.outputFormat(forBus: 0)
