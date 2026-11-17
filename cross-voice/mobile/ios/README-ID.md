@@ -18,20 +18,23 @@ Proyek native SwiftUI + AVAudioEngine. Berbeda dari website/PWA, audio menggunak
 6. Pilih iPhone/iPad sebagai run destination dan tekan Run. Beri izin mikrofon.
 7. Untuk distribusi umum, buat Archive + TestFlight/App Store menggunakan kredensial Apple yang sah.
 
-## Pemakaian
-1. Cloudflare Worker dan Paper plugin harus sudah berjalan dan memakai gateway terbaru yang menyediakan `/api/renew`.
-2. Masukkan URL gateway HTTPS dan origin website yang identik dengan `VOICE_ORIGIN` di Worker.
-3. Masuk Minecraft Bedrock, jalankan `/voice link` lalu isikan 8 karakter kode ke aplikasi.
-4. Tekan **Hubungkan & aktifkan mikrofon**, izinkan akses mic, dan tunggu status terhubung.
-5. Buka Minecraft dan uji suara Java↔Bedrock / Bedrock↔Bedrock sambil aplikasi berada di background.
-6. Gunakan Mute, Deafen, Whisper, Group dan Putuskan Voice melalui aplikasi.
+## Pemakaian dan konfigurasi otomatis
+1. Admin menyiapkan `VOICE_PUBLIC_URL` di Pages, dan `VOICE_ORIGIN` di Worker harus sesuai domain situs. Deploy update Pages yang menyediakan `/api/voice/mobile-config`.
+2. Buka SSCircle Voice di iPhone. **Tidak ada lagi kolom gateway atau Origin**.
+3. Masuk Minecraft Bedrock dan jalankan `/voice link`. Masukkan kode ke aplikasi dan tekan **Hubungkan ke Voice**.
+4. iOS mengambil gateway dan Origin secara otomatis dari HTTPS website SSCircle, lalu membuat sesi Pairing/WebSocket.
+5. Kontrol Mute, Deafen, Whisper, Group, dan Disconnect menggunakan kartu gelap dan aksen biru muda yang senada dengan website.
+6. Buka Minecraft dan uji suara Java↔Bedrock / Bedrock↔Bedrock saat aplikasi background.
+
+### Domain bootstrap iOS
+`SSCVoiceBootstrapURL` pada `SSCircleVoice/Info.plist` adalah domain website resmi yang boleh memberikan konfigurasi. Default saat preview: `https://voice-test.sscircle.pages.dev`. Sebelum membangun aplikasi untuk domain produksi yang berbeda, admin harus mengganti nilai tersebut satu kali, lalu build/sign melalui Xcode. Gateway Worker dapat berubah kemudian tanpa build ulang karena diambil dari website saat pairing.
 
 ## Implementasi
 - Audio input menggunakan AVAudioEngine mic tap + AVAudioConverter menuju PCM16 LE mono 48kHz.
 - Audio output menggunakan AVAudioPlayerNode per sumber untuk mixing, volume attenuation dan pan.
 - Input Voice Activation, 960 sample/20ms, batch 3 frame; sesuai dengan Worker PR #74.
 - Reconnect WebSocket, pairing satu kali, token bearer 15 menit yang diperbarui secara otomatis sebelum habis.
-- Token/kode pairing hanya berada dalam memori, URL publik disimpan dengan AppStorage.
+- Token/kode pairing hanya berada dalam memori; tidak ada penyimpanan alamat gateway/Origin atau secret pada AppStorage. Hanya alamat website HTTPS bootstrap yang dibundel saat build.
 - `AVAudioSession.playAndRecord` mode voiceChat, `.mixWithOthers`, background audio.
 - Tidak merekam suara ke berkas. Tidak menyimpan rahasia bridge.
 - **Belum dinyatakan siap produksi** sampai compile CI, instalasi dengan signing, dan tes headset/Minecraft latar belakang pada iOS nyata lulus.
