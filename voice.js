@@ -418,8 +418,8 @@ function updateAppDownloads(){
   const subtitle=$('voice-app-description');
   if(!subtitle)return; // Allows existing isolated browser tests to run.
   $('voice-app-title').textContent=en?'SSCircle Voice for phones':'SSCircle Voice untuk HP';
-  subtitle.textContent=en?'Use a dedicated Voice app while playing Minecraft. Choose your platform.':
-    'Aplikasi pendamping untuk berbicara saat membuka Minecraft. Pilih perangkatmu.';
+  subtitle.textContent=en?'Gateway and website connect automatically. Just enter your /voice link code in the app.':
+    'Gateway dan Origin terhubung otomatis dari SSCircle. Di aplikasi cukup masukkan kode /voice link.';
   $('voice-download-android').href=android||
     'https://github.com/locdaily-store/SSCircle-Web/actions/workflows/cross-voice-android.yml';
   $('voice-download-ios').href=ios||
