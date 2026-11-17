@@ -11,6 +11,8 @@ on:
       - 'scripts/package-voice-cloudflare.py'
       - 'cross-voice/cloudflare/**'
       - 'cross-voice/INSTALL-ID.md'
+      - 'tests/voice-page.test.mjs'
+      - 'tests/voice-background.test.mjs'
       - '.github/workflows/cloudflare-voice-package.yml'
   push:
     branches:
