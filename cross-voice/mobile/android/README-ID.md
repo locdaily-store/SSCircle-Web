@@ -38,14 +38,14 @@ Ganti `KODE_RESMI_APPLE` dengan kode undangan TestFlight yang benar. **Jangan gu
 7. Kode pairing dan session token tidak disimpan ke penyimpanan permanen. Sesi kadaluarsa membutuhkan kode baru.
 
 ### Domain website bawaan aplikasi
-APK Preview saat ini mengenali website staging resmi `https://voice-test.sscircle.pages.dev`. Untuk **domain SSCircle produksi yang berbeda**, admin harus menyetel satu variabel saat build, bukan meminta setiap pemain mengisinya:
+APK v0.2.2 secara bawaan mengenali website Production SSCircle `https://sscircle.pages.dev`. Untuk **domain SSCircle produksi yang berbeda**, admin harus menyetel satu variabel saat build, bukan meminta setiap pemain mengisinya:
 ```bash
 gradle -p cross-voice/mobile/android :app:assembleDebug -PvoiceSiteOrigin=https://DOMAIN-WEBSITE-SSCircle --no-daemon
 ```
 Ganti contoh `DOMAIN-WEBSITE-SSCircle` dengan domain HTTPS website aktual, tanpa trailing path. Setelah domain dibangun ke APK, pembaruan Worker/gateway berikutnya diambil **otomatis** dari `/api/voice/mobile-config`, tanpa membangun ulang aplikasi hanya karena URL Worker berubah. Hindari menebak domain produksi.
 
 ## Perbaikan AutoConnect v0.2.1 dan kontrol notifikasi
-- Error **"Domain konfigurasi berubah"** pada versi sebelumnya ditangani dengan menolak redirect ke domain asing, lalu memakai gateway SSCircle Preview yang sudah dikenal sebagai fallback publik **hanya jika domain awal adalah `https://voice-test.sscircle.pages.dev`**. Untuk domain produksi lain, konfigurasi tetap harus valid dari domain HTTPS situs tersebut.
+- **SERVER_OFFLINE pada v0.2.1** terjadi karena APK lama memakai domain dan Worker Preview, padahal kode berasal dari server Production. v0.2.2 memakai website Production SSCircle (`https://sscircle.pages.dev`) dan mengambil gateway dari `/api/voice/mobile-config` lalu `/voice-config.js` seperti halaman Voice web. URL Worker Production bawaan hanya dipakai bila `/api/health` dari worker tersebut membuktikan gateway tersambung ke Paper.
 - Website SSCircle masih menentukan konfigurasi utama dari `VOICE_PUBLIC_URL`. Kode pairing `/voice link` tetap harus dimasukkan oleh pemain.
 - Saat sesi aktif, tarik **panel notifikasi Android dari bagian atas HP**, lalu tekan **Mute/Unmute**, **Deafen/Undeafen**, atau **Disconnect** tanpa perlu membuka kembali aplikasi.
 - Di Android 13+, izin notifikasi diperlukan agar tombol kontrol muncul di panel notifikasi. Sebagian vendor menyembunyikan tombol pada tampilan notifikasi ringkas; perlu diperluas/expand.
