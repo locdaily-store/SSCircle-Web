@@ -27,6 +27,16 @@ android {
     }
 }
 
+// Reuse the real SSCircle website logo; do not ship a synthetic app icon.
+val generatedVoiceRes = layout.buildDirectory.dir("generated/sscircle-voice-res")
+android.sourceSets.getByName("main").res.srcDir(generatedVoiceRes)
+val copyVoiceLogo by tasks.registering(Copy::class) {
+    from(rootProject.file("../../../assets/sscircle-logo.png"))
+    into(generatedVoiceRes.map { it.dir("drawable") })
+    rename { "sscircle_voice_logo.png" }
+}
+tasks.named("preBuild") { dependsOn(copyVoiceLogo) }
+
 dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 }
