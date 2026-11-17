@@ -8,6 +8,8 @@ targets:
     deploymentTarget: "16.0"
     sources:
       - path: SSCircleVoice
+      - path: ../../../assets/sscircle-logo.png
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: id.sscircle.voice.mobile
