@@ -136,25 +136,50 @@ public final class VoiceService extends Service {
         io.execute(() -> discoverAndPair(now, code));
         return START_NOT_STICKY; // Never restart microphone without a visible, user-approved action.
     }
+    private PendingIntent notificationControl(String action, String command, int requestCode) {
+        Intent intent = new Intent(this, VoiceService.class).setAction(action);
+        if (CONTROL.equals(action)) {
+            intent.putExtra("command", command);
+            intent.putExtra("value", "");
+        }
+        // Separate request codes keep Mute/Deafen/Disconnect independent; immutable
+        // explicit intents prevent other apps from injecting a different command.
+        return PendingIntent.getService(this, requestCode, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+    }
     private Notification notification(String content) {
         Intent open = new Intent(this, VoiceActivity.class);
         PendingIntent launch = PendingIntent.getActivity(this, 0, open,
             PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-        PendingIntent stop = PendingIntent.getService(this, 1,
-            new Intent(this, VoiceService.class).setAction(STOP),
-            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-        return new Notification.Builder(this, CHANNEL)
+        Notification.Builder builder = new Notification.Builder(this, CHANNEL)
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
-            .setContentTitle("SSCircle Voice")
+            .setContentTitle("SSCircle Voice" + (active && !player.isEmpty() ? " • " + player : ""))
             .setContentText(content)
             .setContentIntent(launch)
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Putuskan", stop)
             .setOngoing(true)
-            .setCategory(Notification.CATEGORY_SERVICE)
-            .build();
+            .setOnlyAlertOnce(true)
+            .setVisibility(Notification.VISIBILITY_PUBLIC)
+            .setCategory(Notification.CATEGORY_SERVICE);
+        if (active) {
+            builder.addAction(android.R.drawable.ic_lock_silent_mode,
+                muted ? "Unmute" : "Mute",
+                notificationControl(CONTROL, muted ? "unmute" : "mute", 2402));
+            builder.addAction(android.R.drawable.ic_lock_silent_mode_off,
+                deafened ? "Undeafen" : "Deafen",
+                notificationControl(CONTROL, deafened ? "undeafen" : "deafen", 2403));
+        }
+        builder.addAction(android.R.drawable.ic_menu_close_clear_cancel, "Disconnect",
+            notificationControl(STOP, "", 2404));
+        return builder.build();
     }
     private void updateNotification(String content) {
-        getSystemService(NotificationManager.class).notify(NOTIFICATION, notification(content));
+        if (!active) return;
+        try {
+            getSystemService(NotificationManager.class).notify(NOTIFICATION, notification(content));
+        } catch (SecurityException ignored) {
+            // Android 13+ notification permission was denied. The microphone service
+            // may still run, but user must allow notifications for shade controls.
+        }
     }
     private void acquireWakeLock() {
         try {
@@ -409,6 +434,9 @@ public final class VoiceService extends Service {
         State previous = state;
         publish(new State(true, muted, deafened, whisper,
             "Terhubung • latar belakang aktif", player, summary.toString()));
+        updateNotification("Terhubung sebagai " + player +
+            (muted ? " • mikrofon mute" : " • mikrofon aktif") +
+            (deafened ? " • deafen" : ""));
     }
     private void control(String command, String value) {
         if (!active || command == null) return;
@@ -438,6 +466,7 @@ public final class VoiceService extends Service {
     private void message(String message) {
         publish(new State(active, muted, deafened, whisper,
             message, player, state.nearby));
+        if (active) updateNotification(message);
     }
     private void failAndStop(String error) {
         message(error);
