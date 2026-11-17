@@ -185,7 +185,7 @@ public final class VoiceActivity extends Activity {
         line(heard,text("PEMAIN YANG TERDENGAR",11,BLUE,true),0,8);
         nearby=text("Belum ada pemain dalam jangkauan.",14,TEXT,false);
         line(heard,nearby,0,0);
-        line(root,text("BACKGROUND VOICE  •  Tetap aktif saat membuka Minecraft jika diizinkan Android. Panggilan dan penghemat baterai dapat menginterupsi audio.",12,MUTED,false),0,14);
+        line(root,text("BACKGROUND VOICE  •  Saat Minecraft dibuka, tarik panel notifikasi Android dari atas layar untuk Mute, Deafen, atau Disconnect tanpa kembali ke aplikasi. Aktifkan izin notifikasi (Android 13+) agar tombol tampil.",12,MUTED,false),0,14);
     }
     private void startPair() {
         String code=pairing.getText().toString().trim().toUpperCase(Locale.ROOT);
