@@ -251,11 +251,15 @@ export class VoiceRoom extends DurableObject {
       const oldToken=req.headers.get('Authorization')?.replace(/^Bearer /,'')||'';
       if(!TOKEN.test(oldToken))return error(401,'SESSION_EXPIRED',this.origin);
       const oldHash=await digest('session:'+oldToken);
+      // Do not revoke a still-valid bearer just because Paper is temporarily offline.
+      if(!this.healthy())return error(503,'SERVER_OFFLINE',this.origin);
+      const previous=this.rows('SELECT uuid,expires,epoch FROM voice_sessions WHERE token_hash=?',oldHash)[0];
+      if(!previous||previous.expires<now()||previous.epoch!==this.bridgeEpoch||
+          !this.players.get(previous.uuid)?.bedrock)
+        return error(401,'SESSION_EXPIRED',this.origin);
       const entries=this.rows('DELETE FROM voice_sessions WHERE token_hash=? RETURNING uuid,expires,epoch',oldHash);
       const entry=entries[0];
-      if(!entry||entry.expires<now()||entry.epoch!==this.bridgeEpoch||
-          !this.healthy()||!this.players.get(entry.uuid)?.bedrock)
-        return error(401,'SESSION_EXPIRED',this.origin);
+      if(!entry)return error(401,'SESSION_EXPIRED',this.origin);
       const nextToken=randomToken(),expiry=now()+15*60_000;
       const nextHash=await digest('session:'+nextToken);
       this.sql.exec('INSERT INTO voice_sessions (token_hash,uuid,expires,epoch) VALUES (?,?,?,?)',
