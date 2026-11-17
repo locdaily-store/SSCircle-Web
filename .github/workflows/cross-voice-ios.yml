@@ -5,8 +5,7 @@ on:
     branches:
       - feature/sscircle-cross-voice
     paths:
-      - 'cross-voice/mobile/**'
-      - '.github/workflows/cross-voice-android.yml'
+      - 'cross-voice/mobile/ios/**'
       - '.github/workflows/cross-voice-ios.yml'
   pull_request:
     paths:
@@ -16,6 +15,10 @@ on:
 
 permissions:
   contents: read
+
+concurrency:
+  group: sscircle-voice-ios-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   ios:
