@@ -95,6 +95,8 @@ Ganti dengan URL Worker yang benar, tanpa slash terakhir. Variable ini **publik*
 
 Halaman /voice.html harus diberikan izin mikrofon khusus oleh Worker Pages, sementara halaman lain tetap dibatasi.
 
+**Pemeriksaan auto-config:** buka `https://DOMAIN-WEBSITE-SSCircle/api/voice/mobile-config`. Respons JSON harus berisi `ready:true`, `origin` yang sama persis dengan domain website, dan `gateway` HTTPS Workers yang benar. Setelah itu, halaman web dan aplikasi sama-sama memakai gateway tersebut tanpa pengaturan manual di HP.
+
 ## 6. Pemakaian
 
 Java: pasang Simple Voice Chat mod, lalu berbicara di dalam game seperti biasa.
@@ -129,7 +131,8 @@ PR #74 sekarang menyediakan sumber aplikasi native yang **terpisah dari halaman 
 - Android (API 26+): `cross-voice/mobile/android/`, panduan `cross-voice/mobile/android/README-ID.md`. Workflow `SSCircle Voice Android APK` menghasilkan `SSCircle-Voice-Android-APK` setelah build sukses. APK debug ditandatangani otomatis untuk pengujian.
 - iPhone/iPad (iOS 16+): `cross-voice/mobile/ios/`, panduan `cross-voice/mobile/ios/README-ID.md`. Memerlukan Xcode dan Apple signing atau TestFlight; APK Android **tidak** dapat dipasang di iOS.
 - Keduanya menggunakan Cloudflare Worker yang sama (tanpa VPS) dan bukan WebView. Native audio memakai PCM16 48kHz sesuai protokol PR #74.
-- Masukkan URL HTTPS Worker dan Origin yang persis sama dengan `VOICE_ORIGIN`. Pairing memakai `/voice link` dalam game.
+- Aplikasi sekarang **otomatis** mengambil URL Worker dan Origin dari `https://WEBSITE-SSCircle/api/voice/mobile-config`; pemain cukup memasukkan kode `/voice link`. Website mengambil `VOICE_PUBLIC_URL` dari Pages dan meneruskan Origin sesuai domain HTTPS yang sedang digunakan. URL ini adalah konfigurasi publik, **bukan** credential.
+- Domain app preview bawaan adalah `https://voice-test.sscircle.pages.dev`. Untuk domain produksi berbeda, admin menyetel `-PvoiceSiteOrigin` pada build Android atau `SSCVoiceBootstrapURL` di Info.plist iOS satu kali. Jangan memakai domain contoh ketika sudah produksi.
 - Worker versi terbaru menyediakan `POST /api/renew` agar sesi native dirotasi otomatis tanpa menutup audio. Deploy ulang Worker dari branch PR #74 untuk aplikasi mobile.
 - Tetap **wajib pengujian pada HP fisik** saat Minecraft aktif, termasuk headset, screen lock, interupsi panggilan, kualitas dua arah, baterai dan latensi.
 
