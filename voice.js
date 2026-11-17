@@ -406,9 +406,42 @@ function translateInterface(){
   put('.voice-mobile-warning',a.notice);put('#background-title',a.backgroundTitle);put('#recover-voice',a.recover);
   if(!document.hidden)backgroundInfo(a.backgroundReady);
 }
+function updateAppDownloads(){
+  const config=window.SSCIRCLE_VOICE_DOWNLOADS||{};
+  const android=typeof config.android==='string'&&
+    /^https:\/\/github\.com\/locdaily-store\/SSCircle-Web\/releases\/download\/[a-z0-9._-]+\/[a-z0-9._-]+\.apk$/i.test(config.android)
+    ?config.android:'';
+  const ios=typeof config.ios==='string'&&
+    /^https:\/\/(?:testflight\.apple\.com\/join\/[a-z0-9]+|apps\.apple\.com\/[a-z]{2}\/app\/[^?#]+\/id[0-9]+)\/?$/i.test(config.ios)
+    ?config.ios:'';
+  const en=lang==='en';
+  const subtitle=$('voice-app-description');
+  if(!subtitle)return; // Allows existing isolated browser tests to run.
+  $('voice-app-title').textContent=en?'SSCircle Voice for phones':'SSCircle Voice untuk HP';
+  subtitle.textContent=en?'Use a dedicated Voice app while playing Minecraft. Choose your platform.':
+    'Aplikasi pendamping untuk berbicara saat membuka Minecraft. Pilih perangkatmu.';
+  $('voice-download-android').href=android||
+    'https://github.com/locdaily-store/SSCircle-Web/actions/workflows/cross-voice-android.yml';
+  $('voice-download-ios').href=ios||
+    'https://github.com/locdaily-store/SSCircle-Web/blob/feature/sscircle-cross-voice/cross-voice/mobile/ios/README-ID.md';
+  $('voice-android-action').textContent=android?(en?'Download Android APK':'Unduh APK Android'):
+    (en?'View Android APK builds':'Lihat build APK Android');
+  $('voice-ios-action').textContent=ios?(en?'Install iOS app':'Unduh aplikasi iOS'):
+    (en?'iOS installation guide':'Panduan aplikasi iOS');
+  $('voice-android-note').textContent=android?
+    (en?'Official SSCircle Android test APK.':'APK uji SSCircle untuk Android.'):
+    (en?'No published APK yet. Check the Actions build results.':
+      'APK belum dipublikasikan. Buka hasil build di GitHub Actions.');
+  $('voice-ios-note').textContent=ios?
+    (en?'Opens the official iOS App Store/TestFlight listing.':
+      'Membuka halaman App Store/TestFlight resmi.'):
+    (en?'No TestFlight link yet. Apple code signing is required.':
+      'Belum ada tautan TestFlight. Instalasi memerlukan penandatanganan Apple.');
+}
 function setLanguage(){
   lang=$('language').value;document.documentElement.lang=lang;
   translateInterface();
+  updateAppDownloads();
   $('start-mic').textContent=stream?translation('stop'):translation('start');
   if(!me)status(translation('status'),false);
   $('join-group').textContent=translation('group');
