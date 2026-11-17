@@ -6,6 +6,7 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.media.AudioManager;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
@@ -77,10 +78,18 @@ public final class VoiceService extends Service {
     private ScheduledFuture<?> retry, renewal;
     private int reconnectAttempt;
     private PowerManager.WakeLock wakeLock;
+    private int previousAudioMode = AudioManager.MODE_NORMAL;
+    private boolean previousSpeakerphone;
+    private boolean audioRouteOwned;
 
     @Override public IBinder onBind(Intent intent) { return null; }
     @Override public void onCreate() {
         super.onCreate();
+        AudioManager audioManager = (AudioManager) getSystemService(AUDIO_SERVICE);
+        if (audioManager != null) {
+            previousAudioMode = audioManager.getMode();
+            previousSpeakerphone = audioManager.isSpeakerphoneOn();
+        }
         NotificationManager manager = getSystemService(NotificationManager.class);
         manager.createNotificationChannel(new NotificationChannel(CHANNEL,
             "SSCircle Voice sedang berjalan", NotificationManager.IMPORTANCE_LOW));
@@ -412,7 +421,11 @@ public final class VoiceService extends Service {
                     engine.deafen(deafened);
                     audio = engine;
                     engine.start();
-                    message("Terhubung • voice aktif di background");
+                    boolean routeApplied = VoiceOutputRoute.apply(VoiceService.this,
+                        VoiceOutputRoute.isSpeaker(VoiceService.this));
+                    audioRouteOwned = true;
+                    message(routeApplied ? "Terhubung • voice aktif di background" :
+                        "Terhubung • output tidak tersedia, periksa speaker/earpiece");
                     updateNotification("Terhubung sebagai " + player + " • mikrofon aktif");
                 }
                 @Override public void onMessage(WebSocket ws, String text) {
@@ -518,6 +531,16 @@ public final class VoiceService extends Service {
     private void control(String command, String value) {
         if (!active || command == null) return;
         if (value == null) value = "";
+        if ("speaker".equals(command) || "earpiece".equals(command)) {
+            boolean speaker = "speaker".equals(command);
+            boolean before = VoiceOutputRoute.isSpeaker(this);
+            boolean routed = VoiceOutputRoute.apply(this, speaker);
+            if (routed) VoiceOutputRoute.save(this, speaker);
+            else VoiceOutputRoute.save(this, before);
+            message(routed ? (speaker ? "Mode suara: Speaker HP" : "Mode suara: Telepon / Earpiece") :
+                "Output suara tidak tersedia pada perangkat atau sedang digunakan aplikasi lain.");
+            return;
+        }
         switch (command) {
             case "mute": muted = true; break;
             case "unmute": muted = false; break;
@@ -557,6 +580,10 @@ public final class VoiceService extends Service {
         if (renewal != null) { renewal.cancel(false); renewal = null; }
         VoiceAudioEngine engine = audio; audio = null;
         if (engine != null) engine.stop();
+        if (audioRouteOwned) {
+            VoiceOutputRoute.release(this, previousAudioMode, previousSpeakerphone);
+            audioRouteOwned = false;
+        }
         WebSocket ws = socket; socket = null;
         if (ws != null) ws.close(1000, "user disconnect");
         String oldToken = token;
