@@ -76,7 +76,7 @@ export default {
         'Access-Control-Allow-Headers':'Content-Type, Authorization',
         'Access-Control-Max-Age':'600','Vary':'Origin'}});
     }
-    if(!['/api/health','/api/pair','/api/ticket','/api/disconnect','/ws','/bridge'].includes(url.pathname))
+    if(!['/api/health','/api/pair','/api/ticket','/api/renew','/api/disconnect','/ws','/bridge'].includes(url.pathname))
       return error(404,'NOT_FOUND',origin);
     if(!['GET','POST'].includes(request.method))return error(405,'METHOD_NOT_ALLOWED',origin);
     const secret=String(env.VOICE_BRIDGE_SECRET||'');
@@ -243,6 +243,31 @@ export class VoiceRoom extends DurableObject {
       this.sql.exec('INSERT INTO voice_sessions (token_hash,uuid,expires,epoch) VALUES (?,?,?,?)',
         hash,entry.uuid,expiry,this.bridgeEpoch);
       return reply(200,{ok:true,token,expiresIn:900,player:{uuid:entry.uuid,name:p.name}},this.origin);
+    }
+    // A native foreground audio service needs long calls without keeping a fixed 15-minute token.
+    // Rotating the bearer invalidates replay while extending the existing WebSocket attachment.
+    if(path==='/api/renew'&&method==='POST'){
+      if(!req.headers.get('Origin'))return error(403,'ORIGIN_REQUIRED',this.origin);
+      const oldToken=req.headers.get('Authorization')?.replace(/^Bearer /,'')||'';
+      if(!TOKEN.test(oldToken))return error(401,'SESSION_EXPIRED',this.origin);
+      const oldHash=await digest('session:'+oldToken);
+      const entries=this.rows('DELETE FROM voice_sessions WHERE token_hash=? RETURNING uuid,expires,epoch',oldHash);
+      const entry=entries[0];
+      if(!entry||entry.expires<now()||entry.epoch!==this.bridgeEpoch||
+          !this.healthy()||!this.players.get(entry.uuid)?.bedrock)
+        return error(401,'SESSION_EXPIRED',this.origin);
+      const nextToken=randomToken(),expiry=now()+15*60_000;
+      const nextHash=await digest('session:'+nextToken);
+      this.sql.exec('INSERT INTO voice_sessions (token_hash,uuid,expires,epoch) VALUES (?,?,?,?)',
+        nextHash,entry.uuid,expiry,this.bridgeEpoch);
+      this.sql.exec('DELETE FROM voice_tickets WHERE uuid=?',entry.uuid);
+      const client=this.clients.get(entry.uuid);
+      if(client){
+        const attachment=client.deserializeAttachment();
+        if(attachment?.type==='browser'&&attachment.epoch===this.bridgeEpoch)
+          client.serializeAttachment({...attachment,expires:expiry});
+      }
+      return reply(200,{ok:true,token:nextToken,expiresIn:900},this.origin);
     }
     if(path==='/api/ticket'&&method==='POST'){
       if(!req.headers.get('Origin'))return error(403,'ORIGIN_REQUIRED',this.origin);
