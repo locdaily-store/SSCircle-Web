@@ -14,6 +14,14 @@
 | Gateway 503 | Paper belum terhubung, secret atau origin Cloudflare tidak lengkap | Periksa Wrangler secret, /api/health dan restart Paper; Worker tidak perlu direstart |
 | HTTP 429 | Terlalu banyak pairing gagal | Tunggu setidaknya 60 detik |
 
+### Status Bedrock sudah CONNECTED tetapi ikon Simple Voice Chat masih disconnected
+
+1. Pastikan plugin Paper **v0.2.4 atau lebih baru**, `/voice status` menunjukkan `Web Voice CONNECTED`, dan `/scvoice status` menunjukkan Gateway terhubung.
+2. Di `plugins/SSCircleCrossVoice/config.yml`, `indicators.bedrock-native-icon: true`; restart atau jalankan `/scvoice reload` sesuai konfigurasi.
+3. Lihat dari **Minecraft Java dengan Simple Voice Chat**, bukan hanya client Bedrock. Cek `show_nametag_icons=true` di konfigurasi client. Pemain Java lain perlu berada cukup dekat dan nametag tidak disembunyikan plugin lain.
+4. `/voice link` yang baru dibuat **bukan** tanda terhubung. Tunggu sampai aplikasi/web membuka WebSocket yang aktif. Jika gateway offline, ikon tidak boleh menjadi connected.
+5. Plugin ini memanggil API resmi `setConnected`. Bila mod Java masih menggambar ikon disconnect meskipun status berubah di API, kemungkinan dipengaruhi versi/client mod/overlay. Jangan mengubah nickname atau menyuntik paket yang memalsukan koneksi client secara sembarangan.
+
 ### Pengumpulan log
 Kumpulkan status plugin, versi Paper, versi Simple Voice Chat, floodgate, platform browser, dan pesan error. Jangan mengunggah secret, kode pairing, token, atau audio pribadi.
 
