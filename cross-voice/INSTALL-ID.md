@@ -128,6 +128,29 @@ indicators:
 
 **Pemasangan:** ganti **JAR SSCircleCrossVoice** di folder `plugins/`, restart server, pasangkan kode baru, dan coba menggunakan satu client Java yang memasang Simple Voice Chat. **Tidak perlu mengubah file Cloudflare atau APK hanya untuk fitur ikon ini**.
 
+## 6B. Badge mikrofon yang selalu terlihat setelah pairing Bedrock (v0.2.5)
+
+Plugin menampilkan **TextDisplay badge mikrofon** di dekat sisi kanan nickname pemain Bedrock pada client Java setelah gateway mengirim event `session connected:true` (WebSocket audio aktif). Bukan saat kode pairing sekadar dibuat. Saat disconnect, pemain keluar, gateway mati, atau pergantian dunia, badge dihapus. Nickname, LuckPerms, scoreboard, dan TAB tidak ditimpa.
+
+**Resource pack Java wajib untuk menampilkan gambar mikrofon:** `SSCircle-Mic-Glyph-Java-26.3.zip`, disediakan dalam artifact distribusi CI dan dapat dibangun ulang dengan `python3 cross-voice/paper/create_mic_resourcepack.py`. File pack menyediakan font `sscircle:voice`, karakter `U+E401`, dan gambar mikrofon pixel art. Tanpa pack, ikon bisa terlihat sebagai kotak. Tidak diperlukan mod Java tambahan untuk badge ini.
+
+**Instalasi client Java:** Options > Resource Packs > Open Pack Folder, masukkan ZIP tersebut (jangan diekstrak), lalu aktifkan. Untuk distribusi otomatis, host ZIP dengan HTTPS dan gunakan `resource-pack` serta `resource-pack-sha1` pada `server.properties`. Jika server sudah menggunakan resource pack, **gabungkan** folder `assets/sscircle/` ke pack lama dan perbarui SHA-1, jangan mengganti pack server lain.
+
+Konfigurasi `plugins/SSCircleCrossVoice/config.yml`:
+
+```yaml
+indicators:
+  bedrock-native-icon: true
+  bedrock-mic-badge: true
+  badge-height: 2.42
+  badge-scale: 0.70
+  badge-view-distance: 48
+```
+
+Badge ini merupakan entitas terpisah yang mengikuti kepala pemain, sehingga posisi di samping nametag **perkiraan**, dan bisa berbeda tergantung pose/nama/font. Ikon menunjukkan **Voice terhubung**, bukan pemain sedang berbicara. Badge hanya ditampilkan kepada client Java dalam radius konfigurasi, tidak kepada client Bedrock.
+
+**Untuk deploy:** perbarui JAR SSCircleCrossVoice v0.2.5 pada folder `plugins/`, restart Paper, aktifkan resource pack pada client Java. Tidak perlu memperbarui Cloudflare Worker ataupun APK untuk ikon ini.
+
 ## 7. Port dan jaringan
 
 | Koneksi | Contoh port | Protokol |
