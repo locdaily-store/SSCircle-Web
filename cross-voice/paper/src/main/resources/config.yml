@@ -21,6 +21,15 @@ audio:
 # Mod Java Simple Voice Chat menampilkan ikon yang berasal dari status koneksi.
 # Tidak mengubah nickname, TAB, atau scoreboard LuckPerms.
 indicators:
+  # Status connected pada ikon asli Simple Voice Chat (jika SVC mendukung).
   bedrock-native-icon: true
+  # Ikon mikrofon TERPISAH di samping nickname, terlihat pada client Java.
+  # Memerlukan resource pack SSCircle Mic Glyph v0.2.5 di client Java.
+  # Tidak mengubah nama pemain, TAB, scoreboard atau tim LuckPerms.
+  bedrock-mic-badge: true
+  # Penempatan badge relatif terhadap nametag vanilla, dapat diatur server.
+  badge-height: 2.42
+  badge-scale: 0.70
+  badge-view-distance: 48
 security:
   pairing-expiry-seconds: 120
