@@ -1,5 +1,5 @@
 name: SSCircleCrossVoice
-version: 0.2.0
+version: 0.2.4
 main: id.sscircle.voice.CrossVoicePlugin
 api-version: '1.21'
 description: SSCircle Java/Bedrock voice bridge using Simple Voice Chat
