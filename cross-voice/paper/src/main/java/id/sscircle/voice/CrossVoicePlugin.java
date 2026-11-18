@@ -58,6 +58,10 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
     private final Map<UUID,Settings> settings=new ConcurrentHashMap<>();
     private final Set<UUID> forcedOff=ConcurrentHashMap.newKeySet();
     private final Set<UUID> webConnected=ConcurrentHashMap.newKeySet();
+    // Tracks only the SVC connection overrides installed by SSCircle Cross Voice.
+    // Never modify a genuine Java voice chat connection or a Bedrock user that has
+    // not paired. The gateway's active /ws session is the source of truth.
+    private final Set<UUID> svcConnectedOverrides=ConcurrentHashMap.newKeySet();
     private final Map<UUID,Long> lastPairing= new ConcurrentHashMap<>();
     private final Map<String,Group> groups=new HashMap<>();
     private ArrayBlockingQueue<Frame> audioQueue=new ArrayBlockingQueue<>(256);
@@ -184,6 +188,10 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
         }catch(RuntimeException e){sendInFlight.set(false);dropped++;outboundPackets.clear();}
     }
     private void snapshot(){
+        // The native Simple Voice Chat nametag icon follows the active /ws
+        // session, not merely a consumed pairing code. Runs on Paper main
+        // thread to avoid racing SVC/Bukkit player state.
+        syncBedrockVoiceIndicators();
         if(socket==null)return; // Bukkit main thread: positions only, no audio codec.
         JsonObject packet=new JsonObject();packet.addProperty("t","snapshot");
         packet.addProperty("voiceReady",voiceReady);
@@ -225,6 +233,56 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
         cfg.addProperty("groupsAllowed",groupsAllowed);
         send(cfg);
     }
+    /**
+     * Simple Voice Chat 2.6 API explicitly supports marking an unmodded
+     * player's connection as connected. This changes its ORIGINAL nametag
+     * status icon seen by Java players with Simple Voice Chat installed.
+     * Does not edit nickname, scoreboard teams, TAB or client resource packs.
+     */
+    private void syncBedrockVoiceIndicators(){
+        VoicechatServerApi api=voice;
+        boolean enabled=getConfig().getBoolean("indicators.bedrock-native-icon",true);
+        boolean available=enabled && socket!=null && voiceReady && api!=null;
+        // The cached SVC connection may reset its flag after reconnect.
+        // Re-assert only when it reports disconnected; avoid packet spam.
+        for(Player player:Bukkit.getOnlinePlayers()){
+            UUID id=player.getUniqueId();
+            if(!bedrock(id))continue;
+            boolean shouldShow=available && webConnected.contains(id);
+            VoicechatConnection connection=null;
+            if(api!=null){
+                try{connection=api.getConnectionOf(id);}
+                catch(RuntimeException ignored){}
+            }
+            if(connection==null||connection.isInstalled())continue;
+            try{
+                if(shouldShow){
+                    if(!connection.isConnected())connection.setConnected(true);
+                    svcConnectedOverrides.add(id);
+                }else if(svcConnectedOverrides.remove(id)){
+                    connection.setConnected(false);
+                }
+            }catch(RuntimeException ignored){
+                // SVC is reloading. The next 5-tick sync retries safely.
+            }
+        }
+        // If the player left or Floodgate no longer recognizes them, do not
+        // keep stale entries. Quit cleanup attempts to restore the SVC state.
+        svcConnectedOverrides.removeIf(id->{
+            Player p=Bukkit.getPlayer(id);
+            return p==null||!bedrock(id);
+        });
+    }
+    private void resetBedrockVoiceIndicator(UUID id){
+        if(!svcConnectedOverrides.remove(id))return;
+        VoicechatServerApi api=voice;
+        if(api==null)return;
+        try{
+            VoicechatConnection connection=api.getConnectionOf(id);
+            if(connection!=null&&!connection.isInstalled())connection.setConnected(false);
+        }catch(RuntimeException ignored){}
+    }
+
     private String pairingCode(){
         StringBuilder b=new StringBuilder(8);
         for(int i=0;i<8;i++)b.append(ALPHABET.charAt(random.nextInt(ALPHABET.length())));
@@ -252,6 +310,7 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
     @EventHandler public void quit(PlayerQuitEvent e){
         UUID id=e.getPlayer().getUniqueId();
         settings.remove(id);forcedOff.remove(id);webConnected.remove(id);lastPairing.remove(id);
+        resetBedrockVoiceIndicator(id);
         JsonObject m=new JsonObject();m.addProperty("t","kick");m.addProperty("uuid",id.toString());send(m);
         // The audio worker owns all codec instances.
         audioWorker.submit(()->closeCodec(id));
@@ -271,9 +330,11 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
             });
             events.registerEvent(VoicechatServerStoppedEvent.class,event->{
                 voiceReady=false;voice=null;
+                svcConnectedOverrides.clear(); // SVC restart discards override state.
                 // A restarted SVC server invalidates codec history and senders.
                 if(audioWorker!=null)audioWorker.submit(()->{
-                    for(UUID uuid:new ArrayList<>(senders.keySet()))closeCodec(uuid);
+                    for(UUID uuid:new ArrayList<>(svcConnectedOverrides))resetBedrockVoiceIndicator(uuid);
+        for(UUID uuid:new ArrayList<>(senders.keySet()))closeCodec(uuid);
                     for(OpusDecoder d:decoders.values())d.close();
                     for(OpusEncoder e:encoders.values())e.close();
                     decoders.clear();encoders.clear();senders.clear();
@@ -598,6 +659,6 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
         for(UUID uuid:new ArrayList<>(senders.keySet()))closeCodec(uuid);
         for(OpusDecoder decoder:decoders.values())decoder.close();
         for(OpusEncoder encoder:encoders.values())encoder.close();
-        decoders.clear();encoders.clear();senders.clear();settings.clear();forcedOff.clear();webConnected.clear();lastPairing.clear();groups.clear();audioQueue.clear();outboundPackets.clear();pendingJavaAudio.clear();
+        decoders.clear();encoders.clear();senders.clear();settings.clear();forcedOff.clear();webConnected.clear();svcConnectedOverrides.clear();lastPairing.clear();groups.clear();audioQueue.clear();outboundPackets.clear();pendingJavaAudio.clear();
     }
 }
