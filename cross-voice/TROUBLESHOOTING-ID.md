@@ -22,6 +22,14 @@
 4. `/voice link` yang baru dibuat **bukan** tanda terhubung. Tunggu sampai aplikasi/web membuka WebSocket yang aktif. Jika gateway offline, ikon tidak boleh menjadi connected.
 5. Plugin ini memanggil API resmi `setConnected`. Bila mod Java masih menggambar ikon disconnect meskipun status berubah di API, kemungkinan dipengaruhi versi/client mod/overlay. Jangan mengubah nickname atau menyuntik paket yang memalsukan koneksi client secara sembarangan.
 
+### Ikon mikrofon hijau Bedrock tidak muncul
+
+- Gunakan SSCircleCrossVoice **v0.2.5** dan lihat melalui client Minecraft **Java** yang mengaktifkan resource pack `SSCircle-Mic-Glyph-Java-26.3.zip`. Tanpa resource pack, karakter mikrofon bisa menjadi kotak/hilang.
+- Saat pemain Bedrock sudah terhubung melalui aplikasi/website, `/scvoice status` harus menunjukkan `mic badges` lebih dari nol. Jika nol, cek status Gateway, SVC, `/voice status`, dan koneksi WebSocket.
+- Periksa `indicators.bedrock-mic-badge: true`. Pastikan Bedrock dan Java berada di dunia yang sama serta dalam `badge-view-distance` blok.
+- Jika server sudah memakai resource pack, gabungkan font `sscircle:voice`; jangan menimpa resource pack lainnya.
+- Tampilan di samping nickname adalah perkiraan menggunakan TextDisplay, bukan renderer asli nametag. Ikon menunjukkan koneksi aktif, bukan sedang berbicara.
+
 ### Pengumpulan log
 Kumpulkan status plugin, versi Paper, versi Simple Voice Chat, floodgate, platform browser, dan pesan error. Jangan mengunggah secret, kode pairing, token, atau audio pribadi.
 
