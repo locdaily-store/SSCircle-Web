@@ -1,6 +1,6 @@
 plugins { java }
 group = "id.sscircle"
-version = "0.2.4"
+version = "0.2.5"
 repositories {
     mavenCentral()
     maven("https://repo.papermc.io/repository/maven-public/")
