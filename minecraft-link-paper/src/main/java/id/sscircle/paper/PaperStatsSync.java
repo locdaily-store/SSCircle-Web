@@ -369,7 +369,9 @@ final class PaperStatsSync implements Listener {
         }
         // The invalid Material cache is common to all players; remove after
         // scanning so future quit events do less work.
-        if(!rejectedMaterials.isEmpty()){
+        // A manual /sscircle sync may be in the middle of an incremental
+        // player scan. Do not change shared material indices until it ends.
+        if(activeJob==null&&!rejectedMaterials.isEmpty()){
             blockMaterials.removeAll(rejectedMaterials);
             rejectedMaterials.clear();
         }
