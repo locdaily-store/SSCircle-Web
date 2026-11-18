@@ -333,8 +333,7 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
                 svcConnectedOverrides.clear(); // SVC restart discards override state.
                 // A restarted SVC server invalidates codec history and senders.
                 if(audioWorker!=null)audioWorker.submit(()->{
-                    for(UUID uuid:new ArrayList<>(svcConnectedOverrides))resetBedrockVoiceIndicator(uuid);
-        for(UUID uuid:new ArrayList<>(senders.keySet()))closeCodec(uuid);
+                    for(UUID uuid:new ArrayList<>(senders.keySet()))closeCodec(uuid);
                     for(OpusDecoder d:decoders.values())d.close();
                     for(OpusEncoder e:encoders.values())e.close();
                     decoders.clear();encoders.clear();senders.clear();
@@ -651,6 +650,7 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
     @Override public void onDisable(){
         running.set(false);
         Bukkit.getScheduler().cancelTasks(this);
+        for(UUID uuid:new ArrayList<>(svcConnectedOverrides))resetBedrockVoiceIndicator(uuid);
         WebSocket ws=socket;if(ws!=null)ws.abort();socket=null;
         if(audioWorker!=null){
             audioWorker.shutdownNow();
