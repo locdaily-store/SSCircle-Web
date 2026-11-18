@@ -124,6 +124,12 @@ final class PaperIdentitySync implements Listener {
             SSCirclePaperLinkPlugin.Identity identity=identityFor.apply(player);
             if(identity==null)continue; // AuthMe/Floodgate did not verify session.
             String source=identity.authSource();
+            // Low-request default: after an accepted verified identity proof,
+            // only a changed authentication source or explicit /sscircle sync
+            // requires another HTTP refresh during this Minecraft session.
+            // Initial login proof and safe retry on failures are still needed.
+            if(!plugin.getConfig().getBoolean("identity-sync.periodic-refresh-enabled",false)
+                &&state.lastSuccessMs>0&&state.acceptedSource.equals(source))continue;
             if(!shouldSend(now,state.lastAttemptMs,state.lastSuccessMs,
                 state.acceptedSource,source))continue;
             state.inflight=true;
