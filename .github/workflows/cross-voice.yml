@@ -108,10 +108,15 @@ jobs:
         run: test -s build/cross-voice/SSCircleCrossVoice.jar
       - name: Buat ZIP lengkap dan hanya perubahan
         run: python3 scripts/package_cross_voice.py
+      - name: Buat resource pack ikon mic untuk client Minecraft Java 26.3
+        run: |
+          python3 cross-voice/paper/create_mic_resourcepack.py
+          unzip -t dist/SSCircle-Mic-Glyph-Java-26.3.zip | tail -1
       - uses: actions/upload-artifact@v4
         with:
           name: SSCircle-Cross-Voice-Distribution
           path: |
             dist/SSCircle-Cross-Voice-FULL.zip
             dist/SSCircle-Cross-Voice-ONLY-CHANGES.zip
+            dist/SSCircle-Mic-Glyph-Java-26.3.zip
           if-no-files-found: error
