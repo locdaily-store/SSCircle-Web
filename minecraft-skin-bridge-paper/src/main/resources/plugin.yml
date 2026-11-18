@@ -1,5 +1,5 @@
 name: SSCircleSkinBridge
-version: '10.49.1.4'
+version: '10.54.7'
 main: id.sscircle.skin.SSCircleSkinBridge
 api-version: '26.3'
 author: SSCircle
@@ -12,7 +12,7 @@ commands:
   ssskin:
     description: Periksa dan sinkronkan skin SSCircle
     aliases: [ssb, skinbridge]
-    usage: /ssb [help|me|status|sync|check|reload]
+    usage: /ssb [h|me|s|q|a|p <pemain>|c <pemain>|cfg|r]
 permissions:
   sscircle.admin:
     default: op
