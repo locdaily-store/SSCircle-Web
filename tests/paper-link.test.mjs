@@ -57,7 +57,7 @@ test('Paper Direct: no insecure default endpoint or secrets in shipped config',(
 });
 
 test('V10.45.2: safe tab-completion shows matching commands and hides admin-only reload',()=>{
- assert.match(manifest,/version: '10\.54\.6'/);
+ assert.match(manifest,/version: '10\.54\.7'/);
  assert.match(paper,/implements CommandExecutor, TabCompleter, Listener/);
  assert.match(paper,/public List<String> onTabComplete\(CommandSender sender, Command command, String alias, String\[\] args\)/);
  assert.match(paper,/if \(args\.length != 1\) return List\.of\(\)/);
@@ -82,7 +82,7 @@ test('V10.45.2: explain both independent failures without exposing shared secret
 });
 
 test('V10.45.3: operator-only signed diagnostic and safe error presentation',()=>{
- assert.match(manifest,/version: '10\.54\.6'/);
+ assert.match(manifest,/version: '10\.54\.7'/);
  assert.match(paper,/private static final String DIAGNOSE_PATH = "\/api\/minecraft\/link\/diagnose"/);
  assert.match(paper,/options\.add\("diagnose"\)/);
  assert.match(paper,/private void runDiagnostic\(CommandSender sender\)/);
@@ -414,4 +414,19 @@ test('V10.54.6: lightweight capture intervals and a single bounded skin publishi
  assert.match(bridge,/pauseForLowTps\(\)/);
  assert.match(bridgeConfig,/pause-on-low-tps: true/);
  assert.doesNotMatch(bridge,/index\+\+\*20L/);
+});
+
+
+test('V10.54.7: quit-only statistics avoids repeated HTTP snapshots while preserving queue retries',()=>{
+ const stats=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/PaperStatsSync.java',import.meta.url),'utf8');
+ const telemetry=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/PaperSyncTelemetry.java',import.meta.url),'utf8');
+ const identity=readFileSync(new URL('../minecraft-link-paper/src/main/java/id/sscircle/paper/PaperIdentitySync.java',import.meta.url),'utf8');
+ assert.match(config,/stats-sync:[\s\S]*?mode: quit_only/);
+ assert.match(stats,/if\(!quitOnly\)\s*plugin\.getServer\(\)\.getScheduler\(\)\.runTaskTimer/);
+ assert.match(stats,/private int scanBlocksAtQuit\(Player player\)/);
+ assert.match(stats,/flushQueue\(\);\s*sendNext\(\);/);
+ assert.match(stats,/scheduleRetry\(code,response\.headers\(\)/);
+ assert.match(config,/sync-monitor:[\s\S]*?enabled: false/);
+ assert.match(telemetry,/getBoolean\("sync-monitor\.enabled",false\)/);
+ assert.match(identity,/getBoolean\("identity-sync\.periodic-refresh-enabled",false\)/);
 });
