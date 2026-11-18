@@ -113,6 +113,21 @@ Browser Android/iOS dapat ditangguhkan ketika Minecraft sedang di depan. **Tidak
 
 **Ketahanan background (PR #74):** WebSocket dan mikrofon tidak sengaja ditutup ketika halaman berpindah ke background. Gunakan **Voice Activation** untuk mencoba berbicara sambil membuka Minecraft (PTT hanya ketika halaman dapat ditekan). Saat kembali ke tab, halaman mencoba menyambung ulang WebSocket dan AudioContext. Jika browser menghentikan mikrofon, tekan tombol **Pulihkan Voice** untuk meminta akses ulang. Jangan tutup tab. Browser/OS tetap dapat menangguhkan proses dan tidak bisa dipaksa aktif oleh JavaScript atau PWA.
 
+## 6A. Ikon mikrofon asli Simple Voice Chat untuk Bedrock
+
+Plugin Paper **SSCircleCrossVoice v0.2.4** memanggil `VoicechatConnection.setConnected(true)` pada pemain Floodgate/Bedrock ketika mendapat event `session connected:true` dari gateway dan sesi browser/aplikasi benar-benar hidup. Ketika `session connected:false`, pemain logout, server voice restart, atau jembatan Cloudflare putus, plugin memulihkan `setConnected(false)`. Pengecekan dilakukan setiap 5 tick pada thread utama, tanpa mengubah prefix LuckPerms, scoreboard team, atau TAB.
+
+Konfigurasi tambahan di `plugins/SSCircleCrossVoice/config.yml`:
+
+```yaml
+indicators:
+  bedrock-native-icon: true
+```
+
+`false` menonaktifkan penggantian indikator. **Ikon berasal dari mod Simple Voice Chat di client Java**, bukan ikon buatan plugin, dan hanya terlihat pada client yang memasang mod dengan `show_nametag_icons=true`. Ikon status connected tidak sama dengan animasi indikator *sedang bicara*. Pemain Bedrock tanpa mod tetap melihat UI Minecraft Bedrock standar. Sebagian mod pengubah nametag dan versi client SVC tertentu dapat menyembunyikannya.
+
+**Pemasangan:** ganti **JAR SSCircleCrossVoice** di folder `plugins/`, restart server, pasangkan kode baru, dan coba menggunakan satu client Java yang memasang Simple Voice Chat. **Tidak perlu mengubah file Cloudflare atau APK hanya untuk fitur ikon ini**.
+
 ## 7. Port dan jaringan
 
 | Koneksi | Contoh port | Protokol |
