@@ -66,6 +66,15 @@ class PaperStatsSyncTest {
         assertFalse(PaperStatsSync.canQueue(entries,"id-new"));
         assertEquals(1024,entries.size());
     } 
+    @Test void quitOnlyIsTheSafeLowRequestDefault() {
+        assertTrue(PaperStatsSync.quitOnlyMode(null));
+        assertTrue(PaperStatsSync.quitOnlyMode(""));
+        assertTrue(PaperStatsSync.quitOnlyMode("quit_only"));
+        assertTrue(PaperStatsSync.quitOnlyMode("QUIT_ONLY"));
+        assertFalse(PaperStatsSync.quitOnlyMode("periodic"));
+        assertFalse(PaperStatsSync.quitOnlyMode("PERIODIC"));
+    }
+
     @Test void captureSchedulerUsesBoundedPeriod(){
         assertEquals(2L,PaperStatsSync.capturePeriodTicks(2));
         assertEquals(1L,PaperStatsSync.capturePeriodTicks(0));
