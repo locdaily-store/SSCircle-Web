@@ -258,6 +258,7 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
             readSettings();
             startPairingIfNeeded();
             sender.sendMessage("Konfigurasi SSCircle dan pairing diperiksa ulang.");
+            sender.sendMessage("Mode stats-sync, identity-sync, dan sync-monitor baru berlaku sepenuhnya setelah restart Paper.");
             sender.sendMessage("Environment Windows yang berubah tetap membutuhkan restart proses Paper.");
             return true;
         }
@@ -546,6 +547,9 @@ public final class SSCirclePaperLinkPlugin extends JavaPlugin implements Command
         boolean enabled=getConfig().getBoolean("stats-sync.enabled",true);
         statusItem(sender,"Sinkronisasi",enabled?"Aktif":"Nonaktif",
             enabled?NamedTextColor.GREEN:NamedTextColor.YELLOW);
+        statusItem(sender,"Mode statistik",statsSync==null?"Belum aktif":
+            statsSync.modeLabel().equals("QUIT_ONLY")?"Saat disconnect / quit":
+                "Berkala (legacy)",NamedTextColor.AQUA);
         if(operator){
             statusItem(sender,"Antrean",statsSync==null?"Tidak aktif":
                 statsSync.pendingCount()+" akun",NamedTextColor.YELLOW);
