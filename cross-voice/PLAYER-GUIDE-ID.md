@@ -15,6 +15,12 @@
 7. Biarkan tab Voice terbuka saat berpindah aplikasi. Jika koneksi atau mikrofon dihentikan OS, kembali ke tab Voice dan tekan **Pulihkan Voice**. Bila browser meminta izin lagi, izinkan mikrofon.
 8. Tekan **Disconnect** jika selesai. Jika token habis, gunakan `/voice link` untuk kode baru.
 
+### Indikator mikrofon pemain Bedrock (v0.2.4)
+
+Jika sudah menjalankan `/voice link` dan benar-benar **terhubung ke Voice SSCircle** lewat aplikasi Android/iOS atau website, ikon status pemain Bedrock di samping nama pada **client Java yang memasang Simple Voice Chat** akan mengikuti koneksi aktif. SSCircle Cross Voice memakai API bawaan Simple Voice Chat `VoicechatConnection.setConnected(true)`. Tidak ada mod tambahan pada client Java selama SVC mendukung indikator tersebut.
+
+Penting: indikator berubah hanya setelah websocket audio berstatus aktif, **bukan** saat kode pairing sekadar dibuat atau diterima. Saat disconnect, keluar server, atau gateway kehilangan koneksi, ikon kembali ke status standar. Warna/bentuk ikon ditentukan oleh versi dan konfigurasi client Simple Voice Chat; ini bukan tanda berbicara real-time dan tidak mengubah ikon Bedrock UI secara langsung.
+
 ### Saat berpindah aplikasi atau layar dikunci
 
 - Halaman tidak lagi sengaja menutup WebSocket/mikrofon saat masuk latar belakang. Saat kembali, halaman mencoba reconnect WebSocket dan melanjutkan AudioContext; jika mikrofon dimatikan OS, tekan **Pulihkan Voice** untuk mengaktifkannya kembali.
