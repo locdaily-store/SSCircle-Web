@@ -39,6 +39,7 @@ import java.util.LinkedHashMap;
 import java.util.Iterator;
 import java.util.Base64;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -62,6 +63,7 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
     // Never modify a genuine Java voice chat connection or a Bedrock user that has
     // not paired. The gateway's active /ws session is the source of truth.
     private final Set<UUID> svcConnectedOverrides=ConcurrentHashMap.newKeySet();
+    private BedrockMicBadges micBadges;
     private final Map<UUID,Long> lastPairing= new ConcurrentHashMap<>();
     private final Map<String,Group> groups=new HashMap<>();
     private ArrayBlockingQueue<Frame> audioQueue=new ArrayBlockingQueue<>(256);
@@ -105,6 +107,7 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
             Bukkit.getPluginManager().disablePlugin(this);return;
         }
         service.registerPlugin(new VoiceHooks());
+        micBadges=new BedrockMicBadges(this);
         audioQueue=new ArrayBlockingQueue<>(Math.max(64,Math.min(2048,getConfig().getInt("audio.max-queued-frames",256))));
         http=HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(6)).build();
         running.set(true);
@@ -243,12 +246,17 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
         VoicechatServerApi api=voice;
         boolean enabled=getConfig().getBoolean("indicators.bedrock-native-icon",true);
         boolean available=enabled && socket!=null && voiceReady && api!=null;
+        boolean showBadge=getConfig().getBoolean("indicators.bedrock-mic-badge",true);
+        Set<UUID> badgeOwners=new HashSet<>();
         // The cached SVC connection may reset its flag after reconnect.
         // Re-assert only when it reports disconnected; avoid packet spam.
         for(Player player:Bukkit.getOnlinePlayers()){
             UUID id=player.getUniqueId();
             if(!bedrock(id))continue;
-            boolean shouldShow=available && webConnected.contains(id);
+            boolean shouldShow=socket!=null && voiceReady && webConnected.contains(id);
+            if(shouldShow && showBadge)badgeOwners.add(id);
+            // Native SVC icon is an optional secondary indicator.
+            shouldShow=shouldShow && available;
             VoicechatConnection connection=null;
             if(api!=null){
                 try{connection=api.getConnectionOf(id);}
@@ -272,6 +280,7 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
             Player p=Bukkit.getPlayer(id);
             return p==null||!bedrock(id);
         });
+        if(micBadges!=null)micBadges.sync(badgeOwners);
     }
     private void resetBedrockVoiceIndicator(UUID id){
         if(!svcConnectedOverrides.remove(id))return;
@@ -311,6 +320,7 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
         UUID id=e.getPlayer().getUniqueId();
         settings.remove(id);forcedOff.remove(id);webConnected.remove(id);lastPairing.remove(id);
         resetBedrockVoiceIndicator(id);
+        if(micBadges!=null)micBadges.remove(id);
         JsonObject m=new JsonObject();m.addProperty("t","kick");m.addProperty("uuid",id.toString());send(m);
         // The audio worker owns all codec instances.
         audioWorker.submit(()->closeCodec(id));
@@ -550,7 +560,8 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
                 tell(sender,"Gateway "+(socket==null?"OFFLINE":"TERHUBUNG")+
                     ", Simple Voice Chat "+(voiceReady?"READY":"BELUM SIAP")+
                     ", antrean audio "+audioQueue.size()+
-                    ", Java→Web "+sent+", Web→Java "+received+", dropped "+dropped);return true;
+                    ", Java→Web "+sent+", Web→Java "+received+", dropped "+dropped+
+                    ", mic badges "+(micBadges==null?0:micBadges.count()));return true;
             }
             if(action.equals("inspect")&&args.length>=2){
                 Player p=Bukkit.getPlayerExact(args[1]);
@@ -651,6 +662,7 @@ public final class CrossVoicePlugin extends JavaPlugin implements Listener, TabE
         running.set(false);
         Bukkit.getScheduler().cancelTasks(this);
         for(UUID uuid:new ArrayList<>(svcConnectedOverrides))resetBedrockVoiceIndicator(uuid);
+        if(micBadges!=null){micBadges.clear();micBadges=null;}
         WebSocket ws=socket;if(ws!=null)ws.abort();socket=null;
         if(audioWorker!=null){
             audioWorker.shutdownNow();
