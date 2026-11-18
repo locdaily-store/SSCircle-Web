@@ -1,5 +1,11 @@
 name: SSCircle Cross Voice CI
 on:
+  push:
+    branches:
+      - feature/sscircle-cross-voice
+    paths:
+      - 'cross-voice/**'
+      - '.github/workflows/cross-voice.yml'
   pull_request:
     paths:
       - 'cross-voice/**'
