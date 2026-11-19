@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#132334">
+<title>SSCircle Voice | Voice Chat Java & Bedrock</title>
+<meta name="description" content="Hubungkan Minecraft Bedrock ke proximity voice chat SSCircle Server.">
+<link rel="icon" href="assets/sscircle-logo.png">
+<link rel="stylesheet" href="style.css?v=10.49.1.6">
+<link rel="stylesheet" href="public-unified.css?v=10.60.0">
+<link rel="stylesheet" href="voice.css">
+<script src="public-unified.js?v=10.60.0" defer></script><script src="voice-config.js" defer></script><script src="voice.js" defer></script>
+</head>
+<body class="ssc-voice-page">
+<header class="home-header">
+<a class="home-brand" href="./" aria-label="SSCircle Server"><img src="assets/sscircle-logo.png" width="42" height="42" alt="Logo SSCircle"><span>SSCircle Server</span></a>
+<nav class="home-nav" aria-label="Navigasi utama">
+<a class="home-nav-link" href="/">Home</a><a class="home-nav-link" href="events.html">Event</a>
+<a class="home-nav-link" href="announcements.html">Announcement</a>
+<a class="home-nav-link is-active" aria-current="page" href="voice.html">Voice</a>
+<a class="home-nav-link" href="how-to-play.html">How to Play</a><a class="home-nav-link" href="/my-sscircle">Profile</a>
+</nav>
+<a class="voice-home-mobile" href="/">Home</a>
+</header>
+<main class="voice-shell">
+<section class="voice-top">
+<img src="assets/sscircle-logo.png" width="64" height="64" alt="Logo SSCircle">
+<div><span class="voice-eyebrow">VOICE / CROSS-PLATFORM</span><h1>SSCircle Voice</h1>
+<p id="subtitle">Bicara dengan teman Minecraft Java dan Bedrock di sekitar kamu.</p></div>
+<div class="voice-language"><label for="language">Language</label>
+<select id="language"><option value="id">Bahasa Indonesia</option><option value="en">English</option></select></div>
+</section>
+<section class="voice-app-downloads" aria-labelledby="voice-app-title">
+  <div class="voice-app-heading">
+    <div><span class="voice-step">MOBILE APP</span><h2 id="voice-app-title">SSCircle Voice untuk HP</h2>
+    <p id="voice-app-description">Gateway dan Origin terhubung otomatis dari SSCircle. Di aplikasi cukup masukkan kode /voice link.</p></div>
+  </div>
+  <div class="voice-app-grid">
+    <div class="voice-app-option">
+      <div class="voice-app-platform">Android <small>Android 8.0+</small></div>
+      <a id="voice-download-android" class="voice-app-button" href="https://github.com/locdaily-store/SSCircle-Web/releases/download/sscircle-voice-android-preview/SSCircle-Voice-Android.apk" target="_blank" rel="noopener noreferrer"><span id="voice-android-action">Unduh APK Android</span></a>
+      <p id="voice-android-note">APK uji resmi. Android 8.0+ dengan mikrofon latar belakang.</p>
+    </div>
+    <div class="voice-app-option">
+      <div class="voice-app-platform">iOS <small>iPhone / iPad · iOS 16+</small></div>
+      <a id="voice-download-ios" class="voice-app-button" href="https://github.com/locdaily-store/SSCircle-Web/blob/feature/sscircle-cross-voice/cross-voice/mobile/ios/README-ID.md" target="_blank" rel="noopener noreferrer"><span id="voice-ios-action">Panduan aplikasi iOS</span></a>
+      <p id="voice-ios-note">Belum ada tautan TestFlight. Instalasi memerlukan penandatanganan Apple.</p>
+    </div>
+  </div>
+</section>
+<div class="voice-network"><span class="voice-led" id="connection-dot"></span><strong id="connection-label" role="status">Memeriksa server...</strong><small id="connection-details"></small></div>
+<section id="pairing-panel" class="voice-panel">
+<div class="voice-step">01 / PAIRING</div>
+<h2 id="pair-title">Hubungkan akun Minecraft</h2>
+<p id="pair-info">Masuk ke server melalui Bedrock, ketik <code>/voice link</code> di chat Minecraft, lalu masukkan kode sekali pakai yang muncul.</p>
+<form id="pair-form">
+<label for="pair-code" id="pair-label">Kode pairing (8 karakter)</label>
+<div class="voice-pair-row"><input id="pair-code" type="text" maxlength="8" minlength="8" pattern="[A-HJ-NP-Za-km-z2-9]{8}" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="XXXXXXXX" required>
+<button type="submit" id="pair-submit">Connect</button></div>
+</form>
+<p class="voice-note" id="pair-message" role="alert"></p>
+<p class="voice-hint">Kode berlaku 2 menit dan hanya bisa dipakai sekali. Jangan membagikannya.</p>
+</section>
+<section id="room-panel" class="voice-panel" hidden>
+<div class="voice-room-head"><div><span class="voice-step">02 / VOICE ROOM</span><h2 id="room-title">Voice Room</h2>
+<div class="voice-profile"><img id="player-avatar" src="assets/sscircle-logo.png" width="46" height="46" alt="Avatar Minecraft">
+<div><strong id="player-name">Minecraft</strong><small id="room-status">Connecting...</small></div></div></div>
+<button id="disconnect" class="voice-danger" type="button">Disconnect</button></div>
+<div class="voice-controls">
+<button id="start-mic" type="button">Aktifkan mikrofon</button>
+<button id="mute" type="button" aria-pressed="false">Mute</button>
+<button id="deafen" type="button" aria-pressed="false">Deafen</button>
+<button id="whisper" type="button" aria-pressed="false">Whisper: OFF</button>
+</div>
+<div class="voice-setting-grid">
+<div><label for="talk-mode" id="talk-mode-label">Mode bicara</label><select id="talk-mode">
+<option value="ptt">Push-to-Talk (tahan V)</option><option value="voice">Voice Activation</option></select>
+<button id="ptt" class="voice-ptt" type="button">Tahan untuk berbicara</button></div>
+<div><label for="mic-select">Input microphone</label><select id="mic-select"><option value="">Default microphone</option></select>
+<label for="speaker-select">Output speaker</label><select id="speaker-select" disabled><option value="">Default speaker (browser)</option></select></div>
+<div><label for="sensitivity">Mic sensitivity</label><input type="range" id="sensitivity" min="0" max="40" value="6"><label for="noise-suppression"><input id="noise-suppression" type="checkbox" checked> <span id="noise-label">Noise suppression (jika didukung)</span></label><label for="mic-volume">Input volume</label><input type="range" id="mic-volume" min="0" max="200" value="100"></div>
+<div><label for="output-volume">Output volume</label><input id="output-volume" type="range" min="0" max="200" value="100">
+<label for="mic-meter">Microphone level</label><meter id="mic-meter" min="0" max="1" value="0"></meter>
+<div class="voice-tests"><button id="test-mic" type="button">Test Mic</button><button id="test-speaker" type="button">Test Speaker</button></div></div>
+</div>
+<div class="voice-groups"><h3>Mode suara</h3>
+<label><input type="radio" name="voice-mode" value="proximity" checked> Proximity / 3D</label>
+<label><input type="radio" name="voice-mode" value="group"> Group</label>
+<input id="group-name" type="text" maxlength="24" pattern="[A-Za-z0-9_-]{1,24}" placeholder="Nama grup" disabled>
+<button id="join-group" type="button" disabled>Gabung grup</button>
+</div>
+<div class="voice-heard"><h3 id="nearby-title">Pemain yang terdengar</h3><ul id="nearby-list"><li>Belum ada pemain dalam jangkauan.</li></ul></div>
+<p id="room-message" class="voice-note" role="status"></p>
+<div class="voice-background-panel" aria-label="Voice di latar belakang">
+  <div><strong id="background-title">Voice saat pindah aplikasi</strong>
+  <p id="background-state" role="status" aria-live="polite">Voice diusahakan tetap aktif saat pindah aplikasi. Jangan tutup tab.</p></div>
+  <button id="recover-voice" type="button">Pulihkan Voice</button>
+</div>
+<div class="voice-mobile-warning">Android/iOS bisa menghentikan mikrofon, audio, atau koneksi ketika browser di latar belakang. Pulihkan Voice jika terhenti; gunakan perangkat kedua bila perlu.</div>
+</section>
+</main>
+<footer class="home-footer"><div class="home-footer-inner"><div class="home-footer-brand"><img src="assets/sscircle-logo.png" width="28" height="28" alt=""> SSCircle Server</div><p>One circle. Endless stories.</p><a href="./">Homepage</a><a href="rules.html">Server Rules</a></div></footer>
+</body></html>

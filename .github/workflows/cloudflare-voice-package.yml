@@ -1,0 +1,98 @@
+name: SSCircle Cloudflare Pages + Voice Worker ZIP
+
+on:
+  pull_request:
+    paths:
+      - '_worker.js'
+      - '_routes.json'
+      - 'voice.*'
+      - 'assets/**'
+      - 'scripts/package-cloudflare.py'
+      - 'scripts/package-voice-cloudflare.py'
+      - 'cross-voice/cloudflare/**'
+      - 'cross-voice/INSTALL-ID.md'
+      - 'tests/voice-page.test.mjs'
+      - 'tests/voice-background.test.mjs'
+      - '.github/workflows/cloudflare-voice-package.yml'
+  push:
+    branches:
+      - feature/sscircle-cross-voice
+    paths:
+      - '_worker.js'
+      - '_routes.json'
+      - 'voice.*'
+      - 'scripts/package-cloudflare.py'
+      - 'scripts/package-voice-cloudflare.py'
+      - 'cross-voice/cloudflare/**'
+      - 'cross-voice/INSTALL-ID.md'
+      - '.github/workflows/cloudflare-voice-package.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sscircle-cloudflare-pack-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    name: Kemas Cloudflare Pages, Voice Worker dan ZIP gabungan
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Periksa sintaks gateway dan website tanpa memasang dependensi
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --version
+          python3 --version
+          node --check _worker.js
+          node --check voice.js
+          node --check voice-config.js
+          node --check voice-worklet.js
+          node --check cross-voice/cloudflare/src/index.mjs
+          python3 -m py_compile scripts/package-cloudflare.py scripts/package-voice-cloudflare.py
+      - name: Uji kontrak Cloudflare Pages package
+        run: python3 -m unittest discover -s tests -p test_cloudflare_package.py
+      - name: Buat 4 ZIP Cloudflare terverifikasi
+        run: python3 scripts/package-voice-cloudflare.py dist
+      - name: Pastikan ZIP benar dan tidak berisi credential atau file build
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+          root=Path('dist')
+          files=list(root.glob('*.zip'))
+          assert len(files)==4, f'Expected 4 ZIPs, got: {files}'
+          for path in files:
+              assert path.stat().st_size>100, f'Empty bundle: {path}'
+              with ZipFile(path) as z:
+                  assert z.testzip() is None
+                  names=z.namelist()
+                  assert not any('/.env' in '/'+n.lower() or '.dev.vars' in n.lower() or
+                      n.lower().endswith(('.pem','.key','.p12','.db','.sqlite','.sqlite3'))
+                      for n in names), f'Unsafe archive: {path}'
+                  print(path.name, len(names), 'files', path.stat().st_size, 'bytes')
+          PY
+      - name: Upload Cloudflare Pages Direct Upload ZIP + Worker Deploy ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: SSCircle-Cloudflare-DEPLOYMENT-KIT
+          path: dist/*.zip
+          if-no-files-found: error
+          retention-days: 30
+
+  voice-web-tests:
+    name: Pemeriksaan Voice Web terpisah
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Jalankan tes frontend dan CSP
+        run: node --test tests/voice-page.test.mjs tests/voice-background.test.mjs

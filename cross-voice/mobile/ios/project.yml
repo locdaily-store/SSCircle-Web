@@ -1,0 +1,20 @@
+name: SSCircleVoice
+options:
+  bundleIdPrefix: id.sscircle
+targets:
+  SSCircleVoice:
+    type: application
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: SSCircleVoice
+      - path: ../../../assets/sscircle-logo.png
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: id.sscircle.voice.mobile
+        SWIFT_VERSION: 5.0
+        TARGETED_DEVICE_FAMILY: "1,2"
+        CODE_SIGN_STYLE: Automatic
+    info:
+      path: SSCircleVoice/Info.plist

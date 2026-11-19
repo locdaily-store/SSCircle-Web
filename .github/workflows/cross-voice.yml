@@ -1,0 +1,122 @@
+name: SSCircle Cross Voice CI
+on:
+  push:
+    branches:
+      - feature/sscircle-cross-voice
+    paths:
+      - 'cross-voice/**'
+      - '.github/workflows/cross-voice.yml'
+  pull_request:
+    paths:
+      - 'cross-voice/**'
+      - 'voice.html'
+      - 'voice.css'
+      - 'voice.js'
+      - 'voice-config.js'
+      - 'voice-worklet.js'
+      - 'tests/voice-page.test.mjs'
+      - 'tests/voice-background.test.mjs'
+      - '_worker.js'
+      - 'scripts/package_cross_voice.py'
+      - '.github/workflows/cross-voice.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  gateway:
+    name: Uji keamanan pairing dan audio gateway
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Pasang dependensi gateway Node.js
+        run: npm install --no-audit --no-fund --prefix cross-voice/gateway
+      - name: Periksa sintaks browser dan gateway
+        run: |
+          node --check voice.js
+          node --check voice-worklet.js
+          node --check cross-voice/gateway/server.mjs
+      - name: Uji audio dua arah, pairing dan keamanan WebSocket
+        run: npm test --prefix cross-voice/gateway
+      - name: Uji Permissions Policy, CSP dan konfigurasi Cloudflare Pages Voice
+        run: node --test tests/voice-page.test.mjs tests/voice-background.test.mjs
+  cloudflare:
+    name: Uji gateway Cloudflare Durable Object asli
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Pasang Wrangler untuk Cloudflare Worker
+        run: npm install --no-audit --no-fund --prefix cross-voice/cloudflare
+      - name: Periksa sintaks gateway Durable Object
+        run: node --check cross-voice/cloudflare/src/index.mjs
+      - name: Jalankan Durable Object lokal dan uji WebSocket end-to-end
+        working-directory: cross-voice/cloudflare
+        run: |
+          set -euo pipefail
+          printf 'VOICE_BRIDGE_SECRET=local-development-bridge-secret-not-for-production-123456\n' > .dev.vars
+          npx wrangler dev --local --port 8892 --ip 127.0.0.1 --var VOICE_ORIGIN:https://sscircle.test > /tmp/sscircle-voice-wrangler.log 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          ready=0
+          for i in $(seq 1 45); do
+            if curl --silent --fail http://127.0.0.1:8892/api/health > /dev/null; then ready=1; break; fi
+            sleep 2
+          done
+          if [ "$ready" != 1 ]; then
+            sed -E 's/(VOICE_BRIDGE_SECRET[=:] *)[^[:space:]]+/\1[REDACTED]/g' /tmp/sscircle-voice-wrangler.log | tail -60
+            exit 1
+          fi
+          CROSS_VOICE_TEST_URL=http://127.0.0.1:8892 npm test
+  paper:
+    name: Build Paper 26.3 dengan API resmi
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+      - name: Compile dengan Paper API dan Simple Voice Chat API asli
+        run: gradle -p cross-voice/paper clean build --no-daemon --stacktrace
+      - name: Upload JAR hanya jika build asli berhasil
+        uses: actions/upload-artifact@v4
+        with:
+          name: SSCircleCrossVoice-JAR
+          path: cross-voice/paper/build/libs/SSCircleCrossVoice.jar
+          if-no-files-found: error
+  package:
+    name: Paket distribusi FULL dan ONLY CHANGES
+    runs-on: ubuntu-latest
+    needs: [paper,gateway,cloudflare]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: SSCircleCrossVoice-JAR
+          path: build/cross-voice
+      - name: Pastikan JAR hasil kompilasi benar tersedia
+        run: test -s build/cross-voice/SSCircleCrossVoice.jar
+      - name: Buat ZIP lengkap dan hanya perubahan
+        run: python3 scripts/package_cross_voice.py
+      - name: Buat resource pack ikon mic untuk client Minecraft Java 26.3
+        run: |
+          python3 cross-voice/paper/create_mic_resourcepack.py
+          unzip -t dist/SSCircle-Mic-Glyph-Java-26.3.zip | tail -1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SSCircle-Cross-Voice-Distribution
+          path: |
+            dist/SSCircle-Cross-Voice-FULL.zip
+            dist/SSCircle-Cross-Voice-ONLY-CHANGES.zip
+            dist/SSCircle-Mic-Glyph-Java-26.3.zip
+          if-no-files-found: error

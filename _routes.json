@@ -23,7 +23,10 @@
     "/gallery",
     "/how-to-play",
     "/page-closed.html",
-    "/page-closed"
+    "/page-closed",
+    "/voice",
+    "/voice.html",
+    "/voice-config.js"
   ],
   "exclude": []
 }

@@ -1,0 +1,38 @@
+name: SSCircle Voice iOS Compile
+
+on:
+  push:
+    branches:
+      - feature/sscircle-cross-voice
+    paths:
+      - 'cross-voice/mobile/ios/**'
+      - '.github/workflows/cross-voice-ios.yml'
+  pull_request:
+    paths:
+      - 'cross-voice/mobile/ios/**'
+      - '.github/workflows/cross-voice-ios.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sscircle-voice-ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ios:
+    name: Build iOS simulator (unsigned)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate Xcode project
+        run: cd cross-voice/mobile/ios && xcodegen generate --spec project.yml
+      - name: Compile simulator app (does not produce an installable iPhone IPA)
+        run: |
+          xcodebuild -project cross-voice/mobile/ios/SSCircleVoice.xcodeproj \
+            -scheme SSCircleVoice -sdk iphonesimulator \
+            -configuration Debug -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO build

@@ -1,0 +1,31 @@
+name: SSCircleCrossVoice
+version: 0.2.5
+main: id.sscircle.voice.CrossVoicePlugin
+api-version: '1.21'
+description: SSCircle Java/Bedrock voice bridge using Simple Voice Chat
+authors: [SSCircle]
+depend: [voicechat, floodgate]
+commands:
+  voice:
+    description: Voice pairing and controls
+    usage: /voice [link|status|mute|unmute|deafen|undeafen|whisper|normal|volume|group|disconnect]
+    permission: sscircle.voice.use
+  scvoice:
+    description: SSCircle Cross Voice administration
+    usage: /scvoice [status|inspect|mute|unmute|kick|distance|groups|reload]
+    permission: sscircle.voice.admin
+permissions:
+  sscircle.voice.use:
+    default: true
+  sscircle.voice.group:
+    default: true
+  sscircle.voice.admin:
+    default: op
+  sscircle.voice.admin.mute:
+    default: op
+  sscircle.voice.admin.disconnect:
+    default: op
+  sscircle.voice.admin.reload:
+    default: op
+  sscircle.voice.admin.configure:
+    default: op

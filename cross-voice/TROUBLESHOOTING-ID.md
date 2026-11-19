@@ -1,0 +1,37 @@
+# Troubleshooting SSCircle Cross Voice
+
+| Gejala | Kemungkinan penyebab | Pemeriksaan |
+|---|---|---|
+| /scvoice status OFFLINE | WSS Cloudflare Worker, secret atau firewall keluar TCP 443 salah | Uji /api/health, Worker observability, DNS dan domain WSS |
+| /voice link gagal | Bukan Bedrock/Floodgate atau gateway offline | Cek /voice status dan plugin floodgate |
+| Kode pairing invalid | Sudah digunakan, kedaluwarsa 2 menit, atau server restart | Ketik /voice link untuk kode baru |
+| Mikrofon ditolak | Browser tidak mendapat izin | Pastikan HTTPS, izin mikrofon diberikan |
+| Java tidak dengar Bedrock | API AudioSender tidak tersedia, UDP SVC tertutup, atau JAR SVC tidak kompatibel | Periksa SVC, plugin version, /scvoice status |
+| Bedrock tidak dengar Java | Opus decoder belum tersedia, suara tidak masuk event, atau browser tertutup | Periksa console Paper, gateway, /api/health |
+| Pemain world lain terdengar | Bug isolasi | Matikan modul dan kirim laporan dengan UUID world, tanpa merekam suara |
+| Suara mengganda | Browser aktif pada beberapa perangkat, SVC addon lain, atau pengiriman loop | Putuskan sesi lain dan periksa addon suara |
+| iOS/Android berhenti mendengar | Browser ditangguhkan sistem operasi | Gunakan perangkat kedua atau desktop |
+| Gateway 503 | Paper belum terhubung, secret atau origin Cloudflare tidak lengkap | Periksa Wrangler secret, /api/health dan restart Paper; Worker tidak perlu direstart |
+| HTTP 429 | Terlalu banyak pairing gagal | Tunggu setidaknya 60 detik |
+
+### Status Bedrock sudah CONNECTED tetapi ikon Simple Voice Chat masih disconnected
+
+1. Pastikan plugin Paper **v0.2.4 atau lebih baru**, `/voice status` menunjukkan `Web Voice CONNECTED`, dan `/scvoice status` menunjukkan Gateway terhubung.
+2. Di `plugins/SSCircleCrossVoice/config.yml`, `indicators.bedrock-native-icon: true`; restart atau jalankan `/scvoice reload` sesuai konfigurasi.
+3. Lihat dari **Minecraft Java dengan Simple Voice Chat**, bukan hanya client Bedrock. Cek `show_nametag_icons=true` di konfigurasi client. Pemain Java lain perlu berada cukup dekat dan nametag tidak disembunyikan plugin lain.
+4. `/voice link` yang baru dibuat **bukan** tanda terhubung. Tunggu sampai aplikasi/web membuka WebSocket yang aktif. Jika gateway offline, ikon tidak boleh menjadi connected.
+5. Plugin ini memanggil API resmi `setConnected`. Bila mod Java masih menggambar ikon disconnect meskipun status berubah di API, kemungkinan dipengaruhi versi/client mod/overlay. Jangan mengubah nickname atau menyuntik paket yang memalsukan koneksi client secara sembarangan.
+
+### Ikon mikrofon hijau Bedrock tidak muncul
+
+- Gunakan SSCircleCrossVoice **v0.2.5** dan lihat melalui client Minecraft **Java** yang mengaktifkan resource pack `SSCircle-Mic-Glyph-Java-26.3.zip`. Tanpa resource pack, karakter mikrofon bisa menjadi kotak/hilang.
+- Saat pemain Bedrock sudah terhubung melalui aplikasi/website, `/scvoice status` harus menunjukkan `mic badges` lebih dari nol. Jika nol, cek status Gateway, SVC, `/voice status`, dan koneksi WebSocket.
+- Periksa `indicators.bedrock-mic-badge: true`. Pastikan Bedrock dan Java berada di dunia yang sama serta dalam `badge-view-distance` blok.
+- Jika server sudah memakai resource pack, gabungkan font `sscircle:voice`; jangan menimpa resource pack lainnya.
+- Tampilan di samping nickname adalah perkiraan menggunakan TextDisplay, bukan renderer asli nametag. Ikon menunjukkan koneksi aktif, bukan sedang berbicara.
+
+### Pengumpulan log
+Kumpulkan status plugin, versi Paper, versi Simple Voice Chat, floodgate, platform browser, dan pesan error. Jangan mengunggah secret, kode pairing, token, atau audio pribadi.
+
+### Batas pengujian
+Tes Node berhasil membuktikan frame PCM mengalir antar-WebSocket, **bukan** bahwa semua klien manusia sudah dapat berbicara pada semua kombinasi platform. Dukungan Simple Voice Chat plugin Paper 26.3 dan mobile background belum terverifikasi melalui server sebenarnya.

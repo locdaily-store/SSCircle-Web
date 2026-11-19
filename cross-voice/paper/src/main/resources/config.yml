@@ -1,0 +1,35 @@
+# SSCircle Cross Voice - Paper 26.3 (Java 25)
+# Memerlukan Simple Voice Chat server plugin dan Floodgate.
+# Tidak ada audio yang direkam ke penyimpanan.
+gateway:
+  # Pakai WSS URL Cloudflare Worker (workers.dev atau custom domain). Tidak perlu VPS/Tunnel.
+  websocket-url: "wss://voice.example.com/bridge"
+  # Secret minimal 32 karakter, sama dengan Wrangler secret VOICE_BRIDGE_SECRET.
+  # Jangan masukkan secret asli dalam GitHub atau file publik.
+  secret: ""
+  reconnect-seconds: 5
+audio:
+  distance: 32.0
+  whisper-distance: 8.0
+  max-queued-frames: 256
+  allow-groups: true
+  max-player-sessions: 50
+  # Audio native Java tidak dimodifikasi; format PCM 48kHz 16-bit mono 20ms.
+  # Safari/iOS/Android bisa membatasi audio browser saat Minecraft di depan.
+# Status microphone bawaan Simple Voice Chat, hanya untuk Floodgate/Bedrock.
+# 🎤 terpasang saat sesi WebSocket Voice aktif (bukan saat kode dibuat).
+# Mod Java Simple Voice Chat menampilkan ikon yang berasal dari status koneksi.
+# Tidak mengubah nickname, TAB, atau scoreboard LuckPerms.
+indicators:
+  # Status connected pada ikon asli Simple Voice Chat (jika SVC mendukung).
+  bedrock-native-icon: true
+  # Ikon mikrofon TERPISAH di samping nickname, terlihat pada client Java.
+  # Memerlukan resource pack SSCircle Mic Glyph v0.2.5 di client Java.
+  # Tidak mengubah nama pemain, TAB, scoreboard atau tim LuckPerms.
+  bedrock-mic-badge: true
+  # Penempatan badge relatif terhadap nametag vanilla, dapat diatur server.
+  badge-height: 2.42
+  badge-scale: 0.70
+  badge-view-distance: 48
+security:
+  pairing-expiry-seconds: 120
