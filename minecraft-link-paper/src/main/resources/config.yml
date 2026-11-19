@@ -34,7 +34,11 @@ stats-sync:
   # Ubah penanda ini ketika menggunakan kembali backup world yang menyimpan uid.dat.
   # Contoh: season-7, reset-2. Maksimal 32 huruf/angka/-/_; jangan ubah saat bermain biasa.
   world-generation: default
+  # V10.54.7: kirim statistik HANYA saat player quit/disconnect secara default.
+  # 'periodic' mengaktifkan perilaku lama bila admin menginginkan statistik live.
+  mode: quit_only
   interval-seconds: 300
+  # Opsi ini berlaku hanya jika mode: periodic.
   # Saat >=30 pemain online, sinkronisasi berkala menjadi tiap 600 detik.
   # Join/quit dan /sscircle sync tetap dapat memicu pembacaan sendiri.
   adaptive-enabled: true
@@ -53,11 +57,18 @@ stats-sync:
   # Penulisan file antrean dilakukan asynchronous setiap 10 detik.
   queue-flush-seconds: 10
 
-# V10.48: laporan ringkas untuk Admin Control; tidak membuka port ke Paper.
-# Plugin mengirim heartbeat keluar lewat HTTPS dan menerima permintaan sync
-# singkat dari website. 120 detik = maksimal 720 laporan/hari per server.
+# Monitoring opsional. OFF menghemat 720 request/hari per server pada interval 120s.
+# Konsekuensi: status live dan perintah sync_now dari Admin Control website
+# tidak berjalan; gunakan /sscircle sync di game untuk manual.
+# Jika ingin Admin Control live, set enabled: true dan restart Paper.
 sync-monitor:
+  enabled: false
   interval-seconds: 120
+
+# Tetap kirim bukti identitas saat login terverifikasi/berubah atau diulang
+# secara manual. OFF berarti tanpa refresh rutin 10-menit ketika sudah sukses.
+identity-sync:
+  periodic-refresh-enabled: false
 
 # V10.48.2: FastLogin/FastLoginPlus dan ProtocolLib dapat dipasang terpisah.
 # Status PREMIUM/CRACKED dibaca hanya dari sesi FastLogin yang sudah berhasil
@@ -73,5 +84,9 @@ skin-sync:
   # Satu profil diperiksa setiap 60 tick; tidak memuat semua pemain sekaligus.
   profile-scan-ticks: 60
 
+# V10.54.7: capture statistik penuh sekali saat quit; retry antrean saat jaringan
+# gagal tetap berjalan di background, dengan backoff. Tidak ada HTTP ketika
+# antrean kosong. Rekaman stats bisa terlambat jika pemain belum logout.
+# Koneksi crash/force-kill mendadak tetap berisiko kehilangan sesi terakhir.
 # V10.54: jangan hapus stats-queue.properties ataupun .damaged-* tanpa backup.
 # Antrean disk tetap asynchronous dan maksimum satu pekerjaan penulisan aktif.

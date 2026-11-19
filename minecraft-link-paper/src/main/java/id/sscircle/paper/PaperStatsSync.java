@@ -88,6 +88,8 @@ final class PaperStatsSync implements Listener {
     private final AtomicReference<List<Snapshot>> waitingWrite=new AtomicReference<>();
     private final AtomicBoolean writerRunning=new AtomicBoolean(false);
     private boolean queueLocked,queueQuarantined,queueFull;
+    private int captureTaskId=-1;
+    private boolean quitOnly=true;
     private long lastFullWarningMs;
     private CaptureJob activeJob;
     private boolean dirty,inFlight;
@@ -130,17 +132,25 @@ final class PaperStatsSync implements Listener {
         int interval=Math.max(60,Math.min(3600,
             plugin.getConfig().getInt("stats-sync.interval-seconds",300)));
         normalIntervalSeconds=interval;
+        quitOnly=quitOnlyMode(plugin.getConfig().getString("stats-sync.mode","quit_only"));
         int flush=Math.max(3,Math.min(60,
             plugin.getConfig().getInt("stats-sync.queue-flush-seconds",10)));
         plugin.getServer().getPluginManager().registerEvents(this,plugin);
-        plugin.getServer().getScheduler().runTaskTimer(plugin,this::captureOneTick,20L,
-            capturePeriodTicks(plugin.getConfig().getInt("stats-sync.capture-period-ticks",2)));
-        plugin.getServer().getScheduler().runTaskTimer(plugin,this::captureScheduled,100L,20L*interval);
+        if(!quitOnly)
+            plugin.getServer().getScheduler().runTaskTimer(plugin,this::captureScheduled,100L,20L*interval);
+        // Network polling checks only a NONEMPTY durable retry queue. Zero HTTP
+        // traffic while no player has quit and no explicit admin sync was used.
         plugin.getServer().getScheduler().runTaskTimer(plugin,this::sendNext,140L,HTTP_PERIOD_TICKS);
         plugin.getServer().getScheduler().runTaskTimer(plugin,this::flushQueue,20L*flush,20L*flush);
-        plugin.getLogger().info("Stats V10.54: "+blockReadsPerTick+
-            " reads/tick (TPS rendah: "+lowTpsBlockReadsPerTick+
-            "), interval "+interval+"s, antrean pulih "+pending.size());
+        plugin.getLogger().info("Stats "+(quitOnly?"QUIT_ONLY":"PERIODIC")+
+            ": "+blockReadsPerTick+" reads/tick saat scan manual"+
+            " (TPS rendah: "+lowTpsBlockReadsPerTick+
+            "), HTTP hanya untuk antrean/retry; antrean pulih "+pending.size());
+    }
+
+    // The explicit setting makes legacy scheduled capture opt-in only.
+    static boolean quitOnlyMode(String raw){
+        return raw==null||!"periodic".equalsIgnoreCase(raw.strip());
     }
 
     // Reduce scheduler wakeups when scanning many block categories; one tick
@@ -150,7 +160,12 @@ final class PaperStatsSync implements Listener {
     }
 
     void stop(){
-        // Short synchronous reads only; do not scan all materials on shutdown.
+        if(captureTaskId!=-1){
+            Bukkit.getScheduler().cancelTask(captureTaskId);
+            captureTaskId=-1;
+        }
+        // Graceful server stop can kick online players without PlayerQuitEvent.
+        // Preserve the last snapshot locally; async HTTP is not awaited on stop.
         if(enabled())for(Player player:Bukkit.getOnlinePlayers())captureQuickExit(player);
         flushQueue();
         diskWriter.shutdown();
@@ -171,6 +186,7 @@ final class PaperStatsSync implements Listener {
     }
 
     int pendingCount(){return pending.size();}
+    String modeLabel(){return quitOnly?"QUIT_ONLY":"PERIODIC";}
     int captureBacklogCount(){return playersToSample.size()+(activeJob==null?0:1);}
     String deliveryCode(){
         if(!enabled())return "STATS_DISABLED";
@@ -191,7 +207,7 @@ final class PaperStatsSync implements Listener {
 
     @EventHandler(priority=EventPriority.MONITOR)
     public void onJoin(PlayerJoinEvent event){
-        if(!enabled())return;
+        if(!enabled()||quitOnly)return;
         UUID id=event.getPlayer().getUniqueId();
         plugin.getServer().getScheduler().runTaskLater(plugin,()->{
             Player player=Bukkit.getPlayer(id);
@@ -207,10 +223,15 @@ final class PaperStatsSync implements Listener {
         enqueuedPlayers.remove(id);
         if(activeJob!=null&&activeJob.uuid.equals(id))activeJob=null;
         captureQuickExit(event.getPlayer());
+        // Quit creates one final, complete stats snapshot. Persist the queue
+        // immediately (disk IO runs on the dedicated writer) and start an
+        // async HTTP attempt. Failed deliveries retry with backoff.
+        flushQueue();
+        sendNext();
     }
 
     private void captureScheduled(){
-        if(!enabled())return;
+        if(!enabled()||quitOnly)return;
         int online=Bukkit.getOnlinePlayers().size();
         int threshold=Math.max(10,Math.min(200,
             plugin.getConfig().getInt("stats-sync.busy-player-threshold",30)));
@@ -233,6 +254,12 @@ final class PaperStatsSync implements Listener {
         if(!player.isOnline()||enqueuedPlayers.contains(player.getUniqueId()))return;
         enqueuedPlayers.add(player.getUniqueId());
         playersToSample.addLast(player.getUniqueId());
+        if(captureTaskId==-1){
+            captureTaskId=plugin.getServer().getScheduler()
+                .runTaskTimer(plugin,this::captureOneTick,1L,
+                    capturePeriodTicks(plugin.getConfig().getInt("stats-sync.capture-period-ticks",2)))
+                .getTaskId();
+        }
     }
 
     private void captureOneTick(){
@@ -252,7 +279,13 @@ final class PaperStatsSync implements Listener {
                 break;
             }
         }
-        if(activeJob==null)return;
+        if(activeJob==null){
+            if(captureTaskId!=-1){
+                Bukkit.getScheduler().cancelTask(captureTaskId);
+                captureTaskId=-1;
+            }
+            return;
+        }
         Player player=Bukkit.getPlayer(activeJob.uuid);
         if(player==null||!player.isOnline()){
             activeJob=null;
@@ -309,13 +342,40 @@ final class PaperStatsSync implements Listener {
         if(id==null)return;
         String key=id.provider()+":"+id.verifiedId();
         Snapshot previous=latestSample.get(key);
-        // Without a full material scan, block totals are unknown. Avoid
-        // misleading zeros or a reset caused by an incomplete snapshot.
-        if(previous==null)return;
+        int blocks;
+        if(quitOnly){
+            // Bukkit statistics cannot safely be read asynchronously and
+            // Player objects are invalid after quit. Read once here, not once
+            // every N minutes for every online player. All four counters are
+            // from the same final exit snapshot, including freshly mined blocks.
+            blocks=scanBlocksAtQuit(player);
+        }else{
+            // Preserve the old ultra-light exit path for periodic mode; it
+            // never invents a total of zero when no full scan exists.
+            if(previous==null)return;
+            blocks=previous.blocksMined();
+        }
         captureFinished(id,Math.max(0,player.getStatistic(Statistic.PLAY_ONE_MINUTE))/20,
             Math.max(0,player.getStatistic(Statistic.DEATHS)),
-            Math.max(0,player.getStatistic(Statistic.MOB_KILLS)),
-            previous.blocksMined());
+            Math.max(0,player.getStatistic(Statistic.MOB_KILLS)),blocks);
+    }
+
+    private int scanBlocksAtQuit(Player player){
+        long total=0L;
+        for(Material material:blockMaterials){
+            try{total+=Math.max(0,player.getStatistic(Statistic.MINE_BLOCK,material));}
+            catch(IllegalArgumentException notTracked){rejectedMaterials.add(material);}
+            if(total>=Integer.MAX_VALUE){total=Integer.MAX_VALUE;break;}
+        }
+        // The invalid Material cache is common to all players; remove after
+        // scanning so future quit events do less work.
+        // A manual /sscircle sync may be in the middle of an incremental
+        // player scan. Do not change shared material indices until it ends.
+        if(activeJob==null&&!rejectedMaterials.isEmpty()){
+            blockMaterials.removeAll(rejectedMaterials);
+            rejectedMaterials.clear();
+        }
+        return (int)total;
     }
 
     private void rememberSample(String key,Snapshot snapshot){

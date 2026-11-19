@@ -49,6 +49,10 @@ final class PaperSyncTelemetry {
     }
 
     void start(){
+        if(!plugin.getConfig().getBoolean("sync-monitor.enabled",false)){
+            heartbeatState="Nonaktif untuk hemat Cloudflare; perintah sync Admin Control perlu monitor aktif";
+            return;
+        }
         int seconds=Math.max(60,Math.min(600,
             plugin.getConfig().getInt("sync-monitor.interval-seconds",120)));
         plugin.getServer().getScheduler().runTaskTimer(plugin,this::report,100L,20L*seconds);

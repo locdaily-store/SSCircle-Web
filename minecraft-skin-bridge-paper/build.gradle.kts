@@ -1,7 +1,7 @@
 plugins { java }
 
 group = "id.sscircle"
-version = "10.49.1.4"
+version = "10.54.7"
 
 repositories {
     mavenCentral()
@@ -21,5 +21,5 @@ tasks.withType<JavaCompile>().configureEach {
 
 tasks.jar {
     archiveBaseName.set("SSCircle-Skin-Bridge-Paper")
-    archiveVersion.set("10.49.1.4")
+    archiveVersion.set("10.54.7")
 }

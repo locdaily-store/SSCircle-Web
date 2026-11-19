@@ -17,3 +17,23 @@ Addon untuk SSCirclePlayerSync 10.49.1. Perbaikan penting: mengirim file PNG ski
 - `/ssb reload`: OP memuat kembali konfigurasi Core dan Skin Bridge, termasuk jadwal pemeriksaan.
 
 Alias `/ssskin` dan `/skinbridge` tetap tersedia. Jangan pakai `/skin` karena umumnya dipakai SkinsRestorer. Skin Bridge mengikuti secret/pairing SSCirclePlayerSync; tidak membutuhkan secret tersendiri.
+
+
+## Command cepat SSCircle SkinBridge v10.54.7
+
+Command utama tetap `/ssskin` dan alias `/ssb`, `/skinbridge`. Berikut jalan pintas, semuanya mendukung TAB-completion:
+
+| Fungsi | Command lengkap | Command cepat |
+| --- | --- | --- |
+| Bantuan | `/ssb help` | `/ssb h` |
+| Status skin sendiri | `/ssb me` | `/ssb m` |
+| Diagnosis gateway dan sinkronisasi (OP) | `/ssb status` | `/ssb s` |
+| Lihat antrean, TPS, pengiriman (OP) | `/ssb queue` | `/ssb q` |
+| Ulang sinkron semua pemain online (OP) | `/ssb sync` | `/ssb a`, `/ssb all` |
+| Kirim ulang skin satu pemain (OP) | `/ssb sync NamaPemain` | `/ssb p NamaPemain`, `/ssb force NamaPemain` |
+| Pemeriksaan skin pemain (OP) | `/ssb check NamaPemain` | `/ssb c NamaPemain` |
+| Tampilkan pengaturan tanpa secret (OP) | `/ssb config` | `/ssb cfg` |
+| Reload konfigurasi (OP) | `/ssb reload` | `/ssb r` |
+
+Ada cooldown **10 detik per admin** untuk command manual sync agar admin tidak membanjiri Cloudflare. Sinkronisasi berjalan lewat antrean existing; opsi `/ssb queue` hanya memeriksa status dan **tidak mengirim request HTTPS**.
+

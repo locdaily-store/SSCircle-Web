@@ -24,6 +24,8 @@ import java.time.Duration;
 import java.util.Objects;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Locale;
 import java.util.UUID;
 
@@ -37,6 +39,9 @@ public final class SSCircleSkinBridge extends JavaPlugin implements Listener, Co
     private Method coreIdentity;
     private SkinPublisher publisher;
     private String endpoint="",secret="";
+    // Per sender, admin-only bulk/forced sync has a short spam guard.
+    private final Map<String,Long> syncCooldown=new LinkedHashMap<>();
+    private static final long SYNC_COOLDOWN_MS=10_000L;
 
     @Override public void onEnable(){
         saveDefaultConfig();
@@ -169,41 +174,76 @@ public final class SSCircleSkinBridge extends JavaPlugin implements Listener, Co
     }
 
     private void showHelp(CommandSender sender){
-        say(sender,"Perintah cepat: /ssb atau /ssskin");
-        say(sender,"/ssb me - status skin milikmu sendiri");
+        say(sender,"=== SSCircle Skin Bridge • Command Cepat ===");
+        say(sender,"/ssb me (m, saya) - status skin sendiri; /ssb help (h, ?) - bantuan");
         if(sender.hasPermission("sscircle.admin")){
-            say(sender,"/ssb status - diagnosa koneksi dan antrean");
-            say(sender,"/ssb sync [pemain] - kirim ulang skin online (tanpa nama = semua)");
-            say(sender,"/ssb check <pemain> - jelaskan hasil sinkronisasi");
-            say(sender,"/ssb reload - muat ulang konfigurasi Skin Bridge");
+            say(sender,"/ssb status (s, diag) - diagnosis umum");
+            say(sender,"/ssb queue (q) - antrean, proses aktif dan TPS");
+            say(sender,"/ssb sync (a, all, syncall) - ulang sinkron semua pemain online");
+            say(sender,"/ssb sync <pemain> (p, push, force) - ulang satu pemain");
+            say(sender,"/ssb check <pemain> (c, i, inspect) - cek skin pemain");
+            say(sender,"/ssb config (cfg) - lihat pengaturan tanpa menampilkan secret");
+            say(sender,"/ssb reload (r) - muat ulang konfigurasi");
+            say(sender,"Alias dasar: /ssb, /ssskin, /skinbridge. Semua tersedia dengan TAB.");
         }
+    }
+
+    private static String canonical(String raw){
+        String sub=raw.toLowerCase(Locale.ROOT);
+        return switch(sub){
+            case "h","help","bantuan","?" -> "help";
+            case "m","me","saya" -> "me";
+            case "s","status","diag","diagnose","diagnosis" -> "status";
+            case "q","queue","antrean" -> "queue";
+            case "sync","a","all","syncall","kirim" -> "sync";
+            case "p","push","force" -> "sync_player";
+            case "c","check","cek","i","inspect" -> "check";
+            case "cfg","config","settings" -> "config";
+            case "r","reload","muatulang" -> "reload";
+            default -> sub;
+        };
+    }
+
+    private boolean allowManualSync(CommandSender sender){
+        String who=sender.getName().toLowerCase(Locale.ROOT);
+        long now=System.currentTimeMillis();
+        Long last=syncCooldown.get(who);
+        if(last!=null&&now-last<SYNC_COOLDOWN_MS){
+            say(sender,"Jeda 10 detik antar perintah sync manual agar request Cloudflare tetap ringan.");
+            return false;
+        }
+        if(syncCooldown.size()>64)syncCooldown.clear();
+        syncCooldown.put(who,now);
+        return true;
     }
 
     @Override public List<String> onTabComplete(CommandSender sender,Command command,
                                                  String alias,String[] args){
         if(args.length==1){
-            List<String> choices=new ArrayList<>(List.of("help","me"));
+            List<String> choices=new ArrayList<>(List.of("help","h","me","m"));
             if(sender.hasPermission("sscircle.admin"))
-                choices.addAll(List.of("status","sync","check","inspect","reload"));
+                choices.addAll(List.of("status","s","queue","q","sync","a","all",
+                    "syncall","p","push","force","check","c","inspect","i",
+                    "config","cfg","reload","r"));
             String prefix=args[0].toLowerCase(Locale.ROOT);
-            return choices.stream().filter(x->x.startsWith(prefix)).toList();
+            return choices.stream().filter(x->x.startsWith(prefix)).distinct().toList();
         }
-        if(args.length==2 && sender.hasPermission("sscircle.admin")&&
-           List.of("sync","check","inspect").contains(args[0].toLowerCase(Locale.ROOT))){
+        if(args.length==2&&sender.hasPermission("sscircle.admin")&&
+            List.of("sync","sync_player","check").contains(canonical(args[0]))){
             String prefix=args[1].toLowerCase(Locale.ROOT);
             return Bukkit.getOnlinePlayers().stream().map(Player::getName)
                 .filter(name->name.toLowerCase(Locale.ROOT).startsWith(prefix))
-                .limit(20).toList();
+                .limit(30).toList();
         }
         return List.of();
     }
 
     @Override public boolean onCommand(CommandSender sender,Command command,String label,String[] args){
-        String sub=args.length==0?"help":args[0].toLowerCase(Locale.ROOT);
-        if(sub.equals("help")||sub.equals("bantuan")||sub.equals("?")){
+        String sub=canonical(args.length==0?"help":args[0]);
+        if(sub.equals("help")){
             showHelp(sender);return true;
         }
-        if(sub.equals("me")||sub.equals("saya")){
+        if(sub.equals("me")){
             if(!(sender instanceof Player player)){say(sender,"Perintah ini hanya untuk pemain.");return true;}
             say(sender,"Status skin kamu: "+explainCode(publisher.statusFor(player.getUniqueId())));
             return true;
@@ -212,7 +252,7 @@ public final class SSCircleSkinBridge extends JavaPlugin implements Listener, Co
             say(sender,"Perintah ini untuk OP/admin. Gunakan /ssb me untuk memeriksa skin sendiri.");
             return true;
         }
-        if(sub.equals("reload")||sub.equals("muatulang")){
+        if(sub.equals("reload")){
             core.reloadConfig();
             reloadConfig();
             boolean configured=readCoreSettings();
@@ -223,12 +263,18 @@ public final class SSCircleSkinBridge extends JavaPlugin implements Listener, Co
                 "Alamat website belum valid. Periksa endpoint Core dan gunakan /ssb status.");
             return true;
         }
-        if(sub.equals("sync")){
+        if(sub.equals("sync")||sub.equals("sync_player")){
             if(!getConfig().getBoolean("skin-sync.enabled",true)){
                 say(sender,"Skin sync sedang OFF. Aktifkan skin-sync.enabled pada config.yml lalu /ssb reload.");
                 return true;
             }
-            if(args.length>=2){
+            if(sub.equals("sync_player")&&args.length<2){
+                say(sender,"Gunakan /ssb p <nama pemain>, atau /ssb a untuk semua pemain.");
+                return true;
+            }
+            if(!allowManualSync(sender))return true;
+            if(args.length>=2 && sub.equals("sync_player") ||
+                args.length>=2 && sub.equals("sync")){
                 Player target=Bukkit.getPlayerExact(args[1]);
                 if(target==null){say(sender,"Pemain tidak online. Gunakan TAB untuk daftar pemain.");return true;}
                 publisher.forcePlayer(target);
@@ -239,7 +285,7 @@ public final class SSCircleSkinBridge extends JavaPlugin implements Listener, Co
             }
             return true;
         }
-        if(sub.equals("check")||sub.equals("inspect")||sub.equals("cek")){
+        if(sub.equals("check")){
             if(args.length<2){say(sender,"Gunakan /ssb check <nama pemain>.");return true;}
             Player target=Bukkit.getPlayerExact(args[1]);
             if(target==null){say(sender,"Pemain tidak online. Periksa setelah mereka login.");return true;}
@@ -248,7 +294,25 @@ public final class SSCircleSkinBridge extends JavaPlugin implements Listener, Co
             say(sender,"Kode: "+raw+" | Jika belum berhasil, gunakan /ssb sync "+target.getName());
             return true;
         }
-        if(sub.equals("status")||sub.equals("diagnose")){
+        if(sub.equals("queue")){
+            say(sender,"=== Antrean Skin Bridge ===");
+            say(sender,"Proses jaringan aktif: "+publisher.activeLookups()+" / 2; antrean: "+
+                publisher.pendingScanCount()+" pemain.");
+            say(sender,"TPS rendah: "+(publisher.pausedForLowTps()?"YA, sementara dijeda":"TIDAK"));
+            say(sender,"Hasil terakhir: "+explainCode(publisher.lastDelivery()));
+            say(sender,"Sukses terakhir: "+publisher.lastSuccess());
+            return true;
+        }
+        if(sub.equals("config")){
+            say(sender,"=== Pengaturan Skin Bridge (secret disembunyikan) ===");
+            say(sender,"Sinkronisasi: "+(getConfig().getBoolean("skin-sync.enabled",true)?"AKTIF":"NONAKTIF"));
+            say(sender,"Interval pemeriksaan: "+getConfig().getLong("skin-sync.interval-seconds",300)+" detik");
+            say(sender,"Tunda jika TPS rendah: "+getConfig().getBoolean("skin-sync.pause-on-low-tps",true));
+            say(sender,"Batas TPS: "+getConfig().getDouble("skin-sync.low-tps-threshold",18.0));
+            say(sender,"Alamat HTTPS Core: "+(endpoint.isBlank()?"BELUM VALID":endpoint));
+            return true;
+        }
+        if(sub.equals("status")){
             boolean coreReady=core!=null&&core.isEnabled();
             String signing=activeCoreSecret();
             boolean pairingReady=signing!=null&&signing.length()>=32&&!"null".equals(signing);

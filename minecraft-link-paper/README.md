@@ -234,3 +234,24 @@ Instalasi baru cukup menetapkan URL HTTPS website pada config.yml dan menyetujui
 - Periksa kesehatan antrean melalui /sscircle status sebelum menghapus atau memulihkan file plugin.
 - Config.yml yang sudah dibuat server tidak direset; pengaturan pembacaan statistik dan Auto Pairing tetap berlaku.
 - GitHub CI tidak membuktikan TPS di hosting nyata. Lakukan uji MSPT/TPS dengan 20–50 pemain aktif.
+
+
+## Mode hemat Cloudflare: quit-only (v10.54.7)
+
+Secara default, **SSCircle Player Sync mengirim statistik Vanilla hanya ketika pemain keluar/disconnect**. Tidak ada lagi pengambilan dan pengiriman statistik berkala saat pemain tetap online. Ketika quit, plugin membaca total playtime, death, mob kills, dan semua kategori blok yang ditambang sekali pada thread utama Paper, lalu menyimpan **snapshot terakhir** dalam antrean disk `plugins/SSCirclePlayerSync/stats-queue.properties` dan melakukan pengiriman HTTPS asinkron. Jika gagal, antrean dikirim ulang dengan exponential backoff. Tidak ada HTTP stats selama antrean kosong. Admin tetap bisa meminta pengambilan paksa lewat `/sscircle sync`.
+
+```yaml
+stats-sync:
+  enabled: true
+  mode: quit_only   # periodic untuk mode lama
+  queue-flush-seconds: 10
+sync-monitor:
+  enabled: false    # tanpa heartbeat otomatis 120 detik
+identity-sync:
+  periodic-refresh-enabled: false
+```
+
+**Catatan penting:** ini khusus alur *statistik*. Pairing server, linking, bukti login terverifikasi dan SkinBridge tetap bisa mengakses Cloudflare saat diperlukan; mematikannya seluruhnya akan merusak autentikasi/skin. Identity Sync hanya meminta bukti awal saat sesi autentikasi berhasil dan mencoba ulang ketika belum tersambung, tetapi tidak mengulang tiap 10 menit setelah sukses. Monitor `enabled:false` menghemat sekitar **720 request heartbeat/hari/server** pada interval 120 detik, dengan konsekuensi dashboard status realtime dan perintah `sync_now` dari Admin Control tidak aktif. Aktifkan kembali `sync-monitor.enabled:true` jika memerlukan kontrol tersebut. Perubahan mode perlu **restart Paper**, bukan hanya /sscircle reload.
+
+**Trade-off:** statistik website tidak berubah selama pemain masih online; perubahan baru terlihat setelah keluar dan event terkirim. Bila server force-kill/crash sebelum event quit/shutdown bersih, sesi terakhir mungkin tidak sempat tersimpan. Jangan hapus stats-queue.properties maupun file `.damaged-` saat troubleshooting. Untuk statistik pada penutupan Season atau sebelum reset world, gunakan `/sscircle sync` dan tunggu hingga antrean mencapai 0 **sebelum** snapshot final.
+
