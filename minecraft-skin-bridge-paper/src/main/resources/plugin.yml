@@ -11,7 +11,8 @@ softdepend: [SkinsRestorer]
 commands:
   ssskin:
     description: Periksa dan sinkronkan skin SSCircle
-    usage: /ssskin [status|sync|inspect|reload]
+    aliases: [ssb, skinbridge]
+    usage: /ssb [help|me|status|sync|check|reload]
 permissions:
   sscircle.admin:
     default: op

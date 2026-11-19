@@ -836,10 +836,186 @@ function validVotingVotes(input, questions, mode='global', globalTokens=3) {
     return [{questionId,account,optionId,voterKey,createdAt:s(v?.createdAt,40)||new Date().toISOString()}];
   });
 }
+// Read-only snapshot preview. No new leaderboard table: the existing season
+// snapshot is copied into the shared Season Archive only on confirmed closure.
+// Read the same per-account ledger written by minecraftStatsIngest.
+// Old member-level snapshots are fallback-only for members without modern
+// data. Archived/unlinked account segments remain part of historical totals.
+async function seasonClosingPreview(env,seasonId,activatedAt){
+  const empty={available:false,playerCount:0,playtimeSeconds:0,deaths:0,
+    mobKills:0,blocksMined:0,lastSyncedAt:'',entries:[],awardCandidates:[]};
+  if(!activatedAt||!Number.isFinite(Date.parse(activatedAt)))return empty;
+  const key='season:'+seasonId+':'+activatedAt;
+  const result=await env.DB.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('minecraft_account_stat_progress','minecraft_accounts','minecraft_account_stat_archive','player_stat_snapshots')"
+  ).all();
+  const tables=new Set((result.results||[]).map(row=>row.name));
+  const emptySelect="SELECT '' AS application_id,0 AS playtime_seconds,0 AS deaths,0 AS mob_kills,0 AS blocks_mined,'' AS last_synced_at WHERE 0";
+  const modern=[],values=[];
+  if(tables.has('minecraft_account_stat_progress')&&tables.has('minecraft_accounts')){
+    modern.push(`SELECT a.application_id,p.total_playtime AS playtime_seconds,
+      p.total_deaths AS deaths,p.total_mobs AS mob_kills,p.total_blocks AS blocks_mined,
+      p.last_captured_at AS last_synced_at
+      FROM minecraft_account_stat_progress p
+      JOIN minecraft_accounts a ON a.id=p.account_id WHERE p.season_id=?`);
+    values.push(key);
+  }
+  if(tables.has('minecraft_account_stat_archive')){
+    modern.push(`SELECT application_id,playtime_seconds,deaths,mob_kills,blocks_mined,
+      last_synced_at FROM minecraft_account_stat_archive WHERE season_id=?`);
+    values.push(key);
+  }
+  let legacy=emptySelect;
+  if(tables.has('player_stat_snapshots')){
+    legacy=`SELECT application_id,playtime_seconds,deaths,mob_kills,blocks_mined,
+      last_synced_at FROM player_stat_snapshots l WHERE l.season_id=?
+      AND NOT EXISTS (SELECT 1 FROM modern WHERE application_id=l.application_id)`;
+    values.push(key);
+  }
+  if(!values.length)return empty;
+  const cte=`WITH modern AS (${modern.length?modern.join(' UNION ALL '):emptySelect}),
+    combined AS (SELECT * FROM modern UNION ALL ${legacy}),
+    per_member AS (SELECT application_id,
+      SUM(playtime_seconds) AS playtime_seconds,SUM(deaths) AS deaths,
+      SUM(mob_kills) AS mob_kills,SUM(blocks_mined) AS blocks_mined,
+      MAX(last_synced_at) AS last_synced_at FROM combined GROUP BY application_id)`;
+  const fetch=sql=>env.DB.prepare(cte+' '+sql).bind(...values).all();
+  const total=await env.DB.prepare(cte+` SELECT COUNT(*) AS players,
+    COALESCE(SUM(playtime_seconds),0) AS playtime,
+    COALESCE(SUM(deaths),0) AS deaths,COALESCE(SUM(mob_kills),0) AS mobs,
+    COALESCE(SUM(blocks_mined),0) AS blocks,
+    MAX(last_synced_at) AS last_sync FROM per_member`).bind(...values).first();
+  const username=tables.has('minecraft_accounts')
+    ?"(SELECT a.username FROM minecraft_accounts a WHERE a.application_id=m.application_id ORDER BY a.verified_at DESC LIMIT 1)"
+    :"NULL";
+  const ranked=await fetch(`SELECT m.application_id,m.playtime_seconds,m.mob_kills,
+    ${username} AS username FROM per_member m
+    ORDER BY m.playtime_seconds DESC,m.mob_kills DESC,m.application_id ASC LIMIT 20`);
+  const positive=x=>Math.max(0,Number(x)||0);
+  const entries=(ranked.results||[]).map((row,index)=>{
+    const seconds=positive(row.playtime_seconds);
+    return {memberId:row.application_id,
+      name:s(row.username,80)||'Pemain '+String(index+1).padStart(2,'0'),
+      score:Math.floor(seconds/3600)+' jam '+Math.floor(seconds%3600/60)+' menit'};
+  });
+  const awardCandidates=[];
+  for(const award of [
+    {metric:'playtime_seconds',title:'Pemain Teraktif',unit:'detik bermain'},
+    {metric:'mob_kills',title:'Pembasmi Monster',unit:'mob dikalahkan'},
+    {metric:'blocks_mined',title:'Penambang Terbaik',unit:'blok ditambang'}
+  ]){
+    const rows=await fetch(`SELECT m.application_id,m.${award.metric} AS value,
+      ${username} AS username FROM per_member m WHERE m.${award.metric}>0
+      ORDER BY m.${award.metric} DESC,m.playtime_seconds DESC,m.application_id ASC LIMIT 1`);
+    const leader=rows.results?.[0];
+    if(!leader)continue;
+    awardCandidates.push({title:award.title,player:s(leader.username,100)||'Pemain SSCircle',
+      description:positive(leader.value)+' '+award.unit,
+      memberId:/^[0-9a-f-]{36}$/.test(leader.application_id||'')?leader.application_id:''});
+  }
+  return {available:true,playerCount:positive(total?.players),
+    playtimeSeconds:positive(total?.playtime),deaths:positive(total?.deaths),
+    mobKills:positive(total?.mobs),blocksMined:positive(total?.blocks),
+    lastSyncedAt:total?.last_sync||'',entries,awardCandidates};
+}
+// An acknowledged command is not enough: the next signed Paper heartbeat must
+// also confirm an empty upload queue AND finished capture work.
+async function seasonSyncReadiness(env,season){
+  if(!season?.archivePreparedAt||!season.archiveSyncCommandId)
+    return {ready:false,message:'Persiapkan penutupan dan minta sinkronisasi akhir terlebih dahulu.'};
+  await ensureMinecraftSyncMonitor(env);
+  const command=await env.DB.prepare(
+    "SELECT completed_at,expires_at FROM minecraft_sync_commands WHERE id=? AND type='sync_now'"
+  ).bind(season.archiveSyncCommandId).first();
+  if(!command)return {ready:false,message:'Permintaan sinkronisasi belum tersedia. Persiapkan ulang penutupan.'};
+  if(!command.completed_at){
+    if(Date.parse(command.expires_at)<Date.now())
+      return {ready:false,message:'Permintaan sinkronisasi kedaluwarsa. Persiapkan ulang penutupan.'};
+    return {ready:false,message:'Menunggu plugin Paper menerima dan menyelesaikan perintah sinkronisasi.'};
+  }
+  const status=await env.DB.prepare('SELECT * FROM minecraft_sync_status WHERE id=1').first();
+  if(!status||!Number.isFinite(Date.parse(status.seen_at))||
+     Date.now()-Date.parse(status.seen_at)>240000||
+     Date.parse(status.seen_at)<Date.parse(command.completed_at))
+    return {ready:false,message:'Menunggu heartbeat terbaru dari Paper setelah sinkronisasi.'};
+  if(status.pending_count>0||status.capture_backlog>0)
+    return {ready:false,message:'Antrean kirim atau pembacaan statistik Minecraft belum kosong.'};
+  if(!['SYNC_OK','IDLE'].includes(status.delivery_code))
+    return {ready:false,message:'Plugin melaporkan masalah pengiriman: '+status.delivery_code};
+  return {ready:true,message:'Sinkronisasi akhir dikonfirmasi. Antrean Paper kosong.',
+    completedAt:command.completed_at,lastSeenAt:status.seen_at};
+}
+// Ask the existing signed Paper heartbeat to capture the first Season sample.
+// Best effort: the Season must still open even if Minecraft is offline.
+async function seasonQueueInitialSync(env){
+  try{
+    await ensureMinecraftSyncMonitor(env);
+    const now=new Date().toISOString();
+    const pending=await env.DB.prepare(`SELECT id FROM minecraft_sync_commands
+      WHERE type='sync_now' AND completed_at IS NULL AND expires_at>? LIMIT 1`)
+      .bind(now).first();
+    if(pending)return;
+    await env.DB.prepare(`INSERT INTO minecraft_sync_commands
+      (id,type,created_at,expires_at) VALUES(?,'sync_now',?,?)`)
+      .bind(uid(),now,new Date(Date.now()+600000).toISOString()).run();
+  }catch(error){
+    // Avoid logging private account/secret fields.
+    console.error('[SSCircle season initial sync]',{errorType:String(error?.name||'Error')});
+  }
+}
+// This endpoint is only called by a separate Cloudflare Worker Cron Trigger.
+// A saved schedule does not silently run on an ordinary website visit.
+async function seasonScheduledTick(req,env){
+  const token=String(env.SEASON_CRON_TOKEN||'');
+  const provided=String(req.headers.get('Authorization')||'').replace(/^Bearer /,'');
+  if(token.length<32)return bad('Scheduler belum dikonfigurasi.',503);
+  if(provided.length!==token.length||!safeEq(provided,token))
+    return bad('Akses scheduler ditolak.',401);
+  const row=await readSettingsRow(env);
+  if(!row)return bad('Pengaturan Season belum tersedia.',503);
+  const settings=normalSettings(parse(row.settings)||{});
+  const now=new Date().toISOString();
+  const ready=(settings.homeLeaderboardSeasons||[]).filter(season=>
+    season.archiveStatus==='planned'&&season.archiveAutoOpen===true&&
+    !season.archiveFinalizedAt&&season.archiveScheduledAt&&
+    Number.isFinite(Date.parse(season.archiveScheduledAt))&&
+    season.archiveScheduledAt<=now);
+  if(!ready.length)return J({ok:true,started:0});
+  if(ready.length!==1||settings.statSeasonId||
+    settings.homeLeaderboardSeasons.some(item=>item.archiveStatus==='active'))
+    return J({ok:true,started:0,blocked:'Ada Season lain aktif atau jadwal bersamaan.'});
+  const season=ready[0];
+  season.archiveStatus='active';
+  season.archiveStartDate=now.slice(0,10);
+  season.archiveEndDate='';
+  season.archiveScheduledAt='';
+  season.archiveAutoOpen=false;
+  // Scheduling is not permission to publish a private draft.
+  season.archivePublished=season.archivePublished===true;
+  settings.statSeasonId=season.id;
+  settings.statSeasonActivatedAt=now;
+  seasonTimelineEvent(season,'opening','Season dimulai',now);
+  const revision=now+'-'+uid();
+  const result=await env.DB.prepare(
+    "UPDATE form_config SET settings=?,updated_at=? WHERE id=1 AND COALESCE(updated_at,'')=?"
+  ).bind(JSON.stringify(settings),revision,row.updated_at||'').run();
+  if(!result.meta?.changes)return J({ok:true,started:0,blocked:'Perubahan bersamaan. Coba pada jadwal Cron berikutnya.'});
+  await seasonQueueInitialSync(env);
+  return J({ok:true,started:1,seasonId:season.id,activatedAt:now});
+}
+function seasonTimelineEvent(season,kind,title,now){
+  const timeline=Array.isArray(season.archiveTimeline)?season.archiveTimeline:[];
+  if(timeline.some(entry=>entry.kind===kind))return;
+  // Never silently omit the closing/opening record if the timeline is full.
+  if(timeline.length>=24)throw Error('Maksimal 24 milestone. Hapus satu milestone sebelum memulai atau menutup Season.');
+  timeline.push({id:'lifecycle-'+kind+'-'+season.id,date:now.slice(0,10),
+    title,description:'',kind});
+  season.archiveTimeline=timeline;
+}
 // Satu sumber data season untuk Leaderboard lama sekaligus Season Archive.
 function validLeaderboard(input) {
-  if (!Array.isArray(input) || input.length > 12)
-    throw Error('Maksimal 12 season SSCircle.');
+  if (!Array.isArray(input))
+    throw Error('Daftar Season harus berupa array.');
   const seen = new Set();
   const date = (value, label) => {
     const raw = s(value, 10);
@@ -855,22 +1031,74 @@ function validLeaderboard(input) {
     if (seen.has(id)) throw Error('ID season duplikat.');
     seen.add(id);
     const title=s(season?.title,120)||('Leaderboard S'+(index+1));
+    // One board per category; the first board stays mirrored as legacy
+    // season.entries for existing homepage widgets and older saved Seasons.
     const entriesRaw=Array.isArray(season?.entries)?season.entries:[];
     if(entriesRaw.length>20) throw Error('Maksimal 20 peringkat per season.');
-    const entries=entriesRaw.map(e=>({name:s(e?.name,80),score:s(e?.score,80)})).filter(e=>e.name||e.score);
+    const boardsRaw=season?.archiveLeaderboards===undefined
+      ?(entriesRaw.length?[{id:'main',title:'Leaderboard Season',entries:entriesRaw}]:[])
+      :season.archiveLeaderboards;
+    if(!Array.isArray(boardsRaw)||boardsRaw.length>8)
+      throw Error('Maksimal 8 leaderboard per Season.');
+    const boardIds=new Set();
+    const archiveLeaderboards=boardsRaw.map((board,i)=>{
+      const boardId=s(board?.id,64)||(i===0?'main':'leaderboard-'+(i+1));
+      if(!/^[a-z0-9_-]{1,64}$/i.test(boardId)||boardIds.has(boardId))
+        throw Error('ID leaderboard Season tidak valid atau duplikat.');
+      boardIds.add(boardId);
+      const boardEntries=board?.entries;
+      if(!Array.isArray(boardEntries)||boardEntries.length>20)
+        throw Error('Maksimal 20 pemain per leaderboard.');
+      const title=s(board?.title,120);
+      if(!title)throw Error('Judul leaderboard Season wajib diisi.');
+      return {id:boardId,title,entries:boardEntries.map(e=>({
+        ...(/^[0-9a-f-]{36}$/.test(e?.memberId||'')?{memberId:e.memberId}:{}),
+        name:s(e?.name,80),score:s(e?.score,80)
+      })).filter(e=>e.name||e.score)};
+    });
+    const entries=archiveLeaderboards[0]?.entries||[];
+    const requestedBoard=s(season?.homeFeaturedLeaderboardId,64);
+    const homeFeaturedLeaderboardId=archiveLeaderboards.some(board=>board.id===requestedBoard)
+      ?requestedBoard:(archiveLeaderboards[0]?.id||'');
     const startDate=date(season?.archiveStartDate,'mulai season');
     const endDate=date(season?.archiveEndDate,'akhir season');
     if(startDate&&endDate&&endDate<startDate) throw Error('Tanggal akhir season harus setelah tanggal mulai.');
     const memories=season?.archiveMemories===undefined?[]:season.archiveMemories;
     const builds=season?.archiveBuilds===undefined?[]:season.archiveBuilds;
     const awards=season?.archiveAwards===undefined?[]:season.archiveAwards;
+    const timeline=season?.archiveTimeline===undefined?[]:season.archiveTimeline;
+    if(!Array.isArray(timeline)||timeline.length>24)throw Error('Maksimal 24 tonggak timeline per Season.');
+    const iso=value=>{
+      const raw=s(value,40);
+      return raw&&Number.isFinite(Date.parse(raw))&&new Date(raw).toISOString()===raw?raw:'';
+    };
     if(!Array.isArray(memories)||memories.length>12) throw Error('Maksimal 12 foto kenangan per season.');
     if(!Array.isArray(builds)||builds.length>8) throw Error('Maksimal 8 bangunan terbaik per season.');
     if(!Array.isArray(awards)||awards.length>12) throw Error('Maksimal 12 penghargaan per season.');
-    return {id,title,entries,
+    return {id,title,entries,archiveLeaderboards,homeFeaturedLeaderboardId,
       archivePublished:season?.archivePublished===true,
-      archiveStatus:season?.archiveStatus==='active'?'active':'ended',
+      archiveStatus:['planned','active','ended'].includes(season?.archiveStatus)?season.archiveStatus:'ended',
       archiveStartDate:startDate,archiveEndDate:endDate,
+      archivePreparedAt:iso(season?.archivePreparedAt),
+       archiveSyncCommandId:/^[0-9a-f-]{36}$/.test(season?.archiveSyncCommandId||'')?season.archiveSyncCommandId:'',
+       archiveAutoOpen:season?.archiveAutoOpen===true,
+      archiveFinalizedAt:iso(season?.archiveFinalizedAt),
+      archiveScheduledAt:iso(season?.archiveScheduledAt),
+      archiveSnapshot:season?.archiveSnapshot&&typeof season.archiveSnapshot==='object'
+        ?{capturedAt:iso(season.archiveSnapshot.capturedAt),
+          playerCount:Math.max(0,Math.min(100000,Number(season.archiveSnapshot.playerCount)||0)),
+          playtimeSeconds:Math.max(0,Number(season.archiveSnapshot.playtimeSeconds)||0),
+          deaths:Math.max(0,Number(season.archiveSnapshot.deaths)||0),
+          mobKills:Math.max(0,Number(season.archiveSnapshot.mobKills)||0),
+          blocksMined:Math.max(0,Number(season.archiveSnapshot.blocksMined)||0)}
+        :null,
+      archiveTimeline:timeline.map(entry=>({
+        id:s(entry?.id,64)||uid(),
+        date:date(entry?.date,'timeline Season'),
+        title:s(entry?.title,120),
+        description:s(entry?.description,450),
+        kind:['opening','closing','event','build','award','milestone'].includes(entry?.kind)?entry.kind:'milestone'
+      })).filter(entry=>entry.title),
       archiveSummary:s(season?.archiveSummary,1200),
       archiveCover:img(season?.archiveCover),
       archiveMemories:memories.map(m=>({src:img(m?.src),caption:s(m?.caption,240)})).filter(m=>m.src),
@@ -2221,6 +2449,16 @@ async function ensureMemberCenter(env) {
   ];
   for (const sql of statements) await env.DB.prepare(sql).run();
 
+  // Additive migration: the epoch is scoped to the signed Paper snapshot.
+  // A missing epoch from an older JAR remains compatible with existing ledgers.
+  const statCols=await env.DB.prepare('PRAGMA table_info(minecraft_account_stat_progress)').all();
+  if(!(statCols.results||[]).some(col=>col.name==='last_world_epoch')){
+    try{
+      await env.DB.prepare("ALTER TABLE minecraft_account_stat_progress ADD COLUMN last_world_epoch TEXT NOT NULL DEFAULT ''").run();
+    }catch(error){
+      if(!/duplicate column name/i.test(String(error?.message||'')))throw error;
+    }
+  }
   // Existing D1 databases need the new permission without dropping any rows.
   const policyCols=await env.DB.prepare('PRAGMA table_info(member_policy)').all();
   if(!(policyCols.results||[]).some(col=>col.name==='allow_members')){
@@ -2682,10 +2920,140 @@ async function memberSecurityAPI(req,env,path,method) {
   return bad('Endpoint keamanan anggota tidak ditemukan.',404);
 }
 
+// Erase a rejected member's linked data in a single D1 batch. Never allow
+// deletion of accepted accounts; suspension must be deliberate and visible.
+// Manual text-only historical rankings cannot be attributed safely by name.
+async function memberPurgeAPI(req,env,method){
+  const value=method==='GET'
+    ?{id:new URL(req.url).searchParams.get('memberId')}
+    :await body(req,600);
+  const memberId=value?.id;
+  if(!/^[0-9a-f-]{36}$/.test(memberId||''))
+    return bad('ID anggota tidak valid.',400);
+  const person=await env.DB.prepare('SELECT id,status FROM submissions WHERE id=?')
+    .bind(memberId).first();
+  if(!person)return bad('Anggota tidak ditemukan.',404);
+  if(person.status!=='rejected')
+    return bad('Ubah status ke Ditolak atau Keluarkan anggota terlebih dahulu. Akun aktif tidak boleh dihapus.',409);
+  const account=await env.DB.prepare(
+    'SELECT COUNT(*) AS n FROM minecraft_accounts WHERE application_id=?'
+  ).bind(memberId).first();
+  const stat=await env.DB.prepare(`SELECT COUNT(*) AS n FROM minecraft_account_stat_progress p
+    WHERE p.account_id IN (SELECT id FROM minecraft_accounts WHERE application_id=?)`)
+    .bind(memberId).first();
+  const row=await readSettingsRow(env);
+  if(!row)return bad('Pengaturan website tidak tersedia.',503);
+  const confirmation='HAPUS DATA '+memberId.slice(0,8).toUpperCase();
+  if(method==='GET')return J({id:memberId,status:person.status,
+    linkedAccounts:account?.n||0,statsRows:stat?.n||0,
+    confirmation,revision:row.updated_at||'',
+    warning:'Menghapus pendaftaran, profil, tautan Minecraft, gambar skin, statistik D1, sesi, hubungan sosial dan penghargaan terkait. Ban Paper tetap dikelola terpisah.'});
+  if(method!=='POST')return bad('Metode tidak didukung.',405);
+  if(!await rateLimit(env,req,'member-purge',3,3600))
+    return bad('Batas penghapusan tercapai. Coba setelah satu jam.',429);
+  if(value.confirmation!==confirmation || value.revision!==(row.updated_at||''))
+    return bad('Konfirmasi salah atau pengaturan berubah. Tinjau ulang dahulu.',409);
+  const settings=parse(row.settings)||{};
+  const legacyVoteKey='app:'+memberId;
+  if(Array.isArray(settings.homeVotingVotes))
+    settings.homeVotingVotes=settings.homeVotingVotes.filter(v=>v?.voterKey!==legacyVoteKey);
+  for(const season of settings.homeLeaderboardSeasons||[]){
+    if(Array.isArray(season.archiveAwards))
+      season.archiveAwards=season.archiveAwards.filter(award=>award?.memberId!==memberId);
+    if(Array.isArray(season.archiveLeaderboards)){
+      for(const board of season.archiveLeaderboards)
+        if(Array.isArray(board.entries))
+          board.entries=board.entries.filter(entry=>entry?.memberId!==memberId);
+      season.entries=season.archiveLeaderboards[0]?.entries||[];
+    }else if(Array.isArray(season.entries))
+      season.entries=season.entries.filter(entry=>entry?.memberId!==memberId);
+  }
+  // Protect against a second admin modifying the form or re-accepting the member.
+  const revision=new Date().toISOString()+'-'+uid();
+  const condition=`EXISTS(SELECT 1 FROM submissions s WHERE s.id=? AND s.status='rejected')
+    AND EXISTS(SELECT 1 FROM form_config f WHERE f.id=1 AND f.updated_at=?)`;
+  const queries=[
+    env.DB.prepare(`UPDATE form_config SET settings=?,updated_at=? WHERE id=1
+      AND COALESCE(updated_at,'')=?
+      AND EXISTS(SELECT 1 FROM submissions WHERE id=? AND status='rejected')`)
+      .bind(JSON.stringify(settings),revision,row.updated_at||'',memberId)
+  ];
+  const tableRows=await env.DB.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+  ).all();
+  const tables=new Set((tableRows.results||[]).map(x=>x.name));
+  const mediaColumns=tables.has('media')
+    ?new Set((await env.DB.prepare('PRAGMA table_info(media)').all()).results.map(x=>x.name))
+    :new Set();
+  const privateMedia=mediaColumns.has('submission_id')&&mediaColumns.has('object_key')
+    ?(await env.DB.prepare("SELECT id,object_key FROM media WHERE submission_id=? AND visibility='private'")
+      .bind(memberId).all()).results||[]
+    :[];
+  if(tables.has('media_blobs')&&privateMedia.length){
+    queries.push(env.DB.prepare(`DELETE FROM media_blobs WHERE
+      id IN (SELECT id FROM media WHERE submission_id=? AND visibility='private')
+      AND ${condition}`).bind(memberId,memberId,revision));
+  }
+  if(privateMedia.length){
+    queries.push(env.DB.prepare(`DELETE FROM media WHERE submission_id=?
+      AND visibility='private' AND ${condition}`).bind(memberId,memberId,revision));
+  }
+  // All identifiers come from sqlite_master and are checked before interpolation.
+  // Account-linked children are removed before minecraft_accounts.
+  const special=['submissions','form_config','media','media_blobs','minecraft_accounts'];
+  const deletions=[];
+  for(const table of tables){
+    if(special.includes(table)||!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(table))continue;
+    const columns=new Set((await env.DB.prepare('PRAGMA table_info("'+table+'")').all())
+      .results.map(item=>item.name));
+    const clauses=[],args=[];
+    for(const field of ['application_id','member_id','member_a','member_b',
+                        'requested_by','submission_id']){
+      if(columns.has(field)){clauses.push('"'+field+'"=?');args.push(memberId);}
+    }
+    if(columns.has('account_id')){
+      clauses.push('"account_id" IN (SELECT id FROM minecraft_accounts WHERE application_id=?)');
+      args.push(memberId);
+    }
+    if(columns.has('voter_key')){
+      clauses.push('"voter_key"=?');args.push(legacyVoteKey);
+    }
+    if(!clauses.length)continue;
+    const sql=`DELETE FROM "${table}" WHERE (${clauses.join(' OR ')}) AND ${condition}`;
+    deletions.push({table,statement:env.DB.prepare(sql).bind(...args,memberId,revision)});
+  }
+  // Referenced account tables must precede their parent.
+  for(const item of deletions)queries.push(item.statement);
+  if(tables.has('minecraft_accounts'))
+    queries.push(env.DB.prepare(`DELETE FROM minecraft_accounts WHERE application_id=?
+      AND ${condition}`).bind(memberId,memberId,revision));
+  // Delete submission last. ON DELETE CASCADE acts as a second guard for
+  // any legacy tables linked by foreign key that were not enumerated above.
+  queries.push(env.DB.prepare(`DELETE FROM submissions WHERE id=?
+    AND status='rejected'
+    AND EXISTS(SELECT 1 FROM form_config WHERE id=1 AND updated_at=?)`)
+    .bind(memberId,revision));
+  const results=await env.DB.batch(queries);
+  const removed=Number(results.at(-1)?.meta?.changes||0);
+  if(!removed)return bad('Penghapusan batal karena status atau revisi telah berubah.',409);
+  const objectKeys=privateMedia.map(x=>x.object_key).filter(x=>x&&!x.startsWith('d1/'));
+  let mediaErrors=0;
+  if(objectKeys.length){
+    if(!env.MEDIA)mediaErrors=objectKeys.length;
+    else try{
+      await env.MEDIA.delete(objectKeys.length===1?objectKeys[0]:objectKeys);
+    }catch{mediaErrors=objectKeys.length;}
+  }
+  return J({ok:true,removed:1,mediaErrors,
+    message:'Data anggota terkait telah dihapus. Ban server Minecraft tidak berubah.'});
+}
+
 async function memberCenterAPI(req,env,path,method) {
   if (path.startsWith('/api/admin/')) {
     if (!await admin(req,env)) return bad('Silakan masuk ke Admin Control.',401);
     await ensureMemberCenter(env);
+    if(path==='/api/admin/member-purge' && ['GET','POST'].includes(method))
+      return await memberPurgeAPI(req,env,method);
     if (path==='/api/admin/member-center' && method==='GET') {
       await ensureMailbox(env);
       const url=new URL(req.url), offset=Math.max(0,Math.min(100000,Number.parseInt(url.searchParams.get('offset')||'0',10)||0));
@@ -3676,6 +4044,9 @@ async function minecraftStatsIngest(req,env,ctx){
   if(!payload||typeof payload!=='object'||!mcStatIdentityValid(payload)||
     !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(payload.eventId||'')||
     !metrics||typeof metrics!=='object'||
+    (payload.worldEpoch!==undefined&&payload.worldEpoch!==''&&
+      (typeof payload.worldEpoch!=='string'||!
+        /^[0-9a-f-]{36}:[A-Za-z0-9_-]{1,32}$/.test(payload.worldEpoch)))||
     !['playtimeSeconds','deaths','mobKills','blocksMined'].every(k=>validMetric(metrics[k]))||
     !Number.isFinite(stamp)||stamp>Date.now()+300000||stamp<Date.now()-30*86400000)
     return minecraftLinkError('STATS_INVALID','Statistik tidak valid atau terlalu lama.',400);
@@ -3715,21 +4086,28 @@ async function minecraftStatsIngest(req,env,ctx){
   // Preserve old member-wide snapshots read-only because their account attribution is unknown.
   const names=['playtime','deaths','mobs','blocks'];
   const vals=[metrics.playtimeSeconds,metrics.deaths,metrics.mobKills,metrics.blocksMined];
+  const worldEpoch=payload.worldEpoch||'';
   const upsert=`INSERT INTO minecraft_account_stat_progress
     (account_id,season_id,last_captured_at,last_playtime,last_deaths,last_mobs,last_blocks,
-      total_playtime,total_deaths,total_mobs,total_blocks)
-    VALUES(?,?,?,?,?,?,?,?,?,?,?)
+      last_world_epoch,total_playtime,total_deaths,total_mobs,total_blocks)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
     ON CONFLICT(account_id,season_id) DO UPDATE SET
       ${names.map(name=>`total_${name}=MIN(2147483647,
         minecraft_account_stat_progress.total_${name}+
-        CASE WHEN excluded.last_${name}>=minecraft_account_stat_progress.last_${name}
+        CASE WHEN minecraft_account_stat_progress.last_world_epoch<>'' 
+             AND excluded.last_world_epoch<>'' 
+             AND excluded.last_world_epoch<>minecraft_account_stat_progress.last_world_epoch
+          THEN 0
+          WHEN excluded.last_${name}>=minecraft_account_stat_progress.last_${name}
           THEN excluded.last_${name}-minecraft_account_stat_progress.last_${name}
           ELSE excluded.last_${name} END)`).join(',\n      ')},
       ${names.map(name=>`last_${name}=excluded.last_${name}`).join(',\n      ')},
+      last_world_epoch=CASE WHEN excluded.last_world_epoch<>''
+        THEN excluded.last_world_epoch ELSE minecraft_account_stat_progress.last_world_epoch END,
       last_captured_at=excluded.last_captured_at
     WHERE excluded.last_captured_at>minecraft_account_stat_progress.last_captured_at`;
   const save=(season,initial)=>env.DB.prepare(upsert).bind(
-    account.id,season,capturedAt,...vals,...initial);
+    account.id,season,capturedAt,...vals,worldEpoch,...initial);
   const transaction=[
     env.DB.prepare(`INSERT OR IGNORE INTO minecraft_stat_receipts
       (event_id,application_id,provider,provider_id,received_at) VALUES(?,?,?,?,?)`)
@@ -3789,7 +4167,7 @@ async function ensureMinecraftSyncMonitor(env){
 }
 const MC_DELIVERY_CODES=new Set([
   'IDLE','SYNC_OK','QUEUE_PENDING','NETWORK_ERROR','HTTP_ERROR','AUTH_ERROR',
-   'QUEUE_FULL','QUEUE_STORAGE_ERROR'
+   'QUEUE_FULL','QUEUE_STORAGE_ERROR','STATS_DISABLED'
 ]);
 async function minecraftSyncHeartbeat(req,env){
   const secret=await minecraftRequestSigningSecret(req,env);
@@ -3862,7 +4240,8 @@ async function minecraftSyncHeartbeat(req,env){
       HTTP_ERROR:'Permintaan statistik ditolak atau gagal.',
       AUTH_ERROR:'Periksa kunci atau autentikasi pengiriman.',
        QUEUE_FULL:'Antrean penuh; data sebelumnya dipertahankan.',
-       QUEUE_STORAGE_ERROR:'Arsip antrean perlu diperiksa oleh pengurus.'
+       QUEUE_STORAGE_ERROR:'Arsip antrean perlu diperiksa oleh pengurus.',
+       STATS_DISABLED:'Pengiriman statistik dimatikan di konfigurasi plugin Paper.'
     })[code];
     await env.DB.prepare('INSERT INTO minecraft_sync_events(id,at,code,details) VALUES(?,?,?,?)')
       .bind(uid(),at,code,detail).run();
@@ -5874,6 +6253,8 @@ async function route(req, env, ctx) {
     return await minecraftIdentityRefresh(req,env);
   if(path===MC_SYNC_PATH && method==='POST')
     return await minecraftSyncHeartbeat(req,env);
+  if(path==='/api/internal/seasons/tick' && method==='POST')
+    return await seasonScheduledTick(req,env);
   if (!['GET', 'HEAD'].includes(method) && !sameOrigin(req))
     return bad('Asal permintaan ditolak.', 403);
   if (![
@@ -5946,12 +6327,23 @@ async function route(req, env, ctx) {
     const f = formFrom(await env.DB.prepare('SELECT * FROM form_config WHERE id=1').first());
     delete f.settings.homeVotingVotes;
     delete f.settings.gettingStartedDraft;
-    // Data draft Season Archive hanya untuk admin; ranking lama tetap dapat dipakai di Homepage.
-    // Juga cegah metadata arsip bocor melalui API publik saat halaman dinonaktifkan.
-    f.settings.homeLeaderboardSeasons = (f.settings.homeLeaderboardSeasons || []).map(season =>
-      f.settings.seasonArchiveEnabled === true && season.archivePublished === true
-        ? {...season,archiveAwards:(season.archiveAwards||[]).map(({memberId,...award})=>award)}
-        : {id:season.id,title:season.title,entries:season.entries,archivePublished:false});
+    // Draft archive stories stay private. Publish only the chosen Homepage
+    // leaderboard for unpublished Seasons; never expose their other boards.
+    f.settings.homeLeaderboardSeasons = (f.settings.homeLeaderboardSeasons || []).map(season => {
+      const boards=Array.isArray(season.archiveLeaderboards)?season.archiveLeaderboards:[];
+      const selected=boards.find(board=>board.id===season.homeFeaturedLeaderboardId)||boards[0];
+      // Internal member IDs support erasure, but must not reach the public API.
+      const withoutMemberIds=entries=>(entries||[]).map(({memberId,...entry})=>entry);
+      const homeFeaturedLeaderboard=selected
+        ?{id:selected.id,title:selected.title,entries:withoutMemberIds(selected.entries)}:null;
+      if(f.settings.seasonArchiveEnabled===true&&season.archivePublished===true)
+        return {...season,entries:withoutMemberIds(season.entries),
+          archiveLeaderboards:boards.map(board=>({...board,entries:withoutMemberIds(board.entries)})),
+          homeFeaturedLeaderboard,
+          archiveAwards:(season.archiveAwards||[]).map(({memberId,...award})=>award)};
+      return {id:season.id,title:season.title,entries:withoutMemberIds(season.entries),
+        homeFeaturedLeaderboard,archivePublished:false};
+    });
     return J(f);
   }
   if (path === '/api/registration-cooldown' && method === 'GET') {
@@ -6169,18 +6561,205 @@ async function route(req, env, ctx) {
       const result = await env.DB.prepare("UPDATE form_config SET settings=json_set(settings,'$.homeVotingVotes',json('[]'),'$.homeVotingSessionId',?),updated_at=? WHERE id=1").bind(session, revision).run();
       return J({ ok: true, revision, sessionId: session, totalVotes: 0, changed: Number(result.meta?.changes || 0) });
     }
+    if (path === '/api/admin/seasons/lifecycle' && method === 'GET') {
+      const seasonId=s(url.searchParams.get('seasonId'),64);
+      const row=await readSettingsRow(env);
+      const settings=normalSettings(parse(row?.settings)||{});
+      const season=(settings.homeLeaderboardSeasons||[]).find(item=>item.id===seasonId);
+      if(!season)return bad('Season tidak ditemukan.',404);
+      const preview=seasonId===settings.statSeasonId
+        ?await seasonClosingPreview(env,seasonId,settings.statSeasonActivatedAt)
+        :{available:false,playerCount:0,entries:[]};
+      const sync=season.archivePreparedAt&&seasonId===settings.statSeasonId
+        ?await seasonSyncReadiness(env,season):{ready:false,message:'Season belum dipersiapkan untuk penutupan.'};
+      return J({season,preview,sync,activeSeasonId:settings.statSeasonId||'',
+        revision:row?.updated_at||''});
+    }
+    if (path === '/api/admin/seasons/lifecycle' && method === 'POST') {
+      if(!(await rateLimit(env,req,'season-lifecycle',20,900)))
+        return bad('Terlalu banyak perubahan Season. Coba lagi nanti.',429);
+      const input=await body(req,2400);
+      const id=s(input.seasonId,64),action=s(input.action,24);
+      if(!['prepare','end','start','schedule','archiveLegacy'].includes(action))
+        return bad('Aksi Season tidak valid.',400);
+      if(typeof input.revision!=='string'||input.revision.length>100)
+        return bad('Muat ulang pengaturan Season.',428);
+      const row=await readSettingsRow(env);
+      if(!row||(row.updated_at||'')!==input.revision)
+        return bad('Pengaturan berubah. Muat ulang Admin Control sebelum melanjutkan.',409);
+      const settings=normalSettings(parse(row.settings)||{});
+      const season=(settings.homeLeaderboardSeasons||[]).find(item=>item.id===id);
+      if(!season)return bad('Season tidak ditemukan.',404);
+      const now=new Date().toISOString();
+      const active=settings.statSeasonId||'';
+      if(action==='schedule'){
+        if(season.archiveStatus!=='planned'||season.archiveFinalizedAt)
+          return bad('Hanya draft Season baru yang boleh dijadwalkan.',409);
+        const start=typeof input.scheduledAt==='string'?input.scheduledAt:'';
+        if(!start||!Number.isFinite(Date.parse(start))||
+          new Date(start).toISOString()!==start||Date.parse(start)<=Date.now())
+          return bad('Pilih waktu pembukaan Season di masa depan.',400);
+        season.archiveStatus='planned';
+        season.archiveScheduledAt=start;
+        season.archiveAutoOpen=input.autoStart===true;
+        if(season.archiveAutoOpen&&(!env.SEASON_CRON_TOKEN||String(env.SEASON_CRON_TOKEN).length<32))
+          return bad('Cloudflare scheduler belum dikonfigurasi. Atur SEASON_CRON_TOKEN atau nonaktifkan pembukaan otomatis.',503);
+      }
+      if(action==='archiveLegacy'){
+        if(input.confirmation!=='ARCHIVE SEASON')
+          return bad('Konfirmasi pengarsipan Season tidak sesuai.',400);
+        if(season.archiveStatus!=='active'||active===id||season.archiveFinalizedAt)
+          return bad('Pengarsipan tanpa snapshot hanya berlaku untuk Season lama tanpa statistik aktif.',409);
+        season.archiveStatus='ended';
+        season.archiveEndDate=now.slice(0,10);
+        season.archiveFinalizedAt=now;
+        season.archiveSnapshot=null;
+        season.archivePublished=input.publish===true||season.archivePublished===true;
+        seasonTimelineEvent(season,'closing','Season diarsipkan tanpa snapshot statistik',now);
+      }
+      if(action==='start'){
+        if(input.confirmation!=='START SEASON')
+          return bad('Konfirmasi pembukaan Season tidak sesuai.',400);
+        if(season.archiveFinalizedAt)
+          return bad('Season yang telah diarsipkan tidak dapat dibuka ulang.',409);
+        if(!['planned','active'].includes(season.archiveStatus))
+          return bad('Hanya Season yang sudah disiapkan yang dapat dimulai.',409);
+        if(active===id&&Number.isFinite(Date.parse(settings.statSeasonActivatedAt)))
+          return bad('Season ini sudah memiliki periode statistik aktif.',409);
+        if(active&&active!==id)
+          return bad('Akhiri Season statistik aktif terlebih dahulu.',409);
+        if((settings.homeLeaderboardSeasons||[]).some(x=>x.id!==id&&x.archiveStatus==='active'))
+          return bad('Masih ada Season lain berstatus Sedang berlangsung.',409);
+        if(season.archiveScheduledAt&&Date.parse(season.archiveScheduledAt)>Date.now()&&
+          input.overrideSchedule!==true)
+          return bad('Waktu pembukaan yang dijadwalkan belum tiba.',409);
+        season.archiveStatus='active';
+        season.archiveStartDate=now.slice(0,10);
+        season.archiveEndDate='';
+        season.archiveScheduledAt='';
+        season.archiveAutoOpen=false;
+        season.archivePublished=input.publish===true||season.archivePublished===true;
+        settings.statSeasonId=id;
+        settings.statSeasonActivatedAt=active===id&&
+          Number.isFinite(Date.parse(settings.statSeasonActivatedAt))
+          ?settings.statSeasonActivatedAt:now;
+        seasonTimelineEvent(season,'opening','Season dimulai',now);
+      }
+      if(action==='prepare'||action==='end'){
+        if(season.archiveStatus!=='active'||active!==id||
+          !Number.isFinite(Date.parse(settings.statSeasonActivatedAt)))
+          return bad('Season ini bukan periode statistik yang sedang aktif.',409);
+        if(action==='prepare'){
+          if(input.confirmation!=='PREPARE SEASON')
+            return bad('Konfirmasi persiapan Season tidak sesuai.',400);
+          await ensureMinecraftSyncMonitor(env);
+          const telemetry=await env.DB.prepare('SELECT seen_at FROM minecraft_sync_status WHERE id=1').first();
+          if(!telemetry||!Number.isFinite(Date.parse(telemetry.seen_at))||
+            Date.now()-Date.parse(telemetry.seen_at)>240000)
+            return bad('Plugin Paper belum mengirim heartbeat terbaru. Periksa Minecraft Sync terlebih dahulu.',409);
+          const pending=await env.DB.prepare(`SELECT id FROM minecraft_sync_commands
+            WHERE completed_at IS NULL AND expires_at>? ORDER BY created_at ASC LIMIT 1`).bind(now).first();
+          season.archivePreparedAt=now;
+          season.archiveSyncCommandId=pending?.id||uid();
+        }else{
+          if(input.confirmation!=='END SEASON'||!season.archivePreparedAt)
+            return bad('Persiapkan penutupan dan konfirmasi akhir Season terlebih dahulu.',400);
+          const sync=await seasonSyncReadiness(env,season);
+          if(!sync.ready)return bad(sync.message,409);
+          const snapshot=await seasonClosingPreview(env,id,settings.statSeasonActivatedAt);
+          if(snapshot.playerCount===0&&input.allowEmpty!==true)
+            return bad('Belum ada statistik Season. Konfirmasi penutupan tanpa snapshot pemain.',409);
+          season.archiveSnapshot={capturedAt:now,playerCount:snapshot.playerCount,
+            playtimeSeconds:snapshot.playtimeSeconds,deaths:snapshot.deaths,
+            mobKills:snapshot.mobKills,blocksMined:snapshot.blocksMined};
+          if(snapshot.playerCount>0){
+            season.entries=snapshot.entries;
+            if(!Array.isArray(season.archiveLeaderboards))season.archiveLeaderboards=[];
+            if(!season.archiveLeaderboards.length)season.archiveLeaderboards.push({
+              id:'main',title:'Leaderboard Season',entries:snapshot.entries
+            });
+            else season.archiveLeaderboards[0].entries=snapshot.entries;
+          }
+          if(input.autoAwards===true){
+            const awards=Array.isArray(season.archiveAwards)?season.archiveAwards:[];
+            for(const award of snapshot.awardCandidates||[]){
+              if(awards.length>=12)break;
+              if(!awards.some(existing=>existing.title===award.title))awards.push(award);
+            }
+            season.archiveAwards=awards;
+          }
+          season.archiveFinalizedAt=now;
+          season.archiveSyncCommandId='';
+          season.archiveAutoOpen=false;
+          season.archiveEndDate=now.slice(0,10);
+          season.archiveStatus='ended';
+          season.archivePublished=input.publish===true||season.archivePublished===true;
+          settings.statSeasonId='';
+          settings.statSeasonActivatedAt='';
+          seasonTimelineEvent(season,'closing','Season berakhir',now);
+        }
+      }
+      // Single conditional DB update prevents two admins from starting or
+      // ending competing seasons using the same form revision.
+      const revision=now+'-'+uid();
+      const result=await env.DB.prepare(
+        "UPDATE form_config SET settings=?,updated_at=? WHERE id=1 AND COALESCE(updated_at,'')=?"
+      ).bind(JSON.stringify(settings),revision,row.updated_at||'').run();
+      if(!result.meta?.changes)return bad('Perubahan Season bentrok dengan admin lain. Muat ulang.',409);
+      if(action==='start')await seasonQueueInitialSync(env);
+      if(action==='prepare' && season.archiveSyncCommandId){
+        const present=await env.DB.prepare('SELECT id FROM minecraft_sync_commands WHERE id=?')
+          .bind(season.archiveSyncCommandId).first();
+        if(!present)await env.DB.prepare(`INSERT INTO minecraft_sync_commands
+          (id,type,created_at,expires_at) VALUES(?,'sync_now',?,?)`)
+          .bind(season.archiveSyncCommandId,now,new Date(Date.now()+600000).toISOString()).run();
+      }
+      return J({ok:true,revision,settings:normalSettings(settings),
+        season:settings.homeLeaderboardSeasons.find(item=>item.id===id)});
+    }
     if (path === '/api/admin/form' && method === 'PUT') {
-      const input = await body(req, 280000);
+      const input = await body(req, 1800000);
       if (typeof input.revision !== 'string' || input.revision.length > 100)
         return bad('Versi pengaturan tidak tersedia. Muat ulang Admin Control lalu coba lagi.', 428);
       const current = await env.DB.prepare('SELECT settings, updated_at FROM form_config WHERE id=1').first();
       if (!current || (current.updated_at || '') !== input.revision)
         return bad('Pengaturan sudah diperbarui oleh admin lain. Muat ulang halaman sebelum menyimpan.', 409);
+      if((input.settings?.statSeasonId||'')!==((parse((await readSettingsRow(env))?.settings)||{}).statSeasonId||''))
+        return bad('Periode statistik hanya boleh diubah menggunakan tombol Season Lifecycle.',409);
       if(input.settings?.statSeasonId && (!Array.isArray(input.settings.homeLeaderboardSeasons) ||
         !input.settings.homeLeaderboardSeasons.some(season=>season?.id===input.settings.statSeasonId)))
         return bad('Season statistik yang dipilih tidak ditemukan. Pilih Season yang tersedia.',400);
       const settings = settingsValid(input.settings), pages = pagesValid(input.pages);
       const persistedVoting = parse(current.settings) || {};
+      // Final snapshots and lifecycle timestamps are server-owned. A normal
+      // editor save must not overwrite them or forge an archived result.
+      const historical=new Map((persistedVoting.homeLeaderboardSeasons||[]).map(item=>[item.id,item]));
+      if([...historical.values()].some(item=>item.archiveFinalizedAt&&
+        !settings.homeLeaderboardSeasons.some(season=>season.id===item.id)))
+        return bad('Season yang sudah selesai tidak boleh dihapus dari arsip.',409);
+      for(const season of settings.homeLeaderboardSeasons){
+        const old=historical.get(season.id);
+        if(old?.archiveStatus==='active'&&season.archiveStatus!=='active'&&!old.archiveFinalizedAt)
+          return bad('Season aktif hanya boleh diakhiri melalui Season Lifecycle.',409);
+        if(old?.archiveFinalizedAt&&season.archiveStatus!=='ended')
+          return bad('Season yang telah diarsipkan tidak boleh dibuka ulang.',409);
+        if(old?.archiveFinalizedAt){
+          // Final snapshot board is immutable; other manually curated boards
+          // remain editable after closure without rewriting the final ranking.
+          season.entries=old.entries||[];
+          if(old.archiveLeaderboards?.length&&season.archiveLeaderboards.length===0)
+            return bad('Leaderboard snapshot akhir tidak boleh dihapus.',409);
+          if(old.entries?.length){
+            if(!season.archiveLeaderboards.length)season.archiveLeaderboards=[{
+              id:'main',title:'Leaderboard Season',entries:old.entries
+            }];
+            else season.archiveLeaderboards[0].entries=old.entries;
+          }
+        }
+        for(const key of ['archivePreparedAt','archiveSyncCommandId','archiveFinalizedAt','archiveSnapshot','archiveScheduledAt','archiveAutoOpen']){
+          season[key]=old?.[key]??(key==='archiveSnapshot'?null:'');
+        }
+      }
       settings.statSeasonActivatedAt=settings.statSeasonId
         ? settings.statSeasonId===persistedVoting.statSeasonId &&
           Number.isFinite(Date.parse(persistedVoting.statSeasonActivatedAt))

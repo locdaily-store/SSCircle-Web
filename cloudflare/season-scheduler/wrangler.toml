@@ -1,0 +1,10 @@
+name = "sscircle-season-scheduler"
+main = "./worker.js"
+compatibility_date = "2026-11-01"
+
+[triggers]
+crons = ["* * * * *"]
+
+[vars]
+# Replace with the real PRODUCTION Pages custom domain or pages.dev origin.
+SSCIRCLE_SITE_URL = "https://CHANGE-ME.pages.dev"

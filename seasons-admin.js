@@ -4,7 +4,66 @@ window.SSCircleSeasonsAdmin = (() => {
   const $=id=>document.getElementById(id);
   const el=(tag,cls='',text)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n;};
   let model=null,changed=()=>{},phone=false,installed=false,timer=0;
+  const SEASONS_PER_PAGE=24;
+  let seasonPage=0;
   const expanded=new Set();
+  let directoryPromise=null;
+  function cachedRecipients(){
+    const map=new Map();
+    const collect=(entry)=>{
+      if(typeof entry?.id!=='string'||!/^[0-9a-f-]{36}$/i.test(entry.id))return;
+      const previous=map.get(entry.id)||{id:entry.id,name:'',minecraft:[]};
+      const display=String(entry.displayName||entry.name||'').trim();
+      if(display)previous.name=display;
+      if(entry.username&&!previous.minecraft.includes(entry.username))
+        previous.minecraft.push(entry.username);
+      map.set(entry.id,previous);
+    };
+    for(const entry of model?.submissions||[])if(entry.status==='accepted')collect(entry);
+    for(const entry of window.SSCircleMemberCenterAdmin?.getMembers?.()||[])
+      if(entry.status==='accepted')collect(entry);
+    return map;
+  }
+  async function loadRecipientDirectory(){
+    if(directoryPromise)return directoryPromise;
+    directoryPromise=(async()=>{
+      const map=cachedRecipients();
+      // Load only on demand. Reuse the member-center paging API rather than
+      // adding a second member directory or storing extra member data in Season.
+      try{
+        for(let offset=0,page=0;page<50;page++){
+          const response=await fetch('/api/admin/member-center?offset='+offset,{
+            credentials:'same-origin',cache:'no-store'
+          });
+          if(!response.ok)break;
+          const data=await response.json();
+          for(const entry of data.items||[]){
+            if(entry.status!=='accepted')continue;
+            const previous=map.get(entry.id)||{id:entry.id,name:'',minecraft:[]};
+            previous.name=entry.displayName||previous.name;
+            map.set(entry.id,previous);
+          }
+          if(!data.hasMore||!(data.items||[]).length)break;
+          offset+=(data.items||[]).length;
+        }
+      }catch{}
+      try{
+        const response=await fetch('/api/admin/minecraft/links',{
+          credentials:'same-origin',cache:'no-store'
+        });
+        if(response.ok){
+          const data=await response.json();
+          for(const link of data.links||[]){
+            const entry=map.get(link.memberId);
+            const name=String(link.username||'').trim();
+            if(entry&&name&&!entry.minecraft.includes(name))entry.minecraft.push(name);
+          }
+        }
+      }catch{}
+      return [...map.values()];
+    })();
+    return directoryPromise;
+  }
   const mark=()=>{changed();schedule();};
   const inputField=(label,value,change,{type='text',multiline=false,max=400,help=''}={})=>{
     const wrap=el('label','field-group');wrap.append(el('span','field-label',label));
@@ -15,6 +74,62 @@ window.SSCircleSeasonsAdmin = (() => {
     if(help)wrap.append(el('small','field-help',help));return wrap;
   };
   const action=(label,onClick,primary=false)=>{const b=el('button','button '+(primary?'primary':'secondary'),label);b.type='button';b.onclick=onClick;return b;};
+  async function lifecycleRequest(season,actionName,extra={}){
+    const titles={
+      prepare:'Persiapkan penutupan Season ini? Pastikan statistik Minecraft sudah tersinkron.',
+      end:'Akhiri Season sekarang? Snapshot akhir akan disimpan dan statistik periode Season dinonaktifkan.',
+      start:'Mulai Season ini? Periode statistik baru akan aktif dan Season lainnya harus sudah selesai.',
+      schedule:'Simpan jadwal pembukaan Season? Jika memilih otomatis, Cloudflare Cron akan membuka Season sesuai jadwal.',
+      archiveLegacy:'Arsipkan Season lama tanpa statistik aktif? Data leaderboard manual akan dipertahankan.'
+    };
+    const yes=await window.SSCNotice.confirm(
+      titles[actionName]+' Perubahan lain yang belum disimpan di editor perlu disimpan terlebih dahulu.',
+      {danger:actionName==='end',confirmText:actionName==='end'?'Akhiri Season':'Lanjutkan'}
+    );
+    if(!yes)return;
+    const confirmation={prepare:'PREPARE SEASON',end:'END SEASON',start:'START SEASON',
+      archiveLegacy:'ARCHIVE SEASON'}[actionName];
+    try{
+      const response=await fetch('/api/admin/seasons/lifecycle',{
+        method:'POST',credentials:'same-origin',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({action:actionName,seasonId:season.id,
+          revision:model.revision,confirmation,...extra})
+      });
+      const payload=await response.json();
+      if(!response.ok)throw Error(payload.error||payload.message||'Aksi Season gagal.');
+      model.settings=payload.settings;
+      model.revision=payload.revision;
+      expanded.add(season.id);
+      renderEditor();
+      window.SSCNotice.toast('Perubahan Season berhasil disimpan.','success');
+    }catch(error){
+      window.SSCNotice.toast('Gagal mengubah Season: '+error.message,'error',7000);
+    }
+  }
+  async function lifecyclePreview(season,output){
+    output.textContent='Memeriksa snapshot statistik...';
+    try{
+      const response=await fetch('/api/admin/seasons/lifecycle?seasonId='+encodeURIComponent(season.id),{
+        credentials:'same-origin',cache:'no-store'
+      });
+      const data=await response.json();
+      if(!response.ok)throw Error(data.error||'Tidak dapat mengambil statistik.');
+      const preview=data.preview;
+      const sync=data.sync||{ready:false,message:'Belum ada sinkronisasi akhir.'};
+      const when=preview.lastSyncedAt?'Terakhir disinkron: '+preview.lastSyncedAt:'Belum ada sinkronisasi';
+      const syncMessage=' Kesiapan penutupan: '+(sync.ready?'SIAP. ':'BELUM SIAP. ')+sync.message;
+      const top=(preview.entries||[]).slice(0,5).map((entry,index)=>
+        (index+1)+'. '+entry.name+' ('+entry.score+')').join(' · ');
+      const awards=(preview.awardCandidates||[]).map(item=>item.title+': '+item.player).join(' · ');
+      output.textContent=preview.available
+        ?`Snapshot saat ini: ${preview.playerCount} pemain · ${Math.floor(preview.playtimeSeconds/3600)} jam total · ${preview.deaths} deaths · ${preview.mobKills} mob kills. ${when}. `+
+          (top?'Peringkat teratas: '+top+'. ':'')+
+          (awards?'Kandidat Hall of Fame: '+awards+'. ':'')+
+          'Snapshot final diambil kembali saat penutupan dikonfirmasi.'+syncMessage
+        :'Belum ada snapshot periode Season ini. Penutupan kosong memerlukan konfirmasi tambahan.'+syncMessage;
+    }catch(error){output.textContent='Gagal memuat snapshot: '+error.message;}
+  }
   // A dedicated switch keeps the control beside its label even in a wide editor.
   const toggle=(label,checked,change,help='')=>{
     const wrapper=el('label','rules-admin-switch season-admin-toggle');
@@ -54,27 +169,101 @@ window.SSCircleSeasonsAdmin = (() => {
         const card=el('details','season-admin-mini');card.append(el('summary','',`${index+1}. ${item.title||item.caption||item.player||title}`));
         const inner=el('div','season-admin-mini-body');
         for(const [field,label,type,maxLen] of fields)
-          inner.append(inputField(label,item[field],v=>item[field]=v,{multiline:type==='textarea',max:maxLen||300}));
-        if(key==='archiveAwards'){
-          const target=el('label','field-group season-admin-recipient');
-          target.append(el('span','field-label','Penerima anggota SSCircle'));
+          inner.append(inputField(label,item[field],v=>item[field]=v,{
+            multiline:type==='textarea',type:type==='date'?'date':'text',max:maxLen||300
+          }));
+        if(key==='archiveTimeline'){
+          const group=el('label','field-group');
+          group.append(el('span','field-label','Jenis milestone'));
           const select=el('select');
-          const blank=el('option','', 'Belum ditautkan (penghargaan tetap ada di arsip)');
-          blank.value='';select.append(blank);
-          const profileNames=new Map((window.SSCircleMemberCenterAdmin?.getMembers?.()||[]).map(m=>[m.id,m.displayName||'']));
-          const accepted=(model?.submissions||[]).filter(s=>s.status==='accepted').slice(0,1000);
-          for(const member of accepted){
-            const nickname=profileNames.get(member.id)||'Anggota';
-            const option=el('option','',nickname+' · '+member.id.slice(0,8).toUpperCase());
-            option.value=member.id;select.append(option);
+          for(const [value,label] of [
+            ['milestone','Milestone umum'],['event','Event komunitas'],
+            ['build','Pembangunan'],['award','Penghargaan']
+          ]){
+            const option=el('option','',label);option.value=value;select.append(option);
           }
-          if(item.memberId && !accepted.some(s=>s.id===item.memberId)){
-            const existing=el('option','', 'Anggota terpilih sebelumnya · '+item.memberId.slice(0,8).toUpperCase());
-            existing.value=item.memberId;select.append(existing);
-          }
-          select.value=item.memberId||'';
-          select.onchange=()=>{item.memberId=select.value;mark();};
-          target.append(select,el('small','field-help','Pilih pendaftar Diterima. Penghargaan ini otomatis tampil di My SSCircle miliknya setelah disimpan.'));
+          select.value=['event','build','award'].includes(item.kind)?item.kind:'milestone';
+          select.onchange=()=>{item.kind=select.value;mark();};
+          group.append(select);inner.append(group);
+        }
+        if(key==='archiveAwards'){
+          const target=el('div','field-group season-admin-recipient');
+          target.append(el('span','field-label','Penerima anggota SSCircle'));
+          const search=el('input','season-member-search');
+          search.type='search';
+          search.maxLength=120;
+          search.placeholder='Cari nama pemain, username Minecraft atau ID anggota';
+          search.setAttribute('aria-label','Cari anggota penerima penghargaan');
+          search.autocomplete='off';
+          const resultList=el('div','season-member-results');
+          resultList.setAttribute('role','listbox');
+          const selected=el('p','field-help season-member-selected');
+          const local=()=>[...cachedRecipients().values()];
+          let candidates=local();
+          const selectedText=()=>{
+            const member=candidates.find(m=>m.id===item.memberId);
+            selected.textContent=item.memberId
+              ?'Dipilih: '+(member?.name||member?.minecraft?.[0]||'Anggota')+
+                ' · ID '+item.memberId
+              :'Belum ada anggota ditautkan. Penghargaan tetap tersimpan di arsip.';
+          };
+          const paintMatches=()=>{
+            resultList.replaceChildren();
+            const q=search.value.trim().toLocaleLowerCase('id-ID');
+            if(!q){resultList.hidden=true;return;}
+            const found=candidates.filter(member=>{
+              const searchable=[member.id,member.id.slice(0,8),member.name,
+                ...(member.minecraft||[])].join(' ').toLocaleLowerCase('id-ID');
+              return searchable.includes(q);
+            }).slice(0,20);
+            resultList.hidden=false;
+            if(!found.length){
+              resultList.append(el('p','field-help',
+                'Tidak ditemukan pada daftar anggota Diterima. Coba nama atau ID lengkap.'));
+              return;
+            }
+            for(const member of found){
+              const name=member.name||member.minecraft[0]||'Anggota SSCircle';
+              const button=action(name+' · '+(member.minecraft[0]?'@'+member.minecraft[0]+' · ':'')+
+                member.id.slice(0,8).toUpperCase(),()=>{
+                item.memberId=member.id;
+                if(!item.player.trim()){
+                  item.player=member.minecraft[0]||member.name||'';
+                  const playerInput=inner.querySelectorAll('.season-admin-mini-body > .field-group input')[1];
+                  if(playerInput&&item.player)playerInput.value=item.player;
+                }
+                search.value='';
+                selectedText();resultList.hidden=true;mark();
+              });
+              button.classList.add('season-member-result');
+              button.setAttribute('role','option');
+              button.title='ID anggota: '+member.id;
+              resultList.append(button);
+            }
+          };
+          search.addEventListener('input',paintMatches);
+          const loadDirectory=()=>{
+            loadRecipientDirectory().then(all=>{
+              candidates=all;
+              selectedText();paintMatches();
+            }).catch(()=>{selectedText();paintMatches();});
+          };
+          search.addEventListener('focus',loadDirectory,{once:true});
+          search.addEventListener('keydown',event=>{
+            if(event.key==='Escape'){search.value='';resultList.hidden=true;}
+            if(event.key==='Enter'&&!resultList.hidden){
+              const first=resultList.querySelector('button');
+              if(first){event.preventDefault();first.click();}
+            }
+          });
+          selectedText();
+          const clear=action('Lepas tautan anggota',()=>{
+            item.memberId='';selectedText();mark();
+          });
+          clear.classList.add('season-member-clear');
+          target.append(search,resultList,selected,clear,
+            el('small','field-help',
+              'Pencarian hanya menampilkan anggota berstatus Diterima. Nama, username Minecraft, dan ID dapat digunakan. Pilihan akan ditautkan ke Profile setelah disimpan.'));
           inner.append(target);
         }
         if(photoKey)mediaField(inner,'Foto',item,photoKey,repaint);
@@ -102,7 +291,10 @@ window.SSCircleSeasonsAdmin = (() => {
     card.addEventListener('toggle',()=>{if(card.open)expanded.add(season.id);else expanded.delete(season.id);});
     const summary=el('summary','season-admin-summary');
     summary.append(el('strong','',season.title||'Season '+(index+1)));
-    summary.append(el('span','season-admin-count',`${season.archivePublished?'Publik':'Draft'} · ${(season.entries||[]).length} pemain`));
+    const boardCount=Array.isArray(season.archiveLeaderboards)
+      ?season.archiveLeaderboards.length:(season.entries||[]).length?1:0;
+    summary.append(el('span','season-admin-count',
+      `${season.archivePublished?'Publik':'Draft'} · ${boardCount} leaderboard`));
     card.append(summary);
     const body=el('div','season-admin-body');
 
@@ -118,12 +310,13 @@ window.SSCircleSeasonsAdmin = (() => {
     const status=el('label','field-group season-admin-status');
     status.append(el('span','field-label','Status season'));
     const choice=el('select');
-    for(const [value,label] of [['active','Sedang berlangsung'],['ended','Selesai / Arsip']]){
+    for(const [value,label] of [['planned','Draft / Direncanakan'],['active','Sedang berlangsung'],['ended','Selesai / Arsip']]){
       const option=el('option','',label);option.value=value;choice.append(option);
     }
     choice.value=season.archiveStatus||'ended';
-    choice.onchange=()=>{season.archiveStatus=choice.value;mark();};
-    status.append(choice);mainFields.append(status);
+    choice.disabled=true;
+    status.append(choice,el('small','field-help','Status berubah melalui tombol Lifecycle agar periode statistik selalu konsisten.'));
+    mainFields.append(status);
     const dates=el('div','season-admin-dates');
     dates.append(inputField('Tanggal mulai',season.archiveStartDate,v=>season.archiveStartDate=v,{type:'date'}));
     dates.append(inputField('Tanggal selesai (opsional)',season.archiveEndDate,v=>season.archiveEndDate=v,{type:'date'}));
@@ -134,7 +327,94 @@ window.SSCircleSeasonsAdmin = (() => {
     info.content.append(mainFields);
     body.append(info.section);
 
-    const media=editorGroup('02 · Dokumentasi','Sampul, foto kenangan, dan bangunan pilihan.');
+    const lifecycle=editorGroup('02 · Season Lifecycle Management',
+      'Persiapkan, akhiri, jadwalkan, atau mulai periode statistik melalui satu alur terkontrol.');
+    const box=el('div','season-lifecycle-panel');
+    const active=model.settings.statSeasonId===season.id;
+    const activeStatus=season.archiveStatus==='active';
+    const planned=season.archiveStatus==='planned';
+    const statusText=el('p','field-help',
+      active?'Periode statistik Minecraft untuk Season ini sedang aktif.'
+      :planned?'Season masih dalam tahap persiapan dan belum menghasilkan statistik Season.'
+      :season.archiveFinalizedAt?'Snapshot akhir tersimpan. Riwayat ini tidak dapat dibuka ulang.'
+      :'Belum ada periode statistik aktif untuk Season ini.');
+    box.append(statusText);
+    if(season.archiveScheduledAt){
+      const time=el('p','field-help','Rencana pembukaan: '+new Date(season.archiveScheduledAt).toLocaleString('id-ID')+
+        (season.archiveAutoOpen?'. Dibuka otomatis oleh Cloudflare Cron jika scheduler sudah terpasang.':'. Pembukaan manual, admin harus menekan Mulai Season.'));
+      box.append(time);
+    }
+    if(season.archiveFinalizedAt){
+      const snap=season.archiveSnapshot;
+      box.append(el('p','season-lifecycle-snapshot',
+        snap
+          ?'Ditutup '+season.archiveFinalizedAt+' · '+(snap.playerCount||0)+' pemain · '+
+            Math.floor((snap.playtimeSeconds||0)/3600)+' jam total · '+(snap.deaths||0)+' deaths.'
+          :'Diarsipkan '+season.archiveFinalizedAt+' tanpa snapshot otomatis. Leaderboard manual tetap dipertahankan.'));
+    }
+    const actions=el('div','season-lifecycle-actions');
+    if((planned||activeStatus&&!active)&&!season.archiveFinalizedAt){
+      actions.append(action('Mulai Season',()=>lifecycleRequest(season,'start',{
+        publish:season.archivePublished,
+        overrideSchedule:!!season.archiveScheduledAt&&Date.parse(season.archiveScheduledAt)>Date.now()
+      }),true));
+    }
+    if(activeStatus&&!active&&!season.archiveFinalizedAt){
+      actions.append(action('Arsipkan Season lama',()=>lifecycleRequest(season,'archiveLegacy',{
+        publish:season.archivePublished
+      })));
+    }
+    if(planned){
+      const field=el('label','field-group season-lifecycle-schedule');
+      field.append(el('span','field-label','Rencana pembukaan (opsional)'));
+      const dateInput=el('input');dateInput.type='datetime-local';
+      if(season.archiveScheduledAt){
+        const date=new Date(season.archiveScheduledAt);
+        if(Number.isFinite(date.getTime())){
+          const local=new Date(date.getTime()-date.getTimezoneOffset()*60000).toISOString();
+          dateInput.value=local.slice(0,16);
+        }
+      }
+      field.append(dateInput);
+      const cronCheck=el('label','season-lifecycle-check');
+      const cronInput=el('input');cronInput.type='checkbox';cronInput.checked=season.archiveAutoOpen===true;
+      cronCheck.append(cronInput,el('span','','Buka Season otomatis pada jadwal ini (memerlukan Cloudflare Cron Worker).'));
+      actions.append(field,cronCheck,action('Simpan jadwal',()=>{
+        const chosen=dateInput.value?new Date(dateInput.value):null;
+        if(!chosen||!Number.isFinite(chosen.getTime()))
+          return window.SSCNotice.alert('Pilih tanggal dan jam pembukaan yang valid.');
+        lifecycleRequest(season,'schedule',{scheduledAt:chosen.toISOString(),autoStart:cronInput.checked});
+      }));
+    }
+    if(active&&activeStatus){
+      const preview=el('p','season-lifecycle-snapshot','Snapshot belum diperiksa.');
+      actions.append(action('Periksa snapshot akhir',()=>lifecyclePreview(season,preview)));
+      if(!season.archivePreparedAt){
+        actions.append(action('Persiapkan penutupan',()=>lifecycleRequest(season,'prepare')));
+      }else{
+        actions.append(el('p','field-help','Persiapan tercatat: '+season.archivePreparedAt+'. Periksa kesiapan sinkronisasi sebelum mengakhiri Season.'));
+        actions.append(action('Minta ulang sinkronisasi akhir',()=>lifecycleRequest(season,'prepare')));
+        const empty=el('label','season-lifecycle-check');
+        const allow=el('input');allow.type='checkbox';
+        empty.append(allow,el('span','',
+          'Izinkan penutupan tanpa data statistik jika snapshot pemain kosong.'));
+        actions.append(empty);
+        const rewards=el('label','season-lifecycle-check');
+        const auto=el('input');auto.type='checkbox';auto.checked=true;
+        rewards.append(auto,el('span','',
+          'Tambahkan otomatis penghargaan pemain teraktif, pembasmi monster dan penambang terbaik tanpa menggandakan kategori lama.'));
+        actions.append(rewards);
+        actions.append(action('Akhiri Season',()=>lifecycleRequest(season,'end',{
+          publish:season.archivePublished,allowEmpty:allow.checked,autoAwards:auto.checked
+        }),true));
+      }
+      actions.append(preview);
+    }
+    if(!actions.children.length)box.append(el('p','field-help',
+      'Season arsip tidak dapat dibuka ulang. Tambahkan Season baru untuk periode berikutnya.'));
+    box.append(actions);lifecycle.content.append(box);body.append(lifecycle.section);
+
+    const media=editorGroup('03 · Dokumentasi','Sampul, foto kenangan, dan bangunan pilihan.');
     mediaField(media.content,'Foto sampul season',season,'archiveCover',renderEditor);
     makeSublist(media.content,season,'archiveMemories','Foto kenangan',12,
       ()=>({src:'',caption:''}),[['caption','Keterangan foto','text',240]],'src');
@@ -144,40 +424,156 @@ window.SSCircleSeasonsAdmin = (() => {
        ['description','Cerita bangunan','textarea',350]],'src');
     body.append(media.section);
 
-    const achievement=editorGroup('03 · Prestasi & pemain','Catat penghargaan dan urutan pemain untuk season ini.');
+    const achievement=editorGroup('04 · Prestasi & pemain','Catat penghargaan dan urutan pemain untuk season ini.');
     makeSublist(achievement.content,season,'archiveAwards','Penghargaan',12,
       ()=>({title:'Penghargaan baru',player:'',description:'',memberId:''}),
       [['title','Kategori penghargaan','text',120],['player','Nama pemain','text',100],
        ['description','Keterangan','textarea',350]]);
+    // A Season may have multiple titled leaderboards. The first board is
+    // mirrored as season.entries for legacy homepage cards and snapshot data.
+    if(!Array.isArray(season.archiveLeaderboards)){
+      season.archiveLeaderboards=(Array.isArray(season.entries)&&season.entries.length)
+        ?[{id:'main',title:'Leaderboard Season',entries:season.entries}]:[];
+    }
+    const boards=season.archiveLeaderboards;
+    const syncPrimary=()=>{season.entries=boards[0]?.entries||[];};
+    syncPrimary();
     const ranking=el('details','season-admin-subsection');
-    ranking.append(el('summary','',`Leaderboard season (${season.entries.length}/20)`));
-    const inner=el('div','season-admin-subsection-content');ranking.append(inner);
-    const list=el('div','season-admin-sublist');inner.append(list);
-    const repaint=()=>{
-      list.replaceChildren();
-      season.entries.forEach((entry,i)=>{
-        const row=el('div','season-admin-rank');
-        const top=el('div','season-admin-rank-top');
-        top.append(el('strong','season-admin-rank-number','Pemain '+String(i+1).padStart(2,'0')));
-        top.append(action('Hapus',()=>{season.entries.splice(i,1);mark();repaint();}));
-        const fields=el('div','season-admin-rank-fields');
-        fields.append(inputField('Nama pemain',entry.name,v=>entry.name=v,{max:80}));
-        fields.append(inputField('Peringkat / skor',entry.score,v=>entry.score=v,{max:80}));
-        row.append(top,fields);list.append(row);
-      });
-      window.SSCircleSort?.attach(list,{item:'.season-admin-rank',handleTarget:'.season-admin-rank-top',onMove:(from,to)=>{
-        season.entries.splice(to,0,season.entries.splice(from,1)[0]);mark();repaint();
-      }});
+    ranking.open=boards.length>0;
+    ranking.append(el('summary','',`Leaderboard Season (${boards.length}/8)`));
+    const inner=el('div','season-admin-subsection-content');
+    ranking.append(inner);
+    inner.append(el('p','field-help',
+      'Buat leaderboard berjudul, lalu tambahkan pemain di dalamnya. Papan pertama tetap menjadi snapshot statistik resmi, tetapi kamu bebas memilih papan mana yang ditampilkan pada Homepage.'));
+    const featuredField=el('label','field-group season-featured-board');
+    featuredField.append(el('span','field-label','Leaderboard utama di Homepage'));
+    const featuredSelect=el('select');
+    featuredSelect.setAttribute('aria-label','Pilih leaderboard utama untuk Homepage');
+    featuredSelect.onchange=()=>{
+      season.homeFeaturedLeaderboardId=featuredSelect.value;
+      mark();schedule();
     };
-    repaint();
-    const addPlayer=action('+ Tambah pemain',()=>{
-      if(season.entries.length>=20)return SSCNotice.alert('Maksimal 20 pemain per season.');
-      season.entries.push({name:'',score:''});mark();repaint();ranking.open=true;
-    });
-    addPlayer.classList.add('season-admin-add-player');
-    inner.append(addPlayer);
+    featuredField.append(featuredSelect,
+      el('small','field-help','Pilihan ini menentukan kategori yang langsung ditampilkan untuk Season ini di slider leaderboard Homepage. Hasil snapshot final tetap tidak berubah.'));
+    inner.append(featuredField);
+    const updateFeaturedOptions=()=>{
+      const previous=season.homeFeaturedLeaderboardId;
+      const valid=boards.some(board=>board.id===previous);
+      season.homeFeaturedLeaderboardId=valid?previous:(boards[0]?.id||'');
+      featuredSelect.replaceChildren();
+      if(!boards.length){
+        const empty=el('option','','Belum ada leaderboard');
+        empty.value='';featuredSelect.append(empty);featuredSelect.disabled=true;
+      }else{
+        featuredSelect.disabled=false;
+        for(const board of boards){
+          const option=el('option','',board.title||'Leaderboard tanpa judul');
+          option.value=board.id;featuredSelect.append(option);
+        }
+      }
+      featuredSelect.value=season.homeFeaturedLeaderboardId;
+    };
+    const list=el('div','season-admin-leaderboards');
+    inner.append(list);
+    const openBoards=new Set();
+    const repaintBoards=()=>{
+      list.replaceChildren();
+      boards.forEach((board,boardIndex)=>{
+        board.entries ||= [];
+        const frozen=!!season.archiveFinalizedAt&&boardIndex===0;
+        const panel=el('details','season-admin-mini season-admin-leaderboard');
+        panel.open=openBoards.has(board.id);
+        panel.addEventListener('toggle',()=>{
+          if(panel.open)openBoards.add(board.id);else openBoards.delete(board.id);
+        });
+        panel.append(el('summary','',`${board.title||'Leaderboard '+(boardIndex+1)} · ${board.entries.length} pemain`));
+        const controls=el('div','season-admin-mini-body');
+        controls.append(inputField('Judul leaderboard',board.title,v=>{
+          board.title=v;mark();
+          panel.querySelector('summary').textContent=`${v||'Leaderboard '+(boardIndex+1)} · ${board.entries.length} pemain`;
+        },{max:120}));
+        if(frozen)controls.append(el('p','field-help',
+          'Leaderboard snapshot final terkunci. Judul boleh diubah, tetapi hasil peringkat tidak.'));
+        const entries=el('div','season-admin-sublist');
+        controls.append(entries);
+        const paintEntries=()=>{
+          entries.replaceChildren();
+          board.entries.forEach((entry,index)=>{
+            const item=el('div','season-admin-rank');
+            const top=el('div','season-admin-rank-top');
+            top.append(el('strong','season-admin-rank-number','Peringkat '+String(index+1).padStart(2,'0')));
+            if(!frozen)top.append(action('Hapus',()=>{
+              board.entries.splice(index,1);syncPrimary();mark();paintEntries();
+            }));
+            const fields=el('div','season-admin-rank-fields');
+            fields.append(inputField('Nama pemain',entry.name,v=>{entry.name=v;syncPrimary();},{max:80}));
+            fields.append(inputField('Skor / pencapaian',entry.score,v=>{entry.score=v;syncPrimary();},{max:80}));
+            if(frozen)fields.querySelectorAll('input').forEach(input=>input.disabled=true);
+            item.append(top,fields);entries.append(item);
+          });
+          if(!frozen)window.SSCircleSort?.attach(entries,{
+            item:'.season-admin-rank',handleTarget:'.season-admin-rank-top',
+            onMove:(from,to)=>{
+              board.entries.splice(to,0,board.entries.splice(from,1)[0]);
+              syncPrimary();mark();paintEntries();
+            }
+          });
+          panel.querySelector('summary').textContent=
+            `${board.title||'Leaderboard '+(boardIndex+1)} · ${board.entries.length} pemain`;
+        };
+        paintEntries();
+        const actions=el('div','season-lifecycle-actions');
+        if(!frozen){
+          actions.append(action('+ Tambah pemain',()=>{
+            if(board.entries.length>=20)return window.SSCNotice.alert('Maksimal 20 pemain per leaderboard.');
+            board.entries.push({name:'',score:''});syncPrimary();mark();paintEntries();
+            panel.open=true;openBoards.add(board.id);
+          }));
+        }
+        if(!frozen)actions.append(action('Hapus leaderboard',async()=>{
+          const ok=await window.SSCNotice.confirm(
+            'Hapus leaderboard '+(board.title||'ini')+' beserta seluruh peringkat di dalamnya?',
+            {danger:true,confirmText:'Hapus leaderboard'});
+          if(!ok)return;
+          const removedId=board.id;
+          boards.splice(boardIndex,1);
+          if(boardIndex===0&&boards.length){
+            const previousId=boards[0].id;
+            boards[0].id='main';
+            if(season.homeFeaturedLeaderboardId===previousId)
+              season.homeFeaturedLeaderboardId='main';
+          }
+          if(season.homeFeaturedLeaderboardId===removedId)
+            season.homeFeaturedLeaderboardId=boards[0]?.id||'';
+          syncPrimary();mark();repaintBoards();
+        }));
+        controls.append(actions);
+        panel.append(controls);list.append(panel);
+      });
+      if(!boards.length)list.append(el('p','field-help',
+        'Belum ada leaderboard. Klik Tambah leaderboard untuk membuat kategori pertama.'));
+      updateFeaturedOptions();
+    };
+    repaintBoards();
+    inner.append(action('+ Tambah leaderboard',()=>{
+      if(boards.length>=8)return window.SSCNotice.alert('Maksimal 8 leaderboard per Season.');
+      const id=boards.length?'board-'+crypto.randomUUID().replace(/-/g,'').slice(0,12):'main';
+      boards.push({id,title:boards.length?'Leaderboard '+(boards.length+1):'Leaderboard Season',entries:[]});
+      syncPrimary();openBoards.add(id);mark();repaintBoards();ranking.open=true;
+    },true));
     achievement.content.append(ranking);
     body.append(achievement.section);
+
+    const timeline=editorGroup('05 · Timeline Season',
+      'Tambahkan milestone, kegiatan penting, pembangunan besar, serta penghargaan untuk riwayat publik.');
+    season.archiveTimeline ||= [];
+    makeSublist(timeline.content,season,'archiveTimeline','Milestone timeline',24,
+      ()=>({id:'timeline-'+crypto.randomUUID().replace(/-/g,'').slice(0,12),
+        date:'',title:'Milestone baru',description:'',kind:'milestone'}),
+      [['date','Tanggal milestone','date',10],
+       ['title','Judul milestone','text',120],
+       ['description','Keterangan','textarea',450]]);
+    body.append(timeline.section);
 
     const footer=el('div','season-admin-delete-row');
     const deleteButton=action('Hapus season',async()=>{
@@ -185,6 +581,10 @@ window.SSCircleSeasonsAdmin = (() => {
       model.settings.homeLeaderboardSeasons.splice(index,1);expanded.delete(season.id);mark();renderEditor();
     });
     deleteButton.classList.add('season-admin-delete');
+    if(season.archiveFinalizedAt){
+      deleteButton.disabled=true;
+      deleteButton.title='Season yang telah ditutup terlindungi dari penghapusan.';
+    }
     footer.append(deleteButton);body.append(footer);
     card.append(body);return card;
   }
@@ -209,12 +609,9 @@ window.SSCircleSeasonsAdmin = (() => {
       option.value=season.id;seasonChoice.append(option);
     }
     seasonChoice.value=s.statSeasonId||'';
-    seasonChoice.addEventListener('change',()=>{
-      s.statSeasonId=seasonChoice.value;
-      mark();
-    });
+    seasonChoice.disabled=true;
     seasonField.append(seasonChoice,el('small','field-help',
-      'Pengaturan berlaku setelah perubahan Admin Control disimpan. Memilih Season lain membuat periode statistik baru. Data lama tidak dihapus.'));
+      'Periode statistik dikelola otomatis oleh tombol Mulai Season / Akhiri Season pada tiap kartu. Data lama tidak dihapus.'));
     statsPane.content.append(seasonField);
     statsPane.content.append(el('p','field-help',
       'Waktu mulai dicatat otomatis oleh server saat disimpan. Season baru akan menampilkan 0 sampai statistik pemain yang pertama kali tersinkron dipakai sebagai baseline.'));
@@ -229,22 +626,38 @@ window.SSCircleSeasonsAdmin = (() => {
     root.append(main);
     const bar=el('div','rules-admin-toolbar season-admin-toolbar');
     const overview=el('div','season-admin-toolbar-copy');
-    overview.append(el('strong','',`Daftar season (${s.homeLeaderboardSeasons.length}/12)`));
+    overview.append(el('strong','',`Daftar season (${s.homeLeaderboardSeasons.length})`));
     overview.append(el('small','',`${s.homeLeaderboardSeasons.filter(item=>item.archivePublished===true).length} dipublikasikan · Buka kartu untuk mengedit cerita dan prestasi`));
     bar.append(overview);
     bar.append(action('+ Tambah season',()=>{
-      if(s.homeLeaderboardSeasons.length>=12)return SSCNotice.alert('Maksimal 12 season.');
       const id='season-'+crypto.randomUUID().replace(/-/g,'').slice(0,12);
-      s.homeLeaderboardSeasons.push({id,title:'Season '+(s.homeLeaderboardSeasons.length+1),entries:[],archivePublished:false,archiveStatus:'ended',archiveStartDate:'',archiveEndDate:'',archiveSummary:'',archiveCover:'',archiveMemories:[],archiveBuilds:[],archiveAwards:[]});
+      s.homeLeaderboardSeasons.push({id,title:'Season '+(s.homeLeaderboardSeasons.length+1),entries:[],archivePublished:false,archiveStatus:'planned',archiveTimeline:[],archiveScheduledAt:'',archiveStartDate:'',archiveEndDate:'',archiveSummary:'',archiveCover:'',archiveMemories:[],archiveBuilds:[],archiveAwards:[]});
+      seasonPage=Math.floor((s.homeLeaderboardSeasons.length-1)/SEASONS_PER_PAGE);
       expanded.add(id);mark();renderEditor();
+      window.SSCNotice.toast('Season baru masih Draft. Tekan Simpan Season sebelum menjalankan Lifecycle.','info');
     },true));root.append(bar);
     const list=el('div','season-admin-list');root.append(list);
-    s.homeLeaderboardSeasons.forEach((season,index)=>{
+    const pageCount=Math.max(1,Math.ceil(s.homeLeaderboardSeasons.length/SEASONS_PER_PAGE));
+    seasonPage=Math.max(0,Math.min(seasonPage,pageCount-1));
+    const start=seasonPage*SEASONS_PER_PAGE;
+    const rows=s.homeLeaderboardSeasons.slice(start,start+SEASONS_PER_PAGE);
+    rows.forEach((season,index)=>{
       season.entries ||= [];season.archiveMemories ||= [];season.archiveBuilds ||= [];season.archiveAwards ||= [];
-      list.append(seasonCard(season,index));
+      list.append(seasonCard(season,start+index));
     });
+    if(pageCount>1){
+      const pager=el('div','rules-admin-toolbar season-admin-toolbar');
+      const prev=action('Sebelumnya',()=>{seasonPage--;renderEditor();});
+      prev.disabled=seasonPage===0;
+      const next=action('Berikutnya',()=>{seasonPage++;renderEditor();});
+      next.disabled=seasonPage===pageCount-1;
+      pager.append(prev,el('span','field-help',
+        'Halaman '+(seasonPage+1)+' dari '+pageCount+' · '+s.homeLeaderboardSeasons.length+' Season'),next);
+      root.append(pager);
+    }
     window.SSCircleSort?.attach(list,{item:'.season-admin-season',handleTarget:'summary',onMove:(from,to)=>{
-      s.homeLeaderboardSeasons.splice(to,0,s.homeLeaderboardSeasons.splice(from,1)[0]);mark();renderEditor();
+      const fromGlobal=start+from,toGlobal=start+to;
+      s.homeLeaderboardSeasons.splice(toGlobal,0,s.homeLeaderboardSeasons.splice(fromGlobal,1)[0]);mark();renderEditor();
     }});
     if(!s.homeLeaderboardSeasons.length)root.append(el('p','field-help','Belum ada season. Tambahkan season pertama untuk mulai mengisi sejarah SSCircle.'));
   }
@@ -261,7 +674,7 @@ window.SSCircleSeasonsAdmin = (() => {
     frame?.contentWindow?.postMessage({type:'ssc-theme-preview-settings',settings},location.origin);
   }
   function schedule(){clearTimeout(timer);timer=setTimeout(post,130);}
-  function render(data,dirty){model=data;changed=dirty;renderEditor();
+  function render(data,dirty){model=data;changed=dirty;directoryPromise=null;renderEditor();
     if(!installed){installed=true;
       $('seasons-admin-preview-frame').addEventListener('load',schedule);
       $('seasons-preview-desktop').onclick=()=>{phone=false;resize();schedule();};

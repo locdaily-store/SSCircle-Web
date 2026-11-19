@@ -31,6 +31,9 @@ authme-mixed-mode:
 # secara privat ketika Cloudflare offline; file ini jangan diunggah ke website.
 stats-sync:
   enabled: true
+  # Ubah penanda ini ketika menggunakan kembali backup world yang menyimpan uid.dat.
+  # Contoh: season-7, reset-2. Maksimal 32 huruf/angka/-/_; jangan ubah saat bermain biasa.
+  world-generation: default
   interval-seconds: 300
   # Saat >=30 pemain online, sinkronisasi berkala menjadi tiap 600 detik.
   # Join/quit dan /sscircle sync tetap dapat memicu pembacaan sendiri.

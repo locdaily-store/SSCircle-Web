@@ -138,3 +138,13 @@ body .ssc-site-header .home-menu-button{overflow:visible}
 body .ssc-site-header .ssc-hamburger-notice{position:absolute;right:-7px;top:-8px;pointer-events:none;z-index:2}
 @media(min-width:1481px){body .ssc-site-header .ssc-hamburger-notice{display:none!important}}
 @media(max-width:1480px){body .ssc-site-header .home-nav .ssc-nav-notice{margin-left:auto}body .ssc-site-header .ssc-hamburger-notice:not([hidden]){display:inline-flex!important}}
+
+/* The selected Season leaderboard is a category, not a second Season title. */
+.home-leaderboard-category {
+  margin: .25rem 0 1rem;
+  color: var(--ssc-primary,var(--primary,#bc91f5));
+  font-size: clamp(.85rem,1.65vw,1rem);
+  font-weight: 650;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
