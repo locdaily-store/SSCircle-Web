@@ -4530,7 +4530,7 @@ async function mailboxActiveInvite(env,memberId){
     ORDER BY m.rowid DESC LIMIT 1`).bind(memberId,now).first();
   return row?{expiresAt:new Date(row.expires_at*1000).toISOString(),existing:true}:null;
 }
-async function mailboxIssueInitialInvite(env,memberId){
+async function mailboxIssueInitialInvite(env,memberId,verifiedRecovery=false){
   const existing=await mailboxActiveInvite(env,memberId);
   if(existing)return existing;
   const now=Math.floor(Date.now()/1000),stamp=new Date().toISOString();
@@ -4544,8 +4544,11 @@ async function mailboxIssueInitialInvite(env,memberId){
       AND m.type='activation' AND m.expires_at=i.expires_at
       AND m.encrypted_secret IS NOT NULL
     WHERE i.application_id=? AND i.used_at IS NULL AND i.expires_at>?)`;
+  // Password recovery may only use this self-service issuer AFTER a strong
+  // authenticated Dashboard session has been checked by the calling API.
+  // A registration-code-only cookie never grants recovery rights.
   const allowed=`EXISTS(SELECT 1 FROM submissions s WHERE s.id=? AND s.status='accepted')
-    AND NOT EXISTS(SELECT 1 FROM member_credentials c WHERE c.application_id=?)`;
+    AND ${verifiedRecovery?'EXISTS':'NOT EXISTS'}(SELECT 1 FROM member_credentials c WHERE c.application_id=?)`;
   const results=await env.DB.batch([
     env.DB.prepare(`INSERT INTO member_activation_invites
       (application_id,secret_hash,expires_at,created_at,used_at)
@@ -4559,12 +4562,17 @@ async function mailboxIssueInitialInvite(env,memberId){
         memberId,memberId,memberId,now),
     env.DB.prepare(`INSERT INTO member_mailbox
       (id,application_id,type,title,content,encrypted_secret,secret_nonce,expires_at,created_at)
-      SELECT ?,?,'activation','Kode aktivasi akun tersedia',
-        'Pendaftaranmu sudah Diterima. Kode aktivasi berlaku 24 jam dan satu kali pakai. Jangan bagikan kode pendaftaran atau password.',
+      SELECT ?,?,'activation',?,
+        ?,
         ?,?,?,?
       WHERE ${allowed} AND EXISTS(SELECT 1 FROM member_activation_invites i
         WHERE i.application_id=? AND i.secret_hash=? AND i.expires_at=? AND i.used_at IS NULL)`)
-      .bind(messageId,memberId,sealed.encrypted,sealed.nonce,expires,stamp,
+      .bind(messageId,memberId,
+        verifiedRecovery?'Kode verifikasi akun tersedia':'Kode aktivasi akun tersedia',
+        verifiedRecovery
+          ?'Kode verifikasi diterbitkan setelah login Dashboard. Berlaku 24 jam dan hanya sekali pakai. Jangan bagikan kepada siapa pun.'
+          :'Pendaftaranmu sudah Diterima. Kode aktivasi berlaku 24 jam dan satu kali pakai. Jangan bagikan kode pendaftaran atau password.',
+        sealed.encrypted,sealed.nonce,expires,stamp,
         memberId,memberId,memberId,hashed,expires),
     env.DB.prepare(`INSERT INTO member_activation_requests(application_id,requested_at,status,updated_at)
       SELECT ?,?,'sent',? WHERE EXISTS(SELECT 1 FROM member_mailbox
@@ -4696,6 +4704,12 @@ async function mailboxAPI(req,env,path,method){
       label:mailSettings.mailboxAcceptedDiscordButton||RULES_DEFAULTS.mailboxAcceptedDiscordButton,
       url:discordUrl
     };
+    // A verification code issued after Dashboard login must never be
+    // revealed by a copied registration tracking code alone.
+    const containsVerifiedCode=(rows.results||[]).some(row=>
+      row.type==='activation'&&row.title==='Kode verifikasi akun tersedia');
+    const secureCodeViewer=containsVerifiedCode&&accepted
+      ?!!(await memberStrongSession(req,env,account)):false;
     const inbox=(rows.results||[]).filter(row=>
       (!['friend_request','friend_response'].includes(row.type)||prefs.community)&&
       (row.type!=='badge'||prefs.awards)).map(row=>({id:row.id,
@@ -4707,6 +4721,7 @@ async function mailboxAPI(req,env,path,method){
       read:!!row.read_at,expiresAt:row.expires_at?new Date(row.expires_at*1000).toISOString():null,
       friendSenderId:accepted&&row.type==='friend_request'?friendNoticeIds.get(row.id)||null:null,
       canReveal:accepted && !!row.encrypted_secret && row.id===newest?.id &&
+        (row.title!=='Kode verifikasi akun tersedia'||secureCodeViewer) &&
         row.expires_at>Math.floor(Date.now()/1000) &&
         invite?.used_at===null && invite?.expires_at===row.expires_at}));
     const items=[...inbox,...virtual].sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt))).slice(0,80);
@@ -4737,13 +4752,24 @@ async function mailboxAPI(req,env,path,method){
         .bind(account.id).first();
       if(!nowActive)return bad('Kode belum dapat diterbitkan. Periksa status Diterima lalu coba lagi.',503);
     }
-    // Someone with an active password must explicitly request recovery from
-    // the Lupa Password screen; a generic activation click never queues admin.
+    // For an already activated account, a verified Dashboard session IS an
+    // independent proof of ownership. Send a verification code to the same
+    // private Mail Box immediately; no admin review is necessary.
+    const verified=credentials?await memberStrongSession(req,env,account):null;
+    if(credentials&&verified){
+      const sent=await mailboxIssueInitialInvite(env,account.id,true);
+      if(sent)return J({ok:true,delivered:true,verification:true,
+        expiresAt:sent.expiresAt,message:sent.existing
+          ?'Kode verifikasi aktif sudah tersedia di Mail Box.'
+          :'Kode verifikasi otomatis dikirim ke Mail Box. Buka pesan Verifikasi untuk menampilkan kode.'});
+      return bad('Kode verifikasi belum berhasil disimpan. Coba lagi.',503);
+    }
+    // Do not allow a copied registration code to reset an already active
+    // password. The member may log in to Dashboard and retry without admin;
+    // a lost-password flow without a strong session still needs other proof.
     const intention=await body(req,250);
-    if(intention?.purpose!=='recovery')return J({ok:true,delivered:false,
-      alreadyActivated:true,message:'Akun Profile sudah aktif. Masuk menggunakan password Dashboard. Jika lupa password, buka Keamanan akun → Lupa password.'});
-    // A registration-code session alone is NOT enough to reset an existing
-    // password. Recovery still requires independent identity verification.
+    if(intention?.purpose!=='recovery')return bad(
+      'Akun sudah aktif. Untuk meminta kode verifikasi otomatis, masuk dahulu menggunakan password Dashboard, lalu tekan Minta kode lagi. Jika password terlupa, gunakan Lupa password untuk verifikasi pemulihan.',403);
     const activeInvite=await mailboxActiveInvite(env,account.id);
     if(activeInvite)return J({ok:true,delivered:true,recovery:true,
       message:'Kode pemulihan yang masih berlaku tersedia di Mail Box.'});
@@ -4773,11 +4799,14 @@ async function mailboxAPI(req,env,path,method){
     if(!await rateLimit(env,req,'mailbox-reveal',15,900))return bad('Terlalu banyak percobaan.',429);
     const payload=await body(req,250);
     if(!/^[0-9a-f-]{36}$/.test(payload?.id||''))return bad('Pesan tidak tersedia.',404);
-    const row=await env.DB.prepare(`SELECT encrypted_secret,secret_nonce,expires_at
+    const row=await env.DB.prepare(`SELECT title,encrypted_secret,secret_nonce,expires_at
       FROM member_mailbox WHERE id=? AND application_id=? AND type='activation'
       AND id=(SELECT id FROM member_mailbox WHERE application_id=? AND type='activation'
         ORDER BY rowid DESC LIMIT 1)`)
       .bind(payload.id,account.id,account.id).first();
+    if(row?.title==='Kode verifikasi akun tersedia'&&
+       !await memberStrongSession(req,env,account))
+      return bad('Masuk menggunakan password Dashboard untuk melihat kode verifikasi akun aktif.',403);
     const invite=await env.DB.prepare('SELECT expires_at,used_at FROM member_activation_invites WHERE application_id=?')
       .bind(account.id).first();
     if(!row?.encrypted_secret || row.expires_at<=Date.now()/1000 ||
