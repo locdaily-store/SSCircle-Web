@@ -367,8 +367,8 @@ test('Diterima menerbitkan kode awal otomatis ketika status diperbarui',async()=
 test('akun sudah aktif tidak dapat meminta reset tanpa memilih pemulihan secara eksplisit',async()=>{
  const x=fixture();await seedActivated(x);
  const original=await x.request('/api/player/mailbox/request-activation',{method:'POST',body:{}});
- assert.equal(original.status,200,JSON.stringify(original.data));
- assert.equal(original.data.alreadyActivated,true);
+ assert.equal(original.status,403,JSON.stringify(original.data));
+ assert.match(original.data.error,/password Dashboard/i);
  const row=x.db.prepare('SELECT status FROM member_activation_requests WHERE application_id=?').get(ID);
  assert.equal(row,undefined);
  const intentional=await x.request('/api/player/mailbox/request-activation',{method:'POST',body:{purpose:'recovery'}});
