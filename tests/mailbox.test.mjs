@@ -89,7 +89,7 @@ test('anggota Diterima mendapat kode pertama otomatis tanpa membocorkan kode ke 
 test('verifikasi oleh admin mengirim kode AES-GCM ke Mail Box, bukan respons publik',async()=>{
  const x=fixture();
  await seedActivated(x);
- await x.request('/api/player/mailbox/request-activation',{method:'POST',body:{}});
+ await x.request('/api/player/mailbox/request-activation',{method:'POST',body:{purpose:'recovery'}});
  const approved=await x.request('/api/admin/mailbox/approve',{method:'POST',body:{id:ID,verification:'identity-confirmed'},cookie:x.admin});
  assert.equal(approved.status,200,JSON.stringify(approved.data));
  assert.equal(approved.data.delivered,true);
@@ -109,7 +109,7 @@ test('verifikasi oleh admin mengirim kode AES-GCM ke Mail Box, bukan respons pub
  assert.equal(revealed.status,200,JSON.stringify(revealed.data));
  assert.match(revealed.data.code,/^[A-Za-z0-9_-]{32}$/);
  assert.notEqual(raw.encrypted_secret,revealed.data.code);
- const again=await x.request('/api/player/mailbox/request-activation',{method:'POST',body:{}});
+ const again=await x.request('/api/player/mailbox/request-activation',{method:'POST',body:{purpose:'recovery'}});
  assert.equal(again.data.delivered,true);
  assert.equal((await x.request('/api/player/mailbox')).data.items.length,2);
  const used=await x.request('/api/player/security/activate',{method:'POST',body:{invite:revealed.data.code,password:'KataSandiKuat#2040'}});
@@ -125,11 +125,11 @@ test('jalur approval admin tetap dapat menerbitkan kode pemulihan sekali pakai',
   body:{id:ID,verification:'identity-confirmed'}});
  assert.equal(approved.status,200);
  assert.equal(approved.data.delivered,false);
- const req=await x.request('/api/player/mailbox/request-activation',{method:'POST',body:{}});
+ const req=await x.request('/api/player/mailbox/request-activation',{method:'POST',body:{purpose:'recovery'}});
  assert.equal(req.status,200);assert.equal(req.data.delivered,true);
  const row=x.db.prepare('SELECT consumed_at FROM member_mailbox_approvals WHERE application_id=?').get(ID);
  assert.ok(row.consumed_at);
- const second=await x.request('/api/player/mailbox/request-activation',{method:'POST',body:{}});
+ const second=await x.request('/api/player/mailbox/request-activation',{method:'POST',body:{purpose:'recovery'}});
  assert.equal(second.data.delivered,true);
  assert.equal(x.db.prepare('SELECT COUNT(*) AS n FROM member_mailbox WHERE type=?').get('activation').n,1);
 });
@@ -181,7 +181,7 @@ test('pendaftar pending/rejected dapat membaca notifikasi sendiri, tidak bisa me
 test('Mail Box delete only affects owner, while a live activation code stays available',async()=>{
   const x=fixture();
   await seedActivated(x);
-  const requested=await x.request('/api/player/mailbox/request-activation',{method:'POST',body:{}});
+  const requested=await x.request('/api/player/mailbox/request-activation',{method:'POST',body:{purpose:'recovery'}});
   assert.equal(requested.status,200);
   let list=await x.request('/api/player/mailbox');
   const info=list.data.items.find(item=>item.type==='information');
@@ -203,7 +203,7 @@ test('Mail Box delete only affects owner, while a live activation code stays ava
 test('failed transaction restores approval so a later request can issue one invite',async()=>{
  const x=fixture();
  await seedActivated(x);
- await x.request('/api/player/mailbox/request-activation',{method:'POST',body:{}});
+ await x.request('/api/player/mailbox/request-activation',{method:'POST',body:{purpose:'recovery'}});
  const originalBatch=x.env.DB.batch;
  x.env.DB.batch=async()=>{throw Error('temporary transaction failure');};
  const failed=await x.request('/api/admin/mailbox/approve',{method:'POST',cookie:x.admin,
@@ -212,7 +212,7 @@ test('failed transaction restores approval so a later request can issue one invi
  assert.equal(x.db.prepare('SELECT consumed_at FROM member_mailbox_approvals WHERE application_id=?').get(ID).consumed_at,null);
  assert.equal(x.db.prepare("SELECT COUNT(*) AS n FROM member_mailbox WHERE type='activation'").get().n,0);
  x.env.DB.batch=originalBatch;
- const retry=await x.request('/api/player/mailbox/request-activation',{method:'POST',body:{}});
+ const retry=await x.request('/api/player/mailbox/request-activation',{method:'POST',body:{purpose:'recovery'}});
  assert.equal(retry.status,200,JSON.stringify(retry.data));
  assert.equal(retry.data.delivered,true);
  const mailbox=await x.request('/api/player/mailbox');
@@ -231,7 +231,7 @@ test('mark-as-read checks ownership and keeps normal repeat reads idempotent',as
 test('if D1 committed but response was lost, same invite remains recoverable',async()=>{
  const x=fixture();
  await seedActivated(x);
- await x.request('/api/player/mailbox/request-activation',{method:'POST',body:{}});
+ await x.request('/api/player/mailbox/request-activation',{method:'POST',body:{purpose:'recovery'}});
  const originalBatch=x.env.DB.batch;
  x.env.DB.batch=async statements=>{
   await originalBatch(statements);
@@ -244,7 +244,7 @@ test('if D1 committed but response was lost, same invite remains recoverable',as
  const activation=(await x.request('/api/player/mailbox')).data.items.filter(x=>x.type==='activation');
  assert.equal(activation.length,1);
  assert.equal(activation[0].canReveal,true);
- const repeated=await x.request('/api/player/mailbox/request-activation',{method:'POST',body:{}});
+ const repeated=await x.request('/api/player/mailbox/request-activation',{method:'POST',body:{purpose:'recovery'}});
  assert.equal(repeated.data.delivered,true);
  assert.equal(x.db.prepare("SELECT COUNT(*) AS n FROM member_mailbox WHERE type='activation'").get().n,1);
 });
@@ -252,7 +252,7 @@ test('if D1 committed but response was lost, same invite remains recoverable',as
 test('Mail Box batch actions reject other members and never delete a live code',async()=>{
  const x=fixture();
  await seedActivated(x);
- await x.request('/api/player/mailbox/request-activation',{method:'POST',body:{}});
+ await x.request('/api/player/mailbox/request-activation',{method:'POST',body:{purpose:'recovery'}});
  await x.request('/api/admin/mailbox/approve',{method:'POST',cookie:x.admin,
    body:{id:ID,verification:'identity-confirmed'}});
  const list=(await x.request('/api/player/mailbox')).data.items;
@@ -280,7 +280,7 @@ test('Mail Box batch actions reject other members and never delete a live code',
 test('Mail Box batch operations require a valid owner session, including status-only applicants',async()=>{
  const x=fixture();
  await seedActivated(x);
- await x.request('/api/player/mailbox/request-activation',{method:'POST',body:{}});
+ await x.request('/api/player/mailbox/request-activation',{method:'POST',body:{purpose:'recovery'}});
  const message=(await x.request('/api/player/mailbox')).data.items[0];
  assert.equal((await x.request('/api/player/mailbox/manage',{
    method:'POST',cookie:'',body:{action:'read',ids:[message.id]}})).status,403);
@@ -343,7 +343,41 @@ test('self-service activation spends an old admin preapproval to prevent later r
  const activated=await x.request('/api/player/security/activate',{method:'POST',
    body:{invite:code.data.code,password:'NewSecurePass#2040'}});
  assert.equal(activated.status,200,JSON.stringify(activated.data));
- const recovery=await x.request('/api/player/mailbox/request-activation',{method:'POST',body:{}});
+ const recovery=await x.request('/api/player/mailbox/request-activation',{method:'POST',body:{purpose:'recovery'}});
  assert.equal(recovery.status,200,JSON.stringify(recovery.data));
  assert.equal(recovery.data.delivered,false,'Recovery needs a NEW admin approval');
+});
+
+test('Diterima menerbitkan kode awal otomatis ketika status diperbarui',async()=>{
+ const x=fixture();
+ x.db.prepare("UPDATE submissions SET status='pending' WHERE id=?").run(ID);
+ const changed=await x.request('/api/admin/status',{method:'PATCH',cookie:x.admin,
+   body:{id:ID,status:'accepted'}});
+ assert.equal(changed.status,200,JSON.stringify(changed.data));
+ const inbox=await x.request('/api/player/mailbox');
+ assert.equal(inbox.status,200,JSON.stringify(inbox.data));
+ assert.equal(inbox.data.hasPassword,false);
+ assert.equal(inbox.data.activationRequest,'sent');
+ const code=inbox.data.items.filter(i=>i.type==='activation'&&i.canReveal);
+ assert.equal(code.length,1,'Kode otomatis masuk tanpa klik atau approval admin');
+ const second=await x.request('/api/player/mailbox/request-activation',{method:'POST',body:{}});
+ assert.equal(second.data.delivered,true);
+ assert.equal(x.db.prepare("SELECT COUNT(*) AS n FROM member_mailbox WHERE application_id=? AND type='activation'").get(ID).n,1);
+});
+test('akun sudah aktif tidak dapat meminta reset tanpa memilih pemulihan secara eksplisit',async()=>{
+ const x=fixture();await seedActivated(x);
+ const original=await x.request('/api/player/mailbox/request-activation',{method:'POST',body:{}});
+ assert.equal(original.status,200,JSON.stringify(original.data));
+ assert.equal(original.data.alreadyActivated,true);
+ const row=x.db.prepare('SELECT status FROM member_activation_requests WHERE application_id=?').get(ID);
+ assert.equal(row,undefined);
+ const intentional=await x.request('/api/player/mailbox/request-activation',{method:'POST',body:{purpose:'recovery'}});
+ assert.equal(intentional.status,200,JSON.stringify(intentional.data));
+ assert.equal(intentional.data.recovery,true);
+});
+test('header Registration tidak membuat tombol Mail Box dan avatar Profile',()=>{
+ const src=readFileSync(new URL('../public-unified.js',import.meta.url),'utf8');
+ assert.match(src,/const isRegistration=route\(page\)==='\/registration'/);
+ assert.match(src,/isRegistration\?'':/);
+ assert.match(src,/if\(!isRegistration\)\{/);
 });
