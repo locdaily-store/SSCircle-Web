@@ -3375,6 +3375,21 @@ async function mailboxStatusNote(env,applicationId,status,reason=''){
     // Type distinguishes accepted status notifications without HTML or new D1 columns.
     await mailboxNote(env,applicationId,status==='accepted'?'status_accepted':'status',
       message.title,message.content);
+    // First activation is delivered automatically when a 20-digit, accepted
+    // registration changes to Diterima. Never reset an existing password.
+    if(status==='accepted'){
+      try{
+        const member=await env.DB.prepare(
+          'SELECT tracking_code FROM submissions WHERE id=? AND status=?')
+          .bind(applicationId,'accepted').first();
+        if(/^[A-F0-9]{20}$/.test(member?.tracking_code||''))
+          await mailboxIssueInitialInvite(env,applicationId);
+      }catch{
+        // A temporary D1 error must not roll back the accepted status; the
+        // member can retry issuance from Mail Box without admin assistance.
+        console.error('[SSCircle] Automatic first activation delivery failed.');
+      }
+    }
     return true;
   }catch(error){
     console.error('[SSCircle] Mail Box status notification:',error);
@@ -4695,7 +4710,10 @@ async function mailboxAPI(req,env,path,method){
         row.expires_at>Math.floor(Date.now()/1000) &&
         invite?.used_at===null && invite?.expires_at===row.expires_at}));
     const items=[...inbox,...virtual].sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt))).slice(0,80);
-    return J({items,activationRequest:request?.status||'none',applicationStatus:account.status});
+    const credential=accepted?await env.DB.prepare(
+      'SELECT application_id FROM member_credentials WHERE application_id=?').bind(account.id).first():null;
+    return J({items,activationRequest:request?.status||'none',
+      applicationStatus:account.status,hasPassword:!!credential});
   }
   if(path==='/api/player/mailbox/request-activation' && method==='POST'){
     if(!accepted)
@@ -4719,7 +4737,13 @@ async function mailboxAPI(req,env,path,method){
         .bind(account.id).first();
       if(!nowActive)return bad('Kode belum dapat diterbitkan. Periksa status Diterima lalu coba lagi.',503);
     }
-    // Password recovery is deliberately a separate, admin-verified flow.
+    // Someone with an active password must explicitly request recovery from
+    // the Lupa Password screen; a generic activation click never queues admin.
+    const intention=await body(req,250);
+    if(intention?.purpose!=='recovery')return J({ok:true,delivered:false,
+      alreadyActivated:true,message:'Akun Profile sudah aktif. Masuk menggunakan password Dashboard. Jika lupa password, buka Keamanan akun → Lupa password.'});
+    // A registration-code session alone is NOT enough to reset an existing
+    // password. Recovery still requires independent identity verification.
     const activeInvite=await mailboxActiveInvite(env,account.id);
     if(activeInvite)return J({ok:true,delivered:true,recovery:true,
       message:'Kode pemulihan yang masih berlaku tersedia di Mail Box.'});
