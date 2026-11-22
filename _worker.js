@@ -4556,9 +4556,15 @@ async function mailboxIssueInitialInvite(env,memberId){
         WHERE id=? AND application_id=? AND type='activation')
       ON CONFLICT(application_id) DO UPDATE SET
         requested_at=excluded.requested_at,status='sent',updated_at=excluded.updated_at`)
-      .bind(memberId,stamp,stamp,messageId,memberId)
+      .bind(memberId,stamp,stamp,messageId,memberId),
+    // A prior unused admin approval must not become a password-recovery bypass
+    // after self-service activation succeeds. New recoveries require new approval.
+    env.DB.prepare(`UPDATE member_mailbox_approvals SET consumed_at=?
+      WHERE application_id=? AND consumed_at IS NULL AND EXISTS(
+        SELECT 1 FROM member_mailbox WHERE id=? AND application_id=? AND type='activation')`)
+      .bind(stamp+'#self-service',memberId,messageId,memberId)
   ]);
-  if(results.every(x=>x?.meta?.changes>0))
+  if(results.slice(0,3).every(x=>x?.meta?.changes>0))
     return {expiresAt:new Date(expires*1000).toISOString(),existing:false};
   // Another request may have sent a code first. Reuse that code, never rotate it.
   return mailboxActiveInvite(env,memberId);
