@@ -1,4 +1,5 @@
-/* SSCircle V10.49.1.5 | Verified account skins + distortion-free 3D preview.
+
+/* SSCircle V10.49.1.6 | Verified account skins + cross-member 3D preview URL fix.
    Skin textures are cosmetic. Never trust name/UUID alone to claim ownership.
    Native Canvas 2D 3D renderer: no remote scripts, CDN, WebGL dependency, or trackers. */
 'use strict';
@@ -15,11 +16,13 @@
   // enforces password session, ownership and data availability, not the UI.
   const eligible=a=>Boolean(a&&UUID.test(a.id||''));
   const urlForAccount=a=>eligible(a)?(typeof a.socialSkinUrl==='string'&&/^\/api\/player\/social\/skin\?account=[0-9a-f-]{36}$/.test(a.socialSkinUrl)?a.socialSkinUrl:'/api/player/minecraft/skin/'+encodeURIComponent(a.id)):null;
-  const errorHint=(status,code)=>{
-    if(status===404)return 'Skin belum diterima Cloudflare. Setelah login Minecraft, website akan memeriksa otomatis. Jika masih kosong, minta OP melihat /ssskin inspect <pemain>.';
-    if(status===403)return 'Sesi Profile perlu login ulang dengan password Dashboard.';
-    if(status===503)return 'Cloudflare belum bisa mengambil gambar dari Mojang. Pastikan Skin Bridge 10.49.1.3 mengirim PNG dan /ssskin inspect melaporkan SKIN_GAMBAR_TERSIMPAN_HTTP_200.';
-    return 'Gagal mengambil tekstur (HTTP '+status+(code?' · '+code:'')+'). Periksa /ssskin inspect <pemain>.';
+  const errorHint=(status,code,isSocial=false)=>{
+    if(status===404)return isSocial
+      ? 'Skin anggota belum tersedia atau akses profilnya dibatasi. Periksa izin profil dan pastikan PNG skin telah tersimpan di Cloudflare.'
+      : 'Skin belum diterima Cloudflare. Setelah login Minecraft, periksa /ssb check <pemain> jika masih kosong.';
+    if(status===403)return 'Sesi Profile perlu login ulang menggunakan password Dashboard.';
+    if(status===503)return 'Cloudflare belum dapat menampilkan gambar skin. Pastikan SkinBridge mengirim PNG dan /ssb check melaporkan skin tersimpan.';
+    return 'Gagal mengambil tekstur (HTTP '+status+(code?' · '+code:'')+'). Periksa /ssb check <pemain>.';
   };
   function loadSkin(a,force=false){
     const url=urlForAccount(a);
@@ -30,11 +33,16 @@
     if(!cache.has(key)){
       cache.set(key,(async()=>{
         try{
-          const response=await fetch(url+(a.skinUpdatedAt?'?v='+encodeURIComponent(a.skinUpdatedAt):''),
+          // The social endpoint already has ?account=UUID. URLSearchParams
+          // adds &v= safely instead of corrupting that account identifier.
+          const skinUrl=new URL(url,window.location.origin);
+          if(a.skinUpdatedAt)skinUrl.searchParams.set('v',a.skinUpdatedAt);
+          const response=await fetch(skinUrl.toString(),
             {credentials:'same-origin',cache:force?'no-store':'default'});
           if(!response.ok){
             let code='';try{const data=await response.json();code=data.code||'';}catch{}
-            return {image:null,error:errorHint(response.status,code)};
+            return {image:null,error:errorHint(response.status,code,
+              skinUrl.pathname==='/api/player/social/skin')};
           }
           const blob=await response.blob();
           if(blob.size<67||blob.size>1048576)return {image:null,error:'File skin tidak valid.'};
@@ -209,13 +217,25 @@
     };
     dialog._skinRefresh=async()=>{
       info.textContent='Memeriksa data skin terbaru di Cloudflare...';
+      const refreshId=currentAccount.id;
+      const refreshEpoch=dialog._skinEpoch;
       try{
-        const response=await fetch('/api/player/minecraft/link/state',{credentials:'same-origin',cache:'no-store'});
-        if(response.ok){
-          const state=await response.json();
-          currentAccount=state.accounts?.find(x=>x.id===currentAccount.id)||currentAccount;
+        // A member's skin is not present in the viewer's private link-state.
+        // Refresh that member directly from the privacy-checked social endpoint.
+        const isSocial=Boolean(currentAccount.socialSkinUrl&&
+          urlForAccount(currentAccount)?.startsWith('/api/player/social/skin?'));
+        if(!isSocial){
+          const response=await fetch('/api/player/minecraft/link/state',
+            {credentials:'same-origin',cache:'no-store'});
+          if(response.ok){
+            const state=await response.json();
+            if(dialog._skinEpoch!==refreshEpoch||currentAccount.id!==refreshId)return;
+            currentAccount=state.accounts?.find(x=>x.id===refreshId)||currentAccount;
+          }
         }
       }catch{/* Keep current account; loading still reports a useful error. */}
+      // Ignore a late refresh after another member's preview has been opened.
+      if(dialog._skinEpoch!==refreshEpoch||currentAccount.id!==refreshId)return;
       void display(currentAccount,true);
     };
     if(!dialog.open)dialog.showModal();dialog._skinReset();
