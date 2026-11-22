@@ -8,16 +8,16 @@
   const kindIcon=type=>({activation:'✦',status:'◆',announcement:'◈',event:'▦',friend_request:'♙',friend_response:'♙',badge:'★'})[type]||'✉';
   // Kode aktivasi hanya untuk pendaftar yang diterima; selain itu tombolnya dikunci.
   function applyAccess(){
-    const ok=appStatus==='accepted'&&!hasPassword;
+    const ok=appStatus==='accepted';
     $('mailbox-request-button').disabled=!ok;
-    $('mailbox-request-button').hidden=hasPassword;
+    $('mailbox-request-button').hidden=false;
     const hint=$('mailbox-request-hint');
-    if(hint)hint.hidden=appStatus==='accepted'||hasPassword;
-    $('mailbox-request-heading').textContent=hasPassword?'Akun Profile sudah aktif':'Kode aktivasi akun';
+    if(hint)hint.hidden=ok;
+    $('mailbox-request-heading').textContent=hasPassword?'Kode verifikasi akun':'Kode aktivasi akun';
     const message=$('mailbox-request-description');
     if(message)message.textContent=hasPassword
-      ?'Password Dashboard sudah dibuat. Kode aktivasi pertama tidak perlu diminta ulang. Untuk lupa password, buka Keamanan akun pada halaman Profile.'
-      :'Kode aktivasi pertama otomatis dikirim setelah status Diterima. Jika belum ada kode aktif, tekan Minta kode aktivasi.';
+      ?'Tekan Minta kode untuk menerima kode verifikasi otomatis setelah login dengan password Dashboard. Tidak memerlukan admin jika sesi login aman sudah aktif.'
+      :'Kode aktivasi pertama otomatis dikirim setelah status Diterima. Tekan Minta kode untuk memeriksa kode aktif atau menerbitkan kode baru.';
   }
   const fmt=date=>{
     const d=new Date(date);
@@ -109,7 +109,7 @@
       note(appStatus==='pending'?'Pendaftaranmu masih menunggu pemeriksaan pengurus SSCircle.':
         appStatus==='rejected'?'Pendaftaranmu belum dapat diterima. Baca pesan terbaru di kotak masuk.':
         data.activationRequest==='pending'?'Permintaan pemulihan password sedang diperiksa pengurus SSCircle.':
-        hasPassword?'Akun Profile sudah aktif.':'Pesanmu sudah diperbarui.');
+        hasPassword?'Akun aktif. Kode verifikasi dapat diminta setelah login Dashboard.':'Pesanmu sudah diperbarui.');
       if(current){current=items.find(x=>x.id===current.id)||null;if(current)await openMessage(current);}
       renderList();
     }catch(error){
@@ -124,7 +124,7 @@
     }finally{$('mailbox-refresh').disabled=false;loading=false;}
   }
   $('mailbox-request-button').addEventListener('click',async()=>{
-    const b=$('mailbox-request-button');b.disabled=true;note('Mengajukan permintaan aktivasi...');
+    const b=$('mailbox-request-button');b.disabled=true;note('Memproses permintaan kode aktivasi atau verifikasi...');
     try{
       const response=await call('/api/player/mailbox/request-activation','POST',{});
       await load();note(response.message); // No automatic page redirect; already inside Mail Box.
