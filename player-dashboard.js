@@ -343,7 +343,7 @@
         headers:{'Content-Type':'application/json'},body:'{}'});
       securityMessage(data.delivered?
         'Kode pemulihan tersedia di Mail Box. Gunakan tombol Sudah punya kode untuk membuat password baru.':
-        'Permintaan dicatat. Pengurus harus memverifikasi identitasmu sebelum kode dikirim ke Mail Box.');
+        'Permintaan pemulihan dicatat. Pengurus harus memverifikasi identitasmu sebelum kode pemulihan dikirim ke Mail Box.');
       await window.SSCircleMailbox?.open();
     }catch(error){securityMessage('Pemulihan belum dapat diajukan: '+error.message);}
     finally{button.disabled=false;}
