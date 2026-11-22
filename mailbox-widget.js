@@ -12,7 +12,7 @@
     '<button type="button" class="ssc-mailbox-close" id="ssc-mailbox-close" aria-label="Tutup Mail Box">×</button></div>',
     '<div class="ssc-mailbox-content">',
     '<section class="mailbox-request mailbox-surface"><div class="mailbox-request-copy"><h3>Kode aktivasi akun</h3>',
-    '<p>Minta kode aktivasi di sini. Setelah identitas diverifikasi pengurus, kode tersedia di kotak masuk.</p>',
+    '<p>Setelah status pendaftaran Diterima, kode aktivasi pertama langsung dikirim ke Mail Box. Pemulihan password tetap diverifikasi admin.</p>',
     '<small id="ssc-mailbox-request-hint" hidden>Kode aktivasi baru tersedia setelah pendaftaranmu diterima.</small>',
     '</div><button type="button" id="ssc-mailbox-request" class="mailbox-primary" disabled>Minta kode</button></section>',
     '<div class="ssc-mailbox-feedback"><p class="mailbox-message" id="ssc-mailbox-message" role="status" aria-live="polite"></p>',
@@ -57,7 +57,7 @@
     '<button type="button" class="mailbox-primary" id="ssc-mailbox-copy">Salin kode</button></div>',
     '<small id="ssc-mailbox-secret-status" role="status"></small></div>',
     '<button type="button" id="ssc-mailbox-delete" class="ssc-mailbox-delete">Hapus notifikasi</button></div></section></div>',
-    '<p class="mailbox-privacy">Kode pendaftaran tetap bersifat rahasia. Akun yang belum aktif memerlukan verifikasi pengurus untuk mendapatkan kode aktivasi.</p></div>'
+    '<p class="mailbox-privacy">Jaga kerahasiaan kode pendaftaran dan kode aktivasi. Aktivasi pertama tersedia otomatis setelah Diterima; pemulihan password memerlukan verifikasi admin.</p></div>'
   ].join('');
   document.body.append(dialog);
   const $=id=>dialog.querySelector('#'+id);
@@ -239,7 +239,7 @@
         if(!silent)notify(appStatus==='pending'?'Pendaftaranmu masih menunggu pemeriksaan pengurus SSCircle.':
           appStatus==='rejected'?'Pendaftaranmu belum dapat diterima. Baca pesan terbaru di kotak masuk.':
           value.activationRequest==='pending'?
-          'Permintaan kode menunggu verifikasi pengurus.':'Notifikasi sudah diperbarui.');
+          'Permintaan pemulihan password sedang menunggu verifikasi admin.':'Notifikasi sudah diperbarui.');
       }catch(error){
         // Never retain a previous account's messages after an auth or network failure.
         items=[];selected.clear();selecting=false;emptyDetail();loaded=true;loadFailed=true;draw();
