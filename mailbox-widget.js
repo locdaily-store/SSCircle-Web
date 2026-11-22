@@ -11,8 +11,8 @@
     '<div class="ssc-mailbox-head"><div><span class="mailbox-eyebrow">SSCIRCLE / NOTIFIKASI</span><h2 id="ssc-mailbox-title">Mail Box</h2></div>',
     '<button type="button" class="ssc-mailbox-close" id="ssc-mailbox-close" aria-label="Tutup Mail Box">×</button></div>',
     '<div class="ssc-mailbox-content">',
-    '<section class="mailbox-request mailbox-surface"><div class="mailbox-request-copy"><h3>Kode aktivasi akun</h3>',
-    '<p>Setelah status pendaftaran Diterima, kode aktivasi pertama langsung dikirim ke Mail Box. Pemulihan password tetap diverifikasi admin.</p>',
+    '<section class="mailbox-request mailbox-surface"><div class="mailbox-request-copy"><h3 id="ssc-mailbox-request-heading">Kode aktivasi akun</h3>',
+    '<p id="ssc-mailbox-request-description">Setelah status pendaftaran Diterima, kode aktivasi pertama langsung dikirim ke Mail Box. Pemulihan password tetap diverifikasi admin.</p>',
     '<small id="ssc-mailbox-request-hint" hidden>Kode aktivasi baru tersedia setelah pendaftaranmu diterima.</small>',
     '</div><button type="button" id="ssc-mailbox-request" class="mailbox-primary" disabled>Minta kode</button></section>',
     '<div class="ssc-mailbox-feedback"><p class="mailbox-message" id="ssc-mailbox-message" role="status" aria-live="polite"></p>',
@@ -62,14 +62,19 @@
   document.body.append(dialog);
   const $=id=>dialog.querySelector('#'+id);
   let items=[],current=null,filter='all',lastTrigger=null,refreshTask=null,loaded=false,loadFailed=false,deleting=false,
-    selecting=false,selected=new Set(),managing=false,appStatus='none';
+    selecting=false,selected=new Set(),managing=false,appStatus='none',hasPassword=false;
   const kindLabel=type=>({activation:'AKTIVASI AKUN',status:'STATUS PENDAFTARAN',announcement:'PENGUMUMAN RESMI',event:'EVENT SSCIRCLE',friend_request:'KOMUNITAS',friend_response:'KOMUNITAS',badge:'PENGHARGAAN'})[type]||'PEMBERITAHUAN';
   const kindIcon=type=>({activation:'✦',status:'◆',announcement:'◈',event:'▦',friend_request:'♙',friend_response:'♙',badge:'★'})[type]||'✉';
   // Kode aktivasi hanya untuk pendaftar yang diterima; selain itu tombolnya dikunci.
   function applyAccess(){
-    const ok=appStatus==='accepted';
+    const ok=appStatus==='accepted'&&!hasPassword;
     $('ssc-mailbox-request').disabled=!ok;
-    $('ssc-mailbox-request-hint').hidden=ok;
+    $('ssc-mailbox-request').hidden=hasPassword;
+    $('ssc-mailbox-request-hint').hidden=appStatus==='accepted'||hasPassword;
+    $('ssc-mailbox-request-heading').textContent=hasPassword?'Akun Profile sudah aktif':'Kode aktivasi akun';
+    $('ssc-mailbox-request-description').textContent=hasPassword
+      ?'Password Dashboard sudah dibuat. Kamu tidak perlu kode aktivasi lagi. Jika lupa password, buka Profile → Keamanan akun → Lupa password untuk memulai pemulihan yang memerlukan verifikasi identitas.'
+      :'Setelah status pendaftaran Diterima, kode aktivasi pertama otomatis masuk ke Mail Box. Kamu juga bisa menekan Minta kode untuk mengirim ulang jika belum ada kode aktif.';
   }
   const fmt=date=>{
     const value=new Date(date);
@@ -228,7 +233,8 @@
       try{
         const value=await api('/api/player/mailbox');
         items=Array.isArray(value.items)?value.items:[];
-        appStatus=['pending','accepted','rejected'].includes(value.applicationStatus)?value.applicationStatus:'none';applyAccess();
+        appStatus=['pending','accepted','rejected'].includes(value.applicationStatus)?value.applicationStatus:'none';
+        hasPassword=value.hasPassword===true;applyAccess();
         selected.clear();loaded=true;loadFailed=false;
         $('ssc-mailbox-signin').hidden=true;
         if(current){
@@ -239,11 +245,12 @@
         if(!silent)notify(appStatus==='pending'?'Pendaftaranmu masih menunggu pemeriksaan pengurus SSCircle.':
           appStatus==='rejected'?'Pendaftaranmu belum dapat diterima. Baca pesan terbaru di kotak masuk.':
           value.activationRequest==='pending'?
-          'Permintaan pemulihan password sedang menunggu verifikasi admin.':'Notifikasi sudah diperbarui.');
+          'Pemulihan password untuk akun yang sudah aktif sedang menunggu verifikasi admin.':
+          hasPassword?'Akun Profile sudah aktif. Tidak perlu meminta kode aktivasi ulang.':'Notifikasi sudah diperbarui.');
       }catch(error){
         // Never retain a previous account's messages after an auth or network failure.
         items=[];selected.clear();selecting=false;emptyDetail();loaded=true;loadFailed=true;draw();
-        appStatus='none';applyAccess();
+        appStatus='none';hasPassword=false;applyAccess();
         $('ssc-mailbox-signin').hidden=![401,403].includes(error.status);
         if(!silent||dialog.open)notify([401,403].includes(error.status)?
           'Masuk dengan kode pendaftaranmu melalui Cek Status untuk membuka Mail Box.':
