@@ -25,7 +25,12 @@ window.SSCircleMemberCenterAdmin = (() => {
     if(description)box.append(el('p','',description));
     return box;
   };
-  const memberName=m=>m.displayName||'Anggota '+String(m.id||'').slice(0,8).toUpperCase();
+  // Username Minecraft dari pendaftaran lebih dulu: nama tampilan hanya ada bila anggota mengisinya sendiri.
+  const memberName=m=>m.applicantName||m.displayName||'Anggota '+String(m.id||'').slice(0,8).toUpperCase();
+  const memberSub=m=>{
+    const id=String(m.id||'').slice(0,8).toUpperCase();
+    return m.displayName&&m.displayName!==memberName(m)?m.displayName+' · '+id:id;
+  };
   const message=(value,error=false)=>{const node=document.getElementById('member-admin-message');if(node){node.textContent=value;node.dataset.error=String(error);}};
   async function refreshData(){
     const items=[];let offset=0,first=null;
@@ -46,7 +51,7 @@ window.SSCircleMemberCenterAdmin = (() => {
     for(const m of rows){
       const card=el('article','member-admin-member');
       const info=el('div','member-admin-member-info');
-      info.append(el('strong','',memberName(m)),el('small','',String(m.id).slice(0,8).toUpperCase()));
+      info.append(el('strong','',memberName(m)),el('small','',memberSub(m)));
       const meta=el('div','member-admin-member-meta');
       const status={accepted:'Diterima',pending:'Menunggu',rejected:'Ditolak'}[m.status]||m.status;
       meta.append(el('span','member-admin-chip',status),el('span','',m.linkedCount+' akun Minecraft'));
@@ -83,9 +88,9 @@ window.SSCircleMemberCenterAdmin = (() => {
     const content=el('section','panel member-admin-panel');
     const note=el('p','member-admin-message');note.id='member-admin-message';note.setAttribute('role','status');
     if(current==='roster'){
-      content.append(heading('Daftar anggota','Cari berdasarkan nama, ID, atau status. Untuk membersihkan data pemain yang diban di Paper, ubah status pendaftaran menjadi Ditolak dahulu. Daftar ban Minecraft tidak dihapus.'));
+      content.append(heading('Daftar anggota','Cari berdasarkan username Minecraft, nama tampilan, ID, atau status. Untuk membersihkan data pemain yang diban di Paper, ubah status pendaftaran menjadi Ditolak dahulu. Daftar ban Minecraft tidak dihapus.'));
       const tools=el('div','member-admin-filters');
-      const input=el('input');input.type='search';input.placeholder='Cari nama atau ID anggota...';input.value=search;input.setAttribute('aria-label','Cari anggota');
+      const input=el('input');input.type='search';input.placeholder='Cari username, nama atau ID anggota...';input.value=search;input.setAttribute('aria-label','Cari anggota');
       const statuses=el('select');statuses.setAttribute('aria-label','Filter status');
       for(const [value,label] of [['all','Semua status'],['accepted','Diterima'],['pending','Menunggu'],['rejected','Ditolak']]){
         const o=el('option','',label);o.value=value;statuses.append(o);
@@ -93,7 +98,7 @@ window.SSCircleMemberCenterAdmin = (() => {
       statuses.value=statusFilter;
       const list=el('div');
       const drawList=()=>{list.replaceChildren();const q=search.toLowerCase().trim();const rows=snapshot.items.filter(m=>
-        (statusFilter==='all'||m.status===statusFilter)&&(!q||memberName(m).toLowerCase().includes(q)||m.id.toLowerCase().includes(q)));
+        (statusFilter==='all'||m.status===statusFilter)&&(!q||memberName(m).toLowerCase().includes(q)||String(m.displayName||'').toLowerCase().includes(q)||m.id.toLowerCase().includes(q)));
         renderTable(list,rows,false,true);
       };
       input.oninput=()=>{search=input.value;drawList();};

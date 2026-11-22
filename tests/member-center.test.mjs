@@ -155,3 +155,37 @@ test('saved seven-section Profile layout preserves its order after adding Social
  assert.deepEqual(current.filter(x=>x!=='social'),previous);
  assert.ok(current.indexOf('social')<current.indexOf('explore'));
 });
+
+test('daftar anggota admin menampilkan username Minecraft dari jawaban pendaftaran',async()=>{
+ const t=fixture();
+ // Fixture dasar tidak punya kolom jawaban: daftar tetap tampil, hanya tanpa nama pendaftar.
+ const legacy=await t.req('/api/admin/member-center',{cookie:t.admin});
+ assert.equal(legacy.status,200,JSON.stringify(legacy.data));
+ assert.equal(legacy.data.items[0].applicantName,'');
+ t.db.exec('ALTER TABLE submissions ADD COLUMN answers TEXT;ALTER TABLE submissions ADD COLUMN question_snapshot TEXT');
+ const set=(answers,questions)=>t.db.prepare('UPDATE submissions SET answers=?,question_snapshot=? WHERE id=?')
+   .run(answers,questions,ID);
+ const name=async()=>(await t.req('/api/admin/member-center',{cookie:t.admin})).data.items[0].applicantName;
+ // Username Minecraft didahulukan walau pertanyaan Discord berada di urutan pertama.
+ set(JSON.stringify({discord:'disc#1',ign:'  JasitS  '}),JSON.stringify([
+   {id:'discord',title:'Apa username Discord Kamu?'},{id:'ign',title:'Sebutkan username Minecraft kamu!'}]));
+ assert.equal(await name(),'JasitS');
+ // Aturan lama admin.js tetap berlaku bila tidak ada pertanyaan yang menyebut Minecraft.
+ set(JSON.stringify({a:'Nama IGN',b:'x'}),JSON.stringify([{id:'a',title:'Isi nickname kamu'}]));
+ assert.equal(await name(),'Nama IGN');
+ // Tanpa snapshot pertanyaan, kunci jawaban bernama ign dipakai.
+ set(JSON.stringify({ign:'Cadangan'}),'[]');
+ assert.equal(await name(),'Cadangan');
+ // Jawaban kosong, bukan teks, atau JSON rusak tidak merusak daftar.
+ set(JSON.stringify({ign:'   '}),'[]');assert.equal(await name(),'');
+ set(JSON.stringify({ign:['x']}),'[]');assert.equal(await name(),'');
+ set('{bukan json','[]');assert.equal(await name(),'');
+ set(JSON.stringify({ign:'Pan\u0007jang'+'x'.repeat(100)}),'[]');
+ const long=await name();
+ assert.ok(long.length<=64&&!/[\u0000-\u001f]/.test(long));
+ // Kode pendaftaran bersifat rahasia dan tidak ikut dikirim ke daftar ini.
+ const roster=await t.req('/api/admin/member-center',{cookie:t.admin});
+ assert.equal(JSON.stringify(roster.data).includes(CODE),false);
+ // Hanya admin yang dapat membaca daftar.
+ assert.equal((await t.req('/api/admin/member-center',{cookie:t.player})).status,401);
+});

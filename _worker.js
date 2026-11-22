@@ -3048,6 +3048,41 @@ async function memberPurgeAPI(req,env,method){
     message:'Data anggota terkait telah dihapus. Ban server Minecraft tidak berubah.'});
 }
 
+/* V10.56 - Nama pendaftar untuk panel admin (Kelola Pemain).
+   Nama tampilan (member_profiles.display_name) hanya terisi bila anggota sendiri mengisinya, sehingga
+   admin hanya melihat kode. Username Minecraft dari jawaban pendaftaran selalu ada, jadi diambil dari sana.
+   Aturannya mengikuti applicantName() di admin.js, dengan satu tambahan: pertanyaan yang menyebut
+   Minecraft/IGN didahulukan agar username Discord atau TikTok tidak terambil bila urutan formulir berubah.
+   Hanya dipakai oleh endpoint admin. */
+function applicantNameFrom(answersJson,snapshotJson){
+  const parse=value=>{try{return JSON.parse(value||'null');}catch{return null;}};
+  const raw=parse(answersJson),questions=parse(snapshotJson);
+  const answers=raw&&typeof raw==='object'&&!Array.isArray(raw)?raw:{};
+  const list=Array.isArray(questions)?questions:[];
+  const title=q=>String(q?.title||'');
+  const candidate=list.find(q=>/minecraft|gamertag|\bign\b/i.test(title(q))&&/username|gamertag|nickname|nama|ign/i.test(title(q)))||
+    list.find(q=>/username|gamertag|nickname|nama (pemain|minecraft)|ign\b/i.test(title(q)));
+  let value=candidate?answers[candidate.id]:null;
+  if(typeof value!=='string'||!value.trim()){
+    const key=Object.keys(answers).find(k=>/ign|username|nickname|gamertag/i.test(k));
+    value=key?answers[key]:null;
+  }
+  return typeof value==='string'?value.replace(/[\u0000-\u001f\u007f]/g,'').trim().slice(0,64):'';
+}
+// Dibaca terpisah dan dibungkus try/catch: bila jawaban tidak terbaca, daftar anggota tetap tampil.
+async function applicantNamesFor(env,ids){
+  const names=new Map();
+  try{
+    for(let i=0;i<ids.length;i+=50){
+      const chunk=ids.slice(i,i+50);
+      const rows=await env.DB.prepare('SELECT id,answers,question_snapshot FROM submissions WHERE id IN ('+
+        chunk.map(()=>'?').join(',')+')').bind(...chunk).all();
+      for(const row of rows.results||[])names.set(row.id,applicantNameFrom(row.answers,row.question_snapshot));
+    }
+  }catch(error){console.error('[SSCircle] applicant names for admin roster:',error);}
+  return names;
+}
+
 async function memberCenterAPI(req,env,path,method) {
   if (path.startsWith('/api/admin/')) {
     if (!await admin(req,env)) return bad('Silakan masuk ke Admin Control.',401);
@@ -3068,8 +3103,11 @@ async function memberCenterAPI(req,env,path,method) {
         (SELECT MAX(last_synced_at) FROM player_stat_snapshots ps WHERE ps.application_id=s.id) AS last_sync
         FROM submissions s LEFT JOIN member_profiles p ON p.application_id=s.id
         ORDER BY s.submitted_at DESC LIMIT 101 OFFSET ?`).bind(offset).all();
-      const items=(rows.results||[]).slice(0,100).map(a=>({
+      const page=(rows.results||[]).slice(0,100);
+      const applicantNames=await applicantNamesFor(env,page.map(a=>a.id));
+      const items=page.map(a=>({
         id:a.id,status:a.status,submittedAt:a.submitted_at,displayName:a.display_name,
+        applicantName:applicantNames.get(a.id)||'',
         visibility:a.visibility,sessionEpoch:a.session_epoch,linkedCount:a.linked_count||0,
         secureActive:!!a.secure_active,secureSessions:a.secure_sessions||0,activationRequest:a.activation_request||'none',
         lastSync:a.last_sync||null
