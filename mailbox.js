@@ -101,7 +101,7 @@
       appStatus=['pending','accepted','rejected'].includes(data.applicationStatus)?data.applicationStatus:'none';applyAccess();
       note(appStatus==='pending'?'Pendaftaranmu masih menunggu pemeriksaan pengurus SSCircle.':
         appStatus==='rejected'?'Pendaftaranmu belum dapat diterima. Baca pesan terbaru di kotak masuk.':
-        data.activationRequest==='pending'?'Permintaan kode sedang diperiksa oleh pengurus SSCircle.':
+        data.activationRequest==='pending'?'Permintaan pemulihan password sedang diperiksa pengurus SSCircle.':
         'Pesanmu sudah diperbarui.');
       if(current){current=items.find(x=>x.id===current.id)||null;if(current)await openMessage(current);}
       renderList();
