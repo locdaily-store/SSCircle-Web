@@ -325,3 +325,25 @@ test('Accepted status Mail Box includes custom Discord invite CTA, never for rej
  const after=await x.request('/api/player/mailbox');
  assert.equal(after.data.items.find(row=>row.content.includes('Dokumen belum lengkap')).discordCTA,null);
 });
+
+test('self-service activation spends an old admin preapproval to prevent later recovery bypass',async()=>{
+ const x=fixture();
+ const approved=await x.request('/api/admin/mailbox/approve',{method:'POST',cookie:x.admin,
+   body:{id:ID,verification:'identity-confirmed'}});
+ assert.equal(approved.status,200,JSON.stringify(approved.data));
+ assert.equal(approved.data.delivered,false);
+ const issued=await x.request('/api/player/mailbox/request-activation',{method:'POST',body:{}});
+ assert.equal(issued.status,200,JSON.stringify(issued.data));
+ assert.equal(issued.data.delivered,true);
+ const approval=x.db.prepare('SELECT consumed_at FROM member_mailbox_approvals WHERE application_id=?').get(ID);
+ assert.ok(approval.consumed_at,'Preapproval must not carry into password recovery');
+ const first=(await x.request('/api/player/mailbox')).data.items.find(m=>m.type==='activation');
+ const code=await x.request('/api/player/mailbox/reveal',{method:'POST',body:{id:first.id}});
+ assert.equal(code.status,200,JSON.stringify(code.data));
+ const activated=await x.request('/api/player/security/activate',{method:'POST',
+   body:{invite:code.data.code,password:'NewSecurePass#2040'}});
+ assert.equal(activated.status,200,JSON.stringify(activated.data));
+ const recovery=await x.request('/api/player/mailbox/request-activation',{method:'POST',body:{}});
+ assert.equal(recovery.status,200,JSON.stringify(recovery.data));
+ assert.equal(recovery.data.delivered,false,'Recovery needs a NEW admin approval');
+});
