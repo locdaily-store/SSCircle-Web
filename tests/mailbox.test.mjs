@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {DatabaseSync} from 'node:sqlite';
-import {createHmac,pbkdf2Sync} from 'node:crypto';
+import {createHmac,createHash,pbkdf2Sync} from 'node:crypto';
 const source=readFileSync(new URL('../_worker.js',import.meta.url),'utf8');
 const worker=(await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'))).default;
 const SECRET='mailbox-regression-secret',ADMIN='mailbox-admin-verify';
@@ -380,4 +380,49 @@ test('header Registration tidak membuat tombol Mail Box dan avatar Profile',()=>
  assert.match(src,/const isRegistration=route\(page\)==='\/registration'/);
  assert.match(src,/isRegistration\?'':/);
  assert.match(src,/if\(!isRegistration\)\{/);
+});
+
+test('kode verifikasi akun aktif otomatis hanya setelah login Dashboard aman',async()=>{
+ const x=fixture();
+ await x.request('/api/player/security/state');
+ const saltBytes=Buffer.alloc(16,29);
+ const salt=saltBytes.toString('base64url');
+ const password='TestSecurePassword#2026';
+ const proof=pbkdf2Sync(password,saltBytes,220000,32,'sha256').toString('base64url');
+ const hash='v2.'+createHash('sha256').update('sscircle-member-verifier-v2|'+proof).digest('base64url');
+ const now=new Date().toISOString();
+ x.db.prepare(`INSERT INTO member_credentials
+   (application_id,password_salt,password_hash,iterations,created_at,updated_at)
+   VALUES(?,?,?,?,?,?)`).run(ID,salt,hash,220000,now,now);
+ const denied=await x.request('/api/player/mailbox/request-activation',{method:'POST',body:{}});
+ assert.equal(denied.status,403,JSON.stringify(denied.data));
+ const login=await x.request('/api/player/security/login',{method:'POST',body:{code:CODE,proof}});
+ assert.equal(login.status,200,JSON.stringify(login.data));
+ const cookie=login.response.headers.getSetCookie().find(v=>v.startsWith('ssc_member_secure=')).split(';')[0];
+ const secure=x.member+'; '+cookie;
+ const issued=await x.request('/api/player/mailbox/request-activation',{method:'POST',body:{},cookie:secure});
+ assert.equal(issued.status,200,JSON.stringify(issued.data));
+ assert.equal(issued.data.delivered,true);
+ assert.equal(issued.data.verification,true);
+ const inbox=await x.request('/api/player/mailbox',{cookie:secure});
+ const row=inbox.data.items.find(item=>item.title==='Kode verifikasi akun tersedia');
+ assert.ok(row?.canReveal);
+ const outsider=await x.request('/api/player/mailbox',{cookie:x.member});
+ assert.equal(outsider.data.items.find(item=>item.id===row.id).canReveal,false);
+ assert.equal((await x.request('/api/player/mailbox/reveal',{
+   method:'POST',body:{id:row.id},cookie:x.member})).status,403);
+ const revealed=await x.request('/api/player/mailbox/reveal',{
+   method:'POST',body:{id:row.id},cookie:secure});
+ assert.equal(revealed.status,200);
+ assert.match(revealed.data.code,/^[A-Za-z0-9_-]{32}$/);
+ const again=await x.request('/api/player/mailbox/request-activation',{method:'POST',body:{},cookie:secure});
+ assert.equal(again.status,200);
+ assert.equal(x.db.prepare("SELECT COUNT(*) AS n FROM member_mailbox WHERE type='activation'").get().n,1);
+});
+
+test('tombol Minta kode tetap tampil pada akun dengan password',()=>{
+ const widget=readFileSync(new URL('../mailbox-widget.js',import.meta.url),'utf8');
+ const standalone=readFileSync(new URL('../mailbox.js',import.meta.url),'utf8');
+ assert.match(widget,/\$\('ssc-mailbox-request'\)\.hidden=false/);
+ assert.match(standalone,/\$\('mailbox-request-button'\)\.hidden=false/);
 });
