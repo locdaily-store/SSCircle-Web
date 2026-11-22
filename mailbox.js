@@ -3,15 +3,21 @@
 'use strict';
 (() => {
   const $=id=>document.getElementById(id);
-  let items=[],current=null,filter='all',loading=false,appStatus='none';
+  let items=[],current=null,filter='all',loading=false,appStatus='none',hasPassword=false;
   const kindLabel=type=>({activation:'AKTIVASI AKUN',status:'STATUS PENDAFTARAN',announcement:'PENGUMUMAN RESMI',event:'EVENT SSCIRCLE',friend_request:'KOMUNITAS',friend_response:'KOMUNITAS',badge:'PENGHARGAAN'})[type]||'PEMBERITAHUAN';
   const kindIcon=type=>({activation:'✦',status:'◆',announcement:'◈',event:'▦',friend_request:'♙',friend_response:'♙',badge:'★'})[type]||'✉';
   // Kode aktivasi hanya untuk pendaftar yang diterima; selain itu tombolnya dikunci.
   function applyAccess(){
-    const ok=appStatus==='accepted';
+    const ok=appStatus==='accepted'&&!hasPassword;
     $('mailbox-request-button').disabled=!ok;
+    $('mailbox-request-button').hidden=hasPassword;
     const hint=$('mailbox-request-hint');
-    if(hint)hint.hidden=ok;
+    if(hint)hint.hidden=appStatus==='accepted'||hasPassword;
+    $('mailbox-request-heading').textContent=hasPassword?'Akun Profile sudah aktif':'Kode aktivasi akun';
+    const message=$('mailbox-request-description');
+    if(message)message.textContent=hasPassword
+      ?'Password Dashboard sudah dibuat. Kode aktivasi pertama tidak perlu diminta ulang. Untuk lupa password, buka Keamanan akun pada halaman Profile.'
+      :'Kode aktivasi pertama otomatis dikirim setelah status Diterima. Jika belum ada kode aktif, tekan Minta kode aktivasi.';
   }
   const fmt=date=>{
     const d=new Date(date);
@@ -98,16 +104,17 @@
     loading=true;$('mailbox-refresh').disabled=true;
     try{
       const data=await call('/api/player/mailbox');items=data.items||[];
-      appStatus=['pending','accepted','rejected'].includes(data.applicationStatus)?data.applicationStatus:'none';applyAccess();
+      appStatus=['pending','accepted','rejected'].includes(data.applicationStatus)?data.applicationStatus:'none';
+      hasPassword=data.hasPassword===true;applyAccess();
       note(appStatus==='pending'?'Pendaftaranmu masih menunggu pemeriksaan pengurus SSCircle.':
         appStatus==='rejected'?'Pendaftaranmu belum dapat diterima. Baca pesan terbaru di kotak masuk.':
         data.activationRequest==='pending'?'Permintaan pemulihan password sedang diperiksa pengurus SSCircle.':
-        'Pesanmu sudah diperbarui.');
+        hasPassword?'Akun Profile sudah aktif.':'Pesanmu sudah diperbarui.');
       if(current){current=items.find(x=>x.id===current.id)||null;if(current)await openMessage(current);}
       renderList();
     }catch(error){
       // Never retain a different applicant's private message after logout or network failure.
-      items=[];current=null;appStatus='none';applyAccess();
+      items=[];current=null;appStatus='none';hasPassword=false;applyAccess();
       $('mailbox-detail-content').hidden=true;
       $('mailbox-detail-empty').hidden=false;
       $('mailbox-secret-value').textContent='';
