@@ -57,7 +57,7 @@
     '<button type="button" class="mailbox-primary" id="ssc-mailbox-copy">Salin kode</button></div>',
     '<small id="ssc-mailbox-secret-status" role="status"></small></div>',
     '<button type="button" id="ssc-mailbox-delete" class="ssc-mailbox-delete">Hapus notifikasi</button></div></section></div>',
-    '<p class="mailbox-privacy">Jaga kerahasiaan kode pendaftaran dan kode aktivasi. Aktivasi pertama tersedia otomatis setelah Diterima; pemulihan password memerlukan verifikasi admin.</p></div>'
+    '<p class="mailbox-privacy">Jaga kerahasiaan kode pendaftaran dan kode verifikasi. Aktivasi pertama otomatis setelah Diterima. Akun aktif dapat meminta kode tanpa admin setelah login Dashboard yang aman.</p></div>'
   ].join('');
   document.body.append(dialog);
   const $=id=>dialog.querySelector('#'+id);
@@ -67,14 +67,14 @@
   const kindIcon=type=>({activation:'✦',status:'◆',announcement:'◈',event:'▦',friend_request:'♙',friend_response:'♙',badge:'★'})[type]||'✉';
   // Kode aktivasi hanya untuk pendaftar yang diterima; selain itu tombolnya dikunci.
   function applyAccess(){
-    const ok=appStatus==='accepted'&&!hasPassword;
+    const ok=appStatus==='accepted';
     $('ssc-mailbox-request').disabled=!ok;
-    $('ssc-mailbox-request').hidden=hasPassword;
-    $('ssc-mailbox-request-hint').hidden=appStatus==='accepted'||hasPassword;
-    $('ssc-mailbox-request-heading').textContent=hasPassword?'Akun Profile sudah aktif':'Kode aktivasi akun';
+    $('ssc-mailbox-request').hidden=false;
+    $('ssc-mailbox-request-hint').hidden=ok;
+    $('ssc-mailbox-request-heading').textContent=hasPassword?'Kode verifikasi akun':'Kode aktivasi akun';
     $('ssc-mailbox-request-description').textContent=hasPassword
-      ?'Password Dashboard sudah dibuat. Kamu tidak perlu kode aktivasi lagi. Jika lupa password, buka Profile → Keamanan akun → Lupa password untuk memulai pemulihan yang memerlukan verifikasi identitas.'
-      :'Setelah status pendaftaran Diterima, kode aktivasi pertama otomatis masuk ke Mail Box. Kamu juga bisa menekan Minta kode untuk mengirim ulang jika belum ada kode aktif.';
+      ?'Tombol Minta kode tetap tersedia. Setelah kamu login dengan password Dashboard, kode verifikasi dikirim otomatis ke Mail Box tanpa admin. Jika lupa password dan belum login, gunakan pemulihan akun dengan verifikasi kepemilikan.'
+      :'Untuk pendaftar Diterima yang belum mempunyai password, kode aktivasi pertama otomatis dikirim ke Mail Box. Tekan Minta kode untuk memeriksa atau mengirim kode baru bila kode lama kedaluwarsa.';
   }
   const fmt=date=>{
     const value=new Date(date);
@@ -246,7 +246,7 @@
           appStatus==='rejected'?'Pendaftaranmu belum dapat diterima. Baca pesan terbaru di kotak masuk.':
           value.activationRequest==='pending'?
           'Pemulihan password untuk akun yang sudah aktif sedang menunggu verifikasi admin.':
-          hasPassword?'Akun Profile sudah aktif. Tidak perlu meminta kode aktivasi ulang.':'Notifikasi sudah diperbarui.');
+          hasPassword?'Akun sudah aktif. Minta kode verifikasi otomatis setelah login Dashboard.':'Notifikasi sudah diperbarui.');
       }catch(error){
         // Never retain a previous account's messages after an auth or network failure.
         items=[];selected.clear();selecting=false;emptyDetail();loaded=true;loadFailed=true;draw();
@@ -340,7 +340,7 @@
   }));
   $('ssc-mailbox-request').addEventListener('click',async()=>{
     const button=$('ssc-mailbox-request');
-    button.disabled=true;notify('Memproses permintaan kode aktivasi...');
+    button.disabled=true;notify('Memproses permintaan kode aktivasi atau verifikasi...');
     try{
       const result=await api('/api/player/mailbox/request-activation','POST',{});
       await refresh(true);notify(result.message);
