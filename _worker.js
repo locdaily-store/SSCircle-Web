@@ -538,7 +538,7 @@ function publicEvents(settings) {
 // Teks dan kategori aturan awal. Seluruhnya bisa diedit melalui Admin Control.
 const RULES_DEFAULTS = {
   "mailboxAcceptedTitle": "Selamat, pendaftaranmu diterima",
-  "mailboxAcceptedBody": "Pendaftaranmu telah diterima. Untuk mengaktifkan akun, minta kode aktivasi dari bagian atas Mail Box. Kode dikirim setelah identitasmu diverifikasi oleh pengurus.",
+  "mailboxAcceptedBody": "Pendaftaranmu telah diterima. Kamu bisa meminta kode aktivasi pertama langsung dari Mail Box dan kode otomatis dikirim. Pemulihan password yang sudah aktif tetap memerlukan verifikasi pengurus.",
   "mailboxAcceptedDiscordEnabled": true,
   "mailboxAcceptedDiscordNote": "IP Address server Minecraft SSCircle tersedia di Discord SSCircle Community. Bergabunglah untuk mendapatkan alamat server dan informasi komunitas.",
   "mailboxAcceptedDiscordButton": "Gabung SSCircle Community",
@@ -4501,6 +4501,68 @@ async function minecraftLinkClaim(req,env){
   return J({ok:true,message:'Identitas terverifikasi. Buka Profile SSCircle lalu konfirmasi akun ini.'});
 }
 
+/* Self-service is allowed only for the FIRST activation of an accepted
+   applicant. A registration-code session must NEVER reset an existing password:
+   recovery still requires the optional independent Admin Control approval.
+   All three writes share one D1 transaction to avoid issuing an orphan code. */
+async function mailboxActiveInvite(env,memberId){
+  const now=Math.floor(Date.now()/1000);
+  const row=await env.DB.prepare(`SELECT m.id,i.expires_at FROM member_activation_invites i
+    JOIN member_mailbox m ON m.application_id=i.application_id
+      AND m.type='activation' AND m.expires_at=i.expires_at
+      AND m.encrypted_secret IS NOT NULL AND m.secret_nonce IS NOT NULL
+    WHERE i.application_id=? AND i.used_at IS NULL AND i.expires_at>?
+    ORDER BY m.rowid DESC LIMIT 1`).bind(memberId,now).first();
+  return row?{expiresAt:new Date(row.expires_at*1000).toISOString(),existing:true}:null;
+}
+async function mailboxIssueInitialInvite(env,memberId){
+  const existing=await mailboxActiveInvite(env,memberId);
+  if(existing)return existing;
+  const now=Math.floor(Date.now()/1000),stamp=new Date().toISOString();
+  const expires=now+MEMBER_INVITE_SECONDS,secret=b64(crypto.getRandomValues(new Uint8Array(24)));
+  const hashed=await memberInviteHash(env,secret);
+  const sealed=await mailboxSeal(env,secret),messageId=uid();
+  // The SELECT and conflict guard both re-check acceptance, non-activation,
+  // and an already delivered code inside the transactional D1 batch.
+  const noActive=`NOT EXISTS (SELECT 1 FROM member_activation_invites i
+    JOIN member_mailbox m ON m.application_id=i.application_id
+      AND m.type='activation' AND m.expires_at=i.expires_at
+      AND m.encrypted_secret IS NOT NULL
+    WHERE i.application_id=? AND i.used_at IS NULL AND i.expires_at>?)`;
+  const allowed=`EXISTS(SELECT 1 FROM submissions s WHERE s.id=? AND s.status='accepted')
+    AND NOT EXISTS(SELECT 1 FROM member_credentials c WHERE c.application_id=?)`;
+  const results=await env.DB.batch([
+    env.DB.prepare(`INSERT INTO member_activation_invites
+      (application_id,secret_hash,expires_at,created_at,used_at)
+      SELECT ?,?,?,?,NULL WHERE ${allowed} AND ${noActive}
+      ON CONFLICT(application_id) DO UPDATE SET
+        secret_hash=excluded.secret_hash,expires_at=excluded.expires_at,
+        created_at=excluded.created_at,used_at=NULL
+      WHERE ${allowed} AND ${noActive}`)
+      .bind(memberId,hashed,expires,stamp,
+        memberId,memberId,memberId,now,
+        memberId,memberId,memberId,now),
+    env.DB.prepare(`INSERT INTO member_mailbox
+      (id,application_id,type,title,content,encrypted_secret,secret_nonce,expires_at,created_at)
+      SELECT ?,?,'activation','Kode aktivasi akun tersedia',
+        'Pendaftaranmu sudah Diterima. Kode aktivasi berlaku 24 jam dan satu kali pakai. Jangan bagikan kode pendaftaran atau password.',
+        ?,?,?,?
+      WHERE ${allowed} AND EXISTS(SELECT 1 FROM member_activation_invites i
+        WHERE i.application_id=? AND i.secret_hash=? AND i.expires_at=? AND i.used_at IS NULL)`)
+      .bind(messageId,memberId,sealed.encrypted,sealed.nonce,expires,stamp,
+        memberId,memberId,memberId,hashed,expires),
+    env.DB.prepare(`INSERT INTO member_activation_requests(application_id,requested_at,status,updated_at)
+      SELECT ?,?,'sent',? WHERE EXISTS(SELECT 1 FROM member_mailbox
+        WHERE id=? AND application_id=? AND type='activation')
+      ON CONFLICT(application_id) DO UPDATE SET
+        requested_at=excluded.requested_at,status='sent',updated_at=excluded.updated_at`)
+      .bind(memberId,stamp,stamp,messageId,memberId)
+  ]);
+  if(results.every(x=>x?.meta?.changes>0))
+    return {expiresAt:new Date(expires*1000).toISOString(),existing:false};
+  // Another request may have sent a code first. Reuse that code, never rotate it.
+  return mailboxActiveInvite(env,memberId);
+}
 async function mailboxIssueInvite(env,memberId){
   // Generate and seal the secret before consuming approval. Publishing the
   // invite, private message and request status must be one D1 transaction.
@@ -4634,32 +4696,46 @@ async function mailboxAPI(req,env,path,method){
       return bad('Kode aktivasi hanya tersedia setelah pendaftaranmu diterima.',403);
     if(!await rateLimit(env,req,'mailbox-activation',4,300))
       return bad('Terlalu banyak permintaan kode. Coba lagi dalam 5 menit.',429);
+
+    // First activation is automatic after acceptance. Do not give someone who
+    // only knows the registration code a password-reset capability.
+    const credentials=await env.DB.prepare('SELECT application_id FROM member_credentials WHERE application_id=?')
+      .bind(account.id).first();
+    // Old eight-character legacy references are too short to authorize a
+    // password via self-service; keep the admin verification path for those.
+    if(!credentials && /^[A-F0-9]{20}$/.test(account.tracking_code||'')){
+      const sent=await mailboxIssueInitialInvite(env,account.id);
+      if(sent)return J({ok:true,delivered:true,firstActivation:true,expiresAt:sent.expiresAt,
+        message:sent.existing?'Kode aktivasi aktif sudah tersedia di Mail Box.':
+          'Kode aktivasi otomatis dikirim ke Mail Box. Buka pesan Aktivasi untuk menampilkan kode.'});
+      // Fail closed when a simultaneous request or status change prevents issue.
+      const nowActive=await env.DB.prepare('SELECT application_id FROM member_credentials WHERE application_id=?')
+        .bind(account.id).first();
+      if(!nowActive)return bad('Kode belum dapat diterbitkan. Periksa status Diterima lalu coba lagi.',503);
+    }
+    // Password recovery is deliberately a separate, admin-verified flow.
+    const activeInvite=await mailboxActiveInvite(env,account.id);
+    if(activeInvite)return J({ok:true,delivered:true,recovery:true,
+      message:'Kode pemulihan yang masih berlaku tersedia di Mail Box.'});
     const pending=await env.DB.prepare('SELECT status FROM member_activation_requests WHERE application_id=?')
       .bind(account.id).first();
-    const invite=await env.DB.prepare(`SELECT expires_at,used_at FROM member_activation_invites
-      WHERE application_id=?`).bind(account.id).first();
-    if(pending?.status==='sent' && invite?.used_at===null && invite.expires_at>Date.now()/1000)
-      return J({ok:true,delivered:true,message:'Kode masih tersedia di Mail Box.'});
     if(pending?.status==='pending'){
-      // Retry an already verified, but previously interrupted delivery.
-      const retried=await mailboxIssueInvite(env,account.id);
-      return J({ok:true,delivered:!!retried,message:retried?
-        'Kode aktivasi telah dikirim ke Mail Box.':
-        'Permintaan sedang menunggu verifikasi kepemilikan akun.'});
+      const sent=await mailboxIssueInvite(env,account.id);
+      return J({ok:true,delivered:!!sent,recovery:true,message:sent?
+        'Kode pemulihan telah dikirim ke Mail Box.':
+        'Permintaan pemulihan sedang menunggu verifikasi admin.'});
     }
     const stamp=new Date().toISOString();
     await env.DB.prepare(`INSERT INTO member_activation_requests(application_id,requested_at,status,updated_at)
-      VALUES(? ,?,'pending',?) ON CONFLICT(application_id) DO UPDATE SET
+      VALUES(?,?,'pending',?) ON CONFLICT(application_id) DO UPDATE SET
       requested_at=excluded.requested_at,status='pending',updated_at=excluded.updated_at`)
       .bind(account.id,stamp,stamp).run();
     const result=await mailboxIssueInvite(env,account.id);
-    if(!result){
-      await mailboxNote(env,account.id,'information','Permintaan aktivasi diterima',
-        'Permintaanmu sudah tercatat. Demi keamanan, kode akan dikirim otomatis setelah tim SSCircle memverifikasi identitasmu.');
-    }
-    return J({ok:true,delivered:!!result,message:result?
-      'Kode aktivasi telah dikirim ke Mail Box.':
-      'Permintaan sudah masuk ke Mail Box dan menunggu pemeriksaan identitas.'});
+    if(!result)await mailboxNote(env,account.id,'information','Permintaan pemulihan akun',
+      'Permintaan pemulihan password diterima. Pengurus perlu memverifikasi identitasmu sebelum kode pemulihan diterbitkan.');
+    return J({ok:true,delivered:!!result,recovery:true,message:result?
+      'Kode pemulihan telah dikirim ke Mail Box.':
+      'Permintaan pemulihan dicatat dan menunggu verifikasi identitas oleh admin.'});
   }
   if(path==='/api/player/mailbox/reveal' && method==='POST'){
     if(!accepted)
