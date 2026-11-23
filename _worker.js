@@ -5576,7 +5576,13 @@ async function community55API(req,env,path,method,ctx){
     const eventId=s(new URL(req.url).searchParams.get('eventId'),100);
     const signups=eventId?(await env.DB.prepare("SELECT r.member_id,r.state,r.joined_at,r.checked_in_at,s.status AS member_status FROM community_event_signups r JOIN submissions s ON s.id=r.member_id WHERE r.event_id=? ORDER BY r.joined_at LIMIT 200").bind(eventId).all()).results||[]:[];
     const awards=eventId?(await env.DB.prepare("SELECT member_id,rank,label,created_at FROM community_event_awards WHERE event_id=? ORDER BY rank").bind(eventId).all()).results||[]:[];
-    return J({proposals,signups,awards});
+    // Reuse the SAME registration Minecraft username lookup as Kelola Pemain.
+    // Resolve identities server-side; keep member_id for check-in/award writes.
+    const names=await applicantNamesFor(env,[...new Set(
+      [...signups,...awards].map(row=>row.member_id))]);
+    return J({proposals,
+      signups:signups.map(row=>({...row,applicantName:names.get(row.member_id)||''})),
+      awards:awards.map(row=>({...row,applicantName:names.get(row.member_id)||''}))});
   }
   if(path==='/api/admin/community/events/review'&&method==='POST'){
     const x=await body(req,1500),id=s(x.id,100),action=s(x.action,12);
