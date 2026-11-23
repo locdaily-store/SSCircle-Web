@@ -461,8 +461,10 @@
       const data = await request('/api/admin/community/events?eventId=' + encodeURIComponent(id));
       for (const participant of data.signups || []) {
         const card = element('article', 'c55-mini-card');
+        const username = participant.applicantName ||
+          'Anggota ' + String(participant.member_id || '').slice(0,8).toUpperCase();
         card.append(
-          element('strong', '', participant.member_id),
+          element('strong', '', username),
           element('small', '', 'Status: ' + participant.state)
         );
         if (participant.state === 'registered') {
@@ -509,7 +511,9 @@
         participantList.append(element('p', 'c55-note', 'Belum ada peserta.'));
       for (const award of data.awards || []) {
         participantList.append(element('p', 'c55-note',
-          'Juara ' + award.rank + ' · ' + award.member_id + ' · ' + award.label));
+          'Juara ' + award.rank + ' · ' + (award.applicantName ||
+            'Anggota ' + String(award.member_id || '').slice(0,8).toUpperCase()) +
+          ' · ' + award.label));
       }
     } catch (error) {
       notify(error.message, true);
