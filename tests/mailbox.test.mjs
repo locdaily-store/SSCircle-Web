@@ -439,6 +439,7 @@ test('pendaftar baru dan lama mendapatkan kode ASLI tersimpan privat dan tidak b
  assert.ok(notice);
  assert.equal(notice.title,'Kode pendaftaran tersimpan');
  assert.ok(notice.content.includes(CODE));
+ assert.equal(notice.registrationCode,CODE,'Copy field must contain only the original code');
  assert.equal(notice.canReveal,false);
  assert.equal(notice.read,false);
  const stored=x.db.prepare("SELECT content FROM member_mailbox WHERE id=?").get(notice.id);
@@ -447,7 +448,9 @@ test('pendaftar baru dan lama mendapatkan kode ASLI tersimpan privat dan tidak b
  assert.equal(other.status,200);
  const theirCode='112233445566778899AA';
  assert.ok(other.data.items.some(m=>m.type==='registration_code'&&m.content.includes(theirCode)));
+ assert.equal(other.data.items.find(m=>m.type==='registration_code').registrationCode,theirCode);
  assert.ok(!other.data.items.some(m=>m.type==='registration_code'&&m.content.includes(CODE)));
+ assert.ok(!other.data.items.some(m=>m.registrationCode===CODE));
  const unauthorized=await x.request('/api/player/mailbox',{cookie:''});
  assert.equal(unauthorized.status,403);
  const del=await x.request('/api/player/mailbox/delete',{method:'POST',body:{id:notice.id}});
@@ -461,6 +464,7 @@ test('pendaftar baru dan lama mendapatkan kode ASLI tersimpan privat dan tidak b
    assert.equal(response.data.applicationStatus,status);
    assert.equal(response.data.items.filter(m=>m.type==='registration_code').length,1);
    assert.ok(response.data.items.find(m=>m.type==='registration_code').content.includes(CODE));
+   assert.equal(response.data.items.find(m=>m.type==='registration_code').registrationCode,CODE);
  }
  assert.equal(x.db.prepare("SELECT COUNT(*) AS n FROM member_mailbox WHERE application_id=? AND type='registration_code'").get(ID).n,1);
 });
@@ -479,4 +483,17 @@ test('registrasi baru setelah schema initialization tetap menerima kode via stat
  const row=x.db.prepare("SELECT id,content FROM member_mailbox WHERE application_id=? AND type='registration_code'").get(fresh);
  assert.ok(row,'A new member must get its permanent message without having opened the inbox');
  assert.ok(!row.content.includes(code),'Registration code stays in submissions');
+});
+
+test('salin kode pendaftaran tersedia dalam Mail Box modal dan halaman penuh',()=>{
+ const popup=readFileSync(new URL('../mailbox-widget.js',import.meta.url),'utf8');
+ const full=readFileSync(new URL('../mailbox.js',import.meta.url),'utf8');
+ const html=readFileSync(new URL('../mailbox.html',import.meta.url),'utf8');
+ for(const source of [popup,full]){
+   assert.match(source,/registrationCode/,'Code must come from authenticated response');
+   assert.match(source,/navigator\.clipboard\.writeText\(code\)/,'Copy button must use Clipboard API');
+   assert.match(source,/Kode pendaftaran berhasil disalin/,'Copy must report success');
+ }
+ assert.match(popup,/id="ssc-mailbox-registration-copy"/);
+ assert.match(html,/id="mailbox-registration-copy"/);
 });
