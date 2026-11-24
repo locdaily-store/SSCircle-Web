@@ -75,6 +75,13 @@
     $('mailbox-detail-title').textContent=item.title;
     $('mailbox-detail-time').textContent=fmt(item.createdAt);
     $('mailbox-detail-body').textContent=item.content;
+    const registrationCode=item.type==='registration_code'
+      &&typeof item.registrationCode==='string'
+      &&/^(?:[A-F0-9]{20}|[A-F0-9]{8})$/.test(item.registrationCode)
+      ?item.registrationCode:'';
+    $('mailbox-registration-panel').hidden=!registrationCode;
+    $('mailbox-registration-code').textContent=registrationCode;
+    $('mailbox-registration-status').textContent='';
     const cta=item.discordCTA;
     const validDiscord=typeof cta?.url==='string' && /^https:\/\/(?:discord\.gg\/[A-Za-z0-9-]{3,}|discord\.com\/invite\/[A-Za-z0-9-]{3,})\/?$/.test(cta.url);
     $('mailbox-accepted-discord').hidden=!validDiscord;
@@ -119,6 +126,9 @@
       $('mailbox-detail-empty').hidden=false;
       $('mailbox-secret-value').textContent='';
       $('mailbox-secret-row').hidden=true;
+      $('mailbox-registration-code').textContent='';
+      $('mailbox-registration-status').textContent='';
+      $('mailbox-registration-panel').hidden=true;
       renderList();
       note(error.message,true);
     }finally{$('mailbox-refresh').disabled=false;loading=false;}
@@ -160,6 +170,23 @@
     }catch(error){$('mailbox-secret-status').textContent=error.message;
       $('mailbox-secret-row').hidden=true;current.canReveal=false;
     }finally{button.disabled=false;}
+  });
+  $('mailbox-registration-copy').addEventListener('click',async()=>{
+    const id=current?.id;
+    if(current?.type!=='registration_code'||!id)return;
+    const code=$('mailbox-registration-code').textContent;
+    if(!/^(?:[A-F0-9]{20}|[A-F0-9]{8})$/.test(code))return;
+    try{
+      await navigator.clipboard.writeText(code);
+      if(current?.id===id)$('mailbox-registration-status').textContent='Kode pendaftaran berhasil disalin.';
+    }catch{
+      if(current?.id!==id)return;
+      const range=document.createRange();
+      range.selectNodeContents($('mailbox-registration-code'));
+      const selection=window.getSelection();
+      selection?.removeAllRanges();selection?.addRange(range);
+      $('mailbox-registration-status').textContent='Kode telah dipilih. Salin manual dengan Ctrl+C atau gunakan tombol salin di perangkatmu.';
+    }
   });
   $('mailbox-copy').addEventListener('click',async()=>{
     const code=$('mailbox-secret-value').textContent;
