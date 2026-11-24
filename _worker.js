@@ -4741,6 +4741,8 @@ async function mailboxAPI(req,env,path,method){
         (row.type==='status'&&row.title==='Selamat, pendaftaranmu diterima'))
         ?acceptedCTA:null,
       title:row.title,
+      registrationCode:row.type==='registration_code'
+        ?(account.tracking_code||account.id.slice(0,8).toUpperCase()):null,
       // The credential stays in submissions only. Its value is hydrated for
       // the authenticated OWNER, not stored in plaintext in the Mail Box copy.
       content:row.type==='registration_code'
