@@ -500,6 +500,8 @@ test('salin kode pendaftaran tersedia dalam Mail Box modal dan halaman penuh',()
 
 test('admin live sync rejects stale acceptance/rejection without overwriting the previous decision',async()=>{
  const x=fixture();
+ // This fixture predates the public registration form's answer snapshot fields.
+ x.db.exec('ALTER TABLE submissions ADD COLUMN answers TEXT; ALTER TABLE submissions ADD COLUMN question_snapshot TEXT');
  const live=await x.request('/api/admin/live',{cookie:x.admin});
  assert.equal(live.status,200,JSON.stringify(live.data));
  assert.equal(Number.isInteger(live.data.submissionsRevision),true);
