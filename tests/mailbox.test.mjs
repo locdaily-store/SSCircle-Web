@@ -309,7 +309,7 @@ test('Accepted status Mail Box includes custom Discord invite CTA, never for rej
  x.db.prepare('UPDATE form_config SET settings=? WHERE id=1').run(JSON.stringify(entry));
  x.db.prepare("UPDATE submissions SET status='pending' WHERE id=?").run(ID);
  const changed=await x.request('/api/admin/status',{method:'PATCH',cookie:x.admin,
-   body:{id:ID,status:'accepted'}});
+   body:{id:ID,status:'accepted',expectedRevision:0}});
  assert.equal(changed.status,200,JSON.stringify(changed.data));
  const inbox=await x.request('/api/player/mailbox');
  assert.equal(inbox.status,200,JSON.stringify(inbox.data));
@@ -321,7 +321,7 @@ test('Accepted status Mail Box includes custom Discord invite CTA, never for rej
  assert.equal(accepted.discordCTA.note,entry.mailboxAcceptedDiscordNote);
  assert.equal(accepted.discordCTA.url,entry.homeDiscordUrl);
  const rejected=await x.request('/api/admin/status',{method:'PATCH',cookie:x.admin,
-   body:{id:ID,status:'rejected',reason:'Dokumen belum lengkap'}});
+   body:{id:ID,status:'rejected',reason:'Dokumen belum lengkap',expectedRevision:1}});
  assert.equal(rejected.status,200,JSON.stringify(rejected.data));
  const after=await x.request('/api/player/mailbox');
  assert.equal(after.data.items.find(row=>row.content.includes('Dokumen belum lengkap')).discordCTA,null);
@@ -353,7 +353,7 @@ test('Diterima menerbitkan kode awal otomatis ketika status diperbarui',async()=
  const x=fixture();
  x.db.prepare("UPDATE submissions SET status='pending' WHERE id=?").run(ID);
  const changed=await x.request('/api/admin/status',{method:'PATCH',cookie:x.admin,
-   body:{id:ID,status:'accepted'}});
+   body:{id:ID,status:'accepted',expectedRevision:0}});
  assert.equal(changed.status,200,JSON.stringify(changed.data));
  const inbox=await x.request('/api/player/mailbox');
  assert.equal(inbox.status,200,JSON.stringify(inbox.data));
@@ -478,7 +478,7 @@ test('registrasi baru setelah schema initialization tetap menerima kode via stat
    .run(fresh,'pending',code,new Date().toISOString());
  // This is the same handler used by the /api/apply commit path.
  const adminStatus=await x.request('/api/admin/status',{method:'PATCH',cookie:x.admin,
-   body:{id:fresh,status:'accepted'}});
+   body:{id:fresh,status:'accepted',expectedRevision:0}});
  assert.equal(adminStatus.status,200,JSON.stringify(adminStatus.data));
  const row=x.db.prepare("SELECT id,content FROM member_mailbox WHERE application_id=? AND type='registration_code'").get(fresh);
  assert.ok(row,'A new member must get its permanent message without having opened the inbox');
@@ -496,4 +496,31 @@ test('salin kode pendaftaran tersedia dalam Mail Box modal dan halaman penuh',()
  }
  assert.match(popup,/id="ssc-mailbox-registration-copy"/);
  assert.match(html,/id="mailbox-registration-copy"/);
+});
+
+test('admin live sync rejects stale acceptance/rejection without overwriting the previous decision',async()=>{
+ const x=fixture();
+ const live=await x.request('/api/admin/live',{cookie:x.admin});
+ assert.equal(live.status,200,JSON.stringify(live.data));
+ assert.equal(Number.isInteger(live.data.submissionsRevision),true);
+ const roster=await x.request('/api/admin/submissions',{cookie:x.admin});
+ assert.equal(roster.status,200,JSON.stringify(roster.data));
+ const original=roster.data.items.find(v=>v.id===ID);
+ assert.equal(original.statusRevision,0);
+ const missing=await x.request('/api/admin/status',{method:'PATCH',cookie:x.admin,
+   body:{id:ID,status:'pending'}});
+ assert.equal(missing.status,428);
+ const first=await x.request('/api/admin/status',{method:'PATCH',cookie:x.admin,
+   body:{id:ID,status:'pending',expectedRevision:original.statusRevision}});
+ assert.equal(first.status,200,JSON.stringify(first.data));
+ assert.equal(first.data.statusRevision,1);
+ const stale=await x.request('/api/admin/status',{method:'PATCH',cookie:x.admin,
+   body:{id:ID,status:'rejected',reason:'Another admin did not see the update',
+      expectedRevision:original.statusRevision}});
+ assert.equal(stale.status,409,JSON.stringify(stale.data));
+ assert.equal(x.db.prepare('SELECT status FROM submissions WHERE id=?').get(ID).status,'pending');
+ const refreshed=await x.request('/api/admin/submissions',{cookie:x.admin});
+ assert.equal(refreshed.data.items.find(v=>v.id===ID).statusRevision,1);
+ const after=await x.request('/api/admin/live',{cookie:x.admin});
+ assert.ok(after.data.submissionsRevision>live.data.submissionsRevision);
 });
