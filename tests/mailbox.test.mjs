@@ -74,8 +74,8 @@ test('anggota Diterima mendapat kode pertama otomatis tanpa membocorkan kode ke 
  assert.equal(req.data.firstActivation,true);
  const list=await x.request('/api/player/mailbox');
  assert.equal(list.data.activationRequest,'sent');
- assert.equal(list.data.items.length,1);
- assert.equal(list.data.items[0].canReveal,true);
+ assert.equal(list.data.items.filter(m=>m.type==='activation').length,1);
+ assert.equal(list.data.items.find(m=>m.type==='activation').canReveal,true);
  assert.equal(JSON.stringify(list.data).includes('encrypted_secret'),false);
  const noAdmin=await x.request('/api/admin/mailbox/approve',{method:'POST',body:{id:ID,verification:'identity-confirmed'}});
  assert.equal(noAdmin.status,401);
@@ -83,7 +83,7 @@ test('anggota Diterima mendapat kode pertama otomatis tanpa membocorkan kode ke 
  assert.equal((await x.request('/mailbox',{cookie:''})).status,302);
  assert.equal((await x.request('/mailbox',{cookie:x.another})).status,302);
  const denied=await x.request('/api/player/mailbox');
- assert.equal(denied.data.items[0].type,'activation');
+ assert.ok(denied.data.items.some(m=>m.type==='activation'));
 });
 
 test('verifikasi oleh admin mengirim kode AES-GCM ke Mail Box, bukan respons publik',async()=>{
@@ -111,7 +111,7 @@ test('verifikasi oleh admin mengirim kode AES-GCM ke Mail Box, bukan respons pub
  assert.notEqual(raw.encrypted_secret,revealed.data.code);
  const again=await x.request('/api/player/mailbox/request-activation',{method:'POST',body:{purpose:'recovery'}});
  assert.equal(again.data.delivered,true);
- assert.equal((await x.request('/api/player/mailbox')).data.items.length,2);
+ assert.equal((await x.request('/api/player/mailbox')).data.items.filter(m=>m.type!=='registration_code').length,2);
  const used=await x.request('/api/player/security/activate',{method:'POST',body:{invite:revealed.data.code,password:'KataSandiKuat#2040'}});
  assert.equal(used.status,200,JSON.stringify(used.data));
  const reused=await x.request('/api/player/mailbox/reveal',{method:'POST',body:{id:row.id}});
@@ -154,14 +154,15 @@ test('pendaftar pending/rejected dapat membaca notifikasi sendiri, tidak bisa me
  const x=fixture();
  // Membuat satu pesan privat melalui alur lama, lalu mengubah status pendaftar.
  await x.request('/api/player/mailbox/request-activation',{method:'POST',body:{}});
- const message=(await x.request('/api/player/mailbox')).data.items[0];
+ const message=(await x.request('/api/player/mailbox')).data.items.find(m=>m.type==='activation');
  for(const status of ['pending','rejected']){
   x.db.prepare('UPDATE submissions SET status=? WHERE id=?').run(status,ID);
   const list=await x.request('/api/player/mailbox');
   assert.equal(list.status,200);
   assert.equal(list.data.applicationStatus,status);
-  assert.equal(list.data.items.length,1);
-  assert.equal(list.data.items[0].canReveal,false);
+  assert.equal(list.data.items.filter(m=>m.type==='activation').length,1);
+  assert.equal(list.data.items.find(m=>m.type==='activation').canReveal,false);
+  assert.equal(list.data.items.find(m=>m.type==='registration_code').content.includes(CODE),true);
   assert.equal((await x.request('/mailbox')).status,200);
   const legacy=await x.request('/mailbox.html');
   assert.equal(legacy.status,302);
@@ -222,7 +223,7 @@ test('failed transaction restores approval so a later request can issue one invi
 test('mark-as-read checks ownership and keeps normal repeat reads idempotent',async()=>{
  const x=fixture();
  await x.request('/api/player/mailbox/request-activation',{method:'POST',body:{}});
- const id=(await x.request('/api/player/mailbox')).data.items[0].id;
+ const id=(await x.request('/api/player/mailbox')).data.items.find(m=>m.type==='activation').id;
  assert.equal((await x.request('/api/player/mailbox/read',{method:'POST',cookie:x.another,body:{id}})).status,404);
  assert.equal((await x.request('/api/player/mailbox/read',{method:'POST',body:{id}})).status,200);
  assert.equal((await x.request('/api/player/mailbox/read',{method:'POST',body:{id}})).status,200);
@@ -281,7 +282,7 @@ test('Mail Box batch operations require a valid owner session, including status-
  const x=fixture();
  await seedActivated(x);
  await x.request('/api/player/mailbox/request-activation',{method:'POST',body:{purpose:'recovery'}});
- const message=(await x.request('/api/player/mailbox')).data.items[0];
+ const message=(await x.request('/api/player/mailbox')).data.items.find(m=>m.type==='information');
  assert.equal((await x.request('/api/player/mailbox/manage',{
    method:'POST',cookie:'',body:{action:'read',ids:[message.id]}})).status,403);
  x.db.prepare('UPDATE submissions SET status=? WHERE id=?').run('rejected',ID);
@@ -425,4 +426,57 @@ test('tombol Minta kode tetap tampil pada akun dengan password',()=>{
  const standalone=readFileSync(new URL('../mailbox.js',import.meta.url),'utf8');
  assert.match(widget,/\$\('ssc-mailbox-request'\)\.hidden=false/);
  assert.match(standalone,/\$\('mailbox-request-button'\)\.hidden=false/);
+});
+
+test('pendaftar baru dan lama mendapatkan kode ASLI tersimpan privat dan tidak bisa dihapus',async()=>{
+ const x=fixture();
+ // Initializing the Mail Box backfills all pre-existing submissions, not only
+ // the one opening the inbox. No new code, email, or re-registration is needed.
+ const mine=await x.request('/api/player/mailbox');
+ assert.equal(mine.status,200,JSON.stringify(mine.data));
+ assert.equal(x.db.prepare("SELECT COUNT(*) AS n FROM member_mailbox WHERE type='registration_code'").get().n,2);
+ const notice=mine.data.items.find(m=>m.type==='registration_code');
+ assert.ok(notice);
+ assert.equal(notice.title,'Kode pendaftaran tersimpan');
+ assert.ok(notice.content.includes(CODE));
+ assert.equal(notice.canReveal,false);
+ assert.equal(notice.read,false);
+ const stored=x.db.prepare("SELECT content FROM member_mailbox WHERE id=?").get(notice.id);
+ assert.ok(!stored.content.includes(CODE),'Do not duplicate bearer code in mailbox database');
+ const other=await x.request('/api/player/mailbox',{cookie:x.another});
+ assert.equal(other.status,200);
+ const theirCode='112233445566778899AA';
+ assert.ok(other.data.items.some(m=>m.type==='registration_code'&&m.content.includes(theirCode)));
+ assert.ok(!other.data.items.some(m=>m.type==='registration_code'&&m.content.includes(CODE)));
+ const unauthorized=await x.request('/api/player/mailbox',{cookie:''});
+ assert.equal(unauthorized.status,403);
+ const del=await x.request('/api/player/mailbox/delete',{method:'POST',body:{id:notice.id}});
+ assert.equal(del.status,409);
+ const batch=await x.request('/api/player/mailbox/manage',{method:'POST',body:{action:'delete',ids:[notice.id]}});
+ assert.equal(batch.status,409);
+ for(const status of ['pending','rejected','accepted']){
+   x.db.prepare('UPDATE submissions SET status=? WHERE id=?').run(status,ID);
+   const response=await x.request('/api/player/mailbox');
+   assert.equal(response.status,200);
+   assert.equal(response.data.applicationStatus,status);
+   assert.equal(response.data.items.filter(m=>m.type==='registration_code').length,1);
+   assert.ok(response.data.items.find(m=>m.type==='registration_code').content.includes(CODE));
+ }
+ assert.equal(x.db.prepare("SELECT COUNT(*) AS n FROM member_mailbox WHERE application_id=? AND type='registration_code'").get(ID).n,1);
+});
+
+test('registrasi baru setelah schema initialization tetap menerima kode via status notification',async()=>{
+ const x=fixture();
+ await x.request('/api/player/mailbox');
+ const fresh='33333333-3333-4333-8333-333333333333';
+ const code='CDEF1234CDEF1234CDEF';
+ x.db.prepare('INSERT INTO submissions(id,status,tracking_code,submitted_at) VALUES(?,?,?,?)')
+   .run(fresh,'pending',code,new Date().toISOString());
+ // This is the same handler used by the /api/apply commit path.
+ const adminStatus=await x.request('/api/admin/status',{method:'PATCH',cookie:x.admin,
+   body:{id:fresh,status:'accepted'}});
+ assert.equal(adminStatus.status,200,JSON.stringify(adminStatus.data));
+ const row=x.db.prepare("SELECT id,content FROM member_mailbox WHERE application_id=? AND type='registration_code'").get(fresh);
+ assert.ok(row,'A new member must get its permanent message without having opened the inbox');
+ assert.ok(!row.content.includes(code),'Registration code stays in submissions');
 });
