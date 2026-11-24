@@ -63,8 +63,8 @@
   const $=id=>dialog.querySelector('#'+id);
   let items=[],current=null,filter='all',lastTrigger=null,refreshTask=null,loaded=false,loadFailed=false,deleting=false,
     selecting=false,selected=new Set(),managing=false,appStatus='none',hasPassword=false;
-  const kindLabel=type=>({activation:'AKTIVASI AKUN',status:'STATUS PENDAFTARAN',announcement:'PENGUMUMAN RESMI',event:'EVENT SSCIRCLE',friend_request:'KOMUNITAS',friend_response:'KOMUNITAS',badge:'PENGHARGAAN'})[type]||'PEMBERITAHUAN';
-  const kindIcon=type=>({activation:'✦',status:'◆',announcement:'◈',event:'▦',friend_request:'♙',friend_response:'♙',badge:'★'})[type]||'✉';
+  const kindLabel=type=>({registration_code:'KODE PENDAFTARAN',activation:'AKTIVASI AKUN',status:'STATUS PENDAFTARAN',announcement:'PENGUMUMAN RESMI',event:'EVENT SSCIRCLE',friend_request:'KOMUNITAS',friend_response:'KOMUNITAS',badge:'PENGHARGAAN'})[type]||'PEMBERITAHUAN';
+  const kindIcon=type=>({registration_code:'🔑',activation:'✦',status:'◆',announcement:'◈',event:'▦',friend_request:'♙',friend_response:'♙',badge:'★'})[type]||'✉';
   // Kode aktivasi hanya untuk pendaftar yang diterima; selain itu tombolnya dikunci.
   function applyAccess(){
     const ok=appStatus==='accepted';
@@ -125,7 +125,7 @@
   function shownItems(){
     return items.filter(item=>filter==='all'||(filter==='unread'&&!item.read)||
       (filter==='status'&&item.type==='status')||
-      (filter==='activation'&&['activation','information'].includes(item.type))||
+      (filter==='activation'&&['registration_code','activation','information'].includes(item.type))||
       (filter==='announcement'&&item.type==='announcement')||
       (filter==='event'&&item.type==='event')||
       (filter==='community'&&['friend_request','friend_response','badge'].includes(item.type)));
@@ -174,7 +174,7 @@
         const label=document.createElement('label');label.className='ssc-mailbox-select-control';
         const checkbox=document.createElement('input');checkbox.type='checkbox';
         checkbox.checked=selected.has(item.id);
-        checkbox.disabled=!!item.canReveal||managing;
+        checkbox.disabled=!!item.canReveal||item.type==='registration_code'||managing;
         checkbox.setAttribute('aria-label','Pilih notifikasi '+item.title);
         checkbox.addEventListener('change',()=>{
           if(checkbox.checked)selected.add(item.id);else selected.delete(item.id);
@@ -214,8 +214,11 @@
     $('ssc-mailbox-reveal').disabled=!item.canReveal;
     $('ssc-mailbox-secret-status').textContent=item.canReveal?
       'Kode dapat dibuka sampai masa berlakunya habis.':'Kode sudah dipakai atau kedaluwarsa.';
-    $('ssc-mailbox-delete').disabled=item.canReveal===true;
-    $('ssc-mailbox-delete').title=item.canReveal?'Kode aktif tidak boleh dihapus.':'Hapus notifikasi ini.';
+    const protectedCode=item.canReveal===true||item.type==='registration_code';
+    $('ssc-mailbox-delete').disabled=protectedCode;
+    $('ssc-mailbox-delete').title=item.type==='registration_code'
+      ?'Kode pendaftaran disimpan permanen.':
+      item.canReveal?'Kode aktif tidak boleh dihapus.':'Hapus notifikasi ini.';
     draw();
     if(!item.read){
       item.read=true;draw();
@@ -297,7 +300,7 @@
   });
   $('ssc-mailbox-select-all').addEventListener('click',()=>{
     if(managing)return;
-    const visible=shownItems().filter(item=>!item.canReveal);
+    const visible=shownItems().filter(item=>!item.canReveal&&item.type!=='registration_code');
     const allSelected=visible.length>0&&visible.every(item=>selected.has(item.id));
     for(const item of visible){
       if(allSelected)selected.delete(item.id);else selected.add(item.id);
