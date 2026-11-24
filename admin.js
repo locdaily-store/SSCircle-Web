@@ -80,6 +80,7 @@ async function pollAdminChanges(){
 }
 setInterval(()=>{void pollAdminChanges();},5000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)void pollAdminChanges();});
+
 // Review reason dialog is shown only when administrator rejects an application.
 const qtypes = [
   ['short', 'Jawaban singkat'],
