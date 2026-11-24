@@ -6180,6 +6180,33 @@ function sscVoiceAppDownload(env,platform){
   }catch{}
   return '';
 }
+// SSCircle multi-admin sync: event revisions are persisted by D1 triggers.
+// Every approval/rejection also uses per-application compare-and-swap. Polling
+// only updates the dashboard view; correctness is enforced by D1 itself.
+const adminRealtimeReady=new WeakSet();
+async function ensureAdminRealtime(env){
+  if(adminRealtimeReady.has(env.DB))return;
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS admin_sync_revisions(
+    scope TEXT PRIMARY KEY,revision INTEGER NOT NULL DEFAULT 0)`).run();
+  await env.DB.prepare("INSERT OR IGNORE INTO admin_sync_revisions(scope,revision) VALUES('submissions',0)").run();
+  const columns=(await env.DB.prepare('PRAGMA table_info(submissions)').all()).results||[];
+  if(!columns.some(x=>x.name==='status_revision')){
+    try{await env.DB.prepare('ALTER TABLE submissions ADD COLUMN status_revision INTEGER NOT NULL DEFAULT 0').run();}
+    catch(e){if(!/duplicate column name/i.test(String(e?.message||e)))throw e;}
+  }
+  for(const sql of [
+    `CREATE TRIGGER IF NOT EXISTS ssc_admin_sync_insert AFTER INSERT ON submissions BEGIN
+       UPDATE admin_sync_revisions SET revision=revision+1 WHERE scope='submissions'; END`,
+    `CREATE TRIGGER IF NOT EXISTS ssc_admin_sync_delete AFTER DELETE ON submissions BEGIN
+       UPDATE admin_sync_revisions SET revision=revision+1 WHERE scope='submissions'; END`,
+    `CREATE TRIGGER IF NOT EXISTS ssc_admin_sync_status AFTER UPDATE OF status,rejection_reason,status_revision ON submissions
+       WHEN NEW.status IS NOT OLD.status OR NEW.rejection_reason IS NOT OLD.rejection_reason
+         OR NEW.status_revision IS NOT OLD.status_revision BEGIN
+       UPDATE admin_sync_revisions SET revision=revision+1 WHERE scope='submissions'; END`
+  ])await env.DB.prepare(sql).run();
+  adminRealtimeReady.add(env.DB);
+}
+
 async function route(req, env, ctx) {
   const url = new URL(req.url), path = url.pathname, method = req.method;
   if (path === '/api/github/database/inspect')
@@ -6747,6 +6774,13 @@ async function route(req, env, ctx) {
   if (path.startsWith('/api/admin/')) {
     if (!(await admin(req, env)))
       return bad('Akses admin diperlukan. Login ulang.', 401);
+    if(path==='/api/admin/live' && method==='GET'){
+      await ensureAdminRealtime(env);
+      const changes=await env.DB.prepare("SELECT revision FROM admin_sync_revisions WHERE scope='submissions'").first();
+      const form=await env.DB.prepare('SELECT updated_at FROM form_config WHERE id=1').first();
+      return J({submissionsRevision:Number(changes?.revision||0),formRevision:form?.updated_at||''},
+        200,{'Cache-Control':'private, no-store','Vary':'Cookie'});
+    }
     if (path === '/api/admin/form' && method === 'GET') {
       const row = await env.DB.prepare('SELECT * FROM form_config WHERE id=1').first();
       return J({ ...formFrom(row), revision: row.updated_at || '' });
@@ -7248,14 +7282,16 @@ async function route(req, env, ctx) {
       return J({ ok: failures.length === 0, deleted, failures });
     }
     if (path === '/api/admin/submissions' && method === 'GET') {
+      await ensureAdminRealtime(env);
       const offset = Math.min(Math.max(0, parseInt(url.searchParams.get('offset') || '0', 10) || 0), 1000000);
-      const r = await env.DB.prepare('SELECT id,submitted_at,status,rejection_reason,tracking_code,answers,question_snapshot FROM submissions ORDER BY submitted_at ASC,id ASC LIMIT 251 OFFSET ?').bind(offset).all();
+      const r = await env.DB.prepare('SELECT id,submitted_at,status,rejection_reason,status_revision,tracking_code,answers,question_snapshot FROM submissions ORDER BY submitted_at ASC,id ASC LIMIT 251 OFFSET ?').bind(offset).all();
       const arr = r.results || [];
       return J({
         items: arr.slice(0, 250).map(x => ({
           id: x.id,
           at: x.submitted_at,
           status: x.status,
+          statusRevision: Number(x.status_revision||0),
           reason: x.rejection_reason || '',
           trackingCode: x.tracking_code || x.id.slice(0, 8).toUpperCase(),
           answers: parse(x.answers) || {},
@@ -7265,6 +7301,7 @@ async function route(req, env, ctx) {
       });
     }
     if (path === '/api/admin/delete-submissions' && method === 'POST') {
+      await ensureAdminRealtime(env);
       const input = await body(req, 12000);
       if (input.scope !== 'selected' && input.scope !== 'all')
         throw Error('Pilihan penghapusan tidak valid.');
@@ -7310,20 +7347,29 @@ async function route(req, env, ctx) {
       return J({ ok: true, deleted, more: input.scope === 'all' && !!rest, mediaErrors });
     }
     if (path === '/api/admin/status' && method === 'PATCH') {
-      const v = await body(req, 5000);
-      if (!/^[0-9a-f-]{36}$/.test(v.id || '') || !STATUSES.has(v.status))
-        throw Error('ID/status tidak valid.');
-      const reason = v.status === 'rejected' ? s(v.reason, 1000) : '';
-      if (v.status === 'rejected' && !reason)
-        throw Error('Alasan penolakan wajib diisi.');
-      const before = await env.DB.prepare('SELECT status FROM submissions WHERE id=?').bind(v.id).first();
-      const r = await env.DB.prepare('UPDATE submissions SET status=?,rejection_reason=? WHERE id=?').bind(v.status, reason, v.id).run();
-      if (!(r.meta?.changes > 0))
-        return bad('Pendaftaran tidak ditemukan.', 404);
-      // V10.50: beri tahu pendaftar lewat Mail Box, hanya bila statusnya benar-benar berubah.
-      if (before && before.status !== v.status)
-        await mailboxStatusNote(env, v.id, v.status, reason);
-      return J({ ok: true });
+      await ensureAdminRealtime(env);
+      const v=await body(req,5000);
+      if(!/^[0-9a-f-]{36}$/.test(v.id||'')||!STATUSES.has(v.status))
+        return bad('ID/status tidak valid.',400);
+      // Precondition is mandatory. Old cached admin clients cannot silently
+      // overwrite changes made in another session/device.
+      if(!Number.isSafeInteger(v.expectedRevision)||v.expectedRevision<0)
+        return bad('Versi keputusan tidak tersedia. Perbarui halaman Admin Control.',428);
+      const reason=v.status==='rejected'?s(v.reason,1000):'';
+      if(v.status==='rejected'&&!reason)return bad('Alasan penolakan wajib diisi.',400);
+      const previous=await env.DB.prepare('SELECT status,status_revision FROM submissions WHERE id=?')
+        .bind(v.id).first();
+      if(!previous)return bad('Pendaftaran tidak ditemukan. Muat ulang daftar.',404);
+      // Atomic conditional update: only one of two competing decisions wins.
+      const updated=await env.DB.prepare(`UPDATE submissions
+        SET status=?,rejection_reason=?,status_revision=status_revision+1
+        WHERE id=? AND status_revision=?`)
+        .bind(v.status,reason,v.id,v.expectedRevision).run();
+      if(!Number(updated.meta?.changes))return bad(
+        'Pendaftar ini sudah diproses oleh admin lain. Data terbaru akan dimuat; periksa kembali sebelum memutuskan.',409);
+      if(previous.status!==v.status)
+        await mailboxStatusNote(env,v.id,v.status,reason);
+      return J({ok:true,status:v.status,statusRevision:v.expectedRevision+1});
     }
   }
   return bad('Endpoint tidak ditemukan.', 404);
