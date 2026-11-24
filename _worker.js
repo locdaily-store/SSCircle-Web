@@ -3317,7 +3317,27 @@ async function ensureMailbox(env) {
     'CREATE INDEX IF NOT EXISTS idx_ssc_mailbox_owner ON member_mailbox(application_id,created_at)'
   ];
   for(const statement of sql) await env.DB.prepare(statement).run();
+  // Backfill ALL earlier registrations as soon as the Mail Box schema is
+  // initialized. The stored notice is stable and idempotent; its body never
+  // duplicates the bearer registration credential in the mailbox table.
+  await env.DB.prepare(`INSERT OR IGNORE INTO member_mailbox
+    (id,application_id,type,title,content,created_at)
+    SELECT 'c0dec0de'||substr(id,9),id,'registration_code',
+      'Kode pendaftaran tersimpan',
+      'Buka pesan ini melalui sesi pendaftaranmu untuk melihat kode asli. Jangan bagikan kode kepada orang lain.',
+      ?
+    FROM submissions WHERE length(id)=36`).bind(new Date().toISOString()).run();
   mailboxSchemaReady.add(env.DB);
+}
+// This inserts a single durable Mail Box notice without duplicating the code.
+// The original tracking_code stays authoritative in submissions.
+async function mailboxRegistrationNote(env,applicationId){
+  await env.DB.prepare(`INSERT OR IGNORE INTO member_mailbox
+    (id,application_id,type,title,content,created_at)
+    SELECT 'c0dec0de'||substr(id,9),id,'registration_code',
+      'Kode pendaftaran tersimpan',
+      'Buka pesan ini melalui sesi pendaftaranmu untuk melihat kode asli. Jangan bagikan kode kepada orang lain.',
+      ? FROM submissions WHERE id=?`).bind(new Date().toISOString(),applicationId).run();
 }
 async function mailboxKey(env){
   const raw=await crypto.subtle.digest('SHA-256',
@@ -3370,6 +3390,7 @@ function mailboxStatusMessage(status,reason='',settings={}){
 async function mailboxStatusNote(env,applicationId,status,reason=''){
   try{
     await ensureMailbox(env);
+    await mailboxRegistrationNote(env,applicationId);
     const settings=formFrom(await readSettingsRow(env)).settings;
     const message=mailboxStatusMessage(status,reason,settings);
     // Type distinguishes accepted status notifications without HTML or new D1 columns.
@@ -4669,6 +4690,8 @@ async function mailboxAPI(req,env,path,method){
   const accepted=account.status==='accepted';
   await ensureMailbox(env);
   if(path==='/api/player/mailbox' && method==='GET'){
+    // Also cover accounts whose first status notification failed transiently.
+    await mailboxRegistrationNote(env,account.id);
     await ensureSocial(env);
     const rows=await env.DB.prepare(`SELECT id,type,title,content,created_at,read_at,
       expires_at,encrypted_secret FROM member_mailbox WHERE application_id=?
@@ -4717,7 +4740,14 @@ async function mailboxAPI(req,env,path,method){
       discordCTA:acceptedCTA&&(row.type==='status_accepted'||
         (row.type==='status'&&row.title==='Selamat, pendaftaranmu diterima'))
         ?acceptedCTA:null,
-      title:row.title,content:row.content,createdAt:row.created_at,
+      title:row.title,
+      // The credential stays in submissions only. Its value is hydrated for
+      // the authenticated OWNER, not stored in plaintext in the Mail Box copy.
+      content:row.type==='registration_code'
+        ?'Kode pendaftaran milikmu: '+(account.tracking_code||account.id.slice(0,8).toUpperCase())+
+          '\n\nSimpan kode ini secara pribadi. Kode ini digunakan untuk Cek Status dan masuk ke Mail Box. Jangan membagikannya kepada siapa pun.'
+        :row.content,
+      createdAt:row.created_at,
       read:!!row.read_at,expiresAt:row.expires_at?new Date(row.expires_at*1000).toISOString():null,
       friendSenderId:accepted&&row.type==='friend_request'?friendNoticeIds.get(row.id)||null:null,
       canReveal:accepted && !!row.encrypted_secret && row.id===newest?.id &&
@@ -4839,6 +4869,8 @@ async function mailboxAPI(req,env,path,method){
       if(virtualIds.some(id=>!allowed.has(id)))return bad('Notifikasi tidak ditemukan.',404);
     }
     if(payload.action==='delete'){
+      if(found.results.some(row=>row.type==='registration_code'))
+        return bad('Pesan kode pendaftaran disimpan permanen dan tidak dapat dihapus.',409);
       const latest=await env.DB.prepare(
         "SELECT id FROM member_mailbox WHERE application_id=? AND type='activation' ORDER BY rowid DESC LIMIT 1")
         .bind(account.id).first();
@@ -4880,6 +4912,9 @@ async function mailboxAPI(req,env,path,method){
       if(await noticeMark(env,account,[payload.id],'delete'))return J({ok:true});
       return bad('Pesan tidak ditemukan.',404);
     }
+    // The registration code remains available for every registration status.
+    if(row.type==='registration_code')
+      return bad('Pesan kode pendaftaran disimpan permanen dan tidak dapat dihapus.',409);
     // Never remove the sole copy of a still-valid, one-use activation code.
     if(row.type==='activation'){
       const newest=await env.DB.prepare("SELECT id FROM member_mailbox WHERE application_id=? AND type='activation' ORDER BY rowid DESC LIMIT 1")
