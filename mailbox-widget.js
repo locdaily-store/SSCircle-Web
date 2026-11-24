@@ -45,6 +45,11 @@
     '<p>Tekan pesan untuk membaca isinya.</p></div>',
     '<div id="ssc-mailbox-detail" hidden><span class="mailbox-eyebrow" id="ssc-mailbox-category"></span>',
     '<h3 id="ssc-mailbox-subject"></h3><time id="ssc-mailbox-time"></time><p id="ssc-mailbox-body"></p>',
+    '<div class="mailbox-secret-panel" id="ssc-mailbox-registration-panel" hidden>',
+    '<p>Kode pendaftaran ini bersifat pribadi. Jangan bagikan kepada siapa pun.</p>',
+    '<div class="mailbox-secret-row"><code id="ssc-mailbox-registration-code"></code>',
+    '<button type="button" class="mailbox-primary" id="ssc-mailbox-registration-copy">Salin kode pendaftaran</button></div>',
+    '<small id="ssc-mailbox-registration-status" role="status" aria-live="polite"></small></div>',
     '<div id="ssc-mailbox-accepted-discord" class="mailbox-accepted-discord" hidden><p id="ssc-mailbox-accepted-discord-note"></p>',
     '<a id="ssc-mailbox-accepted-discord-button" class="mailbox-primary mailbox-accepted-discord-button" target="_blank" rel="noopener noreferrer">Gabung SSCircle Community ↗</a></div>',
     '<a class="mailbox-primary ssc-notice-link" id="ssc-mailbox-link" hidden>Lihat informasi</a>',
@@ -121,6 +126,9 @@
     $('ssc-mailbox-detail').hidden=true;
     $('ssc-mailbox-code').textContent='';
     $('ssc-mailbox-secret-row').hidden=true;
+    $('ssc-mailbox-registration-code').textContent='';
+    $('ssc-mailbox-registration-panel').hidden=true;
+    $('ssc-mailbox-registration-status').textContent='';
   }
   function shownItems(){
     return items.filter(item=>filter==='all'||(filter==='unread'&&!item.read)||
@@ -194,6 +202,13 @@
     $('ssc-mailbox-subject').textContent=item.title;
     $('ssc-mailbox-time').textContent=fmt(item.createdAt);
     $('ssc-mailbox-body').textContent=item.content;
+    const registrationCode=item.type==='registration_code'
+      &&typeof item.registrationCode==='string'
+      &&/^(?:[A-F0-9]{20}|[A-F0-9]{8})$/.test(item.registrationCode)
+      ?item.registrationCode:'';
+    $('ssc-mailbox-registration-panel').hidden=!registrationCode;
+    $('ssc-mailbox-registration-code').textContent=registrationCode;
+    $('ssc-mailbox-registration-status').textContent='';
     const cta=item.discordCTA;
     const validDiscord=typeof cta?.url==='string' && /^https:\/\/(?:discord\.gg\/[A-Za-z0-9-]{3,}|discord\.com\/invite\/[A-Za-z0-9-]{3,})\/?$/.test(cta.url);
     $('ssc-mailbox-accepted-discord').hidden=!validDiscord;
@@ -381,6 +396,23 @@
       $('ssc-mailbox-secret-status').textContent=error.message;
       $('ssc-mailbox-secret-row').hidden=true;
     }finally{button.disabled=false;}
+  });
+  $('ssc-mailbox-registration-copy').addEventListener('click',async()=>{
+    const id=current?.id;
+    if(current?.type!=='registration_code'||!id)return;
+    const code=$('ssc-mailbox-registration-code').textContent;
+    if(!/^(?:[A-F0-9]{20}|[A-F0-9]{8})$/.test(code))return;
+    try{
+      await navigator.clipboard.writeText(code);
+      if(current?.id===id)$('ssc-mailbox-registration-status').textContent='Kode pendaftaran berhasil disalin.';
+    }catch{
+      if(current?.id!==id)return;
+      const range=document.createRange();
+      range.selectNodeContents($('ssc-mailbox-registration-code'));
+      const selection=window.getSelection();
+      selection?.removeAllRanges();selection?.addRange(range);
+      $('ssc-mailbox-registration-status').textContent='Kode telah dipilih. Salin manual dengan Ctrl+C atau gunakan tombol salin di perangkatmu.';
+    }
   });
   $('ssc-mailbox-copy').addEventListener('click',async()=>{
     const code=$('ssc-mailbox-code').textContent;
