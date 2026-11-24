@@ -4,8 +4,8 @@
 (() => {
   const $=id=>document.getElementById(id);
   let items=[],current=null,filter='all',loading=false,appStatus='none',hasPassword=false;
-  const kindLabel=type=>({activation:'AKTIVASI AKUN',status:'STATUS PENDAFTARAN',announcement:'PENGUMUMAN RESMI',event:'EVENT SSCIRCLE',friend_request:'KOMUNITAS',friend_response:'KOMUNITAS',badge:'PENGHARGAAN'})[type]||'PEMBERITAHUAN';
-  const kindIcon=type=>({activation:'✦',status:'◆',announcement:'◈',event:'▦',friend_request:'♙',friend_response:'♙',badge:'★'})[type]||'✉';
+  const kindLabel=type=>({registration_code:'KODE PENDAFTARAN',activation:'AKTIVASI AKUN',status:'STATUS PENDAFTARAN',announcement:'PENGUMUMAN RESMI',event:'EVENT SSCIRCLE',friend_request:'KOMUNITAS',friend_response:'KOMUNITAS',badge:'PENGHARGAAN'})[type]||'PEMBERITAHUAN';
+  const kindIcon=type=>({registration_code:'🔑',activation:'✦',status:'◆',announcement:'◈',event:'▦',friend_request:'♙',friend_response:'♙',badge:'★'})[type]||'✉';
   // Kode aktivasi hanya untuk pendaftar yang diterima; selain itu tombolnya dikunci.
   function applyAccess(){
     const ok=appStatus==='accepted';
@@ -41,7 +41,7 @@
     const root=$('mailbox-list');root.replaceChildren();
     const shown=items.filter(p=>filter==='all'||(filter==='unread'&&!p.read)||
       (filter==='status'&&p.type==='status')||
-      (filter==='activation'&&(p.type==='activation'||p.type==='information'))||
+      (filter==='activation'&&(['registration_code','activation','information'].includes(p.type)))||
       (filter==='announcement'&&p.type==='announcement')||
       (filter==='event'&&p.type==='event')||
       (filter==='community'&&['friend_request','friend_response','badge'].includes(p.type)));
