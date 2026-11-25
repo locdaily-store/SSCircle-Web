@@ -151,7 +151,7 @@ window.SSCircleNotificationAdmin=(()=>{
    list=el('div');
    panel.append(list);root.append(panel);
   }
-  try{await refreshList()}catch(e){status.textContent=e.message}
+  try{await refreshList();await window.SSCircleDirectAdmin?.load()}catch(e){status.textContent=e.message}
   finally{loading=false}
  }
  return {load};
