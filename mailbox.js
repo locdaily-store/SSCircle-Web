@@ -4,19 +4,20 @@
 (() => {
   const $=id=>document.getElementById(id);
   let items=[],current=null,filter='all',loading=false,appStatus='none',hasPassword=false;
-  const kindLabel=type=>({registration_code:'KODE PENDAFTARAN',activation:'AKTIVASI AKUN',status:'STATUS PENDAFTARAN',announcement:'PENGUMUMAN RESMI',event:'EVENT SSCIRCLE',friend_request:'KOMUNITAS',friend_response:'KOMUNITAS',badge:'PENGHARGAAN'})[type]||'PEMBERITAHUAN';
-  const kindIcon=type=>({registration_code:'🔑',activation:'✦',status:'◆',announcement:'◈',event:'▦',friend_request:'♙',friend_response:'♙',badge:'★'})[type]||'✉';
+  const kindLabel=type=>({registration_code:'KODE PENDAFTARAN',activation:'AKTIVASI AKUN',status:'STATUS PENDAFTARAN',announcement:'PENGUMUMAN RESMI',event:'EVENT SSCIRCLE',friend_request:'KOMUNITAS',friend_response:'KOMUNITAS',badge:'PENGHARGAAN',direct_message:'PESAN PENGURUS'})[type]||'PEMBERITAHUAN';
+  const kindIcon=type=>({registration_code:'🔑',activation:'✦',status:'◆',announcement:'◈',event:'▦',friend_request:'♙',friend_response:'♙',badge:'★',direct_message:'✉'})[type]||'✉';
   // Kode aktivasi hanya untuk pendaftar yang diterima; selain itu tombolnya dikunci.
   function applyAccess(){
     const ok=appStatus==='accepted';
     $('mailbox-request-button').disabled=!ok;
     $('mailbox-request-button').hidden=false;
+    $('mailbox-request-button').textContent=hasPassword?'Minta kode pemulihan':'Minta kode aktivasi';
     const hint=$('mailbox-request-hint');
     if(hint)hint.hidden=ok;
     $('mailbox-request-heading').textContent=hasPassword?'Kode verifikasi akun':'Kode aktivasi akun';
     const message=$('mailbox-request-description');
     if(message)message.textContent=hasPassword
-      ?'Tekan Minta kode untuk menerima kode verifikasi otomatis setelah login dengan password Dashboard. Tidak memerlukan admin jika sesi login aman sudah aktif.'
+      ?'Tekan Minta kode pemulihan setelah login dengan password Dashboard. Kode otomatis dikirim ke Mail Box. Kode pendaftaran saja tidak cukup untuk mereset password.'
       :'Kode aktivasi pertama otomatis dikirim setelah status Diterima. Tekan Minta kode untuk memeriksa kode aktif atau menerbitkan kode baru.';
   }
   const fmt=date=>{
@@ -42,7 +43,7 @@
     const shown=items.filter(p=>filter==='all'||(filter==='unread'&&!p.read)||
       (filter==='status'&&p.type==='status')||
       (filter==='activation'&&(['registration_code','activation','information'].includes(p.type)))||
-      (filter==='announcement'&&p.type==='announcement')||
+      (filter==='announcement'&&['announcement','direct_message'].includes(p.type))||
       (filter==='event'&&p.type==='event')||
       (filter==='community'&&['friend_request','friend_response','badge'].includes(p.type)));
     const unread=items.filter(x=>!x.read).length;
@@ -75,6 +76,8 @@
     $('mailbox-detail-title').textContent=item.title;
     $('mailbox-detail-time').textContent=fmt(item.createdAt);
     $('mailbox-detail-body').textContent=item.content;
+    if(item.directThreadId)void window.SSCircleDirectMailbox?.render($('mailbox-direct'),item.directThreadId);
+    else window.SSCircleDirectMailbox?.clear($('mailbox-direct'));
     const registrationCode=item.type==='registration_code'
       &&typeof item.registrationCode==='string'
       &&/^(?:[A-F0-9]{20}|[A-F0-9]{8})$/.test(item.registrationCode)
@@ -124,6 +127,7 @@
       items=[];current=null;appStatus='none';hasPassword=false;applyAccess();
       $('mailbox-detail-content').hidden=true;
       $('mailbox-detail-empty').hidden=false;
+      window.SSCircleDirectMailbox?.clear($('mailbox-direct'));
       $('mailbox-secret-value').textContent='';
       $('mailbox-secret-row').hidden=true;
       $('mailbox-registration-code').textContent='';
@@ -136,7 +140,8 @@
   $('mailbox-request-button').addEventListener('click',async()=>{
     const b=$('mailbox-request-button');b.disabled=true;note('Memproses permintaan kode aktivasi atau verifikasi...');
     try{
-      const response=await call('/api/player/mailbox/request-activation','POST',{});
+      const endpoint=hasPassword?'/api/player/mailbox/request-recovery':'/api/player/mailbox/request-activation';
+      const response=await call(endpoint,'POST',{});
       await load();note(response.message); // No automatic page redirect; already inside Mail Box.
     }catch(error){note(error.message,true)}finally{applyAccess();}
   });
