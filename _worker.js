@@ -538,7 +538,7 @@ function publicEvents(settings) {
 // Teks dan kategori aturan awal. Seluruhnya bisa diedit melalui Admin Control.
 const RULES_DEFAULTS = {
   "mailboxAcceptedTitle": "Selamat, pendaftaranmu diterima",
-  "mailboxAcceptedBody": "Pendaftaranmu telah diterima. Untuk mengaktifkan akun, minta kode aktivasi dari bagian atas Mail Box. Kode dikirim setelah identitasmu diverifikasi oleh pengurus.",
+  "mailboxAcceptedBody": "Pendaftaranmu telah diterima. Kamu bisa meminta kode aktivasi pertama langsung dari Mail Box dan kode otomatis dikirim. Pemulihan password yang sudah aktif tetap memerlukan verifikasi pengurus.",
   "mailboxAcceptedDiscordEnabled": true,
   "mailboxAcceptedDiscordNote": "IP Address server Minecraft SSCircle tersedia di Discord SSCircle Community. Bergabunglah untuk mendapatkan alamat server dan informasi komunitas.",
   "mailboxAcceptedDiscordButton": "Gabung SSCircle Community",
@@ -3317,7 +3317,27 @@ async function ensureMailbox(env) {
     'CREATE INDEX IF NOT EXISTS idx_ssc_mailbox_owner ON member_mailbox(application_id,created_at)'
   ];
   for(const statement of sql) await env.DB.prepare(statement).run();
+  // Backfill ALL earlier registrations as soon as the Mail Box schema is
+  // initialized. The stored notice is stable and idempotent; its body never
+  // duplicates the bearer registration credential in the mailbox table.
+  await env.DB.prepare(`INSERT OR IGNORE INTO member_mailbox
+    (id,application_id,type,title,content,created_at)
+    SELECT 'c0dec0de'||substr(id,9),id,'registration_code',
+      'Kode pendaftaran tersimpan',
+      'Buka pesan ini melalui sesi pendaftaranmu untuk melihat kode asli. Jangan bagikan kode kepada orang lain.',
+      ?
+    FROM submissions WHERE length(id)=36`).bind(new Date().toISOString()).run();
   mailboxSchemaReady.add(env.DB);
+}
+// This inserts a single durable Mail Box notice without duplicating the code.
+// The original tracking_code stays authoritative in submissions.
+async function mailboxRegistrationNote(env,applicationId){
+  await env.DB.prepare(`INSERT OR IGNORE INTO member_mailbox
+    (id,application_id,type,title,content,created_at)
+    SELECT 'c0dec0de'||substr(id,9),id,'registration_code',
+      'Kode pendaftaran tersimpan',
+      'Buka pesan ini melalui sesi pendaftaranmu untuk melihat kode asli. Jangan bagikan kode kepada orang lain.',
+      ? FROM submissions WHERE id=?`).bind(new Date().toISOString(),applicationId).run();
 }
 async function mailboxKey(env){
   const raw=await crypto.subtle.digest('SHA-256',
@@ -3370,11 +3390,27 @@ function mailboxStatusMessage(status,reason='',settings={}){
 async function mailboxStatusNote(env,applicationId,status,reason=''){
   try{
     await ensureMailbox(env);
+    await mailboxRegistrationNote(env,applicationId);
     const settings=formFrom(await readSettingsRow(env)).settings;
     const message=mailboxStatusMessage(status,reason,settings);
     // Type distinguishes accepted status notifications without HTML or new D1 columns.
     await mailboxNote(env,applicationId,status==='accepted'?'status_accepted':'status',
       message.title,message.content);
+    // First activation is delivered automatically when a 20-digit, accepted
+    // registration changes to Diterima. Never reset an existing password.
+    if(status==='accepted'){
+      try{
+        const member=await env.DB.prepare(
+          'SELECT tracking_code FROM submissions WHERE id=? AND status=?')
+          .bind(applicationId,'accepted').first();
+        if(/^[A-F0-9]{20}$/.test(member?.tracking_code||''))
+          await mailboxIssueInitialInvite(env,applicationId);
+      }catch{
+        // A temporary D1 error must not roll back the accepted status; the
+        // member can retry issuance from Mail Box without admin assistance.
+        console.error('[SSCircle] Automatic first activation delivery failed.');
+      }
+    }
     return true;
   }catch(error){
     console.error('[SSCircle] Mail Box status notification:',error);
@@ -4501,6 +4537,82 @@ async function minecraftLinkClaim(req,env){
   return J({ok:true,message:'Identitas terverifikasi. Buka Profile SSCircle lalu konfirmasi akun ini.'});
 }
 
+/* Self-service is allowed only for the FIRST activation of an accepted
+   applicant. A registration-code session must NEVER reset an existing password:
+   recovery still requires the optional independent Admin Control approval.
+   All three writes share one D1 transaction to avoid issuing an orphan code. */
+async function mailboxActiveInvite(env,memberId){
+  const now=Math.floor(Date.now()/1000);
+  const row=await env.DB.prepare(`SELECT m.id,i.expires_at FROM member_activation_invites i
+    JOIN member_mailbox m ON m.application_id=i.application_id
+      AND m.type='activation' AND m.expires_at=i.expires_at
+      AND m.encrypted_secret IS NOT NULL AND m.secret_nonce IS NOT NULL
+    WHERE i.application_id=? AND i.used_at IS NULL AND i.expires_at>?
+    ORDER BY m.rowid DESC LIMIT 1`).bind(memberId,now).first();
+  return row?{expiresAt:new Date(row.expires_at*1000).toISOString(),existing:true}:null;
+}
+async function mailboxIssueInitialInvite(env,memberId,verifiedRecovery=false){
+  const existing=await mailboxActiveInvite(env,memberId);
+  if(existing)return existing;
+  const now=Math.floor(Date.now()/1000),stamp=new Date().toISOString();
+  const expires=now+MEMBER_INVITE_SECONDS,secret=b64(crypto.getRandomValues(new Uint8Array(24)));
+  const hashed=await memberInviteHash(env,secret);
+  const sealed=await mailboxSeal(env,secret),messageId=uid();
+  // The SELECT and conflict guard both re-check acceptance, non-activation,
+  // and an already delivered code inside the transactional D1 batch.
+  const noActive=`NOT EXISTS (SELECT 1 FROM member_activation_invites i
+    JOIN member_mailbox m ON m.application_id=i.application_id
+      AND m.type='activation' AND m.expires_at=i.expires_at
+      AND m.encrypted_secret IS NOT NULL
+    WHERE i.application_id=? AND i.used_at IS NULL AND i.expires_at>?)`;
+  // Password recovery may only use this self-service issuer AFTER a strong
+  // authenticated Dashboard session has been checked by the calling API.
+  // A registration-code-only cookie never grants recovery rights.
+  const allowed=`EXISTS(SELECT 1 FROM submissions s WHERE s.id=? AND s.status='accepted')
+    AND ${verifiedRecovery?'EXISTS':'NOT EXISTS'}(SELECT 1 FROM member_credentials c WHERE c.application_id=?)`;
+  const results=await env.DB.batch([
+    env.DB.prepare(`INSERT INTO member_activation_invites
+      (application_id,secret_hash,expires_at,created_at,used_at)
+      SELECT ?,?,?,?,NULL WHERE ${allowed} AND ${noActive}
+      ON CONFLICT(application_id) DO UPDATE SET
+        secret_hash=excluded.secret_hash,expires_at=excluded.expires_at,
+        created_at=excluded.created_at,used_at=NULL
+      WHERE ${allowed} AND ${noActive}`)
+      .bind(memberId,hashed,expires,stamp,
+        memberId,memberId,memberId,now,
+        memberId,memberId,memberId,now),
+    env.DB.prepare(`INSERT INTO member_mailbox
+      (id,application_id,type,title,content,encrypted_secret,secret_nonce,expires_at,created_at)
+      SELECT ?,?,'activation',?,
+        ?,
+        ?,?,?,?
+      WHERE ${allowed} AND EXISTS(SELECT 1 FROM member_activation_invites i
+        WHERE i.application_id=? AND i.secret_hash=? AND i.expires_at=? AND i.used_at IS NULL)`)
+      .bind(messageId,memberId,
+        verifiedRecovery?'Kode verifikasi akun tersedia':'Kode aktivasi akun tersedia',
+        verifiedRecovery
+          ?'Kode verifikasi diterbitkan setelah login Dashboard. Berlaku 24 jam dan hanya sekali pakai. Jangan bagikan kepada siapa pun.'
+          :'Pendaftaranmu sudah Diterima. Kode aktivasi berlaku 24 jam dan satu kali pakai. Jangan bagikan kode pendaftaran atau password.',
+        sealed.encrypted,sealed.nonce,expires,stamp,
+        memberId,memberId,memberId,hashed,expires),
+    env.DB.prepare(`INSERT INTO member_activation_requests(application_id,requested_at,status,updated_at)
+      SELECT ?,?,'sent',? WHERE EXISTS(SELECT 1 FROM member_mailbox
+        WHERE id=? AND application_id=? AND type='activation')
+      ON CONFLICT(application_id) DO UPDATE SET
+        requested_at=excluded.requested_at,status='sent',updated_at=excluded.updated_at`)
+      .bind(memberId,stamp,stamp,messageId,memberId),
+    // A prior unused admin approval must not become a password-recovery bypass
+    // after self-service activation succeeds. New recoveries require new approval.
+    env.DB.prepare(`UPDATE member_mailbox_approvals SET consumed_at=?
+      WHERE application_id=? AND consumed_at IS NULL AND EXISTS(
+        SELECT 1 FROM member_mailbox WHERE id=? AND application_id=? AND type='activation')`)
+      .bind(stamp+'#self-service',memberId,messageId,memberId)
+  ]);
+  if(results.slice(0,3).every(x=>x?.meta?.changes>0))
+    return {expiresAt:new Date(expires*1000).toISOString(),existing:false};
+  // Another request may have sent a code first. Reuse that code, never rotate it.
+  return mailboxActiveInvite(env,memberId);
+}
 async function mailboxIssueInvite(env,memberId){
   // Generate and seal the secret before consuming approval. Publishing the
   // invite, private message and request status must be one D1 transaction.
@@ -4578,6 +4690,8 @@ async function mailboxAPI(req,env,path,method){
   const accepted=account.status==='accepted';
   await ensureMailbox(env);
   if(path==='/api/player/mailbox' && method==='GET'){
+    // Also cover accounts whose first status notification failed transiently.
+    await mailboxRegistrationNote(env,account.id);
     await ensureSocial(env);
     const rows=await env.DB.prepare(`SELECT id,type,title,content,created_at,read_at,
       expires_at,encrypted_secret FROM member_mailbox WHERE application_id=?
@@ -4613,6 +4727,12 @@ async function mailboxAPI(req,env,path,method){
       label:mailSettings.mailboxAcceptedDiscordButton||RULES_DEFAULTS.mailboxAcceptedDiscordButton,
       url:discordUrl
     };
+    // A verification code issued after Dashboard login must never be
+    // revealed by a copied registration tracking code alone.
+    const containsVerifiedCode=(rows.results||[]).some(row=>
+      row.type==='activation'&&row.title==='Kode verifikasi akun tersedia');
+    const secureCodeViewer=containsVerifiedCode&&accepted
+      ?!!(await memberStrongSession(req,env,account)):false;
     const inbox=(rows.results||[]).filter(row=>
       (!['friend_request','friend_response'].includes(row.type)||prefs.community)&&
       (row.type!=='badge'||prefs.awards)).map(row=>({id:row.id,
@@ -4620,46 +4740,90 @@ async function mailboxAPI(req,env,path,method){
       discordCTA:acceptedCTA&&(row.type==='status_accepted'||
         (row.type==='status'&&row.title==='Selamat, pendaftaranmu diterima'))
         ?acceptedCTA:null,
-      title:row.title,content:row.content,createdAt:row.created_at,
+      title:row.title,
+      registrationCode:row.type==='registration_code'
+        ?(account.tracking_code||account.id.slice(0,8).toUpperCase()):null,
+      // The credential stays in submissions only. Its value is hydrated for
+      // the authenticated OWNER, not stored in plaintext in the Mail Box copy.
+      content:row.type==='registration_code'
+        ?'Kode pendaftaran milikmu: '+(account.tracking_code||account.id.slice(0,8).toUpperCase())+
+          '\n\nSimpan kode ini secara pribadi. Kode ini digunakan untuk Cek Status dan masuk ke Mail Box. Jangan membagikannya kepada siapa pun.'
+        :row.content,
+      createdAt:row.created_at,
       read:!!row.read_at,expiresAt:row.expires_at?new Date(row.expires_at*1000).toISOString():null,
       friendSenderId:accepted&&row.type==='friend_request'?friendNoticeIds.get(row.id)||null:null,
       canReveal:accepted && !!row.encrypted_secret && row.id===newest?.id &&
+        (row.title!=='Kode verifikasi akun tersedia'||secureCodeViewer) &&
         row.expires_at>Math.floor(Date.now()/1000) &&
         invite?.used_at===null && invite?.expires_at===row.expires_at}));
     const items=[...inbox,...virtual].sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt))).slice(0,80);
-    return J({items,activationRequest:request?.status||'none',applicationStatus:account.status});
+    const credential=accepted?await env.DB.prepare(
+      'SELECT application_id FROM member_credentials WHERE application_id=?').bind(account.id).first():null;
+    return J({items,activationRequest:request?.status||'none',
+      applicationStatus:account.status,hasPassword:!!credential});
   }
   if(path==='/api/player/mailbox/request-activation' && method==='POST'){
     if(!accepted)
       return bad('Kode aktivasi hanya tersedia setelah pendaftaranmu diterima.',403);
     if(!await rateLimit(env,req,'mailbox-activation',4,300))
       return bad('Terlalu banyak permintaan kode. Coba lagi dalam 5 menit.',429);
+
+    // First activation is automatic after acceptance. Do not give someone who
+    // only knows the registration code a password-reset capability.
+    const credentials=await env.DB.prepare('SELECT application_id FROM member_credentials WHERE application_id=?')
+      .bind(account.id).first();
+    // Old eight-character legacy references are too short to authorize a
+    // password via self-service; keep the admin verification path for those.
+    if(!credentials && /^[A-F0-9]{20}$/.test(account.tracking_code||'')){
+      const sent=await mailboxIssueInitialInvite(env,account.id);
+      if(sent)return J({ok:true,delivered:true,firstActivation:true,expiresAt:sent.expiresAt,
+        message:sent.existing?'Kode aktivasi aktif sudah tersedia di Mail Box.':
+          'Kode aktivasi otomatis dikirim ke Mail Box. Buka pesan Aktivasi untuk menampilkan kode.'});
+      // Fail closed when a simultaneous request or status change prevents issue.
+      const nowActive=await env.DB.prepare('SELECT application_id FROM member_credentials WHERE application_id=?')
+        .bind(account.id).first();
+      if(!nowActive)return bad('Kode belum dapat diterbitkan. Periksa status Diterima lalu coba lagi.',503);
+    }
+    // For an already activated account, a verified Dashboard session IS an
+    // independent proof of ownership. Send a verification code to the same
+    // private Mail Box immediately; no admin review is necessary.
+    const verified=credentials?await memberStrongSession(req,env,account):null;
+    if(credentials&&verified){
+      const sent=await mailboxIssueInitialInvite(env,account.id,true);
+      if(sent)return J({ok:true,delivered:true,verification:true,
+        expiresAt:sent.expiresAt,message:sent.existing
+          ?'Kode verifikasi aktif sudah tersedia di Mail Box.'
+          :'Kode verifikasi otomatis dikirim ke Mail Box. Buka pesan Verifikasi untuk menampilkan kode.'});
+      return bad('Kode verifikasi belum berhasil disimpan. Coba lagi.',503);
+    }
+    // Do not allow a copied registration code to reset an already active
+    // password. The member may log in to Dashboard and retry without admin;
+    // a lost-password flow without a strong session still needs other proof.
+    const intention=await body(req,250);
+    if(intention?.purpose!=='recovery')return bad(
+      'Akun sudah aktif. Untuk meminta kode verifikasi otomatis, masuk dahulu menggunakan password Dashboard, lalu tekan Minta kode lagi. Jika password terlupa, gunakan Lupa password untuk verifikasi pemulihan.',403);
+    const activeInvite=await mailboxActiveInvite(env,account.id);
+    if(activeInvite)return J({ok:true,delivered:true,recovery:true,
+      message:'Kode pemulihan yang masih berlaku tersedia di Mail Box.'});
     const pending=await env.DB.prepare('SELECT status FROM member_activation_requests WHERE application_id=?')
       .bind(account.id).first();
-    const invite=await env.DB.prepare(`SELECT expires_at,used_at FROM member_activation_invites
-      WHERE application_id=?`).bind(account.id).first();
-    if(pending?.status==='sent' && invite?.used_at===null && invite.expires_at>Date.now()/1000)
-      return J({ok:true,delivered:true,message:'Kode masih tersedia di Mail Box.'});
     if(pending?.status==='pending'){
-      // Retry an already verified, but previously interrupted delivery.
-      const retried=await mailboxIssueInvite(env,account.id);
-      return J({ok:true,delivered:!!retried,message:retried?
-        'Kode aktivasi telah dikirim ke Mail Box.':
-        'Permintaan sedang menunggu verifikasi kepemilikan akun.'});
+      const sent=await mailboxIssueInvite(env,account.id);
+      return J({ok:true,delivered:!!sent,recovery:true,message:sent?
+        'Kode pemulihan telah dikirim ke Mail Box.':
+        'Permintaan pemulihan sedang menunggu verifikasi admin.'});
     }
     const stamp=new Date().toISOString();
     await env.DB.prepare(`INSERT INTO member_activation_requests(application_id,requested_at,status,updated_at)
-      VALUES(? ,?,'pending',?) ON CONFLICT(application_id) DO UPDATE SET
+      VALUES(?,?,'pending',?) ON CONFLICT(application_id) DO UPDATE SET
       requested_at=excluded.requested_at,status='pending',updated_at=excluded.updated_at`)
       .bind(account.id,stamp,stamp).run();
     const result=await mailboxIssueInvite(env,account.id);
-    if(!result){
-      await mailboxNote(env,account.id,'information','Permintaan aktivasi diterima',
-        'Permintaanmu sudah tercatat. Demi keamanan, kode akan dikirim otomatis setelah tim SSCircle memverifikasi identitasmu.');
-    }
-    return J({ok:true,delivered:!!result,message:result?
-      'Kode aktivasi telah dikirim ke Mail Box.':
-      'Permintaan sudah masuk ke Mail Box dan menunggu pemeriksaan identitas.'});
+    if(!result)await mailboxNote(env,account.id,'information','Permintaan pemulihan akun',
+      'Permintaan pemulihan password diterima. Pengurus perlu memverifikasi identitasmu sebelum kode pemulihan diterbitkan.');
+    return J({ok:true,delivered:!!result,recovery:true,message:result?
+      'Kode pemulihan telah dikirim ke Mail Box.':
+      'Permintaan pemulihan dicatat dan menunggu verifikasi identitas oleh admin.'});
   }
   if(path==='/api/player/mailbox/reveal' && method==='POST'){
     if(!accepted)
@@ -4667,11 +4831,14 @@ async function mailboxAPI(req,env,path,method){
     if(!await rateLimit(env,req,'mailbox-reveal',15,900))return bad('Terlalu banyak percobaan.',429);
     const payload=await body(req,250);
     if(!/^[0-9a-f-]{36}$/.test(payload?.id||''))return bad('Pesan tidak tersedia.',404);
-    const row=await env.DB.prepare(`SELECT encrypted_secret,secret_nonce,expires_at
+    const row=await env.DB.prepare(`SELECT title,encrypted_secret,secret_nonce,expires_at
       FROM member_mailbox WHERE id=? AND application_id=? AND type='activation'
       AND id=(SELECT id FROM member_mailbox WHERE application_id=? AND type='activation'
         ORDER BY rowid DESC LIMIT 1)`)
       .bind(payload.id,account.id,account.id).first();
+    if(row?.title==='Kode verifikasi akun tersedia'&&
+       !await memberStrongSession(req,env,account))
+      return bad('Masuk menggunakan password Dashboard untuk melihat kode verifikasi akun aktif.',403);
     const invite=await env.DB.prepare('SELECT expires_at,used_at FROM member_activation_invites WHERE application_id=?')
       .bind(account.id).first();
     if(!row?.encrypted_secret || row.expires_at<=Date.now()/1000 ||
@@ -4704,6 +4871,8 @@ async function mailboxAPI(req,env,path,method){
       if(virtualIds.some(id=>!allowed.has(id)))return bad('Notifikasi tidak ditemukan.',404);
     }
     if(payload.action==='delete'){
+      if(found.results.some(row=>row.type==='registration_code'))
+        return bad('Pesan kode pendaftaran disimpan permanen dan tidak dapat dihapus.',409);
       const latest=await env.DB.prepare(
         "SELECT id FROM member_mailbox WHERE application_id=? AND type='activation' ORDER BY rowid DESC LIMIT 1")
         .bind(account.id).first();
@@ -4745,6 +4914,9 @@ async function mailboxAPI(req,env,path,method){
       if(await noticeMark(env,account,[payload.id],'delete'))return J({ok:true});
       return bad('Pesan tidak ditemukan.',404);
     }
+    // The registration code remains available for every registration status.
+    if(row.type==='registration_code')
+      return bad('Pesan kode pendaftaran disimpan permanen dan tidak dapat dihapus.',409);
     // Never remove the sole copy of a still-valid, one-use activation code.
     if(row.type==='activation'){
       const newest=await env.DB.prepare("SELECT id FROM member_mailbox WHERE application_id=? AND type='activation' ORDER BY rowid DESC LIMIT 1")
@@ -5441,7 +5613,13 @@ async function community55API(req,env,path,method,ctx){
     const eventId=s(new URL(req.url).searchParams.get('eventId'),100);
     const signups=eventId?(await env.DB.prepare("SELECT r.member_id,r.state,r.joined_at,r.checked_in_at,s.status AS member_status FROM community_event_signups r JOIN submissions s ON s.id=r.member_id WHERE r.event_id=? ORDER BY r.joined_at LIMIT 200").bind(eventId).all()).results||[]:[];
     const awards=eventId?(await env.DB.prepare("SELECT member_id,rank,label,created_at FROM community_event_awards WHERE event_id=? ORDER BY rank").bind(eventId).all()).results||[]:[];
-    return J({proposals,signups,awards});
+    // Reuse the SAME registration Minecraft username lookup as Kelola Pemain.
+    // Resolve identities server-side; keep member_id for check-in/award writes.
+    const names=await applicantNamesFor(env,[...new Set(
+      [...signups,...awards].map(row=>row.member_id))]);
+    return J({proposals,
+      signups:signups.map(row=>({...row,applicantName:names.get(row.member_id)||''})),
+      awards:awards.map(row=>({...row,applicantName:names.get(row.member_id)||''}))});
   }
   if(path==='/api/admin/community/events/review'&&method==='POST'){
     const x=await body(req,1500),id=s(x.id,100),action=s(x.action,12);
@@ -6002,6 +6180,33 @@ function sscVoiceAppDownload(env,platform){
   }catch{}
   return '';
 }
+// SSCircle multi-admin sync: event revisions are persisted by D1 triggers.
+// Every approval/rejection also uses per-application compare-and-swap. Polling
+// only updates the dashboard view; correctness is enforced by D1 itself.
+const adminRealtimeReady=new WeakSet();
+async function ensureAdminRealtime(env){
+  if(adminRealtimeReady.has(env.DB))return;
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS admin_sync_revisions(
+    scope TEXT PRIMARY KEY,revision INTEGER NOT NULL DEFAULT 0)`).run();
+  await env.DB.prepare("INSERT OR IGNORE INTO admin_sync_revisions(scope,revision) VALUES('submissions',0)").run();
+  const columns=(await env.DB.prepare('PRAGMA table_info(submissions)').all()).results||[];
+  if(!columns.some(x=>x.name==='status_revision')){
+    try{await env.DB.prepare('ALTER TABLE submissions ADD COLUMN status_revision INTEGER NOT NULL DEFAULT 0').run();}
+    catch(e){if(!/duplicate column name/i.test(String(e?.message||e)))throw e;}
+  }
+  for(const sql of [
+    `CREATE TRIGGER IF NOT EXISTS ssc_admin_sync_insert AFTER INSERT ON submissions BEGIN
+       UPDATE admin_sync_revisions SET revision=revision+1 WHERE scope='submissions'; END`,
+    `CREATE TRIGGER IF NOT EXISTS ssc_admin_sync_delete AFTER DELETE ON submissions BEGIN
+       UPDATE admin_sync_revisions SET revision=revision+1 WHERE scope='submissions'; END`,
+    `CREATE TRIGGER IF NOT EXISTS ssc_admin_sync_status AFTER UPDATE OF status,rejection_reason,status_revision ON submissions
+       WHEN NEW.status IS NOT OLD.status OR NEW.rejection_reason IS NOT OLD.rejection_reason
+         OR NEW.status_revision IS NOT OLD.status_revision BEGIN
+       UPDATE admin_sync_revisions SET revision=revision+1 WHERE scope='submissions'; END`
+  ])await env.DB.prepare(sql).run();
+  adminRealtimeReady.add(env.DB);
+}
+
 async function route(req, env, ctx) {
   const url = new URL(req.url), path = url.pathname, method = req.method;
   if (path === '/api/github/database/inspect')
@@ -6569,6 +6774,13 @@ async function route(req, env, ctx) {
   if (path.startsWith('/api/admin/')) {
     if (!(await admin(req, env)))
       return bad('Akses admin diperlukan. Login ulang.', 401);
+    if(path==='/api/admin/live' && method==='GET'){
+      await ensureAdminRealtime(env);
+      const changes=await env.DB.prepare("SELECT revision FROM admin_sync_revisions WHERE scope='submissions'").first();
+      const form=await env.DB.prepare('SELECT updated_at FROM form_config WHERE id=1').first();
+      return J({submissionsRevision:Number(changes?.revision||0),formRevision:form?.updated_at||''},
+        200,{'Cache-Control':'private, no-store','Vary':'Cookie'});
+    }
     if (path === '/api/admin/form' && method === 'GET') {
       const row = await env.DB.prepare('SELECT * FROM form_config WHERE id=1').first();
       return J({ ...formFrom(row), revision: row.updated_at || '' });
@@ -7070,14 +7282,16 @@ async function route(req, env, ctx) {
       return J({ ok: failures.length === 0, deleted, failures });
     }
     if (path === '/api/admin/submissions' && method === 'GET') {
+      await ensureAdminRealtime(env);
       const offset = Math.min(Math.max(0, parseInt(url.searchParams.get('offset') || '0', 10) || 0), 1000000);
-      const r = await env.DB.prepare('SELECT id,submitted_at,status,rejection_reason,tracking_code,answers,question_snapshot FROM submissions ORDER BY submitted_at ASC,id ASC LIMIT 251 OFFSET ?').bind(offset).all();
+      const r = await env.DB.prepare('SELECT id,submitted_at,status,rejection_reason,status_revision,tracking_code,answers,question_snapshot FROM submissions ORDER BY submitted_at ASC,id ASC LIMIT 251 OFFSET ?').bind(offset).all();
       const arr = r.results || [];
       return J({
         items: arr.slice(0, 250).map(x => ({
           id: x.id,
           at: x.submitted_at,
           status: x.status,
+          statusRevision: Number(x.status_revision||0),
           reason: x.rejection_reason || '',
           trackingCode: x.tracking_code || x.id.slice(0, 8).toUpperCase(),
           answers: parse(x.answers) || {},
@@ -7087,6 +7301,7 @@ async function route(req, env, ctx) {
       });
     }
     if (path === '/api/admin/delete-submissions' && method === 'POST') {
+      await ensureAdminRealtime(env);
       const input = await body(req, 12000);
       if (input.scope !== 'selected' && input.scope !== 'all')
         throw Error('Pilihan penghapusan tidak valid.');
@@ -7132,20 +7347,29 @@ async function route(req, env, ctx) {
       return J({ ok: true, deleted, more: input.scope === 'all' && !!rest, mediaErrors });
     }
     if (path === '/api/admin/status' && method === 'PATCH') {
-      const v = await body(req, 5000);
-      if (!/^[0-9a-f-]{36}$/.test(v.id || '') || !STATUSES.has(v.status))
-        throw Error('ID/status tidak valid.');
-      const reason = v.status === 'rejected' ? s(v.reason, 1000) : '';
-      if (v.status === 'rejected' && !reason)
-        throw Error('Alasan penolakan wajib diisi.');
-      const before = await env.DB.prepare('SELECT status FROM submissions WHERE id=?').bind(v.id).first();
-      const r = await env.DB.prepare('UPDATE submissions SET status=?,rejection_reason=? WHERE id=?').bind(v.status, reason, v.id).run();
-      if (!(r.meta?.changes > 0))
-        return bad('Pendaftaran tidak ditemukan.', 404);
-      // V10.50: beri tahu pendaftar lewat Mail Box, hanya bila statusnya benar-benar berubah.
-      if (before && before.status !== v.status)
-        await mailboxStatusNote(env, v.id, v.status, reason);
-      return J({ ok: true });
+      await ensureAdminRealtime(env);
+      const v=await body(req,5000);
+      if(!/^[0-9a-f-]{36}$/.test(v.id||'')||!STATUSES.has(v.status))
+        return bad('ID/status tidak valid.',400);
+      // Precondition is mandatory. Old cached admin clients cannot silently
+      // overwrite changes made in another session/device.
+      if(!Number.isSafeInteger(v.expectedRevision)||v.expectedRevision<0)
+        return bad('Versi keputusan tidak tersedia. Perbarui halaman Admin Control.',428);
+      const reason=v.status==='rejected'?s(v.reason,1000):'';
+      if(v.status==='rejected'&&!reason)return bad('Alasan penolakan wajib diisi.',400);
+      const previous=await env.DB.prepare('SELECT status,status_revision FROM submissions WHERE id=?')
+        .bind(v.id).first();
+      if(!previous)return bad('Pendaftaran tidak ditemukan. Muat ulang daftar.',404);
+      // Atomic conditional update: only one of two competing decisions wins.
+      const updated=await env.DB.prepare(`UPDATE submissions
+        SET status=?,rejection_reason=?,status_revision=status_revision+1
+        WHERE id=? AND status_revision=?`)
+        .bind(v.status,reason,v.id,v.expectedRevision).run();
+      if(!Number(updated.meta?.changes))return bad(
+        'Pendaftar ini sudah diproses oleh admin lain. Data terbaru akan dimuat; periksa kembali sebelum memutuskan.',409);
+      if(previous.status!==v.status)
+        await mailboxStatusNote(env,v.id,v.status,reason);
+      return J({ok:true,status:v.status,statusRevision:v.expectedRevision+1});
     }
   }
   return bad('Endpoint tidak ditemukan.', 404);

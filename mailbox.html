@@ -17,7 +17,7 @@
   <link rel="stylesheet" href="mailbox.css?v=10.55.6">
   <script src="color-theme.js?v=10.38.0" defer></script>
   <script src="site-shell.js?v=10.38.0" defer></script>
-  <script src="mailbox.js?v=10.55.6" defer></script>
+  <script src="mailbox.js?v=10.55.11" defer></script>
     <script src="pwa-register.js?v=10.54.5" defer></script>
     <link rel="stylesheet" href="notification-center.css?v=10.53.4">
   <link rel="stylesheet" href="ssc-dialog.css?v=10.55.6">
@@ -52,8 +52,8 @@
       <div class="mailbox-request-copy">
         <span class="mailbox-eyebrow">ACCOUNT ACTIVATION</span>
         <h2 id="mailbox-request-heading">Kode aktivasi akun</h2>
-        <p>Ajukan kode aktivasi. Permintaan langsung masuk ke Mail Box. Jika identitasmu sudah diperiksa admin, kode dikirim otomatis. Jika belum, pesan akan memberi tahu bahwa verifikasi diperlukan.</p>
-        <small>Persetujuan pendaftaran tidak otomatis membuktikan kepemilikan akun. Kode bersifat pribadi dan berlaku 24 jam.</small>
+        <p id="mailbox-request-description">Setelah pendaftaran berstatus Diterima, kode aktivasi pertama akan langsung dikirim ke Mail Box tanpa menunggu Admin Control. Permintaan pemulihan password tetap memerlukan verifikasi admin.</p>
+        <small>Jaga kerahasiaan kode pendaftaran karena dipakai untuk masuk ke Mail Box. Kode aktivasi berlaku 24 jam dan hanya dapat dipakai sekali.</small>
         <small id="mailbox-request-hint" hidden>Kode aktivasi baru tersedia setelah pendaftaranmu diterima.</small>
       </div>
       <button type="button" id="mailbox-request-button" class="mailbox-primary" disabled>Minta kode aktivasi</button>
@@ -80,6 +80,13 @@
           <h2 id="mailbox-detail-title"></h2>
           <time id="mailbox-detail-time"></time>
           <p id="mailbox-detail-body"></p>
+          <div class="mailbox-secret-panel" id="mailbox-registration-panel" hidden>
+            <p>Kode pendaftaran ini bersifat pribadi. Jangan bagikan kepada siapa pun.</p>
+            <div class="mailbox-secret-row"><code id="mailbox-registration-code"></code>
+              <button type="button" id="mailbox-registration-copy" class="mailbox-primary">Salin kode pendaftaran</button>
+            </div>
+            <small id="mailbox-registration-status" role="status" aria-live="polite"></small>
+          </div>
           <div id="mailbox-accepted-discord" class="mailbox-accepted-discord" hidden>
             <p id="mailbox-accepted-discord-note"></p>
             <a id="mailbox-accepted-discord-button" class="mailbox-primary mailbox-accepted-discord-button"

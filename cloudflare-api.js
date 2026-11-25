@@ -70,6 +70,8 @@ const SSCircle = (() => {
   return {
     uuid: () => crypto.randomUUID(),
     getForm: () => api('/form'),
+    getAdminForm: () => api('/admin/form'),
+    getAdminLive: () => api('/admin/live'),
     getCooldown: () => api('/registration-cooldown'),
     async submit(answers, images = {}) {
       const payload = { answers, website: '' };
@@ -110,7 +112,8 @@ const SSCircle = (() => {
       return { ...form, submissions: await this.getSubmissions() };
     },
     saveForm: (settings, pages, revision) => api('/admin/form', jsonOptions('PUT', { settings, pages, revision })),
-    changeStatus: (id, status, reason = '') => api('/admin/status', jsonOptions('PATCH', { id, status, reason })),
+    changeStatus: (id, status, reason = '', expectedRevision) =>
+      api('/admin/status', jsonOptions('PATCH', { id, status, reason, expectedRevision })),
     deleteSubmissions: (payload) => api('/admin/delete-submissions', jsonOptions('POST', payload)),
     getMediaLibrary: () => api('/admin/media-library'),
     deleteUnusedMedia: (ids) => api('/admin/media-cleanup', jsonOptions('POST', { ids, confirmation: 'HAPUS MEDIA' })),

@@ -20,7 +20,7 @@
     <title>Admin Control · SSCircle Server</title>
     <link rel="icon" type="image/png" href="assets/sscircle-logo.png">
     <script src="color-theme.js?v=10.26.0" defer></script>
-    <script src="cloudflare-api.js?v=10.26.0" defer></script>
+    <script src="cloudflare-api.js?v=10.64.0" defer></script>
     <script src="admin-notifications.js?v=10.26.0" defer></script>
     <script src="admin-sortable.js?v=10.30.0" defer></script>
     <script src="image-source-picker.js?v=10.26.0" defer></script>
@@ -32,7 +32,7 @@
     <script src="vote-admin.js?v=10.31.0" defer></script>
     <script src="rules-admin.js?v=10.55.6" defer></script>
     <script src="events-admin.js?v=10.31.0" defer></script>
-    <script src="community-events-admin.js?v=10.61.0" defer></script>
+    <script src="community-events-admin.js?v=10.61.1" defer></script>
     <script src="notification-admin.js?v=10.55.6" defer></script>
     <link rel="stylesheet" href="notification-center.css?v=10.53.4">
     <link rel="stylesheet" href="season-lifecycle.css?v=10.63.2">
@@ -45,7 +45,7 @@
     <script src="profile-admin.js?v=10.55.6" defer></script>
     <script src="announcements-admin.js?v=10.55.6" defer></script>
     <script src="overview-dashboard.js?v=10.61.0" defer></script>
-    <script src="admin.js?v=10.55.6" defer></script>
+    <script src="admin.js?v=10.64.0" defer></script>
     <script src="form-insert-rail.js?v=10.26.0" defer></script>
     <script src="spreadsheet.js?v=10.26.0" defer></script>
     <link rel="stylesheet" href="password-visibility.css?v=10.39.0">
@@ -57,6 +57,11 @@
   <link rel="stylesheet" href="community-events-admin.css?v=10.56.3">
     <link rel="stylesheet" href="gallery-admin.css?v=10.57.1">
     <link rel="stylesheet" href="getting-started-admin.css?v=10.58.0">
+  <style>
+    .ssc-live-admin-tools{display:flex;align-items:center;flex-wrap:wrap;gap:.65rem;justify-content:flex-end}
+    #admin-live-status{font-size:.78rem;color:#b8efcf;max-width:310px;line-height:1.4}
+    #admin-live-status[data-warning="true"]{color:#ffcf83}
+  </style>
 </head>
   <body class="admin-page theme-v3">
     <div class="ambient ambient-a" aria-hidden="true"></div>
@@ -806,7 +811,7 @@
                   <h1>Jawaban masuk<span class="dot-accent">.</span></h1>
                   <p>Semua pertanyaan dan jawaban pendaftar tersimpan di sini.</p>
                 </div>
-                <button id="refresh" class="button secondary">↻ Refresh</button>
+                <div class="ssc-live-admin-tools"><span id="admin-live-status" role="status" aria-live="polite">Sinkronisasi otomatis sedang disiapkan…</span><button id="refresh" class="button secondary">↻ Refresh</button></div>
               </div>
               <div class="panel filters-panel">
                 <div class="search-wrap">

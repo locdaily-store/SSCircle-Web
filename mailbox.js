@@ -3,15 +3,21 @@
 'use strict';
 (() => {
   const $=id=>document.getElementById(id);
-  let items=[],current=null,filter='all',loading=false,appStatus='none';
-  const kindLabel=type=>({activation:'AKTIVASI AKUN',status:'STATUS PENDAFTARAN',announcement:'PENGUMUMAN RESMI',event:'EVENT SSCIRCLE',friend_request:'KOMUNITAS',friend_response:'KOMUNITAS',badge:'PENGHARGAAN'})[type]||'PEMBERITAHUAN';
-  const kindIcon=type=>({activation:'✦',status:'◆',announcement:'◈',event:'▦',friend_request:'♙',friend_response:'♙',badge:'★'})[type]||'✉';
+  let items=[],current=null,filter='all',loading=false,appStatus='none',hasPassword=false;
+  const kindLabel=type=>({registration_code:'KODE PENDAFTARAN',activation:'AKTIVASI AKUN',status:'STATUS PENDAFTARAN',announcement:'PENGUMUMAN RESMI',event:'EVENT SSCIRCLE',friend_request:'KOMUNITAS',friend_response:'KOMUNITAS',badge:'PENGHARGAAN'})[type]||'PEMBERITAHUAN';
+  const kindIcon=type=>({registration_code:'🔑',activation:'✦',status:'◆',announcement:'◈',event:'▦',friend_request:'♙',friend_response:'♙',badge:'★'})[type]||'✉';
   // Kode aktivasi hanya untuk pendaftar yang diterima; selain itu tombolnya dikunci.
   function applyAccess(){
     const ok=appStatus==='accepted';
     $('mailbox-request-button').disabled=!ok;
+    $('mailbox-request-button').hidden=false;
     const hint=$('mailbox-request-hint');
     if(hint)hint.hidden=ok;
+    $('mailbox-request-heading').textContent=hasPassword?'Kode verifikasi akun':'Kode aktivasi akun';
+    const message=$('mailbox-request-description');
+    if(message)message.textContent=hasPassword
+      ?'Tekan Minta kode untuk menerima kode verifikasi otomatis setelah login dengan password Dashboard. Tidak memerlukan admin jika sesi login aman sudah aktif.'
+      :'Kode aktivasi pertama otomatis dikirim setelah status Diterima. Tekan Minta kode untuk memeriksa kode aktif atau menerbitkan kode baru.';
   }
   const fmt=date=>{
     const d=new Date(date);
@@ -35,7 +41,7 @@
     const root=$('mailbox-list');root.replaceChildren();
     const shown=items.filter(p=>filter==='all'||(filter==='unread'&&!p.read)||
       (filter==='status'&&p.type==='status')||
-      (filter==='activation'&&(p.type==='activation'||p.type==='information'))||
+      (filter==='activation'&&(['registration_code','activation','information'].includes(p.type)))||
       (filter==='announcement'&&p.type==='announcement')||
       (filter==='event'&&p.type==='event')||
       (filter==='community'&&['friend_request','friend_response','badge'].includes(p.type)));
@@ -69,6 +75,13 @@
     $('mailbox-detail-title').textContent=item.title;
     $('mailbox-detail-time').textContent=fmt(item.createdAt);
     $('mailbox-detail-body').textContent=item.content;
+    const registrationCode=item.type==='registration_code'
+      &&typeof item.registrationCode==='string'
+      &&/^(?:[A-F0-9]{20}|[A-F0-9]{8})$/.test(item.registrationCode)
+      ?item.registrationCode:'';
+    $('mailbox-registration-panel').hidden=!registrationCode;
+    $('mailbox-registration-code').textContent=registrationCode;
+    $('mailbox-registration-status').textContent='';
     const cta=item.discordCTA;
     const validDiscord=typeof cta?.url==='string' && /^https:\/\/(?:discord\.gg\/[A-Za-z0-9-]{3,}|discord\.com\/invite\/[A-Za-z0-9-]{3,})\/?$/.test(cta.url);
     $('mailbox-accepted-discord').hidden=!validDiscord;
@@ -98,26 +111,30 @@
     loading=true;$('mailbox-refresh').disabled=true;
     try{
       const data=await call('/api/player/mailbox');items=data.items||[];
-      appStatus=['pending','accepted','rejected'].includes(data.applicationStatus)?data.applicationStatus:'none';applyAccess();
+      appStatus=['pending','accepted','rejected'].includes(data.applicationStatus)?data.applicationStatus:'none';
+      hasPassword=data.hasPassword===true;applyAccess();
       note(appStatus==='pending'?'Pendaftaranmu masih menunggu pemeriksaan pengurus SSCircle.':
         appStatus==='rejected'?'Pendaftaranmu belum dapat diterima. Baca pesan terbaru di kotak masuk.':
-        data.activationRequest==='pending'?'Permintaan kode sedang diperiksa oleh pengurus SSCircle.':
-        'Pesanmu sudah diperbarui.');
+        data.activationRequest==='pending'?'Permintaan pemulihan password sedang diperiksa pengurus SSCircle.':
+        hasPassword?'Akun aktif. Kode verifikasi dapat diminta setelah login Dashboard.':'Pesanmu sudah diperbarui.');
       if(current){current=items.find(x=>x.id===current.id)||null;if(current)await openMessage(current);}
       renderList();
     }catch(error){
       // Never retain a different applicant's private message after logout or network failure.
-      items=[];current=null;appStatus='none';applyAccess();
+      items=[];current=null;appStatus='none';hasPassword=false;applyAccess();
       $('mailbox-detail-content').hidden=true;
       $('mailbox-detail-empty').hidden=false;
       $('mailbox-secret-value').textContent='';
       $('mailbox-secret-row').hidden=true;
+      $('mailbox-registration-code').textContent='';
+      $('mailbox-registration-status').textContent='';
+      $('mailbox-registration-panel').hidden=true;
       renderList();
       note(error.message,true);
     }finally{$('mailbox-refresh').disabled=false;loading=false;}
   }
   $('mailbox-request-button').addEventListener('click',async()=>{
-    const b=$('mailbox-request-button');b.disabled=true;note('Mengajukan permintaan aktivasi...');
+    const b=$('mailbox-request-button');b.disabled=true;note('Memproses permintaan kode aktivasi atau verifikasi...');
     try{
       const response=await call('/api/player/mailbox/request-activation','POST',{});
       await load();note(response.message); // No automatic page redirect; already inside Mail Box.
@@ -153,6 +170,23 @@
     }catch(error){$('mailbox-secret-status').textContent=error.message;
       $('mailbox-secret-row').hidden=true;current.canReveal=false;
     }finally{button.disabled=false;}
+  });
+  $('mailbox-registration-copy').addEventListener('click',async()=>{
+    const id=current?.id;
+    if(current?.type!=='registration_code'||!id)return;
+    const code=$('mailbox-registration-code').textContent;
+    if(!/^(?:[A-F0-9]{20}|[A-F0-9]{8})$/.test(code))return;
+    try{
+      await navigator.clipboard.writeText(code);
+      if(current?.id===id)$('mailbox-registration-status').textContent='Kode pendaftaran berhasil disalin.';
+    }catch{
+      if(current?.id!==id)return;
+      const range=document.createRange();
+      range.selectNodeContents($('mailbox-registration-code'));
+      const selection=window.getSelection();
+      selection?.removeAllRanges();selection?.addRange(range);
+      $('mailbox-registration-status').textContent='Kode telah dipilih. Salin manual dengan Ctrl+C atau gunakan tombol salin di perangkatmu.';
+    }
   });
   $('mailbox-copy').addEventListener('click',async()=>{
     const code=$('mailbox-secret-value').textContent;

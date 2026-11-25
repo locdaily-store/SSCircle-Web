@@ -89,7 +89,7 @@ test('declined requests cannot spam and private members cannot be invited',async
  assert.equal((await x.call(A,'/api/player/social/action',{method:'POST',body:{id:B,action:'request'}})).status,200);
  assert.equal((await x.call(B,'/api/player/social/action',{method:'POST',body:{id:A,action:'decline'}})).status,200);
  assert.equal((await x.call(A,'/api/player/social/action',{method:'POST',body:{id:B,action:'request'}})).status,429);
- assert.equal((await x.call(C,'/api/player/mailbox')).data.items.length,0);
+ assert.equal((await x.call(C,'/api/player/mailbox')).data.items.filter(m=>m.type==='friend_request'||m.type==='friend_response').length,0);
 });
 
 

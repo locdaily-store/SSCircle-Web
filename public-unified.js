@@ -28,13 +28,15 @@
     const old = document.querySelector('header.home-header,header.site-header');
     if (!old) return;
     const brandLogo = old.querySelector('.home-brand img,.brand img')?.getAttribute('src') || '/assets/sscircle-logo.png';
+    const isRegistration=route(page)==='/registration';
     const h = document.createElement('header');
     h.className='home-header ssc-site-header';
     h.id='top';
     h.innerHTML='<a href="/" class="home-brand" aria-label="SSCircle Server beranda"><img id="home-logo" data-site-logo src="'+brandLogo.replace(/[^a-zA-Z0-9_/.?-]/g,'')+'" width="41" height="41" alt="Logo SSCircle"><span><strong>SSCircle</strong><small>SERVER</small></span></a>'+
       '<nav class="home-nav" aria-label="Navigasi utama">'+nav()+'</nav>'+
-      '<div class="ssc-header-actions"><button type="button" class="ssc-header-mailbox" data-open-mailbox aria-label="Buka Mail Box"><img class="ssc-mailbox-icon" src="/assets/mailbox-envelope.svg" alt="" aria-hidden="true"><span data-mailbox-count hidden></span></button>'+
-      '<a class="ssc-header-profile" href="/my-sscircle" aria-label="Buka Profile"><img src="/assets/sscircle-logo.png" alt="" width="34" height="34"></a>'+
+      '<div class="ssc-header-actions">'+(isRegistration?'':
+        '<button type="button" class="ssc-header-mailbox" data-open-mailbox aria-label="Buka Mail Box"><img class="ssc-mailbox-icon" src="/assets/mailbox-envelope.svg" alt="" aria-hidden="true"><span data-mailbox-count hidden></span></button>'+
+        '<a class="ssc-header-profile" href="/my-sscircle" aria-label="Buka Profile"><img src="/assets/sscircle-logo.png" alt="" width="34" height="34"></a>')+
       '<button type="button" class="home-menu-button" id="home-menu-button" aria-label="Buka menu" aria-controls="ssc-navigation" aria-expanded="false">☰<span class="ssc-hamburger-notice" data-nav-total hidden></span></button></div>';
     h.querySelector('.home-nav').id='ssc-navigation';
     old.replaceWith(h);
@@ -116,6 +118,7 @@
     if(previousFooter) previousFooter.replaceWith(f);else document.body.append(f);
     // Use the same verified primary-account skin source as the Profile dashboard.
     // The SSCircle logo remains the fallback when no linked skin is available.
+    if(!isRegistration){
     const profileLink=h.querySelector('.ssc-header-profile');
     const profileFallback=profileLink.querySelector('img');
     const avatarCanvas=document.createElement('canvas');
@@ -154,6 +157,7 @@
       .then(r=>r.ok?r.json():null)
       .then(data=>{if(data)renderMemberAvatar(data.accounts);})
       .catch(()=>{});
+    }
     function refreshActiveLinks(){
       h.querySelectorAll('.home-nav a').forEach(a=>{
         const href=a.getAttribute('href')||'/';

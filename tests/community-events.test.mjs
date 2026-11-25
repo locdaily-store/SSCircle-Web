@@ -39,6 +39,11 @@ function fixture(){
 }
 test('member event must be approved before registration, attendance or awards',async()=>{
  const t=fixture();await t.init();const start=new Date(Date.now()+3*86400000).toISOString();
+ // The registration form's Minecraft username is authoritative, not the member UUID.
+ t.db.exec('ALTER TABLE submissions ADD COLUMN answers TEXT; ALTER TABLE submissions ADD COLUMN question_snapshot TEXT');
+ t.db.prepare('UPDATE submissions SET answers=?,question_snapshot=? WHERE id=?').run(
+   JSON.stringify({minecraft_name:'BuilderBedrock',discord_name:'NotMinecraft'}),
+   JSON.stringify([{id:'discord_name',title:'Username Discord'},{id:'minecraft_name',title:'Username Minecraft / IGN'}]),B);
  const data={executor:'Alpha dan Staff SSCircle',title:'Kompetisi Build Bersama',technical:'Peserta membangun rumah dan dinilai oleh panitia di server Minecraft.',startAt:start,prizes:['Rank Event','Badge Juara Kedua']};
  assert.equal((await t.call('/api/community/events/propose',{who:C,method:'POST',payload:data})).status,403);
  const created=await t.call('/api/community/events/propose',{method:'POST',payload:data});
@@ -60,6 +65,14 @@ test('member event must be approved before registration, attendance or awards',a
  assert.equal(check.status,200,JSON.stringify(check.data));
  const prize=await t.call('/api/admin/community/events/award',{asAdmin:true,method:'POST',payload:{eventId,memberId:B,rank:1}});
  assert.equal(prize.status,200,JSON.stringify(prize.data));
+ const roster=await t.call('/api/admin/community/events?eventId='+encodeURIComponent(eventId),{asAdmin:true});
+ assert.equal(roster.status,200,JSON.stringify(roster.data));
+ assert.equal(roster.data.signups.find(x=>x.member_id===B)?.applicantName,'BuilderBedrock');
+ assert.equal(roster.data.awards.find(x=>x.member_id===B)?.applicantName,'BuilderBedrock');
+ assert.equal(roster.data.signups.find(x=>x.member_id===B)?.state,'attended');
+ assert.equal(roster.data.signups.find(x=>x.member_id===A)?.applicantName,'');
+ assert.equal(roster.data.signups.find(x=>x.member_id===B)?.member_id,B,
+   'Check-in must keep the original member ID');
  assert.equal((await t.call('/api/admin/community/events/award',{asAdmin:true,method:'POST',payload:{eventId,memberId:B,rank:1}})).status,409);
  const result=await t.call('/api/community/achievements',{who:B});
  assert.equal(result.status,200,JSON.stringify(result.data));assert.equal(result.data.awards.length,1);

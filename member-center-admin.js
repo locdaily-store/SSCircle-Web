@@ -228,7 +228,7 @@ window.SSCircleMemberCenterAdmin = (() => {
 
   async function issueInvite(member){
     if(member.status!=='accepted')return;
-    const confirmed=await window.SSCircleDialog.confirm('Sudah memverifikasi identitas '+memberName(member)+' melalui kontak resmi yang berbeda dari kode pendaftaran? Jika yakin, sistem akan mengirim kode secara otomatis ke Mail Box.');
+    const confirmed=await window.SSCircleDialog.confirm('Sudah memverifikasi identitas '+memberName(member)+' melalui kontak resmi yang berbeda dari kode pendaftaran? Jalur admin ini tetap tersedia untuk aktivasi manual dan pemulihan password. Kode pertama untuk anggota Diterima dapat diminta otomatis melalui Mail Box.');
     if(!confirmed)return;
     message('Memproses verifikasi anggota...');
     try{

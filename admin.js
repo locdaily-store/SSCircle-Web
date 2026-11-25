@@ -15,6 +15,72 @@ const make = (tag, cls, text) => {
 const uid = () => SSCircle.uuid();
 let data = { settings: {}, pages: [], submissions: [] }, activePage = 0, dirty = false, sheetPage = 0, selectedIds = new Set(), currentDetailId = null, dragState = { pageId: '', fromIndex: -1 }, collapsedPages = new Set(), openRoutes = new Set();
 const PAGE_SIZE = 20;
+// Near-real-time sync (D1-backed, shared between browsers/devices).
+// Never throw away unsaved drafts to apply a remote change.
+let liveRevision=null,liveFormRevision=null,liveBusy=false,liveReloading=false;
+const adminLiveLabel=()=>document.getElementById('admin-live-status');
+function liveNotice(message,warning=false){
+  const node=adminLiveLabel();if(!node)return;
+  node.textContent=message;
+  node.dataset.warning=String(warning);
+}
+async function pollAdminChanges(){
+  if(liveBusy||liveReloading||document.hidden||$('#dashboard').classList.contains('hide'))return;
+  liveBusy=true;
+  try{
+    const info=await SSCircle.getAdminLive();
+    if(liveRevision===null){liveRevision=info.submissionsRevision;liveFormRevision=info.formRevision;liveNotice('Sinkron otomatis aktif · setiap 5 detik');return;}
+    if(info.submissionsRevision!==liveRevision){
+      const previous=new Map(data.submissions.map(x=>[x.id,x]));
+      const fresh=await SSCircle.getSubmissions();
+      const changed=fresh.reduce((n,x)=>n+((!previous.has(x.id)||previous.get(x.id).statusRevision!==x.statusRevision)?1:0),0)
+        +[...previous.keys()].filter(id=>!fresh.some(x=>x.id===id)).length;
+      data.submissions=fresh;
+      liveRevision=info.submissionsRevision;
+      summary();renderAnswers();renderAnalytics();
+      if($('#spreadsheet')&&!$('#spreadsheet').classList.contains('hide'))
+        SSCircleSheet.render(data,allColumns(),valueText,applicantName,showDetails);
+      if(document.querySelector('.tab-page#members-admin:not(.hide)'))
+        void window.SSCircleMemberCenterAdmin?.load();
+      if(changed)liveNotice(changed+' data pendaftar diperbarui dari sesi admin lain.');
+    }
+    if(info.formRevision!==liveFormRevision){
+      liveFormRevision=info.formRevision;
+      if(dirty){
+        liveNotice('Pengaturan diubah admin lain. Draft lokal tetap aman. Salin draft, lalu Refresh sebelum menyimpan.',true);
+      }else if(!liveReloading){
+        liveReloading=true;
+        try{
+          const form=await SSCircle.getAdminForm();
+          if(!dirty){
+            data.settings=form.settings;data.pages=form.pages;data.revision=form.revision;
+            SSCircleImagePicker.setSettings(data.settings);
+            activePage=Math.min(activePage,data.pages.length-1);
+            renderAppearance();renderBuilder();renderAnswers();summary();
+            window.SSCircleThemeEditor?.render(data,dirtyMark);
+            window.SSCircleRegistrationPreview?.render(data);
+            window.SSCircleHomeAdmin?.render(data,dirtyMark);
+            window.SSCircleGalleryAdmin?.render(data);
+            window.SSCircleGettingStartedAdmin?.render(data,dirtyMark);
+            window.SSCircleVoteAdmin?.render(data,dirtyMark);
+            window.SSCircleRulesAdmin?.render(data,dirtyMark);
+            window.SSCircleEventsAdmin?.render(data,dirtyMark);
+            window.SSCircleSeasonsAdmin?.render(data,dirtyMark);
+            window.SSCircleProfileAdmin?.render(data,dirtyMark);
+            window.SSCircleAnnouncementAdmin?.render(data);
+            liveNotice('Pengaturan terbaru admin lain sudah dimuat otomatis.');
+          }
+        }finally{liveReloading=false;}
+      }
+    }
+    if(adminLiveLabel()?.dataset.warning!=='true'&&adminLiveLabel()?.textContent?.includes('terputus'))
+      liveNotice('Sinkron otomatis aktif · setiap 5 detik');
+  }catch(error){liveNotice('Sinkron otomatis terputus. Mencoba kembali…',true);}
+  finally{liveBusy=false;}
+}
+setInterval(()=>{void pollAdminChanges();},5000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)void pollAdminChanges();});
+
 // Review reason dialog is shown only when administrator rejects an application.
 const qtypes = [
   ['short', 'Jawaban singkat'],
@@ -192,6 +258,8 @@ async function refresh() {
   renderBuilder();
   renderAnswers();
   renderAnalytics();
+  liveRevision=null;liveFormRevision=null;
+  void pollAdminChanges();
 }
 $('#login-form').onsubmit = async (e) => {
   e.preventDefault();
@@ -1094,8 +1162,13 @@ function reasonDialog(previous = '') {
   });
 }
 async function reviewStatus(record, newStatus) {
-  if (newStatus === record.status && newStatus !== 'rejected')
-    return;
+  if (newStatus === record.status && newStatus !== 'rejected')return;
+  // Capture before opening the rejection dialog, which may stay open while
+  // another admin processes the same application.
+  const expectedRevision=record.statusRevision;
+  if(!Number.isSafeInteger(expectedRevision)){
+    SSCNotice.alert('Data status belum memiliki versi terbaru. Refresh sebelum memutuskan.');return;
+  }
   let reason = '';
   if (newStatus === 'rejected') {
     reason = await reasonDialog(record.reason);
@@ -1105,14 +1178,20 @@ async function reviewStatus(record, newStatus) {
     }
   }
   try {
-    await SSCircle.changeStatus(record.id, newStatus, reason);
-    record.status = newStatus;
-    record.reason = reason;
-    summary();
-    renderAnswers();
-  }
-  catch (err) {
-    SSCNotice.alert('Gagal mengubah status: ' + err.message);
+    const saved=await SSCircle.changeStatus(record.id,newStatus,reason,expectedRevision);
+    const latest=data.submissions.find(x=>x.id===record.id);
+    if(latest){latest.status=newStatus;latest.reason=reason;latest.statusRevision=saved.statusRevision;}
+    summary();renderAnswers();
+    liveNotice('Keputusan tersimpan; perubahan admin lain akan muncul otomatis.');
+  }catch(err){
+    if(err.status===409||err.status===428){
+      try{
+        data.submissions=await SSCircle.getSubmissions();
+        summary();renderAnswers();renderAnalytics();
+        liveNotice('Konflik dicegah: data terbaru sudah dimuat. Periksa status sebelum mengambil keputusan lagi.',true);
+      }catch{}
+    }
+    SSCNotice.alert('Gagal mengubah status: '+err.message);
     renderAnswers();
   }
 }
