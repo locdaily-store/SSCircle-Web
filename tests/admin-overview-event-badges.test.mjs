@@ -39,8 +39,8 @@ test('Changed Admin Control scripts load with fresh asset version',()=>{
   assert.ok(page.includes('community-events-admin.js?v=10.61.1'),
     'Check-in username renderer should use the current revision');
   for(const file of ['notification-admin.js?v=10.55.78',
-    'notification-direct-admin.js?v=10.55.78',
-    'mailbox-direct.css?v=10.55.78']){
+    'notification-direct-admin.js?v=10.55.79',
+    'mailbox-direct.css?v=10.55.79']){
     assert.ok(page.includes(file),'PR78 notification controls should refresh cache');
   }
 });
