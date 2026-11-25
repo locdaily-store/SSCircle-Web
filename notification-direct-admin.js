@@ -13,7 +13,7 @@ window.SSCircleDirectAdmin=(()=>{
   return data;
  };
  const field=(name,control)=>{const label=node('label');label.append(node('span',name),control);return label;};
- let started=false,root,history,detail,alert,recipient=null,questionRows=[];
+ let started=false,root,history,detail,alert,recipient=null,questionRows=[],activeId='';
  const fmt=date=>{try{return new Date(date).toLocaleString('id-ID',{dateStyle:'medium',timeStyle:'short'});}catch{return ''}};
  function questionForm(){
   if(questionRows.length>=5){alert.textContent='Maksimal lima pertanyaan.';return;}
@@ -28,6 +28,19 @@ window.SSCircleDirectAdmin=(()=>{
   $('ssc-direct-question-list').append(block);questionRows.push(row);
  }
  function clearQuestions(){questionRows=[];$('ssc-direct-question-list').replaceChildren();}
+ async function removeThread(id){
+  const message='Hapus percakapan pribadi ini beserta semua balasan dan pesan dari Mail Box pendaftar? Revisi yang sudah diterapkan tidak dibatalkan.';
+  const confirmed=window.SSCNotice?.confirm
+    ?await window.SSCNotice.confirm(message,{confirmText:'Hapus percakapan',cancelText:'Batal',danger:true})
+    :window.confirm(message);
+  if(!confirmed)return;
+  try{
+   await api('POST',{action:'delete',threadId:id});
+   if(activeId===id){activeId='';detail.replaceChildren();}
+   alert.textContent='Percakapan dan pesan Mail Box telah dihapus.';
+   await list();
+  }catch(error){alert.textContent=error.message;}
+ }
  async function list(){
   try{
    const res=await api(),target=history;target.replaceChildren();
@@ -35,16 +48,22 @@ window.SSCircleDirectAdmin=(()=>{
     const row=node('article',undefined,'ssc-notice-entry'),info=node('div');
     info.append(node('strong',thread.title));
     info.append(node('small',(thread.recipientName||'Pendaftar')+' · '+thread.recipientCode+' · '+thread.recipientStatus+' · '+thread.replies+' balasan'));
+    const buttons=node('div',undefined,'ssc-direct-entry-actions');
     const open=node('button','Buka percakapan','button secondary');open.type='button';
     open.addEventListener('click',()=>void show(thread.id));
-    row.append(info,open);target.append(row);
+    const remove=node('button','Hapus','button secondary ssc-direct-delete');remove.type='button';
+    remove.setAttribute('aria-label','Hapus percakapan '+thread.title);
+    remove.addEventListener('click',()=>void removeThread(thread.id));
+    buttons.append(open,remove);row.append(info,buttons);target.append(row);
    }
    if(!target.childElementCount)target.append(node('p','Belum ada pesan pribadi.','field-help'));
   }catch(error){alert.textContent=error.message;}
  }
  async function show(id){
+  activeId=id;
   detail.replaceChildren(node('p','Memuat percakapan...'));let thread;
-  try{thread=(await api('GET',null,id)).thread;}catch(error){detail.textContent=error.message;return;}
+  try{thread=(await api('GET',null,id)).thread;}catch(error){if(activeId===id)detail.textContent=error.message;return;}
+  if(activeId!==id)return;
   detail.replaceChildren(node('h3',thread.title),
    node('p',(thread.recipientName||'Pendaftar')+' · '+thread.recipientCode+' · '+thread.recipientStatus+' · '+thread.status,'ssc-direct-meta'),
    node('p',thread.content));
@@ -70,7 +89,10 @@ window.SSCircleDirectAdmin=(()=>{
    if(reply.appliedAt)row.append(node('small','Revisi diterapkan: '+fmt(reply.appliedAt)));
    detail.append(row);
   }
-  if(thread.status!=='open')return;
+  const actions=node('div',undefined,'ssc-direct-thread-actions');
+  const remove=node('button','Hapus percakapan','button secondary ssc-direct-delete');remove.type='button';
+  remove.addEventListener('click',()=>void removeThread(id));
+  if(thread.status!=='open'){actions.append(remove);detail.append(actions);return;}
   const message=input('textarea',1800);message.rows=3;message.placeholder='Balasan atau pertanyaan lanjutan...';
   const send=node('button','Kirim balasan pengurus','button primary');send.type='button';
   send.addEventListener('click',async()=>{
@@ -83,18 +105,20 @@ window.SSCircleDirectAdmin=(()=>{
    close.disabled=true;
    try{await api('POST',{action:'close',threadId:id});await show(id);await list();}catch(error){alert.textContent=error.message;close.disabled=false;}
   });
-  detail.append(message,send,close);
+  actions.append(send,close,remove);
+  detail.append(message,actions);
  }
  function init(){
   root=$('ssc-notification-admin-root');if(!root||started)return;started=true;
   const section=node('section',undefined,'ssc-notice-admin-form ssc-direct-admin');
   section.append(node('h3','Kirim pesan pribadi ke pendaftar'));
   section.append(node('p','Pesan khusus untuk satu pendaftar, menggunakan kode dari Jawaban Pendaftar. Berlaku untuk Menunggu, Diterima, dan Ditolak.','field-help'));
-  const form=node('form'),fields=node('div',undefined,'ssc-notice-admin-fields');
+  const form=node('form'),fields=node('div',undefined,'ssc-notice-admin-fields ssc-direct-compact-fields');
   const code=input('input',50);code.placeholder='Kode pendaftaran';
   const check=node('button','Periksa kode','button secondary');check.type='button';
   const info=node('p','Periksa kode sebelum mengirim.','field-help');
-  const row=node('div');row.append(code,check,info);fields.append(field('Kode pendaftaran penerima',row));
+  const row=node('div',undefined,'ssc-direct-code-controls');row.append(code,check,info);
+  fields.append(field('Kode pendaftaran penerima',row));
   const title=input('input',120);title.placeholder='Judul pesan pribadi';
   const content=input('textarea',2400);content.rows=4;content.placeholder='Isi pesan untuk pendaftar...';
   fields.append(field('Judul',title),field('Isi pesan',content));
