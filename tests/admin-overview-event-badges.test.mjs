@@ -33,8 +33,15 @@ test('Overview dashboard shows real membership totals and actionable pending eve
 });
 test('Changed Admin Control scripts load with fresh asset version',()=>{
   const page=src('admin.html');
-  for(const file of ['overview-dashboard.js','overview-dashboard.css','community-events-admin.js']){
+  for(const file of ['overview-dashboard.js','overview-dashboard.css']){
     assert.ok(page.includes(file+'?v=10.61.0'),file+' should refresh cache');
+  }
+  assert.ok(page.includes('community-events-admin.js?v=10.61.1'),
+    'Check-in username renderer should use the current revision');
+  for(const file of ['notification-admin.js?v=10.55.78',
+    'notification-direct-admin.js?v=10.55.78',
+    'mailbox-direct.css?v=10.55.78']){
+    assert.ok(page.includes(file),'PR78 notification controls should refresh cache');
   }
 });
 test('Dashboard Javascript has valid syntax',()=>{
