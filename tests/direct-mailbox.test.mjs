@@ -84,3 +84,54 @@ test('Both private message UIs and recovery endpoint are wired',()=>{
  assert.match(src('mailbox.js'),/mailbox-direct/);
  assert.match(src('_worker.js'),/request-recovery/);
 });
+test('Balasan hanya sekali per giliran admin, dua tab paralel tidak dapat menggandakan jawaban',async()=>{
+ const t=fixture();
+ const sent=await t.req(target,{method:'POST',cookie:t.cookies.admin,
+   payload:{action:'send',code:codes[0],title:'Konfirmasi Data',content:'Jawab pesan ini satu kali.'}});
+ assert.equal(sent.status,201);const id=sent.data.id,path='/api/player/mailbox/direct/reply';
+ const get=()=>t.req('/api/player/mailbox/direct?id='+id,{cookie:t.cookies.a});
+ assert.equal((await get()).data.thread.canReply,true);
+ const first=await t.req(path,{method:'POST',cookie:t.cookies.a,payload:{threadId:id,message:'Balasan awal'}});
+ assert.equal(first.status,200,JSON.stringify(first.data));
+ assert.equal((await get()).data.thread.canReply,false);
+ assert.equal((await t.req(path,{method:'POST',cookie:t.cookies.a,payload:{threadId:id,message:'Balasan kedua sebelum admin'}})).status,409);
+ assert.equal((await t.req(target,{method:'POST',cookie:t.cookies.admin,payload:{action:'reply',threadId:id,message:'Silakan berikan konfirmasi ulang.'}})).status,200);
+ assert.equal((await get()).data.thread.canReply,true);
+ const parallel=await Promise.all([1,2].map(i=>t.req(path,{method:'POST',cookie:t.cookies.a,payload:{threadId:id,message:'Balasan tab '+i}})));
+ assert.deepEqual(parallel.map(x=>x.status).sort((a,b)=>a-b),[200,409]);
+ assert.equal(t.db.prepare("SELECT COUNT(*) n FROM member_direct_replies WHERE thread_id=? AND sender='member'").get(id).n,2);
+ assert.equal((await get()).data.thread.canReply,false);
+ assert.equal((await t.req(target,{method:'POST',cookie:t.cookies.admin,payload:{action:'reply',threadId:id,message:'Giliran baru sudah dibuka.'}})).status,200);
+ assert.equal((await get()).data.thread.canReply,true);
+ assert.equal((await t.req(path,{method:'POST',cookie:t.cookies.a,payload:{threadId:id,message:'Balasan berikutnya'}})).status,200);
+});
+test('Admin dapat menghapus percakapan lengkap; anggota tidak dapat menghapus pesan pribadinya',async()=>{
+ const t=fixture();
+ const sent=await t.req(target,{method:'POST',cookie:t.cookies.admin,
+   payload:{action:'send',code:codes[1],title:'Konfirmasi Data',content:'Harap balas pesan ini.'}});
+ assert.equal(sent.status,201);const id=sent.data.id;
+ assert.equal((await t.req(target,{method:'POST',cookie:t.cookies.b,payload:{action:'delete',threadId:id}})).status,401);
+ assert.equal((await t.req('/api/player/mailbox/delete',{method:'POST',cookie:t.cookies.b,payload:{id}})).status,409);
+ assert.equal((await t.req('/api/player/mailbox/direct/reply',{method:'POST',cookie:t.cookies.b,payload:{threadId:id,message:'Saya sudah konfirmasi'}})).status,200);
+ const deleted=await t.req(target,{method:'POST',cookie:t.cookies.admin,payload:{action:'delete',threadId:id}});
+ assert.equal(deleted.status,200,JSON.stringify(deleted.data));assert.equal(deleted.data.deleted,true);
+ assert.equal(t.db.prepare('SELECT COUNT(*) n FROM member_direct_threads WHERE id=?').get(id).n,0);
+ assert.equal(t.db.prepare('SELECT COUNT(*) n FROM member_direct_replies WHERE thread_id=?').get(id).n,0);
+ assert.equal(t.db.prepare('SELECT COUNT(*) n FROM member_mailbox WHERE id=?').get(id).n,0);
+ assert.equal((await t.req('/api/player/mailbox',{cookie:t.cookies.b})).data.items.filter(x=>x.id===id).length,0);
+ assert.equal((await t.req('/api/player/mailbox/direct?id='+id,{cookie:t.cookies.b})).status,404);
+ assert.equal(t.db.prepare('SELECT COUNT(*) n FROM submissions WHERE id=?').get(B).n,1);
+});
+test('Form admin responsif dan balasan privat dimuat di semua halaman pemilik Mail Box',()=>{
+ const src=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
+ assert.match(src('notification-direct-admin.js'),/window\.SSCNotice\?\.confirm/);
+ assert.match(src('notification-direct-admin.js'),/action:'delete'/);
+ assert.match(src('mailbox-direct.js'),/!thread\.canReply/);
+ assert.match(src('mailbox-direct.css'),/max-width:740px/);
+ for(const file of ['index.html','status.html','mailbox.html','my-sscircle.html']){
+  const html=src(file),d=html.indexOf('mailbox-direct.js?v=10.55.79'),
+   m=html.indexOf('mailbox-widget.js')>=0?html.indexOf('mailbox-widget.js'):html.indexOf('mailbox.js');
+  assert.ok(d>=0&&m>d,file+' harus memuat komponen balasan lebih dulu');
+  assert.match(html,/mailbox-direct.css\?v=10.55.79/);
+ }
+});
