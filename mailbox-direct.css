@@ -1,0 +1,23 @@
+/* PR78: private applicant notification and reply layouts. */
+.mailbox-direct-container{margin:18px 0;border-top:1px solid var(--ssc-border,rgba(160,145,188,.3));padding-top:18px}
+.mailbox-direct-area h4{font-size:1rem;margin:0 0 10px}
+.mailbox-direct-info,.mailbox-direct-error{font-size:.88rem;opacity:.84;white-space:pre-line}
+.mailbox-direct-error{color:#ffaaaa}
+.mailbox-direct-history{display:grid;gap:10px;max-height:360px;overflow:auto;margin:12px 0}
+.mailbox-direct-reply{border:1px solid var(--ssc-border,rgba(150,135,180,.3));border-radius:10px;padding:11px;overflow-wrap:anywhere}
+.mailbox-direct-reply small{display:block;font-size:.75rem;opacity:.72;margin-top:5px}
+.mailbox-direct-reply p{white-space:pre-wrap;margin:7px 0}
+.mailbox-direct-form,.ssc-direct-questions{display:grid;gap:12px;margin-top:12px}
+.mailbox-direct-form label,.ssc-direct-questions label{display:grid;gap:5px}
+.mailbox-direct-form textarea,.ssc-direct-questions textarea,.ssc-direct-questions select{
+ width:100%;box-sizing:border-box;min-width:0;background:var(--ssc-input,#231c32);
+ color:var(--ssc-text,#fff);border:1px solid var(--ssc-border,#655476);
+ border-radius:9px;padding:10px;font:inherit
+}
+.ssc-direct-admin{margin-top:20px}
+.ssc-direct-admin .ssc-direct-questions{margin:12px 0}
+.ssc-direct-thread-panel{margin:14px 0;border-top:1px solid var(--ssc-border,#655476);padding-top:14px}
+.ssc-direct-reply{padding:10px;margin:10px 0;border:1px solid var(--ssc-border,#655476);border-radius:10px;white-space:pre-wrap;overflow-wrap:anywhere}
+.ssc-direct-reply button{margin-top:9px}
+.ssc-direct-meta{opacity:.75;font-size:.81rem}
+@media(max-width:640px){.ssc-direct-admin,.mailbox-direct-container{min-width:0}}
