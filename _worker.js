@@ -4551,7 +4551,7 @@ async function mailboxActiveInvite(env,memberId){
     ORDER BY m.rowid DESC LIMIT 1`).bind(memberId,now).first();
   return row?{expiresAt:new Date(row.expires_at*1000).toISOString(),existing:true}:null;
 }
-async function mailboxIssueInitialInvite(env,memberId,verifiedRecovery=false){
+async function mailboxIssueInitialInvite(env,memberId,verifiedRecovery=false,purpose='verification'){
   const existing=await mailboxActiveInvite(env,memberId);
   if(existing)return existing;
   const now=Math.floor(Date.now()/1000),stamp=new Date().toISOString();
@@ -4589,9 +4589,9 @@ async function mailboxIssueInitialInvite(env,memberId,verifiedRecovery=false){
       WHERE ${allowed} AND EXISTS(SELECT 1 FROM member_activation_invites i
         WHERE i.application_id=? AND i.secret_hash=? AND i.expires_at=? AND i.used_at IS NULL)`)
       .bind(messageId,memberId,
-        verifiedRecovery?'Kode verifikasi akun tersedia':'Kode aktivasi akun tersedia',
+        verifiedRecovery?(purpose==='recovery'?'Kode pemulihan akun tersedia':'Kode verifikasi akun tersedia'):'Kode aktivasi akun tersedia',
         verifiedRecovery
-          ?'Kode verifikasi diterbitkan setelah login Dashboard. Berlaku 24 jam dan hanya sekali pakai. Jangan bagikan kepada siapa pun.'
+          ?'Kode diterbitkan otomatis setelah verifikasi sesi Dashboard. Berlaku 24 jam dan hanya sekali pakai. Jangan bagikan kepada siapa pun.'
           :'Pendaftaranmu sudah Diterima. Kode aktivasi berlaku 24 jam dan satu kali pakai. Jangan bagikan kode pendaftaran atau password.',
         sealed.encrypted,sealed.nonce,expires,stamp,
         memberId,memberId,memberId,hashed,expires),
@@ -4730,7 +4730,7 @@ async function mailboxAPI(req,env,path,method){
     // A verification code issued after Dashboard login must never be
     // revealed by a copied registration tracking code alone.
     const containsVerifiedCode=(rows.results||[]).some(row=>
-      row.type==='activation'&&row.title==='Kode verifikasi akun tersedia');
+      row.type==='activation'&&['Kode verifikasi akun tersedia','Kode pemulihan akun tersedia'].includes(row.title));
     const secureCodeViewer=containsVerifiedCode&&accepted
       ?!!(await memberStrongSession(req,env,account)):false;
     const inbox=(rows.results||[]).filter(row=>
@@ -4741,6 +4741,7 @@ async function mailboxAPI(req,env,path,method){
         (row.type==='status'&&row.title==='Selamat, pendaftaranmu diterima'))
         ?acceptedCTA:null,
       title:row.title,
+      directThreadId:row.type==='direct_message'?row.id:null,
       registrationCode:row.type==='registration_code'
         ?(account.tracking_code||account.id.slice(0,8).toUpperCase()):null,
       // The credential stays in submissions only. Its value is hydrated for
@@ -4753,7 +4754,7 @@ async function mailboxAPI(req,env,path,method){
       read:!!row.read_at,expiresAt:row.expires_at?new Date(row.expires_at*1000).toISOString():null,
       friendSenderId:accepted&&row.type==='friend_request'?friendNoticeIds.get(row.id)||null:null,
       canReveal:accepted && !!row.encrypted_secret && row.id===newest?.id &&
-        (row.title!=='Kode verifikasi akun tersedia'||secureCodeViewer) &&
+        (!['Kode verifikasi akun tersedia','Kode pemulihan akun tersedia'].includes(row.title)||secureCodeViewer) &&
         row.expires_at>Math.floor(Date.now()/1000) &&
         invite?.used_at===null && invite?.expires_at===row.expires_at}));
     const items=[...inbox,...virtual].sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt))).slice(0,80);
@@ -4761,6 +4762,20 @@ async function mailboxAPI(req,env,path,method){
       'SELECT application_id FROM member_credentials WHERE application_id=?').bind(account.id).first():null;
     return J({items,activationRequest:request?.status||'none',
       applicationStatus:account.status,hasPassword:!!credential});
+  }
+  if(path==='/api/player/mailbox/request-recovery' && method==='POST'){
+    if(!accepted)return bad('Pemulihan hanya tersedia untuk pendaftaran berstatus Diterima.',403);
+    if(!await rateLimit(env,req,'mailbox-recovery',3,600))return bad('Terlalu banyak permintaan pemulihan. Coba lagi nanti.',429);
+    const credentials=await env.DB.prepare('SELECT application_id FROM member_credentials WHERE application_id=?')
+      .bind(account.id).first();
+    if(!credentials)return bad('Akun belum memiliki password. Gunakan Minta kode aktivasi pertama.',409);
+    if(!await memberStrongSession(req,env,account))
+      return bad('Untuk mendapatkan kode pemulihan otomatis, masuk dahulu dengan sesi Dashboard yang terverifikasi. Kode pendaftaran saja tidak cukup untuk reset password.',403);
+    const sent=await mailboxIssueInitialInvite(env,account.id,true,'recovery');
+    if(!sent)return bad('Kode pemulihan belum dapat diterbitkan. Coba lagi.',503);
+    return J({ok:true,delivered:true,recovery:true,expiresAt:sent.expiresAt,
+      message:sent.existing?'Kode yang masih berlaku tersedia di Mail Box.':
+        'Kode pemulihan otomatis dikirim ke Mail Box tanpa persetujuan Admin Control.'});
   }
   if(path==='/api/player/mailbox/request-activation' && method==='POST'){
     if(!accepted)
@@ -4836,7 +4851,7 @@ async function mailboxAPI(req,env,path,method){
       AND id=(SELECT id FROM member_mailbox WHERE application_id=? AND type='activation'
         ORDER BY rowid DESC LIMIT 1)`)
       .bind(payload.id,account.id,account.id).first();
-    if(row?.title==='Kode verifikasi akun tersedia'&&
+    if(['Kode verifikasi akun tersedia','Kode pemulihan akun tersedia'].includes(row?.title)&&
        !await memberStrongSession(req,env,account))
       return bad('Masuk menggunakan password Dashboard untuk melihat kode verifikasi akun aktif.',403);
     const invite=await env.DB.prepare('SELECT expires_at,used_at FROM member_activation_invites WHERE application_id=?')
@@ -4871,8 +4886,8 @@ async function mailboxAPI(req,env,path,method){
       if(virtualIds.some(id=>!allowed.has(id)))return bad('Notifikasi tidak ditemukan.',404);
     }
     if(payload.action==='delete'){
-      if(found.results.some(row=>row.type==='registration_code'))
-        return bad('Pesan kode pendaftaran disimpan permanen dan tidak dapat dihapus.',409);
+      if(found.results.some(row=>['registration_code','direct_message'].includes(row.type)))
+        return bad('Pesan kode pendaftaran atau percakapan pengurus tidak dapat dihapus.',409);
       const latest=await env.DB.prepare(
         "SELECT id FROM member_mailbox WHERE application_id=? AND type='activation' ORDER BY rowid DESC LIMIT 1")
         .bind(account.id).first();
@@ -4915,8 +4930,8 @@ async function mailboxAPI(req,env,path,method){
       return bad('Pesan tidak ditemukan.',404);
     }
     // The registration code remains available for every registration status.
-    if(row.type==='registration_code')
-      return bad('Pesan kode pendaftaran disimpan permanen dan tidak dapat dihapus.',409);
+    if(['registration_code','direct_message'].includes(row.type))
+      return bad('Pesan kode pendaftaran atau percakapan pengurus tidak dapat dihapus.',409);
     // Never remove the sole copy of a still-valid, one-use activation code.
     if(row.type==='activation'){
       const newest=await env.DB.prepare("SELECT id FROM member_mailbox WHERE application_id=? AND type='activation' ORDER BY rowid DESC LIMIT 1")
@@ -4943,6 +4958,202 @@ async function mailboxAPI(req,env,path,method){
     return J({ok:true});
   }
   return bad('Halaman Mail Box tidak tersedia.',404);
+}
+
+
+/* PR78: private applicant inbox threads, question replies and moderated edits. */
+const directMailboxReady=new WeakMap();
+async function ensureDirectMailbox(env){
+ let pending=directMailboxReady.get(env.DB);if(pending)return pending;
+ pending=(async()=>{
+  await ensureMailbox(env);
+  for(const sql of [
+   `CREATE TABLE IF NOT EXISTS member_direct_threads (
+    id TEXT PRIMARY KEY,application_id TEXT NOT NULL,title TEXT NOT NULL,
+    content TEXT NOT NULL,questions_json TEXT NOT NULL DEFAULT '[]',
+    status TEXT NOT NULL DEFAULT 'open',created_at TEXT NOT NULL,updated_at TEXT NOT NULL,
+    FOREIGN KEY(application_id) REFERENCES submissions(id) ON DELETE CASCADE)`,
+   'CREATE INDEX IF NOT EXISTS idx_ssc_direct_recipient ON member_direct_threads(application_id,updated_at)',
+   `CREATE TABLE IF NOT EXISTS member_direct_replies(
+    id TEXT PRIMARY KEY,thread_id TEXT NOT NULL,sender TEXT NOT NULL,
+    content TEXT NOT NULL DEFAULT '',answers_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL,applied_at TEXT,
+    FOREIGN KEY(thread_id) REFERENCES member_direct_threads(id) ON DELETE CASCADE)`,
+   'CREATE INDEX IF NOT EXISTS idx_ssc_direct_replies ON member_direct_replies(thread_id,created_at)'
+  ])await env.DB.prepare(sql).run();
+ })().catch(e=>{directMailboxReady.delete(env.DB);throw e});
+ directMailboxReady.set(env.DB,pending);return pending;
+}
+function directQuestions(raw,snapshot){
+ if(!Array.isArray(raw)||raw.length>5)return null;
+ const allow=new Set((Array.isArray(snapshot)?snapshot:[]).map(q=>String(q?.id||''))),seen=new Set(),out=[];
+ for(const q of raw){
+  if(!q||typeof q.prompt!=='string'||q.prompt.trim().length<3||q.prompt.length>240)return null;
+  const fieldId=String(q.fieldId||'').trim();
+  if(fieldId&&(!allow.has(fieldId)||['__proto__','constructor','prototype'].includes(fieldId)||seen.has(fieldId)))return null;
+  if(fieldId)seen.add(fieldId);
+  out.push({id:'q'+(out.length+1),prompt:q.prompt.trim(),fieldId});
+ }
+ return out;
+}
+function directAnswers(raw,questions){
+ if(!raw||typeof raw!=='object'||Array.isArray(raw))return null;
+ const allow=new Set(questions.map(q=>q.id)),out=Object.create(null);
+ for(const [id,value] of Object.entries(raw)){
+  if(!allow.has(id)||typeof value!=='string'||!value.trim()||value.length>500)return null;
+  out[id]=value.trim();
+ }
+ return out;
+}
+async function directThreadDetail(env,t,adminView){
+ const rows=await env.DB.prepare('SELECT id,sender,content,answers_json,created_at,applied_at FROM member_direct_replies WHERE thread_id=? ORDER BY created_at,id LIMIT 80').bind(t.id).all();
+ const result={id:t.id,title:t.title,content:t.content,status:t.status,
+  createdAt:t.created_at,updatedAt:t.updated_at,questions:parse(t.questions_json)||[],
+  replies:(rows.results||[]).map(r=>({id:r.id,sender:r.sender,content:r.content,
+   answers:parse(r.answers_json)||{},createdAt:r.created_at,appliedAt:r.applied_at}))};
+ if(adminView){
+  const app=await env.DB.prepare('SELECT status,tracking_code,answers,question_snapshot FROM submissions WHERE id=?').bind(t.application_id).first();
+  result.recipientCode=app?.tracking_code||t.application_id.slice(0,8).toUpperCase();
+  result.recipientStatus=app?.status||'unknown';
+  result.recipientName=app?applicantNameFrom(app.answers,app.question_snapshot):'';
+  result.registrationQuestions=(parse(app?.question_snapshot)||[]).filter(q=>typeof q?.id==='string').map(q=>({id:q.id,title:s(q.title,140)}));
+ }
+ return result;
+}
+async function directMailboxAPI(req,env,path,method){
+ if(!env.DB||!env.SESSION_SECRET)return bad('Mail Box belum tersedia.',503);
+ const isAdmin=path.startsWith('/api/admin/');
+ if(isAdmin){if(!await admin(req,env))return bad('Akses Admin diperlukan.',401)}
+ else if(!await playerSession(req,env))return bad('Masuk dengan kode pendaftaran yang sah.',403);
+ if(method!=='GET'&&!sameOrigin(req))return bad('Asal permintaan ditolak.',403);
+ await ensureDirectMailbox(env);
+ const url=new URL(req.url);
+ if(isAdmin){
+  if(method==='GET'&&path.endsWith('/lookup')){
+   const code=url.searchParams.get('code')||'';
+   if(!/^[a-fA-F0-9 -]{8,50}$/.test(code))return bad('Kode pendaftaran tidak valid.',400);
+   const app=await applicationByCode(env,code);if(!app)return bad('Kode pendaftaran tidak ditemukan.',404);
+   const x=await env.DB.prepare('SELECT answers,question_snapshot FROM submissions WHERE id=?').bind(app.id).first();
+   return J({ok:true,code:app.tracking_code||app.id.slice(0,8).toUpperCase(),
+    status:app.status,username:applicantNameFrom(x?.answers,x?.question_snapshot),
+    questions:(parse(x?.question_snapshot)||[]).filter(q=>typeof q?.id==='string').map(q=>({id:q.id,title:s(q.title,140)}))},
+    200,{'Cache-Control':'private, no-store'});
+  }
+  if(method==='GET'){
+   const id=url.searchParams.get('id')||'';
+   if(id){
+    if(!SSC_SOCIAL_ID.test(id))return bad('Percakapan tidak ditemukan.',404);
+    const thread=await env.DB.prepare('SELECT * FROM member_direct_threads WHERE id=?').bind(id).first();
+    return thread?J({ok:true,thread:await directThreadDetail(env,thread,true)}):bad('Percakapan tidak ditemukan.',404);
+   }
+   const rows=await env.DB.prepare(`SELECT t.id,t.application_id,t.title,t.status,t.updated_at,
+     s.tracking_code,s.status AS application_status,s.answers,s.question_snapshot,
+     (SELECT COUNT(*) FROM member_direct_replies r WHERE r.thread_id=t.id AND r.sender='member') reply_count
+     FROM member_direct_threads t JOIN submissions s ON s.id=t.application_id
+     ORDER BY t.updated_at DESC LIMIT 100`).all();
+   return J({ok:true,items:(rows.results||[]).map(t=>({id:t.id,title:t.title,status:t.status,
+    recipientCode:t.tracking_code||t.application_id.slice(0,8).toUpperCase(),
+    recipientName:applicantNameFrom(t.answers,t.question_snapshot),recipientStatus:t.application_status,
+    replies:Number(t.reply_count||0),updatedAt:t.updated_at}))},200,{'Cache-Control':'private, no-store'});
+  }
+  if(method!=='POST')return bad('Metode tidak tersedia.',405);
+  if(!await rateLimit(env,req,'admin-direct-notify',35,900))return bad('Terlalu banyak pesan.',429);
+  const data=await body(req,7000),action=data?.action||'send',now=new Date().toISOString();
+  if(action==='send'){
+   const code=String(data?.code||''),title=s(data?.title,120),content=s(data?.content,2400);
+   if(title.length<3||content.length<5||String(data?.title||'').length>120||String(data?.content||'').length>2400)
+    return bad('Periksa judul dan isi pesan.',400);
+   const app=await applicationByCode(env,code);if(!app)return bad('Kode pendaftaran tidak ditemukan.',404);
+   const x=await env.DB.prepare('SELECT question_snapshot FROM submissions WHERE id=?').bind(app.id).first();
+   const questions=directQuestions(data?.questions||[],parse(x?.question_snapshot));
+   if(!questions)return bad('Pertanyaan atau kolom revisi tidak valid.',400);
+   const id=uid();
+   const results=await env.DB.batch([
+    env.DB.prepare(`INSERT INTO member_direct_threads
+      (id,application_id,title,content,questions_json,status,created_at,updated_at)
+      VALUES(?,?,?,?,?,'open',?,?)`).bind(id,app.id,title,content,JSON.stringify(questions),now,now),
+    env.DB.prepare(`INSERT INTO member_mailbox(id,application_id,type,title,content,created_at)
+      VALUES(?,?,'direct_message',?,?,?)`).bind(id,app.id,title,content,now)
+   ]);
+   if(!results.every(r=>r.meta?.changes>0))return bad('Pesan tidak berhasil disimpan.',503);
+   return J({ok:true,id,recipientStatus:app.status},201);
+  }
+  const id=String(data?.threadId||'');
+  if(!SSC_SOCIAL_ID.test(id))return bad('Percakapan tidak ditemukan.',404);
+  const thread=await env.DB.prepare('SELECT * FROM member_direct_threads WHERE id=?').bind(id).first();
+  if(!thread)return bad('Percakapan tidak ditemukan.',404);
+  if(action==='reply'){
+   if(thread.status!=='open')return bad('Percakapan sudah ditutup.',409);
+   const message=s(data?.message,1800);
+   if(!message||String(data?.message||'').length>1800)return bad('Balasan tidak valid.',400);
+   await env.DB.batch([
+    env.DB.prepare(`INSERT INTO member_direct_replies(id,thread_id,sender,content,answers_json,created_at)
+      VALUES(?,?,'admin',?,'{}',?)`).bind(uid(),id,message,now),
+    env.DB.prepare('UPDATE member_direct_threads SET updated_at=? WHERE id=?').bind(now,id),
+    env.DB.prepare('UPDATE member_mailbox SET read_at=NULL,created_at=? WHERE id=? AND application_id=?').bind(now,id,thread.application_id)
+   ]);return J({ok:true});
+  }
+  if(action==='close'){
+   await env.DB.prepare("UPDATE member_direct_threads SET status='closed',updated_at=? WHERE id=?").bind(now,id).run();
+   return J({ok:true});
+  }
+  if(action==='apply'){
+   const replyId=String(data?.replyId||'');
+   if(!SSC_SOCIAL_ID.test(replyId))return bad('Balasan tidak ditemukan.',404);
+   const r=await env.DB.prepare("SELECT * FROM member_direct_replies WHERE thread_id=? AND id=? AND sender='member'").bind(id,replyId).first();
+   if(!r)return bad('Balasan pendaftar tidak ditemukan.',404);
+   if(r.applied_at)return bad('Revisi sudah diterapkan sebelumnya.',409);
+   const app=await env.DB.prepare('SELECT answers,question_snapshot FROM submissions WHERE id=?').bind(thread.application_id).first();
+   if(!app)return bad('Data pendaftar tidak ditemukan.',404);
+   const original=parse(app.answers)||{},fields=new Set((parse(app.question_snapshot)||[]).map(q=>String(q?.id||'')));
+   const answers=parse(r.answers_json)||{},questions=parse(thread.questions_json)||{},changed=Object.create(null);
+   for(const q of questions){
+    if(!q.fieldId||!Object.prototype.hasOwnProperty.call(answers,q.id))continue;
+    if(!fields.has(q.fieldId)||['__proto__','constructor','prototype'].includes(q.fieldId))return bad('Kolom revisi tidak valid.',409);
+    const oldValue=original[q.fieldId];
+    if(oldValue!==undefined&&oldValue!==null&&typeof oldValue!=='string')return bad('Jenis kolom tidak bisa ditimpa otomatis.',409);
+    changed[q.fieldId]=answers[q.id];
+   }
+   if(!Object.keys(changed).length)return bad('Belum ada usulan revisi kolom.',400);
+   const next=JSON.stringify({...original,...changed});
+   const results=await env.DB.batch([
+    env.DB.prepare('UPDATE submissions SET answers=? WHERE id=? AND answers=?').bind(next,thread.application_id,app.answers),
+    env.DB.prepare(`UPDATE member_direct_replies SET applied_at=? WHERE id=? AND applied_at IS NULL
+     AND EXISTS(SELECT 1 FROM submissions WHERE id=? AND answers=?)`).bind(now,replyId,thread.application_id,next)
+   ]);
+   if(!(results[0]?.meta?.changes>0)||!(results[1]?.meta?.changes>0))
+    return bad('Data berubah saat revisi diproses. Muat ulang.',409);
+   await env.DB.prepare('UPDATE member_direct_threads SET updated_at=? WHERE id=?').bind(now,id).run();
+   return J({ok:true,updatedFields:Object.keys(changed).length});
+  }
+  return bad('Tindakan tidak tersedia.',400);
+ }
+ const member=await playerSession(req,env),id=url.searchParams.get('id')||'';
+ if(method==='GET'){
+  if(!SSC_SOCIAL_ID.test(id))return bad('Pesan tidak ditemukan.',404);
+  const t=await env.DB.prepare('SELECT * FROM member_direct_threads WHERE id=? AND application_id=?').bind(id,member.id).first();
+  return t?J({ok:true,thread:await directThreadDetail(env,t,false)},200,
+    {'Cache-Control':'private, no-store'}):bad('Pesan tidak ditemukan.',404);
+ }
+ if(method==='POST'&&path.endsWith('/reply')){
+  if(!await rateLimit(env,req,'direct-member-reply',10,300))return bad('Terlalu banyak balasan.',429);
+  const data=await body(req,4500),threadId=String(data?.threadId||'');
+  if(!SSC_SOCIAL_ID.test(threadId))return bad('Pesan tidak ditemukan.',404);
+  const t=await env.DB.prepare('SELECT * FROM member_direct_threads WHERE id=? AND application_id=?').bind(threadId,member.id).first();
+  if(!t)return bad('Pesan tidak ditemukan.',404);
+  if(t.status!=='open')return bad('Percakapan sudah ditutup.',409);
+  const content=s(data?.message,1200),answers=directAnswers(data?.answers||{},parse(t.questions_json)||[]);
+  if(answers===null||String(data?.message||'').length>1200||(!content&&!Object.keys(answers).length))
+   return bad('Isi balasan atau pertanyaan belum valid.',400);
+  const now=new Date().toISOString();
+  await env.DB.batch([
+   env.DB.prepare(`INSERT INTO member_direct_replies(id,thread_id,sender,content,answers_json,created_at)
+     VALUES(?,?,'member',?,?,?)`).bind(uid(),threadId,content,JSON.stringify(answers),now),
+   env.DB.prepare('UPDATE member_direct_threads SET updated_at=? WHERE id=?').bind(now,threadId)
+  ]);
+  return J({ok:true,message:'Balasan terkirim ke Admin Control untuk ditinjau.'});
+ }
+ return bad('Metode tidak tersedia.',405);
 }
 
 // SSCircle runtime check: observe what the deployment actually receives.
@@ -6521,6 +6732,8 @@ async function route(req, env, ctx) {
   if ((path.startsWith('/api/player/minecraft/link/') || (path==='/api/admin/minecraft/links' || path==='/api/admin/minecraft/multi-settings')) &&
       ['GET','POST'].includes(method))
     return await minecraftLinkAPI(req,env,path,method);
+  if((path.startsWith('/api/admin/notifications/direct') || path.startsWith('/api/player/mailbox/direct')) && ['GET','POST'].includes(method))
+    return await directMailboxAPI(req,env,path,method);
   if((path==='/api/admin/notifications'&&['GET','POST','DELETE'].includes(method))||
      (path==='/api/player/notifications/preferences'&&['GET','PUT'].includes(method)))
     return await noticeAPI(req,env,path,method);
