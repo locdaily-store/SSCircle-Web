@@ -5007,7 +5007,11 @@ function directAnswers(raw,questions){
 }
 async function directThreadDetail(env,t,adminView){
  const rows=await env.DB.prepare('SELECT id,sender,content,answers_json,created_at,applied_at FROM member_direct_replies WHERE thread_id=? ORDER BY created_at,id LIMIT 80').bind(t.id).all();
+ const last=await env.DB.prepare(`SELECT sender FROM member_direct_replies
+   WHERE thread_id=? ORDER BY rowid DESC LIMIT 1`).bind(t.id).first();
  const result={id:t.id,title:t.title,content:t.content,status:t.status,
+  canReply:t.status==='open'&&(!last||last.sender==='admin'),
+  waitingForAdmin:t.status==='open'&&last?.sender==='member',
   createdAt:t.created_at,updatedAt:t.updated_at,questions:parse(t.questions_json)||[],
   replies:(rows.results||[]).map(r=>({id:r.id,sender:r.sender,content:r.content,
    answers:parse(r.answers_json)||{},createdAt:r.created_at,appliedAt:r.applied_at}))};
@@ -5093,6 +5097,19 @@ async function directMailboxAPI(req,env,path,method){
     env.DB.prepare('UPDATE member_mailbox SET read_at=NULL,created_at=? WHERE id=? AND application_id=?').bind(now,id,thread.application_id)
    ]);return J({ok:true});
   }
+  if(action==='delete'){
+   // Only a confirmed admin can hard-delete a direct thread; deleting its
+   // private Mail Box notice is part of the same D1 transaction. Revisions
+   // previously approved into submissions remain intact.
+   const result=await env.DB.batch([
+    env.DB.prepare('DELETE FROM member_direct_replies WHERE thread_id=?').bind(id),
+    env.DB.prepare("DELETE FROM member_mailbox WHERE id=? AND application_id=? AND type='direct_message'")
+     .bind(id,thread.application_id),
+    env.DB.prepare('DELETE FROM member_direct_threads WHERE id=?').bind(id)
+   ]);
+   if(!result[2]?.meta?.changes)return bad('Percakapan sudah dihapus oleh admin lain.',404);
+   return J({ok:true,deleted:true});
+  }
   if(action==='close'){
    await env.DB.prepare("UPDATE member_direct_threads SET status='closed',updated_at=? WHERE id=?").bind(now,id).run();
    return J({ok:true});
@@ -5146,12 +5163,20 @@ async function directMailboxAPI(req,env,path,method){
   if(answers===null||String(data?.message||'').length>1200||(!content&&!Object.keys(answers).length))
    return bad('Isi balasan atau pertanyaan belum valid.',400);
   const now=new Date().toISOString();
-  await env.DB.batch([
-   env.DB.prepare(`INSERT INTO member_direct_replies(id,thread_id,sender,content,answers_json,created_at)
-     VALUES(?,?,'member',?,?,?)`).bind(uid(),threadId,content,JSON.stringify(answers),now),
-   env.DB.prepare('UPDATE member_direct_threads SET updated_at=? WHERE id=?').bind(now,threadId)
-  ]);
-  return J({ok:true,message:'Balasan terkirim ke Admin Control untuk ditinjau.'});
+  // One member reply for each admin turn. The initial admin message opens the
+  // first turn. Atomic conditional INSERT protects against double-clicks and
+  // simultaneous requests from multiple browser tabs.
+  const inserted=await env.DB.prepare(`INSERT INTO member_direct_replies
+   (id,thread_id,sender,content,answers_json,created_at)
+   SELECT ?,t.id,'member',?,?,? FROM member_direct_threads t
+   WHERE t.id=? AND t.application_id=? AND t.status='open'
+     AND COALESCE((SELECT r.sender FROM member_direct_replies r
+       WHERE r.thread_id=t.id ORDER BY r.rowid DESC LIMIT 1),'admin')='admin'`)
+   .bind(uid(),content,JSON.stringify(answers),now,threadId,member.id).run();
+  if(!inserted.meta?.changes)return bad(
+   'Kamu sudah membalas giliran ini. Tunggu pengurus membalas lagi sebelum mengirim balasan berikutnya.',409);
+  await env.DB.prepare('UPDATE member_direct_threads SET updated_at=? WHERE id=?').bind(now,threadId).run();
+  return J({ok:true,message:'Balasan terkirim. Kamu bisa membalas lagi setelah pengurus membalas.'});
  }
  return bad('Metode tidak tersedia.',405);
 }
