@@ -23,7 +23,9 @@ window.SSCircleDirectMailbox=(()=>{
   if(holder.dataset.directThread!==threadId)return;
   const area=el('section',undefined,'mailbox-direct-area');
   area.append(el('h4','Percakapan dengan pengurus'));
-  area.append(el('p',thread.status==='open'?'Kamu dapat membalas pesan ini dalam status pendaftaran apa pun.':'Percakapan sudah ditutup pengurus.','mailbox-direct-info'));
+  area.append(el('p',thread.status!=='open'?'Percakapan sudah ditutup pengurus.':
+   thread.canReply?'Kamu memiliki satu kesempatan membalas pesan pengurus ini. Setelah dikirim, tunggu balasan pengurus berikutnya.':
+   'Balasanmu sudah terkirim. Tunggu pengurus membalas sebelum kamu dapat menjawab lagi.','mailbox-direct-info'));
   const history=el('div',undefined,'mailbox-direct-history');
   for(const reply of thread.replies||[]){
    const row=el('div',undefined,'mailbox-direct-reply');
@@ -38,7 +40,7 @@ window.SSCircleDirectMailbox=(()=>{
    history.append(row);
   }
   if(history.childElementCount)area.append(history);
-  if(thread.status!=='open'){holder.replaceChildren(area);return;}
+  if(thread.status!=='open'||!thread.canReply){holder.replaceChildren(area);return;}
   const form=el('form',undefined,'mailbox-direct-form');
   form.append(el('h4','Balas atau revisi data pendaftaran'));
   const answers=[];
