@@ -21,3 +21,50 @@
 .ssc-direct-reply button{margin-top:9px}
 .ssc-direct-meta{opacity:.75;font-size:.81rem}
 @media(max-width:640px){.ssc-direct-admin,.mailbox-direct-container{min-width:0}}
+
+/* PR78.1: compact, responsive Admin Control fields and safer thread actions. */
+.ssc-direct-admin .ssc-notice-admin-fields{
+ grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;
+ gap:12px 14px;max-width:930px
+}
+.ssc-direct-admin .ssc-notice-admin-fields>label{min-width:0;align-self:start}
+.ssc-direct-admin .ssc-notice-admin-fields>label:nth-child(3){grid-column:1/-1}
+.ssc-direct-admin .ssc-notice-admin-fields input{
+ box-sizing:border-box;width:100%;height:42px;min-height:42px;padding:9px 12px
+}
+.ssc-direct-admin .ssc-notice-admin-fields textarea{
+ box-sizing:border-box;width:100%;height:94px;min-height:88px;max-height:220px;resize:vertical
+}
+.ssc-direct-admin form,.ssc-direct-admin .ssc-direct-questions{max-width:930px}
+.ssc-direct-code-controls{
+ display:grid;grid-template-columns:minmax(0,1fr) auto;
+ align-items:center;gap:7px 9px;min-width:0
+}
+.ssc-direct-code-controls input{grid-column:1;min-width:0}
+.ssc-direct-code-controls>button{grid-column:2;min-height:40px;white-space:nowrap}
+.ssc-direct-code-controls .field-help{grid-column:1/-1;margin:0;font-size:11px}
+.ssc-direct-entry-actions,.ssc-direct-thread-actions{
+ display:flex;align-items:center;gap:8px;flex-wrap:wrap
+}
+.ssc-direct-admin .ssc-notice-entry{padding:11px 13px;align-items:center;margin:8px 0}
+.ssc-direct-admin .ssc-notice-entry>div:first-child{min-width:0;flex:1;overflow-wrap:anywhere}
+.ssc-direct-admin .ssc-direct-delete{
+ border-color:#ab7487;color:#ffccd9;background:rgba(139,49,73,.12)
+}
+.ssc-direct-admin button{min-height:38px}
+.ssc-direct-thread-panel{min-width:0;display:grid;gap:10px}
+.ssc-direct-thread-panel textarea{box-sizing:border-box;width:100%;max-width:930px;min-height:76px;resize:vertical}
+.ssc-direct-thread-panel .ssc-direct-reply{max-width:930px;overflow-wrap:anywhere}
+.mailbox-direct-area,.mailbox-direct-form{min-width:0}
+.mailbox-direct-form textarea{resize:vertical;min-height:70px;max-height:180px}
+@media(max-width:740px){
+ .ssc-direct-admin .ssc-notice-admin-fields{grid-template-columns:minmax(0,1fr)}
+ .ssc-direct-admin .ssc-notice-admin-fields>label:nth-child(3){grid-column:1}
+}
+@media(max-width:470px){
+ .ssc-direct-admin.ssc-notice-admin-form,.ssc-direct-admin.ssc-notice-admin-list{padding:14px}
+ .ssc-direct-code-controls{grid-template-columns:minmax(0,1fr)}
+ .ssc-direct-code-controls>button{grid-column:1;justify-self:start}
+ .ssc-direct-entry-actions{width:100%}
+ .ssc-direct-entry-actions>button{flex:1}
+}
