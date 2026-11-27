@@ -47,7 +47,7 @@
     <script src="profile-admin.js?v=10.55.6" defer></script>
     <script src="announcements-admin.js?v=10.55.6" defer></script>
     <script src="overview-dashboard.js?v=10.61.0" defer></script>
-    <script src="admin.js?v=10.64.0" defer></script>
+    <script src="admin.js?v=10.65.0" defer></script>
     <script src="form-insert-rail.js?v=10.26.0" defer></script>
     <script src="spreadsheet.js?v=10.26.0" defer></script>
     <link rel="stylesheet" href="password-visibility.css?v=10.39.0">
@@ -481,6 +481,11 @@
                       </div>
                     </div>
                     <div id="appearance-identity-fields" class="appearance-fields"></div>
+                    <label class="toggle-row">
+                      <input type="checkbox" id="registration-one-active" checked>
+                      <span class="toggle-visual" aria-hidden="true"></span>
+                      <span><strong>Batasi satu pendaftaran aktif per pemain</strong><small>Menunggu/Diterima tidak bisa mengirim ulang. Ditolak boleh merevisi dan mengirim ulang menggunakan kode lama. Username Minecraft yang sama dicegah agar tidak didaftarkan dua kali.</small></span>
+                    </label>
                     <label class="toggle-row">
                       <input type="checkbox" id="form-open">
                       <span class="toggle-visual" aria-hidden="true"></span>
