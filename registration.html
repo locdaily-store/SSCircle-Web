@@ -14,10 +14,11 @@
     <title>SSCircle Server | Registration</title>
     <link rel="icon" type="image/png" href="assets/sscircle-logo.png">
     <link rel="stylesheet" href="style.css?v=10.49.1.6">
+    <link rel="stylesheet" href="registration-one-active.css?v=10.65.0">
     <script src="color-theme.js?v=10.26.0" defer></script>
-    <script src="cloudflare-api.js?v=10.26.0" defer></script>
+    <script src="cloudflare-api.js?v=10.65.0" defer></script>
     <script src="social-links.js?v=10.26.0" defer></script>
-    <script src="app.js?v=10.26.1" defer></script>
+    <script src="app.js?v=10.65.0" defer></script>
       <script src="pwa-register.js?v=10.53.0" defer></script>
     <link rel="stylesheet" href="ssc-dialog.css?v=10.55.6">
   <script src="ssc-dialog.js?v=10.55.6" defer></script>
@@ -135,6 +136,22 @@
               <p>Terima kasih! Kamu sudah mengirim pendaftaran. Kamu dapat mendaftar kembali setelah waktu ini habis.</p>
               <strong class="cooldown-time" id="cooldown-remaining">00:00</strong>
               <span class="cooldown-footnote">Kamu tetap bisa mengecek status menggunakan kode pendaftaran.</span>
+            </div>
+          </section>
+          <section id="registration-existing-banner" class="registration-closed-banner hide" role="status" aria-live="polite">
+            <span aria-hidden="true">✓</span>
+            <div>
+              <h2 id="registration-existing-heading">Formulir sudah dikirim</h2>
+              <p id="registration-existing-text">Pendaftaranmu sudah tersimpan.</p>
+              <a href="/status.html#kode-milikku">Lihat status pendaftaran ↗</a>
+            </div>
+          </section>
+          <section id="registration-rejected-banner" class="registration-closed-banner hide" role="status" aria-live="polite">
+            <span aria-hidden="true">↻</span>
+            <div>
+              <h2>Kesempatan memperbaiki formulir</h2>
+              <p>Pengajuan sebelumnya berstatus Ditolak. Perbaiki jawaban dan kirim ulang tanpa membuat kode pendaftaran baru.</p>
+              <p id="registration-rejected-reason" class="registration-rejection-reason"></p>
             </div>
           </section>
           <!-- Formulir pengisian data -->
