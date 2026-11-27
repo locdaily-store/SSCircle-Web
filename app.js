@@ -759,6 +759,7 @@ else {
         const status=eligibility.status;
         if(status==='pending'||status==='accepted'){
           $('#application-form').classList.add('hide');
+          $('#registration-closed-banner').classList.add('hide');
           $('#registration-existing-banner').classList.remove('hide');
           $('#registration-existing-heading').textContent=status==='accepted'?'Pendaftaran sudah Diterima':'Formulir sudah dikirim';
           $('#registration-existing-text').textContent=eligibility.message;
