@@ -3105,20 +3105,22 @@ function registrationMinecraftKey(answers,snapshot){
 async function ensureRegistrationIdentityClaims(env){
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS registration_ign_claims(
     name_key TEXT PRIMARY KEY,application_id TEXT NOT NULL,created_at TEXT NOT NULL)`).run();
-  // Seed previous applicants without changing their records. Accepted wins
-  // over pending if earlier data already contained duplicate usernames.
+  // Seed earlier registrations of every status. Rejected applicants must
+  // sign in with their existing code before resubmitting; a fresh browser
+  // must not silently create a second ID for the same Minecraft username.
+  // Prefer accepted/pending records if historical duplicates already exist.
   const rows=(await env.DB.prepare(`SELECT id,answers,question_snapshot,submitted_at
-    FROM submissions WHERE status IN ('accepted','pending')
-    ORDER BY CASE status WHEN 'accepted' THEN 0 ELSE 1 END,submitted_at ASC LIMIT 2500`).all()).results||[];
+    FROM submissions WHERE status IN ('accepted','pending','rejected')
+    ORDER BY CASE status WHEN 'accepted' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END,
+      submitted_at ASC LIMIT 2500`).all()).results||[];
   for(const row of rows){
     const key=registrationMinecraftKey(parse(row.answers),parse(row.question_snapshot));
     if(key)await env.DB.prepare(`INSERT OR IGNORE INTO registration_ign_claims
       (name_key,application_id,created_at) VALUES(?,?,?)`).bind(key,row.id,row.submitted_at||new Date().toISOString()).run();
   }
-  // A rejected player has no active claim until their resubmission succeeds.
+  // A claim is freed only when the original registration is deleted.
   await env.DB.prepare(`DELETE FROM registration_ign_claims
-    WHERE NOT EXISTS(SELECT 1 FROM submissions s WHERE s.id=application_id
-      AND s.status IN ('pending','accepted'))`).run();
+    WHERE NOT EXISTS(SELECT 1 FROM submissions s WHERE s.id=application_id)`).run();
 }
 async function memberCenterAPI(req,env,path,method) {
   if (path.startsWith('/api/admin/')) {
@@ -7037,9 +7039,9 @@ async function route(req, env, ctx) {
       if(claimedName){
         const existing=await env.DB.prepare(`SELECT c.application_id FROM registration_ign_claims c
           JOIN submissions s ON s.id=c.application_id
-          WHERE c.name_key=? AND s.status IN ('pending','accepted')`).bind(claimedName).first();
+          WHERE c.name_key=? AND s.status IN ('pending','accepted','rejected')`).bind(claimedName).first();
         if(existing&&existing.application_id!==id)
-          return bad('Username Minecraft ini sudah mempunyai pendaftaran yang sedang diseleksi atau sudah Diterima. Gunakan kode pendaftaran yang lama untuk Cek Status.',409);
+          return bad('Username Minecraft ini sudah pernah didaftarkan. Gunakan kode pendaftaran lama untuk Cek Status, atau mengisi ulang jika Ditolak.',409);
       }
     }
     try {
