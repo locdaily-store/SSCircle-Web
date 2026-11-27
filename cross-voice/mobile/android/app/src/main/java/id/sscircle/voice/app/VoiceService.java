@@ -72,7 +72,7 @@ public final class VoiceService extends Service {
         .build();
     private volatile String gateway = "", origin = "", token = "", uuid = "", player = "";
     private volatile boolean active, connected, muted, deafened, whisper;
-    private volatile long expiresAt, generation;
+    private volatile long expiresAt, renewalAt, generation;
     private volatile WebSocket socket;
     private volatile VoiceAudioEngine audio;
     private ScheduledFuture<?> retry, renewal;
@@ -135,7 +135,7 @@ public final class VoiceService extends Service {
         endSession(false);
         gateway = "";
         origin = "";
-        token = ""; uuid = ""; player = ""; expiresAt = 0;
+        token = ""; uuid = ""; player = ""; expiresAt = 0; renewalAt = 0;
         muted = false; deafened = false; whisper = false;
         connected = false; reconnectAttempt = 0;
         active = true;
@@ -194,8 +194,9 @@ public final class VoiceService extends Service {
         try {
             PowerManager power = getSystemService(PowerManager.class);
             wakeLock = power.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "SSCircleVoice:Audio");
-            // Maximum lifetime; renewed only with a new user-initiated session.
-            wakeLock.acquire(4 * 60 * 60 * 1000L);
+            // Foreground microphone service owns this lock; release it at
+            // Disconnect/onDestroy, not after an arbitrary four-hour cutoff.
+            wakeLock.acquire();
         } catch (RuntimeException ignored) { }
     }
     private void releaseWakeLock() {
@@ -350,6 +351,7 @@ public final class VoiceService extends Service {
                 token = result.getString("token");
                 expiresAt = System.currentTimeMillis() +
                     result.optLong("expiresIn", 900) * 1000L;
+                renewalAt = System.currentTimeMillis() + 10 * 60_000L;
                 JSONObject account = result.getJSONObject("player");
                 uuid = account.getString("uuid");
                 player = account.optString("name", "Minecraft");
@@ -398,8 +400,12 @@ public final class VoiceService extends Service {
     private void openSocket(long gen) {
         if (!valid(gen)) return;
         try {
+            // Rotate first when a long background pause resumes; the gateway
+            // accepts the linked UUID as long as the token has not been revoked.
+            if (System.currentTimeMillis() >= renewalAt) renew(gen);
+            if (!valid(gen)) return;
             if (System.currentTimeMillis() >= expiresAt) {
-                failAndStop("Sesi habis. Gunakan /voice link lagi."); return;
+                failAndStop("Perangkat perlu dipasangkan ulang karena akses sudah dicabut."); return;
             }
             message("Menghubungkan WebSocket...");
             JSONObject ticket = post("/api/ticket", token, new JSONObject());
@@ -470,7 +476,7 @@ public final class VoiceService extends Service {
     private void scheduleRetry(long gen) {
         if (!valid(gen)) return;
         if (System.currentTimeMillis() >= expiresAt) {
-            failAndStop("Sesi habis. Gunakan /voice link lagi."); return;
+            failAndStop("Akses perangkat sudah tidak berlaku. Lakukan pairing ulang."); return;
         }
         long delay = Math.min(30, Math.min(5L << Math.min(reconnectAttempt++, 4), 30));
         message("Koneksi putus. Menyambung ulang dalam " + delay + " dtk...");
@@ -479,17 +485,19 @@ public final class VoiceService extends Service {
     }
     private void renew(long gen) {
         if (!valid(gen) || token.isEmpty() ||
-            expiresAt - System.currentTimeMillis() > 5 * 60_000L) return;
+            (System.currentTimeMillis() < renewalAt &&
+             expiresAt - System.currentTimeMillis() > 10 * 60_000L)) return;
         try {
             JSONObject value = post("/api/renew", token, new JSONObject());
             if (!valid(gen)) return;
             token = value.getString("token");
             expiresAt = System.currentTimeMillis() +
                 value.optLong("expiresIn", 900) * 1000L;
+            renewalAt = System.currentTimeMillis() + 10 * 60_000L;
         } catch (Exception error) {
             if (valid(gen) && String.valueOf(error.getMessage()).contains("SESSION_EXPIRED"))
-                failAndStop("Sesi habis. Gunakan /voice link lagi.");
-            // Transient failures retry at the next minute; no secret is logged.
+                failAndStop("Akses perangkat dicabut. Hubungkan akun kembali satu kali.");
+            // Network or Paper outages retry automatically; no secret is logged.
         }
     }
     private void sendAudio(String data) {
@@ -587,7 +595,7 @@ public final class VoiceService extends Service {
         WebSocket ws = socket; socket = null;
         if (ws != null) ws.close(1000, "user disconnect");
         String oldToken = token;
-        token = ""; expiresAt = 0;
+        token = ""; expiresAt = 0; renewalAt = 0;
         releaseWakeLock();
         publish(new State(false, false, false, false,
             finish ? "Voice terputus" : "Memulai koneksi baru...", "",
