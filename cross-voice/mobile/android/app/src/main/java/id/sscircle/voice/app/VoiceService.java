@@ -425,11 +425,14 @@ public final class VoiceService extends Service {
                         });
                     engine.mute(muted);
                     engine.deafen(deafened);
-                    audio = engine;
-                    engine.start();
+                    // Configure the audio route BEFORE opening AudioRecord.
+                    // Some Android devices capture digital silence if
+                    // VOICE_COMMUNICATION starts before MODE_IN_COMMUNICATION.
                     boolean routeApplied = VoiceOutputRoute.apply(VoiceService.this,
                         VoiceOutputRoute.isSpeaker(VoiceService.this));
                     audioRouteOwned = true;
+                    audio = engine;
+                    engine.start();
                     message(routeApplied ? "Terhubung • voice aktif di background" :
                         "Terhubung • output tidak tersedia, periksa speaker/earpiece");
                     updateNotification("Terhubung sebagai " + player + " • mikrofon aktif");
