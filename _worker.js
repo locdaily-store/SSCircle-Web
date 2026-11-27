@@ -769,7 +769,8 @@ const DEFAULTS = {
   statusOwnCodeCopyText: 'Salin kode',
   statusOwnCodeCheckText: 'Cek status saya',
   statusOwnCodeLogoutText: 'Keluar akun',
-  cooldownMinutes: DEFAULT_COOLDOWN_MINUTES
+  cooldownMinutes: DEFAULT_COOLDOWN_MINUTES,
+  registrationOneActive: true
 };
 function safeDonateIcon(value) {
   const icon = s(value, 700);
@@ -1483,6 +1484,7 @@ function settingsValid(input) {
   if (!Number.isFinite(cooldown) || !Number.isInteger(cooldown) || cooldown < 0 || cooldown > MAX_COOLDOWN_MINUTES)
     throw Error('Cooldown harus antara 0 dan 10080 menit.');
   out.cooldownMinutes = cooldown;
+  out.registrationOneActive = input.registrationOneActive !== false;
   for (const key of [
     'homeEnabled',
     'homeVideoEnabled',
@@ -3083,6 +3085,41 @@ async function applicantNamesFor(env,ids){
   return names;
 }
 
+// One active submission per verified registration session, with additional
+// collision control for the Minecraft username field (when the form has one).
+// This prevents accidental duplicates across tabs/browsers. IGN is NOT proof
+// of ownership, so a future Minecraft-authentication step can further harden it.
+function registrationLockMessage(status){
+  if(status==='pending')return 'Formulirmu sudah dikirimkan ke admin dan sedang dalam proses seleksi. Kamu tidak perlu mendaftar kembali.';
+  if(status==='accepted')return 'Pendaftaranmu sudah Diterima. Kamu sudah pernah mengisi formulir dan tidak perlu mengirim pendaftaran lagi.';
+  return '';
+}
+function registrationMinecraftKey(answers,snapshot){
+  const questions=Array.isArray(snapshot)?snapshot:[];
+  const question=questions.find(q=>/minecraft|\bign\b|gamertag/i.test(String(q.title||'')) &&
+    /username|gamertag|nickname|nama|\bign\b/i.test(String(q.title||'')));
+  const value=question&&answers&&typeof answers[question.id]==='string'?answers[question.id].trim():'';
+  if(!value||value.length>40||!/[a-z0-9]/i.test(value)||/[<>\u0000-\u001f]/.test(value))return '';
+  return value.normalize('NFKC').replace(/\s+/g,' ').toLowerCase();
+}
+async function ensureRegistrationIdentityClaims(env){
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS registration_ign_claims(
+    name_key TEXT PRIMARY KEY,application_id TEXT NOT NULL,created_at TEXT NOT NULL)`).run();
+  // Seed previous applicants without changing their records. Accepted wins
+  // over pending if earlier data already contained duplicate usernames.
+  const rows=(await env.DB.prepare(`SELECT id,answers,question_snapshot,submitted_at
+    FROM submissions WHERE status IN ('accepted','pending')
+    ORDER BY CASE status WHEN 'accepted' THEN 0 ELSE 1 END,submitted_at ASC LIMIT 2500`).all()).results||[];
+  for(const row of rows){
+    const key=registrationMinecraftKey(parse(row.answers),parse(row.question_snapshot));
+    if(key)await env.DB.prepare(`INSERT OR IGNORE INTO registration_ign_claims
+      (name_key,application_id,created_at) VALUES(?,?,?)`).bind(key,row.id,row.submitted_at||new Date().toISOString()).run();
+  }
+  // A rejected player has no active claim until their resubmission succeeds.
+  await env.DB.prepare(`DELETE FROM registration_ign_claims
+    WHERE NOT EXISTS(SELECT 1 FROM submissions s WHERE s.id=application_id
+      AND s.status IN ('pending','accepted'))`).run();
+}
 async function memberCenterAPI(req,env,path,method) {
   if (path.startsWith('/api/admin/')) {
     if (!await admin(req,env)) return bad('Silakan masuk ke Admin Control.',401);
@@ -6505,7 +6542,9 @@ async function route(req, env, ctx) {
         return new Response('Pendaftaran sedang tidak tersedia.', { status: 503 });
       const settings = formFrom(await readSettingsRow(env)).settings;
       if (!settings.open) return new Response(null,{status:302,headers:{Location:'/page-closed.html?section=registration','Cache-Control':'no-store'}});
-      if (settings.open && settings.rulesEnabled && !await rulesAgreed(req, env, settings))
+      const existing=settings.registrationOneActive?await playerSession(req,env):null;
+      const locked=existing&&['pending','accepted'].includes(existing.status);
+      if (!locked && settings.open && settings.rulesEnabled && !await rulesAgreed(req, env, settings))
         return new Response(null, { status: 302, headers: { Location: '/rules', 'Cache-Control': 'no-store' } });
     }
     if (path === '/registration.html')
@@ -6827,11 +6866,30 @@ async function route(req, env, ctx) {
     });
     return J(f);
   }
+  if(path==='/api/registration/eligibility'&&method==='GET'){
+    if(!env.SESSION_SECRET)return bad('Sesi pendaftaran belum tersedia.',503);
+    const settings=formFrom(await readSettingsRow(env)).settings;
+    const member=await playerSession(req,env);
+    if(!settings.registrationOneActive||!member)
+      return J({enabled:settings.registrationOneActive,authenticated:!!member,
+        canSubmit:true,canResubmit:false},200,{'Cache-Control':'private, no-store','Vary':'Cookie'});
+    const record=await env.DB.prepare('SELECT status,rejection_reason,tracking_code FROM submissions WHERE id=?')
+      .bind(member.id).first();
+    if(!record)return J({enabled:true,authenticated:false,canSubmit:true,canResubmit:false});
+    return J({enabled:true,authenticated:true,status:record.status,
+      canSubmit:record.status==='rejected',canResubmit:record.status==='rejected',
+      reason:record.status==='rejected'?(record.rejection_reason||'Alasan penolakan belum diberikan pengurus.'):'',
+      message:registrationLockMessage(record.status),
+      reference:record.tracking_code||member.id.slice(0,8).toUpperCase()},
+      200,{'Cache-Control':'private, no-store','Vary':'Cookie'});
+  }
   if (path === '/api/registration-cooldown' && method === 'GET') {
     if (!env.SESSION_SECRET)
       return bad('Layanan belum tersedia.', 503);
     const f = formFrom(await env.DB.prepare('SELECT * FROM form_config WHERE id=1').first());
-    return J({ remainingSeconds: f.settings.cooldownMinutes > 0 ? await cooldownLeft(env, req) : 0 });
+    const member=f.settings.registrationOneActive?await playerSession(req,env):null;
+    return J({ remainingSeconds:member?.status==='rejected'?0:
+      f.settings.cooldownMinutes > 0 ? await cooldownLeft(env, req) : 0 });
   }
   if (path==='/api/voting/status' && method==='GET') {
     const settings=formFrom(await readSettingsRow(env)).settings;
