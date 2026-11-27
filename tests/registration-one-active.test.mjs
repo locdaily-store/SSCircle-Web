@@ -106,3 +106,14 @@ test('UI and admin control show policy, rejection reason and updated cache versi
  assert.match(admin,/id="registration-one-active"/);
  assert.match(app,/getRegistrationEligibility/);
 });
+test('Rejected registration cannot be duplicated in a new browser without original code',async()=>{
+ const x=fixture('rejected');
+ const other=await x.apply('oldname');
+ assert.equal(other.status,409,JSON.stringify(other.data));
+ assert.equal(x.db.prepare('SELECT COUNT(*) n FROM submissions').get().n,1);
+ const original=await x.request('/api/registration/eligibility','GET',null,A);
+ assert.equal(original.data.canResubmit,true);
+ const updated=await x.apply('OldName',A);
+ assert.equal(updated.status,200,JSON.stringify(updated.data));
+ assert.equal(updated.data.reference,CODE);
+});
