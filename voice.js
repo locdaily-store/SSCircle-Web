@@ -293,19 +293,28 @@ async function activateMic(){
     const context=await ensureContext();
     if(!context.audioWorklet)throw Error(translation('audioUnavailable'));
     const device=$('mic-select').value;
-    acquired=await navigator.mediaDevices.getUserMedia({audio:{
-      deviceId:device?{exact:device}:undefined,echoCancellation:true,
-      noiseSuppression:$('noise-suppression').checked,autoGainControl:true},video:false});
+    try{
+      acquired=await navigator.mediaDevices.getUserMedia({audio:{
+        deviceId:device?{exact:device}:undefined,echoCancellation:true,
+        noiseSuppression:$('noise-suppression').checked,autoGainControl:true},video:false});
+    }catch(error){
+      // A saved/default input ID may no longer exist (Bluetooth switching,
+      // Android route changes). Retry with the system's default microphone.
+      if(!['OverconstrainedError','NotFoundError','NotReadableError'].includes(error.name))throw error;
+      $('mic-select').value='';
+      acquired=await navigator.mediaDevices.getUserMedia({audio:{
+        echoCancellation:true,noiseSuppression:false,autoGainControl:true},video:false});
+    }
     if(!micWanted){acquired.getTracks().forEach(track=>track.stop());return;}
     stream=acquired;
     if(!workletLoaded){
-      await context.audioWorklet.addModule('voice-worklet.js');
+      await context.audioWorklet.addModule('voice-worklet.js?v=10.55.82');
       workletLoaded=true;
     }
     micSource=context.createMediaStreamSource(stream);
     worklet=new AudioWorkletNode(context,'sscircle-microphone',{numberOfInputs:1,numberOfOutputs:1});
     worklet.port.onmessage=e=>{
-      if(e.data?.t==='level'){$('mic-meter').value=Math.min(1,e.data.value*7);sendLevel=e.data.value;}
+      if(e.data?.t==='level'){$('mic-meter').value=Math.min(1,e.data.value*12);sendLevel=e.data.value;}
       if(e.data?.t==='pcm'&&shouldTransmit()&&socket?.readyState===WebSocket.OPEN&&
          socket.bufferedAmount<32*1024){
         pendingMic.push({pcm:asPCM(e.data.frame)});
@@ -329,6 +338,7 @@ async function activateMic(){
     }
     $('start-mic').textContent=translation('stop');$('start-mic').classList.add('is-active');
     worklet.port.postMessage({t:'sensitivity',value:$('talk-mode').value==='ptt'?0:Number($('sensitivity').value)/1000});
+    // Voice Activation is default on phones; speaking requires explicit mic permission only.
     updateButtons();await updateDevices();backgroundInfo(translation('backgroundReady'));
   }catch(e){
     micWanted=false;stopMic();
@@ -415,7 +425,7 @@ const labels={
     input:'Volume input',output:'Volume output',meter:'Level mikrofon',
     noise:'Peredam kebisingan (jika didukung)',testMic:'Uji mikrofon',
     testSpeaker:'Uji speaker',mode:'Mode suara',group:'Gabung grup',
-    notice:'Pilih Voice Activation untuk bicara saat membuka Minecraft; Push-to-Talk hanya berfungsi ketika halaman aktif. Android/iOS bisa membekukan tab, mikrofon, atau WebSocket. Pulihkan Voice jika terhenti. Jangan tutup tab atau hentikan paksa browser.',
+    notice:'Voice Activation aktif secara default setelah kamu menekan Aktifkan mikrofon. Jika memilih Push-to-Talk, tahan V/tombol bicara. Periksa bar level mikrofon saat suara tidak terkirim. Perangkat dapat menghentikan mikrofon di latar belakang, gunakan Pulihkan Voice.',
     backgroundTitle:'Voice saat pindah aplikasi',recover:'Pulihkan Voice',backgroundReady:'Voice diusahakan tetap aktif saat pindah aplikasi. Jangan tutup tab.',
     backgroundHidden:'Halaman berjalan di latar belakang jika diizinkan perangkat.',
     micInterrupted:'Mikrofon dihentikan perangkat. Kembali ke halaman lalu tekan Pulihkan Voice.',
