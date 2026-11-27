@@ -6987,7 +6987,11 @@ async function route(req, env, ctx) {
     if (Number(req.headers.get('Content-Length') || 0) > 14 * 1024 * 1024)
       return bad('Ukuran data melebihi 14 MB.', 413);
     const earlySettings = formFrom(await env.DB.prepare('SELECT * FROM form_config WHERE id=1').first()).settings;
-    if (earlySettings.cooldownMinutes > 0) {
+    const prior=earlySettings.registrationOneActive?await playerSession(req,env):null;
+    if(prior&&['pending','accepted'].includes(prior.status))
+      return bad(registrationLockMessage(prior.status),409);
+    const reapplying=!!prior&&prior.status==='rejected'&&earlySettings.registrationOneActive;
+    if (earlySettings.cooldownMinutes > 0 && !reapplying) {
       const initialCooldown = await cooldownLeft(env, req);
       if (initialCooldown > 0)
         return cooldownResponse(initialCooldown);
@@ -7006,6 +7010,8 @@ async function route(req, env, ctx) {
     const f = formFrom(await env.DB.prepare('SELECT * FROM form_config WHERE id=1').first());
     if (!f.settings.open)
       return bad('Pendaftaran sedang ditutup.', 403);
+    if(f.settings.registrationOneActive !== earlySettings.registrationOneActive)
+      return bad('Pengaturan pendaftaran baru saja berubah. Muat ulang halaman, lalu coba lagi.',409);
     if (f.settings.rulesEnabled && !await rulesAgreed(req, env, f.settings))
       return bad('Setujui Server Rules sebelum mengirim pendaftaran.', 403);
     const flow = validateFlow(f.pages, payload.answers, files);
@@ -7013,11 +7019,29 @@ async function route(req, env, ctx) {
     const referencedImages = Object.values(flow.answers).filter(value => value && typeof value === 'object' && value.imageUrl).length;
     if (imageFields.length + referencedImages > MAX_IMAGES_PER_APPLICATION)
       throw Error('Maksimal 3 gambar dalam satu pendaftaran.');
-    const cooldownSeconds = f.settings.cooldownMinutes * 60;
+    const cooldownSeconds = reapplying?0:f.settings.cooldownMinutes * 60;
     const cooldownClaim = await claimCooldown(env, req, cooldownSeconds);
     if (cooldownSeconds > 0 && !cooldownClaim.claimed)
       return cooldownResponse(cooldownClaim.remainingSeconds);
-    const id = uid(), trackingCode = uid().replace(/-/g, '').slice(0, 20).toUpperCase(), uploaded = [];
+    const id = reapplying?prior.id:uid();
+    const trackingCode = reapplying?(prior.tracking_code||prior.id.slice(0,8).toUpperCase()):
+      uid().replace(/-/g, '').slice(0,20).toUpperCase();
+    const uploaded = [];
+    if(reapplying)await env.DB.prepare(`CREATE TABLE IF NOT EXISTS registration_attempt_history(
+      id TEXT PRIMARY KEY,application_id TEXT NOT NULL,old_answers TEXT,
+      old_question_snapshot TEXT,old_reason TEXT,archived_at TEXT NOT NULL)`).run();
+    let claimedName='';
+    if(f.settings.registrationOneActive){
+      await ensureRegistrationIdentityClaims(env);
+      claimedName=registrationMinecraftKey(flow.answers,flow.snapshot);
+      if(claimedName){
+        const existing=await env.DB.prepare(`SELECT c.application_id FROM registration_ign_claims c
+          JOIN submissions s ON s.id=c.application_id
+          WHERE c.name_key=? AND s.status IN ('pending','accepted')`).bind(claimedName).first();
+        if(existing&&existing.application_id!==id)
+          return bad('Username Minecraft ini sudah mempunyai pendaftaran yang sedang diseleksi atau sudah Diterima. Gunakan kode pendaftaran yang lama untuk Cek Status.',409);
+      }
+    }
     try {
       for (const field of imageFields) {
         const qid = field.slice(5), file = files.get(field);
@@ -7025,9 +7049,34 @@ async function route(req, env, ctx) {
         uploaded.push(m);
         flow.answers[qid] = { mediaId: m.id, filename: m.filename };
       }
-      const statements = uploaded.map(m => mediaRecord(env, m));
-      statements.push(env.DB.prepare('INSERT INTO submissions(id,submitted_at,status,answers,question_snapshot,tracking_code,rejection_reason) VALUES(?,?,?,?,?,?,?)').bind(id, new Date().toISOString(), 'pending', JSON.stringify(flow.answers), JSON.stringify(flow.snapshot), trackingCode, ''));
-      await env.DB.batch(statements);
+      const stamp=new Date().toISOString();
+      const statements=[];
+      if(f.settings.registrationOneActive&&reapplying){
+        statements.push(env.DB.prepare('DELETE FROM registration_ign_claims WHERE application_id=?').bind(id));
+      }
+      if(f.settings.registrationOneActive&&claimedName){
+        // UNIQUE name_key is the atomic cross-tab/cross-browser guard.
+        statements.push(env.DB.prepare(`INSERT INTO registration_ign_claims
+          (name_key,application_id,created_at) VALUES(?,?,?)`).bind(claimedName,id,stamp));
+      }
+      if(reapplying){
+        statements.push(env.DB.prepare(`INSERT INTO registration_attempt_history
+          (id,application_id,old_answers,old_question_snapshot,old_reason,archived_at)
+          SELECT ?,id,answers,question_snapshot,rejection_reason,? FROM submissions
+          WHERE id=? AND status='rejected'`).bind(uid(),stamp,id));
+        statements.push(env.DB.prepare(`UPDATE submissions
+          SET submitted_at=?,status='pending',answers=?,question_snapshot=?,rejection_reason=''
+          WHERE id=? AND status='rejected'`).bind(stamp,JSON.stringify(flow.answers),JSON.stringify(flow.snapshot),id));
+      }else{
+        statements.push(env.DB.prepare(`INSERT INTO submissions
+          (id,submitted_at,status,answers,question_snapshot,tracking_code,rejection_reason)
+          VALUES(?,?,?,?,?,?,?)`).bind(id,stamp,'pending',JSON.stringify(flow.answers),JSON.stringify(flow.snapshot),trackingCode,''));
+      }
+      const registrationWrite=statements.length-1;
+      statements.push(...uploaded.map(m=>mediaRecord(env,m)));
+      const written=await env.DB.batch(statements);
+      if(!written[registrationWrite]?.meta?.changes)
+        throw Error('REGISTRATION_STATUS_CHANGED');
     }
     catch (e) {
       for (const m of uploaded)
@@ -7039,12 +7088,31 @@ async function route(req, env, ctx) {
         }
         catch { }
       await releaseCooldown(env, cooldownClaim);
+      if(String(e?.message||e)==='REGISTRATION_STATUS_CHANGED'){
+        // A concurrent tab may have finished a rejected resubmission first.
+        // Restore the claim from the now-authoritative submission snapshot.
+        if(f.settings.registrationOneActive&&reapplying){
+          const actual=await env.DB.prepare('SELECT status,answers,question_snapshot,submitted_at FROM submissions WHERE id=?').bind(id).first();
+          await env.DB.prepare('DELETE FROM registration_ign_claims WHERE application_id=?').bind(id).run();
+          if(actual&&['pending','accepted'].includes(actual.status)){
+            const key=registrationMinecraftKey(parse(actual.answers),parse(actual.question_snapshot));
+            if(key)await env.DB.prepare(`INSERT OR IGNORE INTO registration_ign_claims
+              (name_key,application_id,created_at) VALUES(?,?,?)`)
+              .bind(key,id,actual.submitted_at||new Date().toISOString()).run();
+          }
+        }
+        return bad('Formulir sudah dikirimkan atau sedang diproses. Muat ulang status pendaftaranmu.',409);
+      }
+      if(f.settings.registrationOneActive&&/UNIQUE constraint failed: registration_ign_claims/i.test(String(e?.message||e)))
+        return bad('Username Minecraft ini sudah mempunyai pendaftaran aktif. Gunakan kode pendaftaran yang sebelumnya.',409);
       throw e;
     }
     // V10.50: pesan pertama di Mail Box. Ditulis setelah pendaftaran tersimpan dan di luar
     // blok try di atas, supaya kegagalannya tidak ikut menghapus media yang sudah diunggah.
     await mailboxStatusNote(env, id, 'pending');
-    return J({ ok: true, reference: trackingCode, remainingSeconds: cooldownSeconds }, 201, { 'Set-Cookie': playerCookie(await signPlayer(env, id), PLAYER_SESSION_SECONDS) });
+    return J({ ok: true, reference: trackingCode, reapplication:reapplying,
+      remainingSeconds: cooldownSeconds }, reapplying?200:201,
+      { 'Set-Cookie': playerCookie(await signPlayer(env, id), PLAYER_SESSION_SECONDS) });
   }
   if (path === '/api/admin/login' && method === 'POST') {
     if (!env.ADMIN_PASSWORD || !env.SESSION_SECRET)
