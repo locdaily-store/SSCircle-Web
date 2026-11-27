@@ -1,5 +1,6 @@
 /* SSCircle Voice: live WebSocket PCM audio, paired to authenticated Paper UUID.
-   No recording, no stored voice token, and no silent microphone capture. */
+   No recording. A revocable device token is saved locally for reconnect only;
+   microphone capture still requires an explicit action from the player. */
 (()=>{
 'use strict';
 const $=id=>document.getElementById(id);
@@ -32,6 +33,49 @@ let lang='id',token='',socket=null,me=null,latest=null,ctx=null,stream=null,work
   micWanted=false,micStarting=false,workletLoaded=false,recovering=false,
   sendLevel=0,outputVolume=1,playing=new Map(),pendingMic=[];
 const translation=k=>t[lang][k]||k;
+const sessionKey='sscircle-voice-device-v2:'+API;
+let sessionExpiresAt=0,renewing=null;
+function rememberVoice(){
+  if(!token||!me)return;
+  try{localStorage.setItem(sessionKey,JSON.stringify({token,player:me,expiresAt:sessionExpiresAt}));}catch{}
+}
+function forgetVoice(){try{localStorage.removeItem(sessionKey);}catch{}}
+function restoreVoice(){
+  if(!API)return false;
+  try{
+    const info=JSON.parse(localStorage.getItem(sessionKey)||'null');
+    if(!info||!/^[a-f0-9]{64}$/.test(info.token)||
+       !/^[0-9a-f-]{36}$/i.test(info.player?.uuid||'')||
+       typeof info.player.name!=='string'||info.player.name.length>40||
+       Number(info.expiresAt)<=Date.now()){
+      forgetVoice();return false;
+    }
+    token=info.token;me=info.player;sessionExpiresAt=Number(info.expiresAt);
+    closing=false;setRoom(true);void join();return true;
+  }catch{forgetVoice();return false;}
+}
+async function renewSession(force=false){
+  if(!token||closing)return false;
+  if(!force&&sessionExpiresAt-Date.now()>10*60_000)return true;
+  if(renewing)return renewing;
+  const original=token;
+  renewing=(async()=>{
+    const data=await request('/api/renew',{method:'POST',
+      headers:{Authorization:'Bearer '+original},body:'{}'});
+    if(closing||token!==original)return false;
+    token=data.token;
+    sessionExpiresAt=Date.now()+Number(data.expiresIn||900)*1000;
+    rememberVoice();return true;
+  })().finally(()=>{renewing=null;});
+  return renewing;
+}
+function clearInvalidSession(){
+  closing=true;cancelReconnect();closeSocket();
+  token='';me=null;sessionExpiresAt=0;renewing=null;
+  forgetVoice();stopMic();clearPlayback();setRoom(false);
+  status(translation('disconnected'),false);
+  pairMessage('Sesi perangkat dicabut. Gunakan /voice link sekali untuk memasangkan ulang.',true);
+}
 function message(text,error=false){$('room-message').textContent=text;$('room-message').style.color=error?'#ffb1b7':'';}
 function pairMessage(text,error=false){$('pair-message').textContent=text;$('pair-message').style.color=error?'#ffb1b7':'';}
 function status(label,connected){
@@ -53,9 +97,10 @@ async function request(path,options={}){
   const value=await response.json().catch(()=>({error:'INVALID_RESPONSE'}));
   if(!response.ok){
     const names={INVALID_CODE:translation('invalid'),SERVER_OFFLINE:translation('offline'),
-      SESSION_EXPIRED:'Sesi habis. Gunakan /voice link lagi.',
+      SESSION_EXPIRED:'Akses perangkat tidak berlaku lagi. Hubungkan ulang akun sekali.',
       RATE_LIMIT:'Terlalu banyak percobaan. Tunggu sebelum mencoba lagi.'};
-    throw Error(names[value.error]||value.error||'Kesalahan jaringan');
+    const issue=Error(names[value.error]||value.error||'Kesalahan jaringan');
+    issue.code=value.error||'';throw issue;
   }
   return value;
 }
@@ -78,6 +123,7 @@ async function disconnect(){
   closing=true;cancelReconnect();closeSocket();micWanted=false;
   if(token)try{await request('/api/disconnect',{method:'POST',headers:{Authorization:'Bearer '+token}});}catch{}
   token='';me=null;latest=null;reconnectTry=0;lastVoiceState=0;
+  sessionExpiresAt=0;forgetVoice();
   stopMic();clearPlayback();setRoom(false);status(translation('disconnected'),false);
 }
 function control(action,value=''){
@@ -110,6 +156,8 @@ async function join(){
      socket?.readyState===WebSocket.CONNECTING)return;
   joining=true;setRoom(true);$('room-status').textContent=translation('connecting');
   try{
+    if(sessionExpiresAt-Date.now()<10*60_000)await renewSession();
+    if(closing||!token)return;
     const value=await request('/api/ticket',{method:'POST',
       headers:{Authorization:'Bearer '+token},body:'{}'});
     if(closing||!token)return;
@@ -140,9 +188,10 @@ async function join(){
     current.onerror=()=>{$('room-status').textContent=translation('reconnecting');};
   }catch(error){
     message(error.message,true);
-    if(/SESSION_EXPIRED|Sesi habis|unauthorized/i.test(error.message)){
-      await disconnect();return;
+    if(error.code==='SESSION_EXPIRED'){
+      clearInvalidSession();return;
     }
+    // When Paper is offline or this tab was backgrounded, retry silently.
     scheduleReconnect();
   }finally{joining=false;}
 }
@@ -307,6 +356,11 @@ async function recoverVoice(manual=false){
   if(recovering)return;
   recovering=true;
   try{
+    if(token&&!closing&&sessionExpiresAt-Date.now()<10*60_000){
+      try{await renewSession();}catch(error){
+        if(error.code==='SESSION_EXPIRED'){clearInvalidSession();return;}
+      }
+    }
     // After an OS suspension, a stale WebSocket may still report OPEN.
     if(token&&!closing){
       if(socket?.readyState===WebSocket.OPEN&&lastVoiceState&&
@@ -411,9 +465,6 @@ function updateAppDownloads(){
   const android=typeof config.android==='string'&&
     /^https:\/\/github\.com\/locdaily-store\/SSCircle-Web\/releases\/download\/[a-z0-9._-]+\/[a-z0-9._-]+\.apk$/i.test(config.android)
     ?config.android:'https://github.com/locdaily-store/SSCircle-Web/releases/download/sscircle-voice-android-preview/SSCircle-Voice-Android.apk';
-  const ios=typeof config.ios==='string'&&
-    /^https:\/\/(?:testflight\.apple\.com\/join\/[a-z0-9]+|apps\.apple\.com\/[a-z]{2}\/app\/[^?#]+\/id[0-9]+)\/?$/i.test(config.ios)
-    ?config.ios:'';
   const en=lang==='en';
   const subtitle=$('voice-app-description');
   if(!subtitle)return; // Allows existing isolated browser tests to run.
@@ -422,21 +473,13 @@ function updateAppDownloads(){
     'Gateway dan Origin terhubung otomatis dari SSCircle. Di aplikasi cukup masukkan kode /voice link.';
   $('voice-download-android').href=android||
     'https://github.com/locdaily-store/SSCircle-Web/actions/workflows/cross-voice-android.yml';
-  $('voice-download-ios').href=ios||
-    'https://github.com/locdaily-store/SSCircle-Web/blob/feature/sscircle-cross-voice/cross-voice/mobile/ios/README-ID.md';
+
   $('voice-android-action').textContent=android?(en?'Download Android APK':'Unduh APK Android'):
     (en?'View Android APK builds':'Lihat build APK Android');
-  $('voice-ios-action').textContent=ios?(en?'Install iOS app':'Unduh aplikasi iOS'):
-    (en?'iOS installation guide':'Panduan aplikasi iOS');
   $('voice-android-note').textContent=android?
     (en?'Official SSCircle Android test APK.':'APK uji SSCircle untuk Android.'):
     (en?'No published APK yet. Check the Actions build results.':
       'APK belum dipublikasikan. Buka hasil build di GitHub Actions.');
-  $('voice-ios-note').textContent=ios?
-    (en?'Opens the official iOS App Store/TestFlight listing.':
-      'Membuka halaman App Store/TestFlight resmi.'):
-    (en?'No TestFlight link yet. Apple code signing is required.':
-      'Belum ada tautan TestFlight. Instalasi memerlukan penandatanganan Apple.');
 }
 function setLanguage(){
   lang=$('language').value;document.documentElement.lang=lang;
@@ -454,7 +497,9 @@ $('pair-form').onsubmit=async e=>{
   try{
     const out=await request('/api/pair',{method:'POST',
       body:JSON.stringify({code:$('pair-code').value})});
-    token=out.token;me=out.player;closing=false;cancelReconnect();reconnectTry=0;
+    token=out.token;me=out.player;
+    sessionExpiresAt=Date.now()+Number(out.expiresIn||900)*1000;
+    closing=false;cancelReconnect();reconnectTry=0;rememberVoice();
     pairMessage(translation('paired'));setRoom(true);await join();
   }catch(error){pairMessage(error.message,true);}
   finally{$('pair-submit').disabled=false;}
@@ -531,4 +576,11 @@ if(API){
     .catch(()=>status(translation('offline'),false));
 }else status(translation('noConfig'),false);
 setMode();setLanguage();setRoom(false);
+// The gateway still validates every bearer against its Durable Object storage.
+// Refresh every ten minutes as long as the user keeps the device paired.
+// Timers can be throttled in mobile browsers, so foreground events also renew.
+if(!restoreVoice())setRoom(false);
+setInterval(()=>{if(token&&!closing)void renewSession(true).catch(e=>{
+  if(e.code==='SESSION_EXPIRED')clearInvalidSession();
+});},10*60_000);
 })();
