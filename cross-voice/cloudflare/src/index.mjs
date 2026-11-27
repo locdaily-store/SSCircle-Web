@@ -10,6 +10,8 @@ const CODE=/^[A-HJ-NP-Z2-9]{8}$/;
 const BASE64=/^[A-Za-z0-9+/]*={0,2}$/;
 const TOKEN=/^[a-f0-9]{64}$/;
 const MAX_WS=16400, MAX_FRAMES=4, MAX_BUFFER=65536;
+const SESSION_WINDOW_MS=30*24*60*60*1000; // Sliding window; renewed while in use
+const SESSION_WINDOW_SECONDS=Math.floor(SESSION_WINDOW_MS/1000);
 const now=()=>Date.now();
 const enc=new TextEncoder();
 const hex=bytes=>Array.from(new Uint8Array(bytes),x=>x.toString(16).padStart(2,'0')).join('');
@@ -112,6 +114,7 @@ export class VoiceRoom extends DurableObject {
     this.clients=new Map();
     this.bridge=null;
     this.bridgeEpoch='';
+    this.sessionRevalidated=new Set();
     this.svcReady=false;
     this.lastSnapshot=0;
     this.lastPrune=0;
@@ -146,8 +149,10 @@ export class VoiceRoom extends DurableObject {
     this.sql.exec('DELETE FROM voice_limits WHERE expires < ?',clock);
   }
   tokenFlush(){
+    // A Paper reconnect invalidates one-use pairing codes/tickets, but not the
+    // linked device's bearer. Reauthorize the UUID only after a fresh trusted
+    // Bedrock player snapshot from the newly authenticated Paper bridge.
     this.sql.exec('DELETE FROM voice_pairing');
-    this.sql.exec('DELETE FROM voice_sessions');
     this.sql.exec('DELETE FROM voice_tickets');
   }
   healthy(){return !!this.bridge&&this.svcReady&&now()-this.lastSnapshot<5000;}
@@ -169,6 +174,7 @@ export class VoiceRoom extends DurableObject {
   bridgeOut(reason='bridge offline'){
     const old=this.bridge;
     this.bridge=null;this.bridgeEpoch='';this.svcReady=false;this.lastSnapshot=0;
+    this.sessionRevalidated.clear();
     this.players.clear();
     this.tokenFlush();
     for(const [id,sock] of this.clients){
@@ -239,10 +245,11 @@ export class VoiceRoom extends DurableObject {
       this.clientOut(entry.uuid,'new pairing');
       this.sql.exec('DELETE FROM voice_sessions WHERE uuid=?',entry.uuid);
       this.sql.exec('DELETE FROM voice_tickets WHERE uuid=?',entry.uuid);
-      const token=randomToken(),expiry=now()+15*60_000,hash=await digest('session:'+token);
+      const token=randomToken(),expiry=now()+SESSION_WINDOW_MS,hash=await digest('session:'+token);
       this.sql.exec('INSERT INTO voice_sessions (token_hash,uuid,expires,epoch) VALUES (?,?,?,?)',
         hash,entry.uuid,expiry,this.bridgeEpoch);
-      return reply(200,{ok:true,token,expiresIn:900,player:{uuid:entry.uuid,name:p.name}},this.origin);
+      return reply(200,{ok:true,token,expiresIn:SESSION_WINDOW_SECONDS,
+        player:{uuid:entry.uuid,name:p.name}},this.origin);
     }
     // A native foreground audio service needs long calls without keeping a fixed 15-minute token.
     // Rotating the bearer invalidates replay while extending the existing WebSocket attachment.
@@ -254,13 +261,15 @@ export class VoiceRoom extends DurableObject {
       // Do not revoke a still-valid bearer just because Paper is temporarily offline.
       if(!this.healthy())return error(503,'SERVER_OFFLINE',this.origin);
       const previous=this.rows('SELECT uuid,expires,epoch FROM voice_sessions WHERE token_hash=?',oldHash)[0];
-      if(!previous||previous.expires<now()||previous.epoch!==this.bridgeEpoch||
-          !this.players.get(previous.uuid)?.bedrock)
-        return error(401,'SESSION_EXPIRED',this.origin);
+      if(!previous||previous.expires<now())return error(401,'SESSION_EXPIRED',this.origin);
+      // A bridge outage or player reconnect is temporary; it should not turn
+      // the verified device session into an expired code needing /voice link.
+      if(previous.epoch!==this.bridgeEpoch||!this.players.get(previous.uuid)?.bedrock)
+        return error(503,'SERVER_OFFLINE',this.origin);
       const entries=this.rows('DELETE FROM voice_sessions WHERE token_hash=? RETURNING uuid,expires,epoch',oldHash);
       const entry=entries[0];
       if(!entry)return error(401,'SESSION_EXPIRED',this.origin);
-      const nextToken=randomToken(),expiry=now()+15*60_000;
+      const nextToken=randomToken(),expiry=now()+SESSION_WINDOW_MS;
       const nextHash=await digest('session:'+nextToken);
       this.sql.exec('INSERT INTO voice_sessions (token_hash,uuid,expires,epoch) VALUES (?,?,?,?)',
         nextHash,entry.uuid,expiry,this.bridgeEpoch);
@@ -271,7 +280,7 @@ export class VoiceRoom extends DurableObject {
         if(attachment?.type==='browser'&&attachment.epoch===this.bridgeEpoch)
           client.serializeAttachment({...attachment,expires:expiry});
       }
-      return reply(200,{ok:true,token:nextToken,expiresIn:900},this.origin);
+      return reply(200,{ok:true,token:nextToken,expiresIn:SESSION_WINDOW_SECONDS},this.origin);
     }
     if(path==='/api/ticket'&&method==='POST'){
       if(!req.headers.get('Origin'))return error(403,'ORIGIN_REQUIRED',this.origin);
@@ -279,9 +288,10 @@ export class VoiceRoom extends DurableObject {
       if(!TOKEN.test(token))return error(401,'SESSION_EXPIRED',this.origin);
       const hash=await digest('session:'+token);
       const state=this.rows('SELECT uuid,expires,epoch FROM voice_sessions WHERE token_hash=?',hash)[0];
-      if(!state||state.expires<now()||state.epoch!==this.bridgeEpoch||
-        !this.healthy()||!this.players.get(state.uuid)?.bedrock)
-        return error(401,'SESSION_EXPIRED',this.origin);
+      if(!state||state.expires<now())return error(401,'SESSION_EXPIRED',this.origin);
+      if(!this.healthy()||state.epoch!==this.bridgeEpoch||
+        !this.players.get(state.uuid)?.bedrock)
+        return error(503,'SERVER_OFFLINE',this.origin);
       const ticket=randomToken(),key=await digest('ticket:'+ticket);
       const expiry=Math.min(now()+15000,state.expires);
       this.sql.exec('INSERT INTO voice_tickets (ticket_hash,uuid,expires,session_expires,epoch) VALUES (?,?,?,?,?)',
@@ -325,6 +335,7 @@ export class VoiceRoom extends DurableObject {
       if(path==='/bridge'){
         if(this.bridge)this.bridgeOut('replaced by new Minecraft server');
         this.bridgeEpoch=crypto.randomUUID();
+        this.sessionRevalidated.clear();
         this.bridge=server;
         this.lastSnapshot=0;this.svcReady=false;
         this.players.clear();
@@ -376,6 +387,17 @@ export class VoiceRoom extends DurableObject {
       }
       this.lastSnapshot=now();this.svcReady=m.voiceReady===true;
       this.players=fresh;
+      // Once the new authenticated Paper bridge confirms the same Bedrock
+      // UUID, migrate only that UUID's still-valid linked device sessions.
+      // Never grant tickets to players absent from the current snapshot.
+      if(this.svcReady){
+        for(const [uuid,player] of fresh){
+          if(!player.bedrock||this.sessionRevalidated.has(uuid))continue;
+          this.sql.exec('UPDATE voice_sessions SET epoch=? WHERE uuid=? AND expires>?',
+            this.bridgeEpoch,uuid,now());
+          this.sessionRevalidated.add(uuid);
+        }
+      }
       for(const uuid of this.clients.keys())if(!fresh.get(uuid)?.bedrock)
         this.clientOut(uuid,'player offline');
       // Sessions have a fixed lifetime. A snapshot is a cheap cleanup cadence.
