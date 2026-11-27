@@ -94,7 +94,7 @@ test('real Cloudflare Durable Object pairing, voice batches and world separation
     const formerToken=a.token;
     const rotation=await post('/api/renew',{},formerToken);
     assert.equal(rotation.status,200,'session renew succeeds before expiry');
-    assert.equal(rotation.data.expiresIn,900);
+    assert.equal(rotation.data.expiresIn,30*24*60*60,'active session has a rolling 30-day safety window');
     assert.notEqual(rotation.data.token,formerToken,'renew rotates the bearer');
     assert.equal((await post('/api/ticket',{},formerToken)).status,401,'old bearer is invalid');
     a.token=rotation.data.token;
@@ -163,4 +163,37 @@ test('unauthenticated server and disallowed browser origins are rejected',async(
     headers:{Origin:'https://untrusted.example','Content-Type':'application/json'},
     body:'{"code":"ABCDEFGH"}'});
   assert.equal(r.status,403);
+});
+
+test('linked Bedrock devices reconnect after Paper bridge restarts without a new pairing code',async()=>{
+ let firstBridge,secondBridge,linked;
+ try{
+  firstBridge=await openWs('/bridge',{Authorization:'Bearer '+secret});
+  send(firstBridge,{t:'snapshot',voiceReady:true,players:basePlayers});
+  await sleep(150);
+  linked=await pair(firstBridge,'ABCDEFGH',A);
+  const token=linked.token;
+  // Close/restart the bridge: one-time pairing codes and tickets are revoked,
+  // but the device session stays hashed in Durable Object storage.
+  firstBridge.terminate();
+  await sleep(160);
+  secondBridge=await openWs('/bridge',{Authorization:'Bearer '+secret});
+  send(secondBridge,{t:'snapshot',voiceReady:true,players:basePlayers});
+  await sleep(220);
+  const ticket=await post('/api/ticket',{},token);
+  assert.equal(ticket.status,200,JSON.stringify(ticket.data));
+  const renew=await post('/api/renew',{},token);
+  assert.equal(renew.status,200,JSON.stringify(renew.data));
+  assert.equal(renew.data.expiresIn,30*24*60*60);
+  assert.notEqual(renew.data.token,token);
+  assert.equal((await post('/api/ticket',{},token)).status,401,
+    'rotation must still invalidate the old bearer');
+  assert.equal((await post('/api/ticket',{},renew.data.token)).status,200,
+    'still-linked player may reconnect using the rotated token');
+  const out=await post('/api/disconnect',{},renew.data.token);
+  assert.equal(out.status,200);
+  assert.equal((await post('/api/ticket',{},renew.data.token)).status,401);
+ }finally{
+  for(const ws of [linked?.socket,firstBridge,secondBridge])try{ws?.terminate();}catch{}
+ }
 });
