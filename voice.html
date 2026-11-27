@@ -9,7 +9,7 @@
 <link rel="stylesheet" href="style.css?v=10.49.1.6">
 <link rel="stylesheet" href="public-unified.css?v=10.60.0">
 <link rel="stylesheet" href="voice.css?v=10.55.81">
-<script src="public-unified.js?v=10.60.0" defer></script><script src="voice-config.js" defer></script><script src="voice.js?v=10.55.81" defer></script>
+<script src="public-unified.js?v=10.60.0" defer></script><script src="voice-config.js" defer></script><script src="voice.js?v=10.55.82" defer></script>
 </head>
 <body class="ssc-voice-page">
 <header class="home-header">
@@ -69,13 +69,14 @@
 </div>
 <div class="voice-setting-grid">
 <div><label for="talk-mode" id="talk-mode-label">Mode bicara</label><select id="talk-mode">
-<option value="ptt">Push-to-Talk (tahan V)</option><option value="voice">Voice Activation</option></select>
+<option value="voice" selected>Voice Activation (otomatis)</option><option value="ptt">Push-to-Talk (tahan V / tombol)</option></select>
 <button id="ptt" class="voice-ptt" type="button">Tahan untuk berbicara</button></div>
 <div><label for="mic-select">Input microphone</label><select id="mic-select"><option value="">Default microphone</option></select>
 <label for="speaker-select">Output speaker</label><select id="speaker-select" disabled><option value="">Default speaker (browser)</option></select></div>
-<div><label for="sensitivity">Mic sensitivity</label><input type="range" id="sensitivity" min="0" max="40" value="6"><label for="noise-suppression"><input id="noise-suppression" type="checkbox" checked> <span id="noise-label">Noise suppression (jika didukung)</span></label><label for="mic-volume">Input volume</label><input type="range" id="mic-volume" min="0" max="200" value="100"></div>
+<div><label for="sensitivity">Mic sensitivity</label><input type="range" id="sensitivity" min="0" max="40" value="4"><label for="noise-suppression"><input id="noise-suppression" type="checkbox"> <span id="noise-label">Noise suppression (jika didukung)</span></label><label for="mic-volume">Input volume</label><input type="range" id="mic-volume" min="0" max="200" value="100"></div>
 <div><label for="output-volume">Output volume</label><input id="output-volume" type="range" min="0" max="200" value="100">
 <label for="mic-meter">Microphone level</label><meter id="mic-meter" min="0" max="1" value="0"></meter>
+<small class="voice-mic-hint">Tidak terdengar? Tekan Aktifkan mikrofon dan lihat bar level. Jika kosong, periksa izin mikrofon dan pilihan input. Push-to-Talk harus ditahan.</small>
 <div class="voice-tests"><button id="test-mic" type="button">Test Mic</button><button id="test-speaker" type="button">Test Speaker</button></div></div>
 </div>
 <div class="voice-groups"><h3>Mode suara</h3>
