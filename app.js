@@ -669,7 +669,11 @@ $('#application-form').addEventListener('submit', async (e) => {
     $('#application-form').classList.add('hide');
     $('#success').classList.remove('hide');
     $('#reference-code').textContent = result.reference;
-    startCooldown(result.remainingSeconds || 0);
+    if(model.settings.registrationOneActive!==false){
+      $('#success-cooldown').classList.add('hide');
+      note(result.reapplication?'Formulir revisi berhasil dikirim ke admin. Statusmu sekarang Menunggu.':
+        'Formulir sudah dikirim kepada admin. Kamu tidak dapat mengirim ulang selama Menunggu atau setelah Diterima.');
+    }else startCooldown(result.remainingSeconds || 0);
     $('#application').scrollIntoView({ behavior: 'smooth' });
   }
   catch (err) {
@@ -739,8 +743,36 @@ if (registrationEditorPreview) {
 else {
   (async () => {
     try {
-      render(await SSCircle.getForm(), false);
-      if (model?.settings.open) {
+      const form=await SSCircle.getForm();
+      let eligibility=null;
+      if(form.settings.registrationOneActive!==false){
+        try{eligibility=await SSCircle.getRegistrationEligibility();}
+        catch(error){
+          render(form,false);
+          $('#application-form').classList.add('hide');
+          note('Status pendaftaran belum bisa diperiksa. Muat ulang halaman sebelum mengisi formulir. '+error.message,true);
+          return;
+        }
+      }
+      render(form,false);
+      if(eligibility?.enabled&&eligibility.authenticated){
+        const status=eligibility.status;
+        if(status==='pending'||status==='accepted'){
+          $('#application-form').classList.add('hide');
+          $('#registration-closed-banner').classList.add('hide');
+          $('#registration-existing-banner').classList.remove('hide');
+          $('#registration-existing-heading').textContent=status==='accepted'?'Pendaftaran sudah Diterima':'Formulir sudah dikirim';
+          $('#registration-existing-text').textContent=eligibility.message;
+          note(status==='accepted'?'Statusmu sudah Diterima.':'Formulirmu sedang diseleksi oleh admin.');
+          return;
+        }
+        if(status==='rejected'){
+          $('#registration-rejected-banner').classList.remove('hide');
+          $('#registration-rejected-reason').textContent='Alasan ditolak: '+(eligibility.reason||'Hubungi pengurus untuk informasi lebih lanjut.');
+          note('Perbaiki jawaban yang salah, lalu kirim ulang. Kode pendaftaran lama tetap berlaku.');
+        }
+      }
+      if (model?.settings.open && !(eligibility?.enabled&&eligibility?.status==='rejected')) {
         try {
           const state = await SSCircle.getCooldown();
           startCooldown(state.remainingSeconds || 0);

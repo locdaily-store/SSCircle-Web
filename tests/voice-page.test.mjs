@@ -87,18 +87,21 @@ test('Static voice-config fallback is isolated to Preview hostname',()=>{
   assert.doesNotMatch(source,/VOICE_BRIDGE_SECRET\s*=/);
 });
 
-test('Voice page contains accessible Android and iOS download choices',()=>{
+test('Voice page shows the Android app only, with no unsupported iOS download',()=>{
   const html=readFileSync(new URL('../voice.html',import.meta.url),'utf8');
   const stylesheet=readFileSync(new URL('../voice.css',import.meta.url),'utf8');
   const script=readFileSync(new URL('../voice.js',import.meta.url),'utf8');
-  for (const id of ['voice-app-title','voice-download-android','voice-download-ios',
-    'voice-android-note','voice-ios-note']) {
+  for (const id of ['voice-app-title','voice-download-android','voice-android-note']) {
     assert.ok(html.includes('id="'+id+'"'),'Missing app-download markup: '+id);
   }
   assert.match(stylesheet,/\.voice-app-grid/);
   assert.match(stylesheet,/@media\(max-width:620px\)/);
   assert.match(script,/updateAppDownloads/);
   assert.match(script,/SSCIRCLE_VOICE_DOWNLOADS/);
+  assert.doesNotMatch(html,/id="voice-download-ios"/);
+  assert.doesNotMatch(script,/voice-download-ios/);
+  assert.match(script,/renewSession\(force=false\)/);
+  assert.match(script,/restoreVoice\(\)/);
 });
 
 test('Voice app download links are injected only when official URL is configured',async()=>{

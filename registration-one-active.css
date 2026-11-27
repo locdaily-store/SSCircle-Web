@@ -1,0 +1,5 @@
+/* SSCircle registration one-active status feedback. */
+#registration-existing-banner,#registration-rejected-banner{margin:16px 0;max-width:850px}
+#registration-rejected-banner{border-color:var(--ssc-danger,#ff9caf)}
+.registration-rejection-reason{white-space:pre-wrap;overflow-wrap:anywhere;font-weight:650}
+@media(max-width:640px){#registration-existing-banner,#registration-rejected-banner{padding:17px 15px;margin:13px 0}}

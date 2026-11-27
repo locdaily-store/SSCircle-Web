@@ -35,7 +35,7 @@
 .voice-app-downloads{border:1px solid #8aabc144;border-radius:18px;padding:clamp(18px,3vw,28px);background:linear-gradient(125deg,#96d9ff15,#eef9ff05);margin:0 0 24px}
 .voice-app-heading h2{font-size:clamp(20px,3vw,27px);margin:7px 0}
 .voice-app-heading p{font-size:14px;margin:0 0 18px;opacity:.76}
-.voice-app-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}
+.voice-app-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:13px;max-width:460px}
 .voice-app-option{min-width:0;padding:16px;border:1px solid #8aabc144;border-radius:13px;background:#8aabc10b}
 .voice-app-platform{font-weight:700;display:flex;justify-content:space-between;align-items:center;gap:10px}
 .voice-app-platform small{font-size:12px;font-weight:500;opacity:.7}

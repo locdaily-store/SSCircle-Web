@@ -50,6 +50,7 @@
     '<div class="mailbox-secret-row"><code id="ssc-mailbox-registration-code"></code>',
     '<button type="button" class="mailbox-primary" id="ssc-mailbox-registration-copy">Salin kode pendaftaran</button></div>',
     '<small id="ssc-mailbox-registration-status" role="status" aria-live="polite"></small></div>',
+    '<div id="ssc-mailbox-direct" class="mailbox-direct-container" hidden></div>',
     '<div id="ssc-mailbox-accepted-discord" class="mailbox-accepted-discord" hidden><p id="ssc-mailbox-accepted-discord-note"></p>',
     '<a id="ssc-mailbox-accepted-discord-button" class="mailbox-primary mailbox-accepted-discord-button" target="_blank" rel="noopener noreferrer">Gabung SSCircle Community ↗</a></div>',
     '<a class="mailbox-primary ssc-notice-link" id="ssc-mailbox-link" hidden>Lihat informasi</a>',
@@ -68,17 +69,18 @@
   const $=id=>dialog.querySelector('#'+id);
   let items=[],current=null,filter='all',lastTrigger=null,refreshTask=null,loaded=false,loadFailed=false,deleting=false,
     selecting=false,selected=new Set(),managing=false,appStatus='none',hasPassword=false;
-  const kindLabel=type=>({registration_code:'KODE PENDAFTARAN',activation:'AKTIVASI AKUN',status:'STATUS PENDAFTARAN',announcement:'PENGUMUMAN RESMI',event:'EVENT SSCIRCLE',friend_request:'KOMUNITAS',friend_response:'KOMUNITAS',badge:'PENGHARGAAN'})[type]||'PEMBERITAHUAN';
-  const kindIcon=type=>({registration_code:'🔑',activation:'✦',status:'◆',announcement:'◈',event:'▦',friend_request:'♙',friend_response:'♙',badge:'★'})[type]||'✉';
+  const kindLabel=type=>({registration_code:'KODE PENDAFTARAN',activation:'AKTIVASI AKUN',status:'STATUS PENDAFTARAN',announcement:'PENGUMUMAN RESMI',event:'EVENT SSCIRCLE',friend_request:'KOMUNITAS',friend_response:'KOMUNITAS',badge:'PENGHARGAAN',direct_message:'PESAN PENGURUS'})[type]||'PEMBERITAHUAN';
+  const kindIcon=type=>({registration_code:'🔑',activation:'✦',status:'◆',announcement:'◈',event:'▦',friend_request:'♙',friend_response:'♙',badge:'★',direct_message:'✉'})[type]||'✉';
   // Kode aktivasi hanya untuk pendaftar yang diterima; selain itu tombolnya dikunci.
   function applyAccess(){
     const ok=appStatus==='accepted';
     $('ssc-mailbox-request').disabled=!ok;
     $('ssc-mailbox-request').hidden=false;
+    $('ssc-mailbox-request').textContent=hasPassword?'Minta kode pemulihan':'Minta kode aktivasi';
     $('ssc-mailbox-request-hint').hidden=ok;
     $('ssc-mailbox-request-heading').textContent=hasPassword?'Kode verifikasi akun':'Kode aktivasi akun';
     $('ssc-mailbox-request-description').textContent=hasPassword
-      ?'Tombol Minta kode tetap tersedia. Setelah kamu login dengan password Dashboard, kode verifikasi dikirim otomatis ke Mail Box tanpa admin. Jika lupa password dan belum login, gunakan pemulihan akun dengan verifikasi kepemilikan.'
+      ?'Tombol Minta kode pemulihan tersedia. Setelah login dengan password Dashboard, kode pemulihan otomatis dikirim ke Mail Box. Kode pendaftaran saja tidak cukup untuk mereset password.'
       :'Untuk pendaftar Diterima yang belum mempunyai password, kode aktivasi pertama otomatis dikirim ke Mail Box. Tekan Minta kode untuk memeriksa atau mengirim kode baru bila kode lama kedaluwarsa.';
   }
   const fmt=date=>{
@@ -129,12 +131,13 @@
     $('ssc-mailbox-registration-code').textContent='';
     $('ssc-mailbox-registration-panel').hidden=true;
     $('ssc-mailbox-registration-status').textContent='';
+    window.SSCircleDirectMailbox?.clear($('ssc-mailbox-direct'));
   }
   function shownItems(){
     return items.filter(item=>filter==='all'||(filter==='unread'&&!item.read)||
       (filter==='status'&&item.type==='status')||
       (filter==='activation'&&['registration_code','activation','information'].includes(item.type))||
-      (filter==='announcement'&&item.type==='announcement')||
+      (filter==='announcement'&&['announcement','direct_message'].includes(item.type))||
       (filter==='event'&&item.type==='event')||
       (filter==='community'&&['friend_request','friend_response','badge'].includes(item.type)));
   }
@@ -202,6 +205,8 @@
     $('ssc-mailbox-subject').textContent=item.title;
     $('ssc-mailbox-time').textContent=fmt(item.createdAt);
     $('ssc-mailbox-body').textContent=item.content;
+    if(item.directThreadId)void window.SSCircleDirectMailbox?.render($('ssc-mailbox-direct'),item.directThreadId);
+    else window.SSCircleDirectMailbox?.clear($('ssc-mailbox-direct'));
     const registrationCode=item.type==='registration_code'
       &&typeof item.registrationCode==='string'
       &&/^(?:[A-F0-9]{20}|[A-F0-9]{8})$/.test(item.registrationCode)
@@ -360,7 +365,8 @@
     const button=$('ssc-mailbox-request');
     button.disabled=true;notify('Memproses permintaan kode aktivasi atau verifikasi...');
     try{
-      const result=await api('/api/player/mailbox/request-activation','POST',{});
+      const endpoint=hasPassword?'/api/player/mailbox/request-recovery':'/api/player/mailbox/request-activation';
+      const result=await api(endpoint,'POST',{});
       await refresh(true);notify(result.message);
     }catch(error){notify(error.message,true)}
     finally{applyAccess();}

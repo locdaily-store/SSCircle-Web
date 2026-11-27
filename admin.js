@@ -1515,6 +1515,11 @@ function renderAppearance() {
     if (hiddenCount)
       root.append(more);
   }
+  $('#registration-one-active').checked = data.settings.registrationOneActive !== false;
+  $('#registration-one-active').onchange = () => {
+    data.settings.registrationOneActive = $('#registration-one-active').checked;
+    dirtyMark();
+  };
   $('#form-open').checked = !!data.settings.open;
   $('#form-open').onchange = () => {
     data.settings.open = $('#form-open').checked;

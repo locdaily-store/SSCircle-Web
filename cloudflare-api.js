@@ -73,6 +73,7 @@ const SSCircle = (() => {
     getAdminForm: () => api('/admin/form'),
     getAdminLive: () => api('/admin/live'),
     getCooldown: () => api('/registration-cooldown'),
+    getRegistrationEligibility: () => api('/registration/eligibility'),
     async submit(answers, images = {}) {
       const payload = { answers, website: '' };
       const names = Object.keys(images).filter(k => images[k]);
