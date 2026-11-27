@@ -78,63 +78,113 @@ final class VoiceAudioEngine {
         synchronized (monitor) { incoming.clear(); }
     }
     private void capture() {
+        if (context.checkSelfPermission(Manifest.permission.RECORD_AUDIO)
+                != PackageManager.PERMISSION_GRANTED) {
+            if (running) onFailure.fail("Izin mikrofon belum diberikan.");
+            return;
+        }
+        // VOICE_COMMUNICATION can initialize but produce only digital silence
+        // on some phone/headset combinations. MIC is a device-safe fallback.
+        String reason = "";
+        for (int source : new int[] {
+                MediaRecorder.AudioSource.VOICE_COMMUNICATION,
+                MediaRecorder.AudioSource.MIC }) {
+            if (!running) return;
+            try {
+                captureFrom(source);
+                return;
+            } catch (RuntimeException | JSONException failure) {
+                if (!running) return;
+                reason = String.valueOf(failure.getMessage());
+            }
+        }
+        if (running) onFailure.fail(
+                "Mikrofon tidak dapat mengirim suara. Periksa izin, headset, dan aplikasi lain. " + reason);
+    }
+    private void captureFrom(int source) throws JSONException {
         AudioRecord mic = null;
         AcousticEchoCanceler echo = null;
         NoiseSuppressor noise = null;
         try {
-            if (context.checkSelfPermission(Manifest.permission.RECORD_AUDIO)
-                != PackageManager.PERMISSION_GRANTED) throw new SecurityException("Izin mikrofon tidak tersedia");
             int min = AudioRecord.getMinBufferSize(RATE, AudioFormat.CHANNEL_IN_MONO,
-                AudioFormat.ENCODING_PCM_16BIT);
-            if (min <= 0) throw new IllegalStateException("AudioRecord 48kHz tidak didukung");
-            mic = new AudioRecord(MediaRecorder.AudioSource.VOICE_COMMUNICATION, RATE,
-                AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT,
-                Math.max(min, BYTES * 8));
+                    AudioFormat.ENCODING_PCM_16BIT);
+            if (min <= 0) throw new IllegalStateException("Perekaman PCM 48 kHz tidak didukung");
+            mic = new AudioRecord(source, RATE,
+                    AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT,
+                    Math.max(min, BYTES * 8));
             if (mic.getState() != AudioRecord.STATE_INITIALIZED)
-                throw new IllegalStateException("Mikrofon tidak dapat diinisialisasi");
+                throw new IllegalStateException("Mikrofon belum terinisialisasi");
             record = mic;
-            int audioSession = mic.getAudioSessionId();
-            if (AcousticEchoCanceler.isAvailable()) {
-                echo = AcousticEchoCanceler.create(audioSession);
-                if (echo != null) echo.setEnabled(true);
-            }
-            if (NoiseSuppressor.isAvailable()) {
-                noise = NoiseSuppressor.create(audioSession);
-                if (noise != null) noise.setEnabled(true);
+            if (source == MediaRecorder.AudioSource.VOICE_COMMUNICATION) {
+                final int audioSession = mic.getAudioSessionId();
+                try {
+                    if (AcousticEchoCanceler.isAvailable()) {
+                        echo = AcousticEchoCanceler.create(audioSession);
+                        if (echo != null) echo.setEnabled(true);
+                    }
+                    if (NoiseSuppressor.isAvailable()) {
+                        noise = NoiseSuppressor.create(audioSession);
+                        if (noise != null) noise.setEnabled(true);
+                    }
+                } catch (RuntimeException ignored) {
+                    // Audio FX may be unsupported by certain Android drivers;
+                    // a failure here must not break capture.
+                }
             }
             mic.startRecording();
+            if (mic.getRecordingState() != AudioRecord.RECORDSTATE_RECORDING)
+                throw new IllegalStateException("Mikrofon tidak mulai merekam");
             short[] samples = new short[SAMPLES];
             List<String> pending = new ArrayList<>(3);
+            int silentFrames = 0, hangover = 0;
             while (running && !Thread.currentThread().isInterrupted()) {
                 int read = 0;
                 while (read < SAMPLES && running) {
                     int n = mic.read(samples, read, SAMPLES - read, AudioRecord.READ_BLOCKING);
-                    if (n <= 0) throw new IllegalStateException("Mikrofon terhenti (" + n + ")");
+                    if (n <= 0) throw new IllegalStateException("Perekaman terhenti (" + n + ")");
                     read += n;
                 }
                 if (!running) break;
                 double energy = 0;
-                for (short sample : samples) energy += (double)sample * sample;
-                double rms = Math.sqrt(energy / SAMPLES) / 32768.0;
-                if (muted || rms < 0.012) { pending.clear(); continue; }
+                for (short sample : samples) energy += (double) sample * sample;
+                final double rms = Math.sqrt(energy / SAMPLES) / 32768.0;
+                if (rms < 0.00004) silentFrames++;
+                else silentFrames = 0;
+                if (source == MediaRecorder.AudioSource.VOICE_COMMUNICATION &&
+                        silentFrames >= 350) {
+                    // Seven seconds of exact digital silence often indicates
+                    // the wrong Android capture route. Try generic MIC input.
+                    throw new IllegalStateException(
+                            "Sumber VOICE_COMMUNICATION tidak menangkap audio, beralih ke MIC");
+                }
+                if (muted) {
+                    pending.clear();
+                    hangover = 0;
+                    continue;
+                }
+                if (rms >= 0.002) hangover = 12;
+                else if (hangover > 0) hangover--;
+                if (hangover == 0) {
+                    pending.clear();
+                    continue;
+                }
                 byte[] raw = new byte[BYTES];
                 for (int i = 0; i < SAMPLES; i++) {
-                    raw[i * 2] = (byte)(samples[i] & 255);
-                    raw[i * 2 + 1] = (byte)((samples[i] >>> 8) & 255);
+                    raw[i * 2] = (byte) (samples[i] & 255);
+                    raw[i * 2 + 1] = (byte) ((samples[i] >>> 8) & 255);
                 }
                 pending.add(Base64.encodeToString(raw, Base64.NO_WRAP));
                 if (pending.size() == 3) {
                     JSONObject batch = new JSONObject();
                     batch.put("t", "audioBatch");
                     JSONArray frames = new JSONArray();
-                    for (String pcm : pending) frames.put(new JSONObject().put("pcm", pcm));
+                    for (String pcm : pending)
+                        frames.put(new JSONObject().put("pcm", pcm));
                     batch.put("frames", frames);
                     sender.send(batch.toString());
                     pending.clear();
                 }
             }
-        } catch (SecurityException | IllegalStateException | JSONException failure) {
-            if (running) onFailure.fail(failure.getMessage());
         } finally {
             record = null;
             if (echo != null) echo.release();
