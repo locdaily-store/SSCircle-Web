@@ -7,6 +7,12 @@ const source=readFileSync(new URL('../voice.js',import.meta.url),'utf8');
 
 test('Page lifecycle retains microphone and socket, then restores an interrupted connection',async()=>{
   const elements=new Map(),docEvents=new Map(),winEvents=new Map(),clients=[],timers=[];
+  const saved=new Map();
+  const localStorage={
+    setItem(key,value){saved.set(key,value);},
+    getItem(key){return saved.get(key)||null;},
+    removeItem(key){saved.delete(key);}
+  };
   const element=id=>{
     if(!elements.has(id))elements.set(id,{
       id,value:id==='language'?'id':id==='talk-mode'?'ptt':id==='output-volume'?'100':'',
@@ -63,13 +69,14 @@ test('Page lifecycle retains microphone and socket, then restores an interrupted
     const timer={fn,delay,cancelled:false};timers.push(timer);return timer;
   };
   runInNewContext(source,{
-    window,document,navigator,fetch,WebSocket:FakeSocket,AudioWorkletNode:FakeWorklet,
+    window,document,navigator,fetch,localStorage,WebSocket:FakeSocket,AudioWorkletNode:FakeWorklet,
     Option:class {constructor(label,value){this.label=label;this.value=value;}},
-    Response,setTimeout:fakeTimeout,clearTimeout(timer){timer.cancelled=true;},
+    Response,setTimeout:fakeTimeout,setInterval:fakeTimeout,clearTimeout(timer){timer.cancelled=true;},
     console
   },{filename:'voice.js'});
   await elements.get('pair-form').onsubmit({preventDefault(){}});
   assert.equal(clients.length,1);
+  assert.equal(saved.size,1,'Paired device token survives refresh only on trusted website');
   clients[0].onopen();
   await elements.get('start-mic').onclick();
   assert.equal(track.stopped,0,'microphone starts only after pressing the button');
@@ -93,9 +100,10 @@ test('Page lifecycle retains microphone and socket, then restores an interrupted
 
   await elements.get('disconnect').onclick();
   assert.equal(track.stopped,1,'explicit disconnect releases microphone');
+  assert.equal(saved.size,0,'explicit Disconnect revokes the stored device session');
 });
 
-test('Voice background implementation is transparent and does not persist microphone tokens',()=>{
+test('Voice background implementation persists only revocable session, not microphone permission',()=>{
   const html=readFileSync(new URL('../voice.html',import.meta.url),'utf8');
   assert.match(html,/id="recover-voice"/);
   assert.match(html,/id="background-state"/);
@@ -103,5 +111,8 @@ test('Voice background implementation is transparent and does not persist microp
   assert.match(source,/window\.addEventListener\('pageshow'/);
   assert.match(source,/window\.addEventListener\('online'/);
   assert.doesNotMatch(source,/reconnectTry\s*>\s*8/);
-  assert.doesNotMatch(source,/(?:localStorage|sessionStorage)\.setItem\(/);
+  assert.match(source,/localStorage\.setItem\(sessionKey/);
+  assert.match(source,/localStorage\.removeItem\(sessionKey/);
+  assert.match(source,/renewSession\(true\)/);
+  assert.doesNotMatch(source,/localStorage\.setItem\([^;]*(?:micWanted|stream|audio)/);
 });
